@@ -1,7 +1,10 @@
 
+from math import sqrt
+
 import numpy as np
 import pandas as pd
 from pyproj import Proj, transform
+from scipy.spatial import distance_matrix
 
 
 wgs84 = Proj(init="epsg:4326")
@@ -9,56 +12,37 @@ nzmg = Proj(init="epsg:27200")
 #nztm = Proj(init="epsg:2193")
 
 
-def downsample_mcg(df):
-    """Resample McGann points on 1km grid."""
-    # DOESNT SEEM TO DO ANYTHING
+def downsample_mcg(df, res=1000):
+    """
+    Resample McGann points on 1km grid.
+    res: grid resolution (m)
+    """
 
-    # meters
-    # too far just means the point is further away than the centre `sqrt(grid_res**2 * 2) / 2` (only possible around edges)
-    too_far = 707.2
-    grid_res = 1000
+    max_dist = sqrt(res ** 2 * 2) / 2
+    x = df["Easting"].values
+    y = df["Northing"].values
 
-    # Make the grid. Use raster() and then convert.
-    # Not the most direct but it works.
-    ggg = raster(crs = proj4string(inputSPDF),
-                ext = extent(bbox(inputSPDF)),
-                resolution = grid_res)
-    gg = as(ggg, 'SpatialGrid')
-    g = as(gg, 'SpatialPoints')
+    # trying to copy R logic - extents
+    xmin = round(min(x))
+    nx = round((max(x) - xmin) / res)
+    xmax = nx * res + xmin
+    ymax = round(max(y))
+    ny = round((ymax - min(y)) / res)
+    ymin = ymax - ny * res
 
-    # Note that with 1000 meter spacing, a grid overlay on McGann points
-    # ends up as 21 x 43 km, with 22x44 points = 968 points:
-    # > points2grid(gg)
-    # s1      s2
-    # cellcentre.offset 2468048 5725866
-    # cellsize             1000    1000
-    # cells.dim              22      44
+    # coarse grid
+    xx = np.linspace(xmin, xmax, nx)
+    yy = np.linspace(ymin, ymax, ny)
+    grid = np.dstack(np.meshgrid(xx, yy)).reshape(-1, 2)
 
-    # > dim(coordinates(g))
-    # [1] 968   2
+    # distances from coarse grid, nearest neighbor
+    dist = distance_matrix(grid, np.dstack((x, y))[0])
+    nn = np.argmin(dist, axis=1)
+    # cut out if no points within search area
+    nn = nn[dist[np.arange(nn.size), nn] <= max_dist]
+    nn.sort()
 
-    # converting to "ppp"...
-    grd = ppp(x = coordinates(g)[,1],
-        y = coordinates(g)[,2],
-        window = owin(xrange=bbox(g)[1,], yrange = bbox(g)[2,]))
-
-    inpSPDFppp = ppp(x = coordinates(inputSPDF)[,1],
-        y = coordinates(inputSPDF)[,2],
-        window = owin(xrange=bbox(inputSPDF)[1,], yrange=bbox(inputSPDF)[2,]))
-
-    # Finally, running nncross
-    distz = nncross(grd, inpSPDFppp)
-
-    # I want to take only the points in McGann original data that are less than "tooFar"
-    # distance away from one of the grid points.
-
-    # Throw out all data too far from a McGann point.
-    distz <- distz[distz$dist < tooFar,]
-
-    # Remove all other points from input dataframe
-    outp <- inputSPDF[distz$which,] 
-
-    return(outp)
+    return df.iloc[nn]
 
 
 def load_vs(downsample_mcgann=True):
@@ -70,7 +54,7 @@ def load_vs(downsample_mcgann=True):
     """
 
     # load each Vs data source.
-    mcgann = load_mcgann_vs(downsample_mcgann)
+    mcgann = load_mcgann_vs(downsample=downsample_mcgann)
     wotherspoon = load_wotherspoon_vs()
     kaiseretal = load_kaiseretal_vs()
 
