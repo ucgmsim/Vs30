@@ -23,12 +23,24 @@ def downsample_mcg(df, res=1000):
     y = df["Northing"].values
 
     # trying to copy R logic - extents
-    xmin = round(min(x))
+    # works for this dataset, needs testing for others
+    xmin = min(x)
     nx = round((max(x) - xmin) / res)
-    xmax = nx * res + xmin
-    ymax = round(max(y))
-    ny = round((ymax - min(y)) / res)
-    ymin = ymax - ny * res
+    if ((max(x) - xmin) / res) % 1 < 0.5:
+        # this is run
+        xmin += res / 2.0
+        xmax = (nx - 1) * res + xmin
+    else:
+        xmax = nx * res + xmin
+    ymax = max(y) - res
+    ny = round((ymax - min(y)) / res) + 1
+    if ((ymax - min(x)) / res) % 1 < 0.5:
+        ymax -= res / 2.0
+        ymin = ymax - (ny - 2) * res
+    else:
+        # this is run
+        ymax += res / 2.0
+        ymin = ymax - (ny - 1) * res
 
     # coarse grid
     xx = np.linspace(xmin, xmax, nx)
