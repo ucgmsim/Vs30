@@ -34,6 +34,9 @@ convert2nc = function(rdata, raster) {
     nc_close(ncout)
 }
 
+###
+### ELEVATION / SLOPE
+###
 
 rdata = "nzni_9c_DEM.Rdata"
 load(rdata)
@@ -66,3 +69,29 @@ convert2nc(rdata, slp_nzsi_9c)
 rdata = "nzsi_30c_slp.Rdata"
 load(rdata)
 convert2nc(rdata, slp_nzsi_30c)
+
+###
+### VARIOGRAM
+###
+
+load("variogram_AhdiAK_noQ3_hyb09c_v6.Rdata")
+write.csv(variogram, "variogram_AhdiAK_noQ3_hyb09c_v6.csv")
+
+###
+### QMAP
+###
+
+# shapefile maxlen = 10 chars
+names(map_NZGD00@data)[9] = "TERRANE_EQ"
+names(map_NZGD00@data)[10] = "SUPRGRP_EQ"
+names(map_NZGD00@data)[11] = "GRP_EQ"
+names(map_NZGD00@data)[12] = "SUBGRP_EQ"
+names(map_NZGD00@data)[13] = "FORMATN_EQ"
+names(map_NZGD00@data)[14] = "MEMBER_EQ"
+names(map_NZGD00@data)[21] = "DESCRIPTN"
+names(map_NZGD00@data)[22] = "ROCK_GRP"
+names(map_NZGD00@data)[25] = "SIMPL_NAME"
+names(map_NZGD00@data)[27] = "K_GRP_NAME"
+names(map_NZGD00@data)[29] = "QMAP_NUMBR"
+
+writeOGR(obj=map_NZGD00, dsn="QMAP_Seamless_July13K_NZGD00", layer="data", driver="ESRI Shapefile")
