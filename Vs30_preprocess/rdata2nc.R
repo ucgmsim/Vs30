@@ -81,6 +81,10 @@ write.csv(variogram, "variogram_AhdiAK_noQ3_hyb09c_v6.csv")
 ### QMAP
 ###
 
+setwd("/home/vap30/big_noDB/geo")
+
+load("QMAP_Seamless_July13K_NZGD00.Rdata")
+
 # shapefile maxlen = 10 chars
 names(map_NZGD00@data)[9] = "TERRANE_EQ"
 names(map_NZGD00@data)[10] = "SUPRGRP_EQ"
@@ -93,5 +97,26 @@ names(map_NZGD00@data)[22] = "ROCK_GRP"
 names(map_NZGD00@data)[25] = "SIMPL_NAME"
 names(map_NZGD00@data)[27] = "K_GRP_NAME"
 names(map_NZGD00@data)[29] = "QMAP_NUMBR"
+names(map_NZGD00@data)[31] = "Shape_Len"
+names(map_NZGD00@data)[39] = "ID_testing"
+names(map_NZGD00@data)[40] = "ID_AAK"
+names(map_NZGD00@data)[41] = "ID_AAK_KA"
+names(map_NZGD00@data)[42] = "ID_AAK_K3"
+names(map_NZGD00@data)[43] = "ID_AAK_3"
+names(map_NZGD00@data)[44] = "ID_AAK_3M"
+names(map_NZGD00@data)[45] = "ID_AAK_KAH"
+names(map_NZGD00@data)[46] = "ID_AAK_3_H"
+names(map_NZGD00@data)[47] = "Vs30_testn"
+names(map_NZGD00@data)[48] = "SD_testn"
+names(map_NZGD00@data)[49] = "Vs30_AAK"
+names(map_NZGD00@data)[50] = "SD_AAK"
+names(map_NZGD00@data)[51] = "V30_AAK_KA"
+names(map_NZGD00@data)[52] = "SD_AAK_KA"
+names(map_NZGD00@data)[53] = "V30_AAK_K3"
+names(map_NZGD00@data)[54] = "SD_AAK_K3"
+names(map_NZGD00@data)[55] = "V30_AAK_3"
+names(map_NZGD00@data)[56] = "SD_AAK_3"
+names(map_NZGD00@data)[57] = "V30_AAK_3M"
+names(map_NZGD00@data)[58] = "SD_AAK_3M"
 
 writeOGR(obj=map_NZGD00, dsn="QMAP_Seamless_July13K_NZGD00", layer="data", driver="ESRI Shapefile")
