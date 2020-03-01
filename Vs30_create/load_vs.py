@@ -6,10 +6,9 @@ import pandas as pd
 from pyproj import Proj, transform
 from scipy.spatial import distance_matrix
 
-
-wgs84 = Proj(init="epsg:4326")
-nzmg = Proj(init="epsg:27200")
-#nztm = Proj(init="epsg:2193")
+# requires pyproj 6
+wgs84 = Proj("epsg:4326")
+nzmg = Proj("epsg:27200")
 
 
 def downsample_mcg(df, res=1000):
@@ -44,7 +43,7 @@ def downsample_mcg(df, res=1000):
 
     # coarse grid
     xx = np.linspace(xmin, xmax, nx)
-    yy = np.linspace(ymin, ymax, ny)
+    yy = np.linspace(ymin, ymax, ny)[::-1]
     grid = np.dstack(np.meshgrid(xx, yy)).reshape(-1, 2)
 
     # distances from coarse grid, nearest neighbor
@@ -52,7 +51,6 @@ def downsample_mcg(df, res=1000):
     nn = np.argmin(dist, axis=1)
     # cut out if no points within search area
     nn = nn[dist[np.arange(nn.size), nn] <= max_dist]
-    nn.sort()
 
     return df.iloc[nn]
 
@@ -78,7 +76,7 @@ def load_vs(downsample_mcgann=True):
 def load_mcgann_vs(downsample=True):
     # note this uses nzmg cols, wotherspoon starts with lon/lat and goes to nzmg
 
-    PATH = "McGann_cptVs30data.csv"
+    PATH = "../Vs30_data/McGann_cptVs30data.csv"
     mcgann = pd.read_csv(
         PATH,
         usecols=[3, 4, 7],
@@ -99,7 +97,7 @@ def load_mcgann_vs(downsample=True):
 def load_wotherspoon_vs():
     """Liam Wotherspoon's spreadsheet for the Canterbury region."""
 
-    PATH = "Characterised Vs30 Canterbury_June2017_KFed.csv"
+    PATH = "../Vs30_data/Characterised Vs30 Canterbury_June2017_KFed.csv"
     wotherspoon = pd.read_csv(
         PATH,
         sep="\t",
@@ -110,7 +108,7 @@ def load_wotherspoon_vs():
         dtype=np.float32,
     )
     easts, norths = transform(
-        wgs84, nzmg, wotherspoon["Easting"].values, wotherspoon["Northing"].values
+        wgs84, nzmg, wotherspoon["Northing"].values, wotherspoon["Easting"].values
     )
     wotherspoon["Easting"] = easts
     wotherspoon["Northing"] = norths
@@ -124,7 +122,7 @@ def load_kaiseretal_vs():
     """Values from Kaiser et al. (2017)"""
 
     # with removed duplicate points
-    PATH = "20170817_vs_allNZ_duplicatesCulled.ll"
+    PATH = "../Vs30_data/20170817_vs_allNZ_duplicatesCulled.ll"
     kaiseretal = pd.read_csv(
         PATH,
         usecols=[1, 2, 3, 4],
@@ -135,7 +133,7 @@ def load_kaiseretal_vs():
         converters={"Q": lambda text: int(text.strip()[2])},
     )
     easts, norths = transform(
-        wgs84, nzmg, kaiseretal["Easting"].values, kaiseretal["Northing"].values
+        wgs84, nzmg, kaiseretal["Northing"].values, kaiseretal["Easting"].values
     )
     kaiseretal["Easting"] = easts
     kaiseretal["Northing"] = norths

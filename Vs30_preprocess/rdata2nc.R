@@ -119,4 +119,12 @@ names(map_NZGD00@data)[56] = "SD_AAK_3"
 names(map_NZGD00@data)[57] = "V30_AAK_3M"
 names(map_NZGD00@data)[58] = "SD_AAK_3M"
 
-writeOGR(obj=map_NZGD00, dsn="QMAP_Seamless_July13K_NZGD00", layer="data", driver="ESRI Shapefile")
+# write in 2 coordinate systems while we are here
+writeOGR(obj=map_NZGD00, dsn="QMAP_Seamless_July13K_NZGD00", layer="nztm", driver="ESRI Shapefile")
+nzmg = CRS(paste0(
+    "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 ",
+    "+units=m +no_defs +ellps=intl ",
+    "+towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"),
+    doCheckCRSArgs=FALSE)
+map_NZGD49 = spTransform(map_NZGD00, CRS=nzmg)
+writeOGR(obj=map_NZGD49, dsn="QMAP_Seamless_July13K_NZGD00", layer="nzmg", driver="ESRI Shapefile")

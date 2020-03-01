@@ -24,6 +24,7 @@ from h5py import File as h5open
 import numpy as np
 import pandas as pd
 from pyproj import Proj, transform
+from scipy.spatial import distance_matrix
 from shapely.geometry import Point, Polygon
 
 from load_vs import load_vs
@@ -35,22 +36,19 @@ DS_DIR = "/home/vap30/VsMap/Rdata"
 vspr_file = "vspr.???"
 
 # polygons
-map_NZGD00 = geopandas.read_file("/home/vap30/big_noDB/geo/QMAP_Seamless_July13K_NZGD00/data.shp")
-geo_polygons = np.array(map_NZGD00["geometry"].array)
+map_NZGD49 = geopandas.read_file("/home/vap30/big_noDB/geo/QMAP_Seamless_July13K_NZGD00/nzmg.shp")
+geo_polygons = np.array(map_NZGD49["geometry"].array)
+# coordinate conversion if input is in nztm
 # requires pyproj 6
-nzmg = Proj("epsg:27200")
-nztm = Proj("epsg:2193")
-def tm2mg(p):
-    easts, norths = p.exterior.coords.xy
-    return zip(transform(nztm, nzmg, norths, easts))
-tm2mg_vectorized = np.vectorize(tm2mg)
-geo_polygons = tm2mg_vectorized(geo_polygons)
-
-#for i, p in enumerate(geo_polygons):
-#    print(i, "/", len(geo_polygons))
+#nzmg = Proj("epsg:27200")
+#nztm = Proj("epsg:2193")
+#def tm2mg(p):
 #    easts, norths = p.exterior.coords.xy
-#    easts, norths = transform(nztm, nzmg, norths, easts)
-#    geo_polygons[i] = Polygon(zip(easts, norths))
+#    x, y = transform(nztm, nzmg, norths, easts)
+#    xy = Polygon(list(zip(x, y)))
+#    return xy
+#tm2mg_vectorized = np.vectorize(tm2mg)
+#geo_polygons = tm2mg_vectorized(geo_polygons)
 
 # DEM/slope
 si_9c_slp = h5open(os.path.join(DS_DIR, "nzsi_9c_slp.nc"))
@@ -67,35 +65,52 @@ vspoints_NZGD49 = load_vs(downsample_mcgann=True)
 # sort/categorize Vs data in terms of map polygons & geology metadata
 geo_points = pd.Series(list(zip(vspoints_NZGD49.Easting, vspoints_NZGD49.Northing))).apply(lambda x: Point(x[0], x[1])).values
 
-def contains(a_polygon, a_point):
-    return a_polygon.contains(a_point)
-contains_vectorized = np.vectorize(contains)
+###
+### POINT IN WHICH POLYGON TEST IN PYTHON (SLOW)
+###
+#def contains(a_polygon, a_point):
+#    return a_polygon.contains(a_point)
+#contains_vectorized = np.vectorize(contains)
+#
+# INDEX column in R is 1 indexed location in original polygons (equivalent to polys here)
+# this excludes nan entries where outside all polygons, if using argmax with axis=1, get 0 instead of nan
+#polys = np.argwhere(contains_vectorized(geo_polygons, geo_points[:, np.newaxis]))[:, 1]
+# R version does not include polygon shapes for results but includes locations from point results
+# maybe should replace polygons with points
+#vspr = map_NZGD49.iloc[polys]
+###
+### POINT IN WHICH POLYGON: taken from R (cannot change load_vs ordering)
+###
+# floats because np.nan for no matching polygon
+polys = pd.read_csv("../Vs30_data/vs_index.csv", usecols=[1])["index"].values
+vspr = map_NZGD49(iloc[polys[np.invert(np.isnan(polys))].astype(int)])
 
-polys = np.argmax(contains_vectorized(geo_polygons, geo_points[:, np.newaxis]), axis=1)
-print(polys)
-
-#polys <- VsPts_NZGD49 %over% map_NZGD49  # returns a dataframe with polygon metadata for each Vs point.
-#vspr  <- SpatialPointsDataFrame(VsPts_NZGD49, data=polys)
-#rm(polys)
 
 
-"""
+
 # This shouldn't be necessary, but the %over% calls in vspr are complaining 
 # that identicalCRS()=FALSE, despite the crs() strings being identical.
 # As a kludge, I force identical crs() strings as follows:
-p4s <- crs(vspr)
-crs(slp_nzsi_9c.sgdf) <- p4s
-crs(slp_nzsi_30c.sgdf) <- p4s
-crs(slp_nzni_9c.sgdf) <- p4s
-crs(slp_nzni_30c.sgdf) <- p4s
-rm(p4s)
+#p4s <- crs(vspr)
+#crs(slp_nzsi_9c.sgdf) <- p4s
+#crs(slp_nzsi_30c.sgdf) <- p4s
+#crs(slp_nzni_9c.sgdf) <- p4s
+#crs(slp_nzni_30c.sgdf) <- p4s
+#rm(p4s)
 
 # Add slope overlay data (has to be done in two parts, north and south island)
+grid = np.dstack(np.meshgrid(si_9c_slp["easting"][...], si_9c_slp["northing"][...])).reshape(-1, 2)
+dist = distance_matrix(grid, np.dstack((x, y))[0])
+dist = distance_matrix(grid, vspoints_NZGD49[["Easting", "Northing"]])
+nn = np.argmin(dist, axis=1)
+
 df_si <- data.frame(vspr %over% slp_nzsi_9c.sgdf, vspr %over% slp_nzsi_30c.sgdf)
 colnames(df_si) <- c("slp09c","slp30c")
 df_ni <- data.frame(vspr %over% slp_nzni_9c.sgdf, vspr %over% slp_nzni_30c.sgdf)
 colnames(df_ni) <- c("slp09c","slp30c")
 
+
+"""
 # combine north and south island slope vectors
 na_ni_09c <- is.na(df_ni$slp09c)
 na_ni_30c <- is.na(df_ni$slp30c)
