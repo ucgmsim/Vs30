@@ -81,55 +81,14 @@ geo_points = pd.Series(list(zip(vspoints_NZGD49.Easting, vspoints_NZGD49.Northin
 ###
 ### POINT IN WHICH POLYGON: taken from R (cannot change load_vs ordering)
 ###
-# floats because np.nan for no matching polygon
-polys = pd.read_csv("../Vs30_data/vs_index.csv", usecols=[1])["index"].values
+# floats even for index because np.nan for no matching polygon
+# index, easting, northing, slp09c, slp30c
+site_data = pd.read_csv("../Vs30_data/vs_index.csv", usecols=[1, 4, 5])
+polys = site_data["index"].values
 vspr = map_NZGD49(iloc[polys[np.invert(np.isnan(polys))].astype(int)])
 
 
-
-
-# This shouldn't be necessary, but the %over% calls in vspr are complaining 
-# that identicalCRS()=FALSE, despite the crs() strings being identical.
-# As a kludge, I force identical crs() strings as follows:
-#p4s <- crs(vspr)
-#crs(slp_nzsi_9c.sgdf) <- p4s
-#crs(slp_nzsi_30c.sgdf) <- p4s
-#crs(slp_nzni_9c.sgdf) <- p4s
-#crs(slp_nzni_30c.sgdf) <- p4s
-#rm(p4s)
-
-# Add slope overlay data (has to be done in two parts, north and south island)
-grid = np.dstack(np.meshgrid(si_9c_slp["easting"][...], si_9c_slp["northing"][...])).reshape(-1, 2)
-dist = distance_matrix(grid, np.dstack((x, y))[0])
-dist = distance_matrix(grid, vspoints_NZGD49[["Easting", "Northing"]])
-nn = np.argmin(dist, axis=1)
-
-df_si <- data.frame(vspr %over% slp_nzsi_9c.sgdf, vspr %over% slp_nzsi_30c.sgdf)
-colnames(df_si) <- c("slp09c","slp30c")
-df_ni <- data.frame(vspr %over% slp_nzni_9c.sgdf, vspr %over% slp_nzni_30c.sgdf)
-colnames(df_ni) <- c("slp09c","slp30c")
-
-
 """
-# combine north and south island slope vectors
-na_ni_09c <- is.na(df_ni$slp09c)
-na_ni_30c <- is.na(df_ni$slp30c)
-na_si_09c <- is.na(df_si$slp09c)
-na_si_30c <- is.na(df_si$slp30c)
-
-# error check: EVERY datapoint should be NA for EITHER North or South island if not both
-if(!all(na_ni_09c | na_si_09c)) {print("ERROR")}
-if(!all(na_ni_30c | na_si_30c)) {print("ERROR")}
-
-
-slp09c <- slp30c <- rep(NA, length(vspr))
-slp09c[!na_ni_09c] <- df_ni$slp09c[!na_ni_09c]
-slp09c[!na_si_09c] <- df_si$slp09c[!na_si_09c]
-slp30c[!na_ni_30c] <- df_ni$slp30c[!na_ni_30c]
-slp30c[!na_si_30c] <- df_si$slp30c[!na_si_30c]
-
-df <- data.frame(slp09c=slp09c,slp30c=slp30c)
-
 vspr <- spCbind(vspr,df)
 rm(df, df_ni, df_si,
    na_ni_30c,
