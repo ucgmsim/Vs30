@@ -85,16 +85,15 @@ geo_points = pd.Series(list(zip(vspoints_NZGD49.Easting, vspoints_NZGD49.Northin
 # index, easting, northing, slp09c, slp30c
 site_data = pd.read_csv("../Vs30_data/vs_index.csv", usecols=[1, 4, 5])
 polys = site_data["index"].values
-vspr = map_NZGD49(iloc[polys[np.invert(np.isnan(polys))].astype(int)])
-
-
-"""
-vspr <- spCbind(vspr,df)
-rm(df, df_ni, df_si,
-   na_ni_30c,
-   na_si_30c,
-   na_ni_09c,
-   na_si_09c)
+# need to have blank rows for where there is nan
+vspr = map_NZGD49[:0]
+for p in polys:
+    if np.isnan(p):
+        vspr.append({"INDEX": np.nan}, ignore_index=True)
+    else:
+        vspr.append(map_NZGD49.iloc[int(p)], ignore_index=True)
+vspr["slp09c"] = site_data["slp09c"].values
+vspr["slp30c"] = site_data["slp30c"].values
 
 
 ########################################################################################
@@ -104,7 +103,7 @@ rm(df, df_ni, df_si,
 # "groupID_" in the script classifyThings.R, but I need to do it here because classifyThings
 # uses only polygon data. Here I need a pixel-based overlay similar to the slope and DEM
 # overlays done above.)
-
+"""
 IP <- raster("~/big_noDB/topo/terrainCats/IwahashiPike_NZ_100m_16.tif")
 IPdf <- as(IP, "SpatialGridDataFrame")
 source("R/IP_levels.R")
