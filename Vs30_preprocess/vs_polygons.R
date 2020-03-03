@@ -23,7 +23,6 @@ poly_NZGD49 = spTransform(map_NZGD00, CRS=CRS(paste0(
 
 # POLYGONS for POINTS
 polys = vs_NZGD49 %over% poly_NZGD49
-rm(poly_NZGD49)
 
 # SLOPE for POINTS
 load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
@@ -55,10 +54,17 @@ sigma_MVN_AhdiAK_noQ3_hyb09c = vs_NZGD00 %over% MVN_geology_sigma
 sigma_MVN_YongCA_noQ3 = vs_NZGD00 %over% MVN_terrain_sigma
 rm(MVN_geology, MVN_terrain, MVN_geology_sigma, MVN_terrain_sigma)
 
+# MODELS for POINTS
+#TODO
+
+# VS META for POINTS
+# extra data added via loadVs into vs_NZGD49
+#TODO add as required, mainly duplicated text that can be an enum such as source (mcgann, wotherspoon, kaiser...)
+
 # POINTS DATA
 df = data.frame("index"=polys$INDEX,
-                "easting"=vs_NZGD49@coords[,1],
-                "northing"=vs_NZGD49@coords[,2],
+                "easting"=vs_NZGD00@coords[,1],
+                "northing"=vs_NZGD00@coords[,2],
                 "slp09c"=slp09c$slope,
                 "slp30c"=slp30c$slope,
                 "gid_yongca"=groupID_YongCA,
@@ -68,4 +74,21 @@ df = data.frame("index"=polys$INDEX,
                 "sd_mvn_yca_n3"=sigma_MVN_YongCA_noQ3
 )
 rownames(df) = c()
-write.csv(df, "../Vs30_data/vs_index.csv")
+
+# POINTS CLEAN
+# remove points in water, nans
+# potentially do before finding metadata for them (along the way)
+unwanted = (polys$UNIT_CODE == "water") |
+           (is.na(polys$UNIT_CODE)) |
+           (is.na(slp09c)) |
+           (is.na(slp30c))
+# also remove points in the same location with the same Vs30
+dup_pairs = zerodist(vs_NZGD00)
+for (i in seq(dim(dup_pairs)[1])) {
+    if(vs_NZGD00[dup_pairs[i,1],]$Vs30 == vs_NZGD00[dup_pairs[i,2],]$Vs30) {
+        print(i)
+        unwanted[dup_pairs[i,2]] = T
+    }
+}
+df = df[unwanted==FALSE,]
+write.csv(df, "../Vs30_data/vspr.csv")
