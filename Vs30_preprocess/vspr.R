@@ -14,7 +14,7 @@ vs_NZGD00 = spTransform(vs_NZGD49, CRS(paste0("+proj=tmerc +lat_0=0 +lon_0=173 +
                                               "+x_0=1600000 +y_0=10000000 +ellps=GRS80 ",
                                               "+towgs84=0,0,0,0,0,0,0 +units=m +no_defs")))
 
-# POLYGONS
+# CATEGORY POLYGONS
 load(file = "~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
 poly_NZGD49 = spTransform(map_NZGD00, CRS=CRS(paste0(
     "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 ",
@@ -58,11 +58,7 @@ sigma_MVN_YongCA_noQ3 = vs_NZGD00 %over% MVN_terrain_sigma
 rm(MVN_geology, MVN_terrain, MVN_geology_sigma, MVN_terrain_sigma)
 
 # MODELS for POINTS
-# model groups saved instead, should really be numeric IDs but are description categories instead
-# AhdiAK_noQ3_hyb09c
-# YongCA
-# YongCA_noQ3
-# AhdiYongWeighted1
+# model groups saved, should really be numeric IDs but are description categories instead
 
 # POINTS DATA
 # add columns as required from vs_NZGD00 and polys
@@ -72,7 +68,7 @@ df = data.frame("polygon"=polys$INDEX,
                 "easting"=vs_NZGD00@coords[,1],
                 "northing"=vs_NZGD00@coords[,2],
                 "v30"=vs_NZGD00$Vs30,
-                "terrain"=vspr$dep,
+                "terrain"=polys$dep,
                 "slp09c"=slp09c$slope,
                 "slp30c"=slp30c$slope,
                 "v30_mvn_aak_n3_h9c"=Vs30_MVN_AhdiAK_noQ3_hyb09c,
@@ -85,13 +81,13 @@ df = data.frame("polygon"=polys$INDEX,
 rownames(df) = c()
 
 # POINTS CLEAN
-# remove points in water, nans
+# remove points in water, NaNs
 # potentially do before finding metadata for them (along the way)
 unwanted = (polys$UNIT_CODE == "water") |
            (is.na(polys$UNIT_CODE)) |
            (is.na(slp09c)) |
            (is.na(slp30c))
-# also remove points in the same location with the same Vs30, Vs30 to be stored in vspr?
+# also remove points in the same location with the same Vs30
 dup_pairs = zerodist(vs_NZGD00)
 for (i in seq(dim(dup_pairs)[1])) {
     if(vs_NZGD00[dup_pairs[i,1],]$Vs30 == vs_NZGD00[dup_pairs[i,2],]$Vs30) {
