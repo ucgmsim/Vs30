@@ -1,4 +1,6 @@
 
+# Gathers metadata for points with measured Vs30.
+
 # must be run within this script directory because of these silly source paths
 # script dir isn't helpful when running interactively
 # script_dir = dirname(sys.frame(1)$ofile)
@@ -12,7 +14,7 @@ vs_NZGD00 = spTransform(vs_NZGD49, CRS(paste0("+proj=tmerc +lat_0=0 +lon_0=173 +
                                               "+x_0=1600000 +y_0=10000000 +ellps=GRS80 ",
                                               "+towgs84=0,0,0,0,0,0,0 +units=m +no_defs")))
 
-# POLYGONS
+# CATEGORY POLYGONS
 load(file = "~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
 poly_NZGD49 = spTransform(map_NZGD00, CRS=CRS(paste0(
     "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 ",
@@ -23,6 +25,7 @@ poly_NZGD49 = spTransform(map_NZGD00, CRS=CRS(paste0(
 
 # POLYGONS for POINTS
 polys = vs_NZGD49 %over% poly_NZGD49
+rm(poly_NZGD49)
 
 # SLOPE for POINTS
 load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
@@ -55,28 +58,30 @@ sigma_MVN_YongCA_noQ3 = vs_NZGD00 %over% MVN_terrain_sigma
 rm(MVN_geology, MVN_terrain, MVN_geology_sigma, MVN_terrain_sigma)
 
 # MODELS for POINTS
-#TODO
-
-# VS META for POINTS
-# extra data added via loadVs into vs_NZGD49
-#TODO add as required, mainly duplicated text that can be an enum such as source (mcgann, wotherspoon, kaiser...)
+# model groups saved, should really be numeric IDs but are description categories instead
 
 # POINTS DATA
-df = data.frame("index"=polys$INDEX,
+# add columns as required from vs_NZGD00 and polys
+# groupid for YoungCA and YoungCA_noQ3 are equal so not duplicated
+# groupid for AhdiYongWeighted1 is just a concatenation of Ahdi and Yong groups
+df = data.frame("polygon"=polys$INDEX,
                 "easting"=vs_NZGD00@coords[,1],
                 "northing"=vs_NZGD00@coords[,2],
+                "v30"=vs_NZGD00$Vs30,
+                "terrain"=polys$dep,
                 "slp09c"=slp09c$slope,
                 "slp30c"=slp30c$slope,
-                "gid_yongca"=groupID_YongCA,
                 "v30_mvn_aak_n3_h9c"=Vs30_MVN_AhdiAK_noQ3_hyb09c,
                 "v30_mvn_yca_n3"=Vs30_MVN_YongCA_noQ3,
                 "sd_mvn_aak_n3_h9c"=sigma_MVN_AhdiAK_noQ3_hyb09c,
-                "sd_mvn_yca_n3"=sigma_MVN_YongCA_noQ3
+                "sd_mvn_yca_n3"=sigma_MVN_YongCA_noQ3,
+                "gid_yca"=groupID_YongCA,
+                "gid_aak_n3_h9c"=polys$groupID_AhdiAK_noQ3_hyb09c
 )
 rownames(df) = c()
 
 # POINTS CLEAN
-# remove points in water, nans
+# remove points in water, NaNs
 # potentially do before finding metadata for them (along the way)
 unwanted = (polys$UNIT_CODE == "water") |
            (is.na(polys$UNIT_CODE)) |
@@ -86,9 +91,15 @@ unwanted = (polys$UNIT_CODE == "water") |
 dup_pairs = zerodist(vs_NZGD00)
 for (i in seq(dim(dup_pairs)[1])) {
     if(vs_NZGD00[dup_pairs[i,1],]$Vs30 == vs_NZGD00[dup_pairs[i,2],]$Vs30) {
-        print(i)
         unwanted[dup_pairs[i,2]] = T
     }
 }
 df = df[unwanted==FALSE,]
+
+# duplicate data and data with different dimensions:
+# 1. residuals will not be saved in vspr table
+#    they are simply log(vs30) - log(other vs30)
+# 2. mean and sd of vs30 by terrain category, or these can be saved in another table
+# 3. rGeos: vs30 / mean of vs30 by terrain category
+
 write.csv(df, "../Vs30_data/vspr.csv")
