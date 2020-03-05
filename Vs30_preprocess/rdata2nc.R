@@ -76,6 +76,8 @@ convert2nc(rdata, slp_nzsi_30c)
 
 load("variogram_AhdiAK_noQ3_hyb09c_v6.Rdata")
 write.csv(variogram, "variogram_AhdiAK_noQ3_hyb09c_v6.csv")
+load("variogram_YongCA_noQ3_v7.Rdata")
+write.csv(variogram, "variogram_YongCA_noQ3_v7.csv")
 
 ###
 ### QMAP
