@@ -334,7 +334,7 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
     obs_variances = (vspr[[sprintf("stDv_%s",MODEL)]])^2
     obs_residuals = log(vspr$Vs30) - obs_values_log
     obs_stdev_log = vspr$lnMeasUncer
-  
+
     mvn_out = mvn(obs_locations, model_locations, model_variances, variogram,
                     model_values_log, obs_variances, obs_residuals,
                     covReducPar, obs_values_log, obs_stdev_log)
@@ -346,6 +346,40 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
     print(sprintf("min, max (mvn_out$pred): %s %s", min(mvn_out$pred, na.rm=T), max(mvn_out$pred, na.rm=T)))
     # what if all values are nan (above)??
     krigedHybOutput = (c(lnObsPred=lnObsPred, stdDev=std_dev))
+    return(krigedHybOutput)
+}
+
+
+mvn_points = function(xy, vspr, variogram, MODEL) {
+    # Interpolates residuals and variance geographically for a SpatialPoints input.
+    # xy is SpatialPoints, eg:
+    #xy = data.frame(x=, y=)
+    #coordinates(xy) = ~ x + y
+    #crs(xy) = "proj4 string"
+
+    polys = over(xy, map_NZGD00)
+    model_values_log = log(1)# convert model GIDs to vs30
+    model_variances = 1^2# convert model GIDs to stdev
+
+    # mask for available points
+    # TODO: return at all locations, nans possible (no valid_index)
+    valid_idx = Which(!is.na(polys$INDEX), cells=TRUE)
+    valid_idx = intersect(valid_idx, Which(!is.na(vs30s), cells=TRUE))
+    valid_idx = intersect(valid_idx, Which(!is.na(stdevs), cells=TRUE))
+
+    # observed locations info
+    obs_locations = coordinates(vspr)
+    obs_values_log = log(vspr[[sprintf("Vs30_%s",MODEL)]])
+    obs_variances = (vspr[[sprintf("stDv_%s",MODEL)]])^2
+    obs_residuals = log(vspr$Vs30) - obs_values_log
+    obs_stdev_log = vspr$lnMeasUncer
+
+    mvn_out = mvn(obs_locations, xy, model_variances[valid_idx], variogram,
+                  model_values_log[valid_idx], obs_variances, obs_residuals,
+                  covReducPar, obs_values_log, obs_stdev_log)
+
+    # what if all values are nan (above)??
+    krigedHybOutput = (c(lnObsPred=(mvn_out$pred - model_values_log), stdDev=sqrt(mvn_out$var)))
     return(krigedHybOutput)
 }
 
@@ -372,6 +406,7 @@ mvn_oneTile = function(x, y, vspr, variogram, MODEL) {
           YongCA_noQ3        = "~/big_noDB/models/YongCA_noQ3_sigma.tif",
           AhdiYongWeighted1  = "~/big_noDB/models/AhdiYongWeighted1_sigma.tif"))   
     # index joined to prevent cropping
+    # TODO: index is just the polygon index for all points, might be possible to generate on the fly
     vs30 = crop(vs30, exts)
     stdev = crop(stdev, exts)
     
