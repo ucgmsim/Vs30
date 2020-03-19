@@ -3,7 +3,8 @@ library(gstat)
 library(Matrix)
 library(raster)
 
-source("R/mvn_params.R")
+source("Kevin/mvn_params.R")
+source("Kevin/MODEL_AhdiAK_noQ3.R")
 
 # vs site properties
 load("Rdata/vspr.Rdata")
@@ -242,7 +243,7 @@ Sigma_Y2Y2 = function(covMatrix, N) {
   M = M_plus_N - N
   
   return(covMatrix[(M+1) : M_plus_N,
-                   (M+1) : M_plus_N, drop = F])
+                   (M+1) : M_plus_N, drop=F])
 }
 
 Sigma_Y1Y2 = function(covMatrix, N) {
@@ -350,22 +351,22 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
 }
 
 
-mvn_points = function(xy, vspr, variogram, MODEL) {
+mvn_points = function(xy, slp09c, vspr, variogram, MODEL) {
     # Interpolates residuals and variance geographically for a SpatialPoints input.
-    # xy is SpatialPoints, eg:
-    #xy = data.frame(x=, y=)
-    #coordinates(xy) = ~ x + y
-    #crs(xy) = "proj4 string"
+    # xy is SpatialPoints
 
     polys = over(xy, map_NZGD00)
-    model_values_log = log(1)# convert model GIDs to vs30
-    model_variances = 1^2# convert model GIDs to stdev
+    gid=lapply(polys$groupID_AhdiAK, as.character)
+    model_params = data.frame("groupID_AhdiAK"=gid, "slp09c"=slp09c)
+    names(model_params) = c("groupID_AhdiAK", "slp09c")
+    model_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params))
+    model_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
 
     # mask for available points
     # TODO: return at all locations, nans possible (no valid_index)
-    valid_idx = Which(!is.na(polys$INDEX), cells=TRUE)
-    valid_idx = intersect(valid_idx, Which(!is.na(vs30s), cells=TRUE))
-    valid_idx = intersect(valid_idx, Which(!is.na(stdevs), cells=TRUE))
+    valid_idx = which(!is.na(polys$INDEX))
+    valid_idx = intersect(valid_idx, which(!is.na(model_values_log)))
+    valid_idx = intersect(valid_idx, which(!is.na(model_variances)))
 
     # observed locations info
     obs_locations = coordinates(vspr)
@@ -374,7 +375,7 @@ mvn_points = function(xy, vspr, variogram, MODEL) {
     obs_residuals = log(vspr$Vs30) - obs_values_log
     obs_stdev_log = vspr$lnMeasUncer
 
-    mvn_out = mvn(obs_locations, xy, model_variances[valid_idx], variogram,
+    mvn_out = mvn(obs_locations, coordinates(xy), model_variances[valid_idx], variogram,
                   model_values_log[valid_idx], obs_variances, obs_residuals,
                   covReducPar, obs_values_log, obs_stdev_log)
 
@@ -436,3 +437,16 @@ for (y in 0:15) {
 x = 2
 y = 1
 mvn_oneTile(x, y, vspr_noQ3, variogram, MODEL)
+
+
+xy = data.frame(x=c(1242550), y=c(4849550))
+coordinates(xy) = ~ x + y
+crs(xy) = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+xy49 = spTransform(xy, "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993")
+load("~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
+load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
+load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
+slp09c = xy49 %over% slp_nzsi_9c.sgdf
+slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+rm(slp_nzsi_9c, slp_nzsi_9c.sgdf, slp_nzni_9c, slp_nzni_9c.sgdf)
+mvn_points(xy, slp09c, vspr, variogram, MODEL)
