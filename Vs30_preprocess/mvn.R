@@ -433,15 +433,14 @@ mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F, k
     log_a = log(aak_vs30)
     log_y = log(yca_vs30)
     if (new_weight) {
-        m_a = (aak_out$stdDev ^ 2) ^ k
-        m_y = (yca_out$stdDev ^ 2) ^ k
+        m_a = (aak_out$stdDev ^ 2) ^ -k
+        m_y = (yca_out$stdDev ^ 2) ^ -k
         w_a = m_a / (m_a + m_y)
         w_y = m_y / (m_a + m_y)
     } else {
         w_a = 0.5
         w_y = 0.5
     }
-    k = 1
     log_ay = log_a * w_a + log_y * w_y
     ay_vs30 = exp(log_ay)
     sig1sq = aak_out["stdDev"] ^ 2
