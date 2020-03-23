@@ -374,9 +374,10 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
 }
 
 
-mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram) {
+mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     # Interpolates residuals and variance geographically for a SpatialPoints input.
     # xy is SpatialPoints
+    # new_weight: T to use new weighting model, set k to 2 or 1
 
     polys = over(xy, map_NZGD00)
     groupID_YongCA = xy %over% IP
@@ -424,20 +425,30 @@ mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram) {
 
     # what if all values are nan (above)??
     # lnObsPred=residual, stdDev=standard_deviation
-    aak_out = (c(lnObsPred=c(mvn_aak$pred - aak_values_log), stdDev=c(sqrt(mvn_aak$var))))
-    yca_out = (c(lnObsPred=(mvn_yca$pred - yca_values_log), stdDev=sqrt(mvn_yca$var)))
+    aak_out = data.frame(lnObsPred=(mvn_aak$pred - aak_values_log), stdDev=sqrt(mvn_aak$var))
+    yca_out = data.frame(lnObsPred=(mvn_yca$pred - yca_values_log), stdDev=sqrt(mvn_yca$var))
     aak_vs30 = exp(aak_values_log) * exp(aak_out["lnObsPred"])
     yca_vs30 = exp(yca_values_log) * exp(yca_out["lnObsPred"])
     # weighted result
     log_a = log(aak_vs30)
     log_y = log(yca_vs30)
-    log_ay = ((log_a + log_y) * 0.5)
+    if (new_weight) {
+        m_a = (aak_out$stdDev ^ 2) ^ k
+        m_y = (yca_out$stdDev ^ 2) ^ k
+        w_a = m_a / (m_a + m_y)
+        w_y = m_y / (m_a + m_y)
+    } else {
+        w_a = 0.5
+        w_y = 0.5
+    }
+    k = 1
+    log_ay = log_a * w_a + log_y * w_y
     ay_vs30 = exp(log_ay)
     sig1sq = aak_out["stdDev"] ^ 2
     sig2sq = yca_out["stdDev"] ^ 2
 
     # Reference: https://en.wikipedia.org/wiki/Mixture_distribution#Moments
-    ay_stdev = (0.5 * (((log_a - log_ay) ^ 2) + sig1sq + ((log_y - log_ay) ^ 2) + sig2sq)) ^ 0.5
+    ay_stdev = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
     return(c(ay_vs30, ay_stdev))
 }
 
@@ -506,5 +517,5 @@ xy00 = spTransform(xy, NZGD2000)
 xy49 = spTransform(xy, NZMG)
 slp09c = xy49 %over% slp_nzsi_9c.sgdf
 slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-ahdiyong = mvn_points(xy00, slp09c, vspr_aak, vspr_yca, variogram)
+ahdiyong = mvn_points(xy00, slp09c, vspr_aak, vspr_yca, variogram, new_weight=T)
 print(ahdiyong)
