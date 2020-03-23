@@ -5,16 +5,39 @@ library(raster)
 
 source("Kevin/mvn_params.R")
 source("Kevin/MODEL_AhdiAK_noQ3.R")
+source("Kevin/MODEL_YongCA_noQ3.R")
+
+MODEL_AAK = "AhdiAK_noQ3_hyb09c"
+MODEL_YCA = "YongCA_noQ3"
+
+WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+NZGD2000 = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+NZMG = "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"
+
+# working files
+load("~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
+load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
+load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
+IP = as(raster("~/big_noDB/topo/terrainCats/IwahashiPike_NZ_100m_16.tif"), "SpatialGridDataFrame")
 
 # vs site properties
 load("Rdata/vspr.Rdata")
 vspr_noQ3 = vspr[(vspr$QualityFlag != "Q3" | is.na(vspr$QualityFlag)),]
 
 # remove points where MODEL predictions don't exist
-model_na = which(is.na(vspr_noQ3[[paste0("Vs30_", MODEL)]]))
-if(length(model_na) > 0) {
+aak_na = which(is.na(vspr_noQ3[[paste0("Vs30_", MODEL_AAK)]]))
+if(length(aak_na) > 0) {
   warning("some locations don't have predictions for this model")
-  vspr_noQ3 = vspr_noQ3[-model_na,]
+  vspr_aak = vspr_noQ3[-aak_na,]
+} else {
+  vspr_aak = vspr_noQ3
+}
+yca_na = which(is.na(vspr_noQ3[[paste0("Vs30_", MODEL_YCA)]]))
+if(length(yca_na) > 0) {
+  warning("some locations don't have predictions for this model")
+  vspr_yca = vspr_noQ3[-yca_na,]
+} else {
+    vspr_yca = vspr_noQ3
 }
 
 # import variogram
@@ -351,37 +374,71 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
 }
 
 
-mvn_points = function(xy, slp09c, vspr, variogram, MODEL) {
+mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram) {
     # Interpolates residuals and variance geographically for a SpatialPoints input.
     # xy is SpatialPoints
 
     polys = over(xy, map_NZGD00)
-    gid=lapply(polys$groupID_AhdiAK, as.character)
-    model_params = data.frame("groupID_AhdiAK"=gid, "slp09c"=slp09c)
-    names(model_params) = c("groupID_AhdiAK", "slp09c")
-    model_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params))
-    model_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
+    groupID_YongCA = xy %over% IP
+    colnames(groupID_YongCA) = "ID"
+    groupID_YongCA_names = plyr::join(groupID_YongCA, IPlevels[[1]])
+    
+    # make sure datatype is correct
+    if (length(xy) > 1) {
+        gid_aak = as.character(polys$groupID_AhdiAK)
+    } else {
+        gid_aak=lapply(polys$groupID_AhdiAK, as.character)
+    }
+    model_params = data.frame("groupID_AhdiAK"=gid_aak, "groupID_YongCA_noQ3"=groupID_YongCA_names$category, "slp09c"=slp09c)
+    names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c")
+    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params))
+    aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
+    yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
+    yca_variances = YongCA_noQ3_set_stDv(model_params)^2
 
     # mask for available points
     # TODO: return at all locations, nans possible (no valid_index)
-    valid_idx = which(!is.na(polys$INDEX))
-    valid_idx = intersect(valid_idx, which(!is.na(model_values_log)))
-    valid_idx = intersect(valid_idx, which(!is.na(model_variances)))
+    #valid_idx = which(!is.na(polys$INDEX))
+    #valid_idx = intersect(valid_idx, which(!is.na(aak_values_log)))
+    #valid_idx = intersect(valid_idx, which(!is.na(aak_variances)))
 
     # observed locations info
-    obs_locations = coordinates(vspr)
-    obs_values_log = log(vspr[[sprintf("Vs30_%s",MODEL)]])
-    obs_variances = (vspr[[sprintf("stDv_%s",MODEL)]])^2
-    obs_residuals = log(vspr$Vs30) - obs_values_log
-    obs_stdev_log = vspr$lnMeasUncer
-
-    mvn_out = mvn(obs_locations, coordinates(xy), model_variances[valid_idx], variogram,
-                  model_values_log[valid_idx], obs_variances, obs_residuals,
-                  covReducPar, obs_values_log, obs_stdev_log)
+    aak_obs_locations = coordinates(vspr_aak)
+    # THESE ARE TAKEN FROM THE MVN, final result. Circular Dependency?
+    aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
+    aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
+    aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
+    aak_obs_stdev_log = vspr_aak$lnMeasUncer
+    mvn_aak = mvn(aak_obs_locations, coordinates(xy), aak_variances, variogram,
+                  aak_values_log, aak_obs_variances, aak_obs_residuals,
+                  covReducPar, aak_obs_values_log, aak_obs_stdev_log)
+    yca_obs_locations = coordinates(vspr_yca)
+    yca_obs_values_log = log(vspr_yca[["Vs30_YongCA_noQ3"]])
+    yca_obs_variances = (vspr_yca[["stDv_YongCA_noQ3"]])^2
+    yca_obs_residuals = log(vspr_yca$Vs30) - yca_obs_values_log
+    yca_obs_stdev_log = vspr_yca$lnMeasUncer
+    mvn_yca = mvn(yca_obs_locations, coordinates(xy), yca_variances, variogram,
+                  yca_values_log, yca_obs_variances, yca_obs_residuals,
+                  covReducPar, yca_obs_values_log, yca_obs_stdev_log)
+    
 
     # what if all values are nan (above)??
-    krigedHybOutput = (c(lnObsPred=(mvn_out$pred - model_values_log), stdDev=sqrt(mvn_out$var)))
-    return(krigedHybOutput)
+    # lnObsPred=residual, stdDev=standard_deviation
+    aak_out = (c(lnObsPred=c(mvn_aak$pred - aak_values_log), stdDev=c(sqrt(mvn_aak$var))))
+    yca_out = (c(lnObsPred=(mvn_yca$pred - yca_values_log), stdDev=sqrt(mvn_yca$var)))
+    aak_vs30 = exp(aak_values_log) * exp(aak_out["lnObsPred"])
+    yca_vs30 = exp(yca_values_log) * exp(yca_out["lnObsPred"])
+    # weighted result
+    log_a = log(aak_vs30)
+    log_y = log(yca_vs30)
+    log_ay = ((log_a + log_y) * 0.5)
+    ay_vs30 = exp(log_ay)
+    sig1sq = aak_out["stdDev"] ^ 2
+    sig2sq = yca_out["stdDev"] ^ 2
+
+    # Reference: https://en.wikipedia.org/wiki/Mixture_distribution#Moments
+    ay_stdev = (0.5 * (((log_a - log_ay) ^ 2) + sig1sq + ((log_y - log_ay) ^ 2) + sig2sq)) ^ 0.5
+    return(c(ay_vs30, ay_stdev))
 }
 
 
@@ -439,14 +496,15 @@ y = 1
 mvn_oneTile(x, y, vspr_noQ3, variogram, MODEL)
 
 
-xy = data.frame(x=c(1242550), y=c(4849550))
+#xy = data.frame(x=c(1242550), y=c(4849550))
+#xy = data.frame(x=c(177), y=c(-37.983333))
+xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
+xy_lonlat=TRUE
 coordinates(xy) = ~ x + y
-crs(xy) = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-xy49 = spTransform(xy, "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993")
-load("~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
-load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
-load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
+if (xy_lonlat) {crs(xy) = WGS84} else {crs(xy) = NZGD2000}
+xy00 = spTransform(xy, NZGD2000)
+xy49 = spTransform(xy, NZMG)
 slp09c = xy49 %over% slp_nzsi_9c.sgdf
 slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-rm(slp_nzsi_9c, slp_nzsi_9c.sgdf, slp_nzni_9c, slp_nzni_9c.sgdf)
-mvn_points(xy, slp09c, vspr, variogram, MODEL)
+ahdiyong = mvn_points(xy00, slp09c, vspr_aak, vspr_yca, variogram)
+print(ahdiyong)
