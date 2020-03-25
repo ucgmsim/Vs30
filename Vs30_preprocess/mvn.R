@@ -19,6 +19,8 @@ load("~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
 load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
 load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
 IP = as(raster("~/big_noDB/topo/terrainCats/IwahashiPike_NZ_100m_16.tif"), "SpatialGridDataFrame")
+dist2coast = as(raster("~/ucgmsim/Vs30map_clean/nz_dc_km.grd"), "SpatialGridDataFrame")
+crs(dist2coast) = WGS84
 
 # vs site properties
 load("Rdata/vspr.Rdata")
@@ -161,9 +163,10 @@ mvn = function(obs_locations, model_locations, model_variances, model,
             cov_matrix = covReducMat * cov_matrix
         }
 
-        # check for positive definiteness
         if (!is.positive.definite(as.matrix(cov_matrix))) {
             warning("Not positive definite.")
+            # warning above doesn't seem to matter, possible solution below
+            #cov_matrix = nearPD(cov_matrix)$mat
         }
 
         cov_Y2Y2_inverse = solve(Sigma_Y2Y2(covMatrix=cov_matrix, n_obs))
@@ -374,7 +377,7 @@ mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
 }
 
 
-mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
+mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     # Interpolates residuals and variance geographically for a SpatialPoints input.
     # xy is SpatialPoints
     # new_weight: T to use new weighting model, set k to 2 or 1
@@ -382,9 +385,16 @@ mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F, k
     n_pts = length(xy)
     blank = rep(NA, n_pts)
     result = data.frame(vs30=blank, sigma=blank)
+    
+    xy00 = spTransform(xy, NZGD2000)
+    xy49 = spTransform(xy, NZMG)
+    slp09c = xy49 %over% slp_nzsi_9c.sgdf
+    slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+    slp09c[is.na(slp09c)] = 0.0
+    coastkm = over(xy, dist2coast)
 
-    polys = over(xy, map_NZGD00)
-    groupID_YongCA = xy %over% IP
+    polys = over(xy00, map_NZGD00)
+    groupID_YongCA = xy00 %over% IP
     colnames(groupID_YongCA) = "ID"
     groupID_YongCA_names = plyr::join(groupID_YongCA, IPlevels[[1]])
     
@@ -398,11 +408,11 @@ mvn_points = function(xy, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F, k
     # groupID of NA will crash
     # maximum 1:286 21:314
     valid_idx = intersect(which(!is.na(gid_aak)), which(!is.na(groupID_YongCA_names$category)))
-    coords = coordinates(xy)[valid_idx,]
+    coords = coordinates(xy00)[valid_idx,]
     rownames(coords) = NULL
 
-    model_params = data.frame("groupID_AhdiAK"=gid_aak, "groupID_YongCA_noQ3"=groupID_YongCA_names$category, "slp09c"=slp09c)
-    names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c")
+    model_params = data.frame(gid_aak, groupID_YongCA_names$category, slp09c, coastkm)
+    names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c", "coastkm")
     model_params = model_params[valid_idx,]
     aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params))
     aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
@@ -914,21 +924,13 @@ for (i in seq(1, length(xya), 2)) {
     #})
 }
 
-#xy = data.frame(x=c(1242550), y=c(4849550))
 xy = data.frame(x=c(175.283333), y=c(-37.783333)) # Hamilton
 #xy = data.frame(x=c(174.74), y=c(-36.840556)) # Auckland
 xy = data.frame(x=c(168.660899999859), y=c(-43.9961999994543))
 xy = data.frame(x=xya[c(T, F)], y=xya[c(F, T)])
-
-
 #xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
-xy_lonlat=T
+
 coordinates(xy) = ~ x + y
-if (xy_lonlat) {crs(xy) = WGS84} else {crs(xy) = NZGD2000}
-xy00 = spTransform(xy, NZGD2000)
-xy49 = spTransform(xy, NZMG)
-slp09c = xy49 %over% slp_nzsi_9c.sgdf
-slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-slp09c[is.na(slp09c)] = 0.0
-ahdiyong = mvn_points(xy00, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F)
+crs(xy) = WGS84
+ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
 print(ahdiyong)

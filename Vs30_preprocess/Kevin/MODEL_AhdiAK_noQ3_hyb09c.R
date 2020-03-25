@@ -138,6 +138,9 @@ AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data){
     w           <- which(data$groupID_AhdiAK %in% gID)
     Vs30out[w]  <- AhdiAK_noQ3_hyb09c_set_Vs30_hyb(data[w,], gID)
   }
+  # override G06
+  g06 = which(data$groupID_AhdiAK %in% "06_alluvium")
+  Vs30out[g06] = pmax(240, pmin(500, 240 + (500-240) * (data$coastkm[g06]-8)/(20-8)))
   return(Vs30out)
 }
 
@@ -152,3 +155,4 @@ AhdiAK_noQ3_hyb09c_set_stDv <- function(data) {
   names(stDvOut) <- NULL
   return(stDvOut)
 }
+
