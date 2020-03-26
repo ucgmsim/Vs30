@@ -24,7 +24,7 @@ crs(dist2coast) = WGS84
 
 # vs site properties
 load("Rdata/vspr.Rdata")
-vspr_noQ3 = vspr[(vspr$QualityFlag != "Q3" | is.na(vspr$QualityFlag)),]
+vspr_noQ3 = vspr[(vspr$QualityFlag != "Q3" | nchar(vspr$StationID) == 3 | is.na(vspr$QualityFlag)),]
 
 # remove points where MODEL predictions don't exist
 aak_na = which(is.na(vspr_noQ3[[paste0("Vs30_", MODEL_AAK)]]))
@@ -408,13 +408,14 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     # valid_idx prevents NA causing crashes
     valid_idx = intersect(which(!is.na(groupID_YongCA_names$category)),
         intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER")))
+    #valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
     coords = coordinates(xy00)[valid_idx,]
     rownames(coords) = NULL
 
     model_params = data.frame(gid_aak, groupID_YongCA_names$category, slp09c, coastkm)
     names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c", "coastkm")
     model_params = model_params[valid_idx,]
-    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T))
+    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
     aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
     yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
     yca_variances = YongCA_noQ3_set_stDv(model_params)^2
@@ -429,6 +430,11 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     mvn_aak = mvn(aak_obs_locations, coords, aak_variances, variogram,
                   aak_values_log, aak_obs_variances, aak_obs_residuals,
                   covReducPar, aak_obs_values_log, aak_obs_stdev_log)
+    #aak_resid = mvn_aak$pred - aak_values_log
+    #aak_stdev = sqrt(mvn_aak$var)
+    #aak_vs30 = exp(aak_values_log) * exp(aak_resid)
+    #result$vs30[valid_idx] = aak_vs30
+    #return(result)
     yca_obs_locations = coordinates(vspr_yca)
     yca_obs_values_log = log(vspr_yca[["Vs30_YongCA_noQ3"]])
     yca_obs_variances = (vspr_yca[["stDv_YongCA_noQ3"]])^2
@@ -907,22 +913,6 @@ xya = array(c(176.8801,-39.6710,#HNPS
               174.3169,-35.7150,#WBHS
               174.7746,-41.2700#POTR
 ))
-for (i in seq(1, length(xya), 2)) {
-    xy = data.frame(x=c(xya[i]), y=c(xya[i+1]))
-    coordinates(xy) = ~ x + y
-    crs(xy) = WGS84
-    xy00 = spTransform(xy, NZGD2000)
-    xy49 = spTransform(xy, NZMG)
-    slp09c = xy49 %over% slp_nzsi_9c.sgdf
-    slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-    slp09c[is.na(slp09c)] = 0.0
-    #result = tryCatch({
-      ahdiyong = mvn_points(xy00, slp09c, vspr_aak, vspr_yca, variogram, new_weight=F)
-      print(sprintf("'%s',%s,'%s',%s", ahdiyong[1], ahdiyong[2], ahdiyong[3], ahdiyong[4]))
-    #}, error = function(e) {
-    #  print("-,NA,-,NA")
-    #})
-}
 
 xy = data.frame(x=c(175.283333), y=c(-37.783333)) # Hamilton
 #xy = data.frame(x=c(174.74), y=c(-36.840556)) # Auckland

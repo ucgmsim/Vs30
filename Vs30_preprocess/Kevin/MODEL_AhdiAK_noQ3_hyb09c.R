@@ -125,7 +125,7 @@ AhdiAK_noQ3_hyb09c_set_Vs30_hyb <- function(data, groupID) {
   return(Vs30out)
 }
 
-AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data, g06mod=T){
+AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data, g06mod=T, g13mod=T){
   # applies each of the individual functions above (geo, hyb) in turn.
   
   # first, apply geo function
@@ -138,10 +138,15 @@ AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data, g06mod=T){
     w           <- which(data$groupID_AhdiAK %in% gID)
     Vs30out[w]  <- AhdiAK_noQ3_hyb09c_set_Vs30_hyb(data[w,], gID)
   }
-  if (!g06mod) {return(Vs30out)}
-  # override G06
-  g06 = which(data$groupID_AhdiAK %in% "06_alluvium")
-  Vs30out[g06] = pmax(240, pmin(500, 240 + (500-240) * (data$coastkm[g06]-8)/(20-8)))
+  if (g06mod) {
+      # override G06
+      g06 = which(data$groupID_AhdiAK %in% "06_alluvium")
+      Vs30out[g06] = pmax(240, pmin(500, 240 + (500-240) * (data$coastkm[g06]-8)/(20-8)))
+  }
+  if (g13mod) {
+      g13 = which(data$groupID_AhdiAK %in% "13_floodplain")
+      Vs30out[g13] = pmax(197, pmin(500, 197 + (500-197) * (data$coastkm[g06]-8)/(20-8)))
+  }
   return(Vs30out)
 }
 
