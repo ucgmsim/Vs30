@@ -405,16 +405,16 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
         gid_aak=lapply(polys$groupID_AhdiAK, as.character)
     }
 
-    # groupID of NA will crash
-    # maximum 1:286 21:314
-    valid_idx = intersect(which(!is.na(gid_aak)), which(!is.na(groupID_YongCA_names$category)))
+    # valid_idx prevents NA causing crashes
+    valid_idx = intersect(which(!is.na(groupID_YongCA_names$category)),
+        intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER")))
     coords = coordinates(xy00)[valid_idx,]
     rownames(coords) = NULL
 
     model_params = data.frame(gid_aak, groupID_YongCA_names$category, slp09c, coastkm)
     names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c", "coastkm")
     model_params = model_params[valid_idx,]
-    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params))
+    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T))
     aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
     yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
     yca_variances = YongCA_noQ3_set_stDv(model_params)^2
