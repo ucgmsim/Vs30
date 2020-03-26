@@ -145,7 +145,7 @@ AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data, g06mod=T, g13mod=T){
   }
   if (g13mod) {
       g13 = which(data$groupID_AhdiAK %in% "13_floodplain")
-      Vs30out[g13] = pmax(197, pmin(500, 197 + (500-197) * (data$coastkm[g06]-8)/(20-8)))
+      Vs30out[g13] = pmax(197, pmin(500, 197 + (500-197) * (data$coastkm[g13]-8)/(20-8)))
   }
   return(Vs30out)
 }
