@@ -23,7 +23,7 @@ dist2coast = as(raster("~/ucgmsim/Vs30map_clean/nz_dc_km.grd"), "SpatialGridData
 crs(dist2coast) = WGS84
 
 # vs site properties
-load("Rdata/vspr.Rdata")
+load("~/VsMap/Rdata/vspr.Rdata")
 vspr_noQ3 = vspr[(vspr$QualityFlag != "Q3" | nchar(vspr$StationID) == 3 | is.na(vspr$QualityFlag)),]
 
 # remove points where MODEL predictions don't exist
@@ -41,11 +41,33 @@ if(length(yca_na) > 0) {
 } else {
     vspr_yca = vspr_noQ3
 }
+# update model values with geology model tweaks
+vspr_aak_points = SpatialPoints(vspr_aak@coords, proj4string=vspr_aak@proj4string)
+distances = coast_distance(vspr_aak_points)
+xy49 = spTransform(vspr_aak_points, NZMG)
+slp09c = xy49 %over% slp_nzsi_9c.sgdf
+slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+slp09c[is.na(slp09c)] = 0.0
+model_params = data.frame(vspr_aak@data$groupID_AhdiAK, slp09c, distances)
+names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
+vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]] = AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T)
 
 # import variogram
-load(sprintf("Rdata/variogram_%s_%s.Rdata", MODEL, vgName))
+load(sprintf("~/VsMap/Rdata/variogram_%s_%s.Rdata", MODEL, vgName))
 
 library(matrixcalc)
+
+coast_poly = readOGR(dsn = "/nesi/project/nesi00213/PlottingData/Paths/lds-nz-coastlines-and-islands/EPSG_2193", layer="nz-coastlines-and-islands-polygons-topo-1500k")
+coast_line = as(coast_poly, "SpatialLinesDataFrame")
+coast_distance = function(xy, km=T) {
+    # xy: SpatialPoints with CRS epsg:2193 NZGD2000
+    nxy = length(xy)
+    result = rep(0.0, nxy)
+    mask = which(!is.na(over(xy, coast_poly)$name))
+    result[mask] = apply(gDistance(xy[mask,], coast_line, byid=T), 2, min)
+    if (km) {return(result/1000.0)}
+    return(result)
+}
 
 mvn = function(obs_locations, model_locations, model_variances, model,
                modeledValues, modelVarObs, obs_residuals,
@@ -163,11 +185,11 @@ mvn = function(obs_locations, model_locations, model_variances, model,
             cov_matrix = covReducMat * cov_matrix
         }
 
-        if (!is.positive.definite(as.matrix(cov_matrix))) {
-            warning("Not positive definite.")
-            # warning above doesn't seem to matter, possible solution below
-            #cov_matrix = nearPD(cov_matrix)$mat
-        }
+        #if (!is.positive.definite(as.matrix(cov_matrix))) {
+        #    warning("Not positive definite.")
+        #    # warning above doesn't seem to matter, possible solution below
+        #    #cov_matrix = nearPD(cov_matrix)$mat
+        #}
 
         cov_Y2Y2_inverse = solve(Sigma_Y2Y2(covMatrix=cov_matrix, n_obs))
         pred = c(pred, as.numeric(mu_Y1_given_y2(modeledValuesChunk, covMatrix=cov_matrix, 
@@ -391,7 +413,8 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     slp09c = xy49 %over% slp_nzsi_9c.sgdf
     slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
     slp09c[is.na(slp09c)] = 0.0
-    coastkm = over(xy, dist2coast)
+    #coastkm = over(xy, dist2coast)
+    coastkm = coast_distance(xy00)
 
     polys = over(xy00, map_NZGD00)
     groupID_YongCA = xy00 %over% IP
@@ -406,9 +429,9 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     }
 
     # valid_idx prevents NA causing crashes
-    valid_idx = intersect(which(!is.na(groupID_YongCA_names$category)),
-        intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER")))
-    #valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
+    #valid_idx = intersect(which(!is.na(groupID_YongCA_names$category)),
+    #    intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER")))
+    valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
     coords = coordinates(xy00)[valid_idx,]
     rownames(coords) = NULL
 
@@ -417,12 +440,11 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     model_params = model_params[valid_idx,]
     aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
     aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
-    yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
-    yca_variances = YongCA_noQ3_set_stDv(model_params)^2
+    #yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
+    #yca_variances = YongCA_noQ3_set_stDv(model_params)^2
 
     # observed locations info
     aak_obs_locations = coordinates(vspr_aak)
-    # THESE ARE TAKEN FROM THE MVN, final result. Circular Dependency?
     aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
     aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
     aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
@@ -430,11 +452,10 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     mvn_aak = mvn(aak_obs_locations, coords, aak_variances, variogram,
                   aak_values_log, aak_obs_variances, aak_obs_residuals,
                   covReducPar, aak_obs_values_log, aak_obs_stdev_log)
-    #aak_resid = mvn_aak$pred - aak_values_log
-    #aak_stdev = sqrt(mvn_aak$var)
-    #aak_vs30 = exp(aak_values_log) * exp(aak_resid)
-    #result$vs30[valid_idx] = aak_vs30
-    #return(result)
+    aak_resid = mvn_aak$pred - aak_values_log
+    result$sigma[valid_idx] = sqrt(mvn_aak$var)
+    result$vs30[valid_idx] = exp(aak_values_log) * exp(aak_resid)
+    return(result)
     yca_obs_locations = coordinates(vspr_yca)
     yca_obs_values_log = log(vspr_yca[["Vs30_YongCA_noQ3"]])
     yca_obs_variances = (vspr_yca[["stDv_YongCA_noQ3"]])^2
@@ -914,13 +935,58 @@ xya = array(c(176.8801,-39.6710,#HNPS
               174.7746,-41.2700#POTR
 ))
 
+
 xy = data.frame(x=c(175.283333), y=c(-37.783333)) # Hamilton
-#xy = data.frame(x=c(174.74), y=c(-36.840556)) # Auckland
-xy = data.frame(x=c(168.660899999859), y=c(-43.9961999994543))
+xy = data.frame(x=c(174.74), y=c(-36.840556)) # Auckland
+xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
 xy = data.frame(x=xya[c(T, F)], y=xya[c(F, T)])
-#xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
 
 coordinates(xy) = ~ x + y
 crs(xy) = WGS84
-ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
+vspr_aak2 = vspr_aak
+vspr_aak2@data$lnMeasUncer = 0.01
+ahdiyong = mvn_points(xy, vspr_aak2, vspr_yca, variogram, new_weight=F)
 print(ahdiyong)
+
+
+###
+### WHOLE NZ
+###
+
+#vs30points = as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")
+#xy00 = data.frame(vs30points@coords)
+#coordinates(xy00) = ~ x + y
+crs(xy00) = NZGD2000
+xy = spTransform(xy00, WGS84)
+xy = read.table("/home/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh100_v18p6.ll")
+coordinates(xy) = ~ V1 + V2
+crs(xy) = WGS84
+ahdi = mvn_points(xy[1:150,], vspr_aak, vspr_yca, variogram, new_weight=F)
+
+
+###
+###
+###
+library(parallel)
+
+vs30points = as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")
+xy00 = data.frame(vs30points@coords)
+location_chunks = split(x=xy00, f=ceiling(seq(1, dim(xy00)[1])/30))
+rm(vs30points)
+
+run = function(xy00, vspr_aak, vspr_yca, variogram) {
+    library(raster)
+    coordinates(xy00) = ~ x + y
+    crs(xy00) = NZGD2000
+    xy = spTransform(xy00, WGS84)
+    ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
+    return(ahdi)
+}
+
+pool = makeCluster(detectCores() - 2)
+# exports variables to instances in cluster
+clusterExport(cl=pool, varlist=c("NZGD2000", "WGS84", "NZMG", "mvn_points",
+                                 "map_NZGD00", "slp_nzsi_9c.sgdf", "slp_nzni_9c.sgdf", "dist2coast", "IP"))
+vals = parLapply(cl=pool, X=location_chunks[1:60], fun=run,
+                 vspr_aak, vspr_yca, variogram)
+stopCluster(pool)
