@@ -2,6 +2,8 @@
 library(gstat)
 library(Matrix)
 library(raster)
+library(rgdal)
+library(rgeos) # gDistance
 
 source("Kevin/mvn_params.R")
 source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
@@ -11,16 +13,18 @@ MODEL_AAK = "AhdiAK_noQ3_hyb09c"
 MODEL_YCA = "YongCA_noQ3"
 
 WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-NZGD2000 = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 NZMG = "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"
 
 # working files
 load("~/big_noDB/geo/QMAP_Seamless_July13K_NZGD00.Rdata")
+# save memory
+gidmap00 = map_NZGD00[, (names(map_NZGD00) %in% c("groupID_AhdiAK"))]
+rm(map_NZGD00, map_NZGD00.Cant)
 load(file="~/VsMap/Rdata/nzsi_9c_slp.Rdata")
 load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
+rm(slp_nzni_9c, slp_nzsi_9c)
 IP = as(raster("~/big_noDB/topo/terrainCats/IwahashiPike_NZ_100m_16.tif"), "SpatialGridDataFrame")
-dist2coast = as(raster("~/ucgmsim/Vs30map_clean/nz_dc_km.grd"), "SpatialGridDataFrame")
-crs(dist2coast) = WGS84
 
 # vs site properties
 load("~/VsMap/Rdata/vspr.Rdata")
@@ -354,52 +358,7 @@ cov_Y1Y1_given_y2 = function(covMatrix_unconditional, cov_Y2Y2_inverse) {
   return(covY1Y1givenY2)
 }
 
-
-mvnRaster = function(inpIndexRaster, inpModelRaster, inpStdDevRaster,
-                      vspr, variogram, MODEL, covReducPar) {
-    # Interpolates residuals and variance geographically for a raster input.
-  
-    # duplicate rasters for filling with outputs
-    lnObsPred = std_dev = inpModelRaster
-  
-    # originally this function fails because of model_values_log not exisisting in all NA case
-    if (all(as.vector(is.na(inpModelRaster)))) { return }
-  
-    # removes ocean points
-    valid_idx = Which(!is.na(inpIndexRaster), cells=TRUE)
-    # Some NA values can get into the MVN inputs and cause annoying problems. Be extra cautious.
-    valid_idx = intersect(valid_idx, Which(!is.na(inpModelRaster), cells=TRUE))
-    valid_idx = intersect(valid_idx, Which(!is.na(inpStdDevRaster), cells=TRUE))[552929]
-
-    # run over these locations
-    model_locations = coordinates(xyFromCell(inpModelRaster, valid_idx, spatial=TRUE))
-    print(model_locations)
-    model_values_log = log(inpModelRaster[valid_idx])
-    model_variances = inpStdDevRaster[valid_idx]^2
-  
-    # observed locations model info
-    obs_locations = coordinates(vspr)
-    obs_values_log = log(vspr[[sprintf("Vs30_%s",MODEL)]])
-    obs_variances = (vspr[[sprintf("stDv_%s",MODEL)]])^2
-    obs_residuals = log(vspr$Vs30) - obs_values_log
-    obs_stdev_log = vspr$lnMeasUncer
-
-    mvn_out = mvn(obs_locations, model_locations, model_variances, variogram,
-                    model_values_log, obs_variances, obs_residuals,
-                    covReducPar, obs_values_log, obs_stdev_log)
-    # pred_residuals??
-    lnObsPred[valid_idx] = mvn_out$pred - model_values_log
-    std_dev[valid_idx] = sqrt(mvn_out$var)
-  
-    print(sprintf("min, max (model_values_log): %s %s", min(model_values_log, na.rm=T), max(model_values_log, na.rm=T)))
-    print(sprintf("min, max (mvn_out$pred): %s %s", min(mvn_out$pred, na.rm=T), max(mvn_out$pred, na.rm=T)))
-    # what if all values are nan (above)??
-    krigedHybOutput = (c(lnObsPred=lnObsPred, stdDev=std_dev))
-    return(krigedHybOutput)
-}
-
-
-mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
+mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1, geology=T, terrain=T) {
     # Interpolates residuals and variance geographically for a SpatialPoints input.
     # xy is SpatialPoints
     # new_weight: T to use new weighting model, set k to 2 or 1
@@ -408,70 +367,97 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     blank = rep(NA, n_pts)
     result = data.frame(vs30=blank, sigma=blank)
     
-    xy00 = spTransform(xy, NZGD2000)
+    # mvn uses EPSG:2193 (NZGD2000/NZTM)
+    xy00 = spTransform(xy, NZTM)
+
+    # model input - coast distance
+    coastkm = coast_distance(xy00)
+    # model input - slope
     xy49 = spTransform(xy, NZMG)
     slp09c = xy49 %over% slp_nzsi_9c.sgdf
     slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
     slp09c[is.na(slp09c)] = 0.0
-    #coastkm = over(xy, dist2coast)
-    coastkm = coast_distance(xy00)
+    rm(xy49)
 
-    polys = over(xy00, map_NZGD00)
-    groupID_YongCA = xy00 %over% IP
-    colnames(groupID_YongCA) = "ID"
-    groupID_YongCA_names = plyr::join(groupID_YongCA, IPlevels[[1]])
-    
-    # make sure datatype is correct
-    if (length(xy) > 1) {
-        gid_aak = as.character(polys$groupID_AhdiAK)
-    } else {
-        gid_aak=lapply(polys$groupID_AhdiAK, as.character)
-    }
+    # model input - group IDs, mask for unusable points
+    if (geology) {
+        gid = over(xy00, gidmap00)$groupID_AhdiAK
+        # make sure datatype is correct
+        if (length(xy) > 1) {
+            gid_aak = as.character(gid)
+        } else {
+            gid_aak=lapply(gid, as.character)
+        }
+        valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
+        rm(gid)
+    } else {gid_aak=NA}
+    if (terrain) {
+        groupID_YongCA = xy00 %over% IP
+        colnames(groupID_YongCA) = "ID"
+        gid_yca = plyr::join(groupID_YongCA, IPlevels[[1]])$category
+        terrain_idx = which(!is.na(gid_yca))
+        if (geology) {
+            valid_idx = intersect(valid_idx, terrain_idx)
+        } else {
+            valid_idx = terrain_idx
+        }
+        rm(terrain_idx, groupID_YongCA)
+    } else {gid_yca=NA}
 
-    # valid_idx prevents NA causing crashes
-    #valid_idx = intersect(which(!is.na(groupID_YongCA_names$category)),
-    #    intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER")))
-    valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
-    coords = coordinates(xy00)[valid_idx,]
-    rownames(coords) = NULL
-
-    model_params = data.frame(gid_aak, groupID_YongCA_names$category, slp09c, coastkm)
+    model_params = data.frame(gid_aak, gid_yca, slp09c, coastkm)
     names(model_params) = c("groupID_AhdiAK", "groupID_YongCA_noQ3", "slp09c", "coastkm")
     model_params = model_params[valid_idx,]
-    aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
-    aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
-    #yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
-    #yca_variances = YongCA_noQ3_set_stDv(model_params)^2
+    # run models
+    if (geology) {
+        aak_values_log = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
+        aak_variances = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
+    }
+    if (terrain) {
+        yca_values_log = log(YongCA_noQ3_set_Vs30(model_params))
+        yca_variances = YongCA_noQ3_set_stDv(model_params)^2
+    }
+    rm(gid_aak, gid_yca, slp09c, coastkm)
 
-    # observed locations info
-    aak_obs_locations = coordinates(vspr_aak)
-    aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
-    aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
-    aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
-    aak_obs_stdev_log = vspr_aak$lnMeasUncer
-    mvn_aak = mvn(aak_obs_locations, coords, aak_variances, variogram,
-                  aak_values_log, aak_obs_variances, aak_obs_residuals,
-                  covReducPar, aak_obs_values_log, aak_obs_stdev_log)
-    aak_resid = mvn_aak$pred - aak_values_log
-    result$sigma[valid_idx] = sqrt(mvn_aak$var)
-    result$vs30[valid_idx] = exp(aak_values_log) * exp(aak_resid)
-    return(result)
-    yca_obs_locations = coordinates(vspr_yca)
-    yca_obs_values_log = log(vspr_yca[["Vs30_YongCA_noQ3"]])
-    yca_obs_variances = (vspr_yca[["stDv_YongCA_noQ3"]])^2
-    yca_obs_residuals = log(vspr_yca$Vs30) - yca_obs_values_log
-    yca_obs_stdev_log = vspr_yca$lnMeasUncer
-    mvn_yca = mvn(yca_obs_locations, coords, yca_variances, variogram,
-                  yca_values_log, yca_obs_variances, yca_obs_residuals,
-                  covReducPar, yca_obs_values_log, yca_obs_stdev_log)
+    coords = coordinates(xy00)[valid_idx,]
+    rownames(coords) = NULL
+    rm(xy00)
 
-    # residual, previously lnObsPred, standard deviation and vs30
-    aak_resid = mvn_aak$pred - aak_values_log
-    aak_stdev = sqrt(mvn_aak$var)
-    aak_vs30 = exp(aak_values_log) * exp(aak_resid)
-    yca_resid = mvn_yca$pred - yca_values_log
-    yca_stdev = sqrt(mvn_yca$var)
-    yca_vs30 = exp(yca_values_log) * exp(yca_resid)
+    if (geology) {
+        aak_obs_locations = coordinates(vspr_aak)
+        aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
+        aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
+        aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
+        aak_obs_stdev_log = vspr_aak$lnMeasUncer
+        mvn_aak = mvn(aak_obs_locations, coords, aak_variances, variogram,
+                      aak_values_log, aak_obs_variances, aak_obs_residuals,
+                      covReducPar, aak_obs_values_log, aak_obs_stdev_log)
+        aak_resid = mvn_aak$pred - aak_values_log
+        aak_stdev = sqrt(mvn_aak$var)
+        aak_vs30 = exp(aak_values_log) * exp(aak_resid)
+        if (!terrain) {
+            result$sigma[valid_idx] = aak_stdev
+            result$vs30[valid_idx] = aak_vs30
+            return(result)
+        }
+    }
+    if (terrain) {
+        yca_obs_locations = coordinates(vspr_yca)
+        yca_obs_values_log = log(vspr_yca[["Vs30_YongCA_noQ3"]])
+        yca_obs_variances = (vspr_yca[["stDv_YongCA_noQ3"]])^2
+        yca_obs_residuals = log(vspr_yca$Vs30) - yca_obs_values_log
+        yca_obs_stdev_log = vspr_yca$lnMeasUncer
+        mvn_yca = mvn(yca_obs_locations, coords, yca_variances, variogram,
+                      yca_values_log, yca_obs_variances, yca_obs_residuals,
+                      covReducPar, yca_obs_values_log, yca_obs_stdev_log)
+        yca_resid = mvn_yca$pred - yca_values_log
+        yca_stdev = sqrt(mvn_yca$var)
+        yca_vs30 = exp(yca_values_log) * exp(yca_resid)
+        if (!terrain) {
+            result$sigma[valid_idx] = yca_stdev
+            result$vs30[valid_idx] = yca_vs30
+            return(result)
+        }
+    }
 
     # weighted result
     log_a = log(aak_vs30)
@@ -495,88 +481,16 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1) {
     return(result)
 }
 
-
-mvn_oneTile = function(x, y, vspr, variogram, MODEL) {
-    tile_name = sprintf("x%02dy%02d", x, y)
-    load(sprintf("Rdata/INDEX_NZGD00_allNZ_%s.Rdata", tile_name))
-    exts = extent(indexRaster)
-    print(exts)
-    
-    # this should be outside the loop
-    vs30 = raster(switch(MODEL,
-          AhdiAK             = "~/big_noDB/models/geo_NZGD00_allNZ_AhdiAK.tif",
-          AhdiAK_noQ3        = "~/big_noDB/models/geo_NZGD00_allNZ_AhdiAK_noQ3.tif",
-          AhdiAK_noQ3_hyb09c = "~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif",
-          YongCA             = "~/big_noDB/models/Yong2012_Cali_Vs30.tif",
-          YongCA_noQ3        = "~/big_noDB/models/YongCA_noQ3.tif",
-          AhdiYongWeighted1  = "~/big_noDB/models/AhdiYongWeighted1.tif"))       
-    stdev = raster(switch(MODEL,
-          AhdiAK             = "~/big_noDB/models/sig_NZGD00_allNZ_AhdiAK.tif",
-          AhdiAK_noQ3        = "~/big_noDB/models/sig_NZGD00_allNZ_AhdiAK_noQ3.tif",
-          AhdiAK_noQ3_hyb09c = "~/big_noDB/models/sig_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif",
-          YongCA             = "~/big_noDB/models/YongCA_sigma.tif",
-          YongCA_noQ3        = "~/big_noDB/models/YongCA_noQ3_sigma.tif",
-          AhdiYongWeighted1  = "~/big_noDB/models/AhdiYongWeighted1_sigma.tif"))   
-    # index joined to prevent cropping
-    # TODO: index is just the polygon index for all points, might be possible to generate on the fly
-    vs30 = crop(vs30, exts)
-    stdev = crop(stdev, exts)
-    
-    mvnOutput = mvnRaster(indexRaster, vs30, stdev, vspr, variogram, MODEL, covReducPar)
-    mvnVs30 = vs30 * exp(mvnOutput$lnObsPred)
-    print(mvnVs30[1])
-  
-    for (prefix in c("MVkrg", "MVres", "MVsdv")) {
-        rast = switch(prefix,
-                       MVkrg=mvnVs30,
-                       MVres=mvnOutput$lnObsPred,
-                       MVsdv=mvnOutput$stdDev)
-        writeRaster(rast, filename=paste0("tmp/", prefix, "_NZGD00_allNZ_", tile_name, "_", MODEL,
-                                          "_noisy", substr(as.character(useNoisyMeasurements), 1, 1),
-                                          sprintf("_minDist%03.1fkm", minThreshold/1000),
-                                          "_", vgName, sprintf("_crp%03.1f", covReducPar),
-                                          ".tif"), format="GTiff", overwrite=TRUE)
-    }
-}
-
-
-for (y in 0:15) {
-    for (x in 0:10) {
-        #print(paste(x, y))
-    }
-}
-x = 2
-y = 1
-mvn_oneTile(x, y, vspr_noQ3, variogram, MODEL)
-
-xya = array(c(176.8801,-39.6710,#HNPS
-              175.9910,-40.6713,#TRMS
-              176.9159,-39.4896,#NSPS
-              177.5278,-38.3340,#MWZ
-              176.8761,-39.4984,#NCDS
-              176.8411,-38.8523,#MTHZ
-              175.8698,-40.3382,#WDPS
-              175.9611,-40.0586,#TSZ
-              176.8968,-39.5066,#NCHS
-              176.8720,-39.4687,#NAAS
-              177.4249,-39.0342,#WFSS
-              176.9149,-39.4859,#NGHS
-              173.8550,-39.4500,#OPSS
-              177.1109,-38.2592,#URZ
-              173.7847,-41.2723,#HAVS
-              174.9544,-41.2058,#DAVS
-              174.8259,-41.1275,#PWES
-              173.2574,-42.0880,#MOLS
-              174.9310,-41.2312,#WANS
-              174.9211,-41.2335,#INSS
-              173.2742,-41.2878,#NELS
-              174.9538,-41.2023,#NBSS
-              174.1384,-41.8274,#WDFS
-              174.8218,-41.2320,#NEWS
-              174.8650,-41.2575,#SOMS
-              174.7784,-41.2799,#VUWS
-              174.7811,-41.2906,#TEPS
-              174.9193,-41.2323,#LIRS
+###
+### CUSTOM POINTS VERSION
+###
+xya = array(c(176.8801,-39.6710,175.9910,-40.6713,176.9159,-39.4896,177.5278,-38.3340,
+              176.8761,-39.4984,176.8411,-38.8523,175.8698,-40.3382,175.9611,-40.0586,
+              176.8968,-39.5066,176.8720,-39.4687,177.4249,-39.0342,176.9149,-39.4859,
+              173.8550,-39.4500,177.1109,-38.2592,173.7847,-41.2723,174.9544,-41.2058,
+              174.8259,-41.1275,173.2574,-42.0880,174.9310,-41.2312,174.9211,-41.2335,
+              173.2742,-41.2878,174.9538,-41.2023,174.1384,-41.8274,174.8218,-41.2320,
+              174.8650,-41.2575,174.7784,-41.2799,174.7811,-41.2906,174.9193,-41.2323,
               174.7813,-41.2954,#WTYS
               174.9401,-41.2074,#FAIS
               174.8794,-41.2245,#PGMS
@@ -945,7 +859,7 @@ coordinates(xy) = ~ x + y
 crs(xy) = WGS84
 vspr_aak2 = vspr_aak
 vspr_aak2@data$lnMeasUncer = 0.01
-ahdiyong = mvn_points(xy, vspr_aak2, vspr_yca, variogram, new_weight=F)
+ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
 print(ahdiyong)
 
 
@@ -956,12 +870,13 @@ print(ahdiyong)
 #vs30points = as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")
 #xy00 = data.frame(vs30points@coords)
 #coordinates(xy00) = ~ x + y
-crs(xy00) = NZGD2000
+crs(xy00) = NZTM
 xy = spTransform(xy00, WGS84)
-xy = read.table("/home/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh100_v18p6.ll")
+#xy = read.table("/home/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh100_v18p6.ll")
+xy = read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll")
 coordinates(xy) = ~ V1 + V2
 crs(xy) = WGS84
-ahdi = mvn_points(xy[1:150,], vspr_aak, vspr_yca, variogram, new_weight=F)
+ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
 
 
 ###
@@ -969,21 +884,93 @@ ahdi = mvn_points(xy[1:150,], vspr_aak, vspr_yca, variogram, new_weight=F)
 ###
 library(parallel)
 
-vs30points = as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")
-xy00 = data.frame(vs30points@coords)
+# don't use this many cores in cluster, leave for other users/processes
+leave_cores = 0
+# which models to generate
+geology = T
+terrain = F
+
+### STEP 1: single raster interpolation at a time (lower memory usage)
+
+# via SpatialPointsDataFrame to remove NA points (~ 1 min)
+print("loading points...")
+xy00 = SpatialPoints(as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")@coords)
+crs(xy00) = NZTM
+
+# model input - coast distance
+location_chunks = split(x=data.frame(xy00), f=ceiling(seq(1, length(xy00))/3000))
+geology_model_run = function(xy00) {
+  # xy00: data.frame of NZTM points
+  library(raster)
+  library(rgeos)
+
+  blank = rep(NA, length(xy00))
+  result = data.frame(aak_values_log=blank, aak_variances=blank)
+
+  # coastline distance (not much memory)
+  xy00 = SpatialPoints(xy00)
+  crs(xy00) = NZTM
+  coastkm = coast_distance(xy00)
+
+  # slope (more memory required for rasters)
+  xy49 = spTransform(xy00, NZMG)
+  slp09c = xy49 %over% slp_nzsi_9c.sgdf
+  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+  slp09c[is.na(slp09c)] = 0.0
+  rm(xy49)
+
+  # large amount of memory for polygon dataset
+  gid = over(xy00, gidmap00)$groupID_AhdiAK
+  # make sure datatype is correct
+  # TODO: short integer based model to save memory (use int indexes instead of string)?
+  if (length(xy00) > 1) {
+      gid_aak = as.character(gid)
+  } else {
+      gid_aak=lapply(gid, as.character)
+  }
+  valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
+
+  model_params = data.frame(gid_aak, slp09c, coastkm)
+  rm(gid_aak, slp09c, coastkm, gid, xy00)
+  names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
+  model_params = model_params[valid_idx,]
+
+  # run model
+  result$aak_values_log[valid_idx] = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
+  result$aak_variances[valid_idx] = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
+
+  return(result)
+}
+pool = makeCluster(detectCores() - leave_cores)
+# coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
+clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
+                                 "slp_nzni_9c.sgdf", "slp_nzsi_9c.sgdf", "gidmap00",
+                                 "AhdiAK_noQ3_hyb09c_set_Vs30", "AhdiAK_noQ3_hyb09c_set_stDv"))
+# 30 processes memory requirement (only geology) ~ 19.3GB on top of workspace, 42 secs at 60 procs * 3000.
+a = Sys.time()
+geology_model_cluster = parLapply(cl=pool, X=location_chunks[1:60], fun=geology_model_run)
+# terrain model as separate cluster because of memory usage
+b = Sys.time()
+stopCluster(pool)
+
+# model input - slope
+xy49 = spTransform(xy, NZMG)
+slp09c = xy49 %over% slp_nzsi_9c.sgdf
+slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+slp09c[is.na(slp09c)] = 0.0
+rm(xy49)
 location_chunks = split(x=xy00, f=ceiling(seq(1, dim(xy00)[1])/30))
 rm(vs30points)
 
 run = function(xy00, vspr_aak, vspr_yca, variogram) {
-    library(raster)
-    coordinates(xy00) = ~ x + y
-    crs(xy00) = NZGD2000
-    xy = spTransform(xy00, WGS84)
-    ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
-    return(ahdi)
+  library(raster)
+  coordinates(xy00) = ~ x + y
+  crs(xy00) = NZGD2000
+  xy = spTransform(xy00, WGS84)
+  ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
+  return(ahdi)
 }
 
-pool = makeCluster(detectCores() - 2)
 # exports variables to instances in cluster
 clusterExport(cl=pool, varlist=c("NZGD2000", "WGS84", "NZMG", "mvn_points",
                                  "map_NZGD00", "slp_nzsi_9c.sgdf", "slp_nzni_9c.sgdf", "dist2coast", "IP"))
