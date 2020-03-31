@@ -26,11 +26,24 @@ load(file="~/VsMap/Rdata/nzni_9c_slp.Rdata")
 rm(slp_nzni_9c, slp_nzsi_9c)
 IP = as(raster("~/big_noDB/topo/terrainCats/IwahashiPike_NZ_100m_16.tif"), "SpatialGridDataFrame")
 
+coast_poly = readOGR(dsn = "/nesi/project/nesi00213/PlottingData/Paths/lds-nz-coastlines-and-islands/EPSG_2193", layer="nz-coastlines-and-islands-polygons-topo-1500k")
+coast_line = as(coast_poly, "SpatialLinesDataFrame")
+coast_distance = function(xy, km=T) {
+  # xy: SpatialPoints with CRS epsg:2193 NZGD2000
+  nxy = length(xy)
+  result = rep(0.0, nxy)
+  mask = which(!is.na(over(xy, coast_poly)$name))
+  result[mask] = apply(gDistance(xy[mask,], coast_line, byid=T), 2, min)
+  if (km) {return(result/1000.0)}
+  return(result)
+}
+
 # vs site properties
 load("~/VsMap/Rdata/vspr.Rdata")
 vspr_noQ3 = vspr[(vspr$QualityFlag != "Q3" | nchar(vspr$StationID) == 3 | is.na(vspr$QualityFlag)),]
 
 # remove points where MODEL predictions don't exist
+# vs30 should really have been updated first
 aak_na = which(is.na(vspr_noQ3[[paste0("Vs30_", MODEL_AAK)]]))
 if(length(aak_na) > 0) {
   warning("some locations don't have predictions for this model")
@@ -60,18 +73,6 @@ vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]] = AhdiAK_noQ3_hyb09c_set_Vs30(model_params
 load(sprintf("~/VsMap/Rdata/variogram_%s_%s.Rdata", MODEL, vgName))
 
 library(matrixcalc)
-
-coast_poly = readOGR(dsn = "/nesi/project/nesi00213/PlottingData/Paths/lds-nz-coastlines-and-islands/EPSG_2193", layer="nz-coastlines-and-islands-polygons-topo-1500k")
-coast_line = as(coast_poly, "SpatialLinesDataFrame")
-coast_distance = function(xy, km=T) {
-    # xy: SpatialPoints with CRS epsg:2193 NZGD2000
-    nxy = length(xy)
-    result = rep(0.0, nxy)
-    mask = which(!is.na(over(xy, coast_poly)$name))
-    result[mask] = apply(gDistance(xy[mask,], coast_line, byid=T), 2, min)
-    if (km) {return(result/1000.0)}
-    return(result)
-}
 
 mvn = function(obs_locations, model_locations, model_variances, variogram,
                modeledValues, modelVarObs, obs_residuals,
@@ -543,8 +544,8 @@ geology_mvn_run = function(model, vspr_aak, variogram) {
   aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
   aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
   aak_obs_stdev_log = vspr_aak$lnMeasUncer
-  aak_values_log = model[, "aak_values_log"]
-  mvn_aak = mvn(aak_obs_locations, coords, model[, "aak_variances"], variogram,
+  aak_values_log = model[valid_idx, "aak_values_log"]
+  mvn_aak = mvn(aak_obs_locations, coords, model[valid_idx, "aak_variances"], variogram,
                 aak_values_log, aak_obs_variances, aak_obs_residuals,
                 covReducPar, aak_obs_values_log, aak_obs_stdev_log)
   # save memory, overwrite instead of add columns
@@ -552,7 +553,7 @@ geology_mvn_run = function(model, vspr_aak, variogram) {
   names(model)[names(model) == "aak_variances"] = "aak_stdev"
   aak_resid = mvn_aak$pred - aak_values_log
   model$aak_stdev[valid_idx] = sqrt(mvn_aak$var)
-  model$aak_vs30 = exp(aak_values_log) * exp(aak_resid)
+  model$aak_vs30[valid_idx] = exp(aak_values_log) * exp(aak_resid)
   
   return(model)
 }
@@ -803,13 +804,19 @@ leave_cores = 0
 # which models to generate
 geology = T
 terrain = F
+job_size = 3000
 
-# via SpatialPointsDataFrame to remove NA points (~ 1 min)
 print("loading points...")
-# TODO: generate grid from these constraints
-xy00 = SpatialPoints(as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")@coords)
-crs(xy00) = NZTM
-location_chunks = split(x=data.frame(xy00), f=ceiling(seq(1, length(xy00))/3000))
+# original grid
+xy00 = sp::makegrid(as(raster::extent(1000050, 2126350, 4700050, 6338350), "SpatialPoints"), cellsize=100)
+# small christchurch centred grid for testing
+#xy00 = sp::makegrid(as(raster::extent(1420050, 1639550, 5064950, 5294550), "SpatialPoints"), cellsize=400)
+colnames(xy00) = c("x", "y")
+location_chunks = split(x=data.frame(xy00), f=ceiling(seq(1, dim(xy00)[1])/job_size))
+rm(xy00)
+
+
+# each instance of cluster uses about input data size * 2
 
 
 ### STEP 1: GEOLOGY MODEL
@@ -819,9 +826,8 @@ if (geology) {
   # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
   clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
                                    "slp_nzni_9c.sgdf", "slp_nzsi_9c.sgdf", "gidmap00"))
-  # 30 processes memory requirement (only geology) ~ 20GB on top of workspace, 42 secs at 60 procs * 3000. 2.83 hours full set (500MB)
   t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=location_chunks[1:64], fun=geology_model_run)
+  cluster_model = parLapply(cl=pool, X=location_chunks, fun=geology_model_run)
   t1 = Sys.time()
   stopCluster(pool)
   print("Geology model complete.")
@@ -865,3 +871,12 @@ if (geology & terrain) {
 }
 
 ### STEP 6: OUTPUT
+# combine
+cluster_model = do.call(rbind, cluster_model)
+# 
+aak_vs30 = cluster_model[, c("x", "y", "aak_vs30")]
+names(aak_vs30) = c("x", "y", "z")
+coordinates(aak_vs30) = ~ x + y
+crs(aak_vs30) = NZTM
+aak_vs30 = rasterFromXYZ(aak_vs30)
+writeRaster(aak_vs30, filename="geology_model.nc", format="CDF", overwrite=TRUE)
