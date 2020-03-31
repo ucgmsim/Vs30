@@ -505,6 +505,7 @@ geology_model_run = function(xy00) {
     gid_aak=lapply(gid_aak, as.character)
   }
   valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
+  if (length(valid_idx) == 0) {return(result)}
   xy00 = xy00[valid_idx]
   gid_aak = gid_aak[valid_idx]
   
@@ -536,6 +537,11 @@ geology_mvn_run = function(model, vspr_aak, variogram) {
   library(raster)
   
   valid_idx = which(!is.na(model[, c("aak_values_log")]))
+  if (length(valid_idx) == 0) {
+    names(model)[names(model) == "aak_values_log"] = "aak_vs30"
+    names(model)[names(model) == "aak_variances"] = "aak_stdev"
+    return(model)
+  }
   coords = coordinates(model[valid_idx, c("x", "y")])
   rownames(coords) = NULL
   
