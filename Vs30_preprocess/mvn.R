@@ -73,7 +73,7 @@ coast_distance = function(xy, km=T) {
     return(result)
 }
 
-mvn = function(obs_locations, model_locations, model_variances, model,
+mvn = function(obs_locations, model_locations, model_variances, variogram,
                modeledValues, modelVarObs, obs_residuals,
                covReducPar, logModVs30obs, obs_stdev_log) {
     # obs_locations: locations of observations. (i.e., coordinates(vspr)
@@ -481,197 +481,129 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1, geol
     return(result)
 }
 
+
+geology_model_run = function(xy00) {
+  # xy00: data.frame of NZTM points
+  library(raster)
+  library(rgeos) # gDistance
+  
+  source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
+  
+  xy00 = SpatialPoints(xy00)
+  crs(xy00) = NZTM
+  result = data.frame(xy00, NA, NA)
+  colnames(result) = c("x", "y", "aak_values_log", "aak_variances")
+  
+  # large amount of memory for polygon dataset
+  gid_aak = over(xy00, gidmap00)$groupID_AhdiAK
+  # make sure datatype is correct
+  # TODO: short integer based model to save memory (use int indexes instead of string)?
+  if (length(xy00) > 1) {
+    gid_aak = as.character(gid_aak)
+  } else {
+    gid_aak=lapply(gid_aak, as.character)
+  }
+  valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
+  xy00 = xy00[valid_idx]
+  gid_aak = gid_aak[valid_idx]
+  
+  # coastline distance (not much memory)
+  coastkm = coast_distance(xy00)
+  
+  # slope (more memory required for rasters)
+  xy49 = spTransform(xy00, NZMG)
+  slp09c = xy49 %over% slp_nzsi_9c.sgdf
+  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+  slp09c[is.na(slp09c)] = 0.0
+  rm(xy00, xy49)
+  
+  model_params = data.frame(gid_aak, slp09c, coastkm)
+  rm(gid_aak, slp09c, coastkm)
+  names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
+  
+  # run model
+  result$aak_values_log[valid_idx] = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
+  result$aak_variances[valid_idx] = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
+  
+  return(result)
+}
+
+
+geology_mvn_run = function(model, vspr_aak, variogram) {
+  library(gstat)
+  library(Matrix)
+  library(raster)
+  
+  valid_idx = which(!is.na(model[, c("aak_values_log")]))
+  coords = coordinates(model[valid_idx, c("x", "y")])
+  rownames(coords) = NULL
+  
+  aak_obs_locations = coordinates(vspr_aak)
+  aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
+  aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
+  aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
+  aak_obs_stdev_log = vspr_aak$lnMeasUncer
+  aak_values_log = model[, "aak_values_log"]
+  mvn_aak = mvn(aak_obs_locations, coords, model[, "aak_variances"], variogram,
+                aak_values_log, aak_obs_variances, aak_obs_residuals,
+                covReducPar, aak_obs_values_log, aak_obs_stdev_log)
+  # save memory, overwrite instead of add columns
+  names(model)[names(model) == "aak_values_log"] = "aak_vs30"
+  names(model)[names(model) == "aak_variances"] = "aak_stdev"
+  aak_resid = mvn_aak$pred - aak_values_log
+  model$aak_stdev[valid_idx] = sqrt(mvn_aak$var)
+  model$aak_vs30 = exp(aak_values_log) * exp(aak_resid)
+  
+  return(model)
+}
+
+
+
 ###
 ### CUSTOM POINTS VERSION
 ###
 xya = array(c(176.8801,-39.6710,175.9910,-40.6713,176.9159,-39.4896,177.5278,-38.3340,
-              176.8761,-39.4984,176.8411,-38.8523,175.8698,-40.3382,175.9611,-40.0586,
-              176.8968,-39.5066,176.8720,-39.4687,177.4249,-39.0342,176.9149,-39.4859,
-              173.8550,-39.4500,177.1109,-38.2592,173.7847,-41.2723,174.9544,-41.2058,
-              174.8259,-41.1275,173.2574,-42.0880,174.9310,-41.2312,174.9211,-41.2335,
-              173.2742,-41.2878,174.9538,-41.2023,174.1384,-41.8274,174.8218,-41.2320,
-              174.8650,-41.2575,174.7784,-41.2799,174.7811,-41.2906,174.9193,-41.2323,
-              174.7813,-41.2954,#WTYS
-              174.9401,-41.2074,#FAIS
-              174.8794,-41.2245,#PGMS
-              172.6119,-40.5570,#KHLS
-              173.3795,-41.2171,#NNZ
-              175.0651,-41.1264,#UHSS
-              174.9042,-41.2294,#LRSS
-              174.6981,-41.2259,#MKBS
-              174.0764,-41.6723,#SEDS
-              174.9043,-41.2521,#PHHS
-              174.7739,-41.2987,#TRTS
-              173.6821,-42.4258,#KIKS
-              174.7682,-41.2840,#WEL
-              174.9485,-41.2574,#WDAS
-              174.8184,-41.3149,#MISS
-              175.0409,-41.1268,#UHCS
-              174.7055,-41.2654,#MKVS
-              172.7037,-41.4290,#MATS
-              174.9548,-41.1804,#TAIS
-              174.7793,-41.2743,#WEMS
-              174.7763,-41.2792,#BOWS
-              173.9051,-41.4395,#BWRS
-              174.8315,-41.1249,#POKS
-              174.7421,-41.2848,#WNKS
-              174.8603,-41.2230,#PTOS
-              174.9260,-41.1914,#BMTS
-              175.0050,-40.9143,#PAPS
-              174.9022,-41.2470,#SEVS
-              173.2768,-41.2665,#NLMS
-              174.8376,-41.3264,#SEAS
-              174.8090,-41.3264,#WNAS
-              172.8305,-42.5232,#HSES
-              172.5695,-43.5909,#HALS
-              174.9855,-39.7546,#WAZ
-              172.6357,-43.6524,#GOVS
-              174.7746,-41.2722,#POTS
-              173.2837,-41.2709,#NCBS
-              172.1165,-41.2494,#KARS
-              172.7272,-43.6303,#DHSS
-              171.5998,-41.7557,#WBCS
-              172.9216,-42.9386,#SCAC
-              172.5433,-42.8695,#LSRC
-              172.8003,-42.7012,#WIGC
-              173.1285,-41.3892,#BTWS
-              172.6538,-43.7061,#MQZ
-              172.1803,-42.3346,#SJFS
-              172.9052,-41.7625,#THZ
-              172.3813,-43.3123,#CSTC
-              172.3280,-41.7999,#MCAS
-              172.7052,-42.9631,#WAKC
-              172.6638,-43.3765,#KPOC
-              172.8026,-42.7594,#CULC
-              173.0348,-42.9674,#GVZ
-              173.2749,-42.8135,#CECS
-              171.8644,-42.1197,#RDCS
-              172.3363,-43.2622,#SMHS
-              172.6572,-43.5794,#HUNS
-              172.4680,-43.6232,#LINC
-              171.5677,-42.9489,#APPS
-              172.2710,-42.7817,#LTZ
-              172.7309,-43.1547,#AMBC
-              172.7314,-43.5069,#NBLC
-              176.9805,-38.6154,#RTZ
-              178.3066,-37.5623,#MXZ
-              178.2572,-38.0715,#PUZ
-              178.3008,-38.3728,#TBAS
-              178.3654,-37.6333,#TDHS
-              173.0095,-41.1247,#MOTS
-              174.9815,-41.1519,#HSSS
-              175.7908,-39.8078,#MNGS
-              174.8739,-41.2247,#PVCS
-              174.7037,-36.8223,#KAPS
-              177.2892,-38.0141,#OPCS
-              175.7956,-39.6800,#THHS
-              175.4126,-39.4174,#ORCS
-              176.3111,-40.4009,#WBFS
-              176.5843,-39.9439,#WPWS
-              176.2210,-40.8988,#CPFS
-              175.5785,-40.6605,#MRZ
-              175.2483,-38.8641,#TUHS
-              178.0319,-38.6822,#GKBS
-              175.5931,-40.3629,#PNMS
-              175.6076,-40.3489,#PNBS
-              176.6118,-40.3022,#PGFS
-              169.1430,-44.6946,#WNPS
-              168.4065,-44.8644,#GLNS
-              170.0972,-43.7364,#MCNS
-              168.6609,-43.9962,#NSBS
-              169.7194,-46.2491,#BDCS
-              170.0983,-44.2546,#TWAS
-              169.2329,-44.2304,#MECS
-              168.6629,-45.0322,#QTPS
-              171.9599,-43.5396,#HORC
-              175.2340,-41.5891,#NWFS
-              171.9301,-43.3368,#SPRS
-              170.7368,-43.0744,#WVZ
-              172.6351,-43.5219,#REHS
-              172.5291,-40.8255,#QRZ
-              171.8548,-43.3215,#KOWC
-              174.2742,-39.5851,#HWHS
-              174.5681,-39.2605,#HUKS
-              171.8635,-43.4577,#WCSS
-              172.8750,-41.6731,#KLDS
-              172.0258,-43.3912,#SHFC
-              170.7372,-43.0716,#WVAS
-              178.0177,-38.6418,#GHHS
-              170.5561,-43.1489,#HAFS
-              173.9814,-41.9557,#KEKS
-              172.2524,-43.8087,#SBRC
-              172.9635,-43.8109,#AKSS
-              172.0938,-43.8968,#DORC
-              172.1979,-43.6675,#DSLC
-              172.0888,-43.5862,#GDLC
-              171.7236,-43.2265,#CSHS
-              171.2340,-43.9239,#PEEC
-              171.4728,-42.7267,#IFPS
-              172.9738,-43.6374,#MNZS
-              171.1356,-42.8917,#KOKS
-              172.6732,-43.5120,#DALS
-              170.3268,-43.3160,#WHAS
-              171.4217,-43.8231,#MAYC
-              171.0539,-43.7146,#RPZ
-              171.7936,-43.7294,#LRSC
-              172.6069,-43.4928,#PPHS
-              172.6449,-43.6065,#STKS
-              171.4023,-43.7046,#MSMC
-              170.3590,-43.2612,#WHFS
-              171.2043,-42.4578,#GMFS
-              171.4079,-42.5240,#ARPS
-              172.5300,-43.4832,#CACS
-              171.6110,-43.8373,#WSFC
-              172.6474,-43.5381,#CCCC
-              172.0231,-43.7515,#RKAC
-              171.4441,-42.7245,#INZ
-              172.3811,-43.5928,#ROLC
-              170.1842,-43.3891,#FJDS
-              170.8287,-44.0987,#FDCS
-              172.0383,-43.3259,#OXZ
-              175.2260,-40.4614,#FXBS
-              175.6337,-40.3303,#PNRS
-              174.0734,-39.0624,#NPCS
-              174.1905,-39.1562,#INHS
-              175.0480,-39.9336,#WCDS
-              177.9216,-38.6257,#GWTS
-              172.7248,-43.6078,#LPCC
-              172.5928,-43.5575,#HHSS
-              172.6605,-43.4446,#OHSS
-              172.6199,-43.5293,#CBGS
-              172.6643,-43.5562,#OPWS
-              175.6478,-40.9504,#WRCS
-              175.7088,-40.6495,#EKTS
-              176.4670,-39.4334,#KFHS
-              174.7861,-41.2675,#PIPS
-              176.0675,-38.6863,#TPPS
-              175.8150,-38.9863,#TTHS
-              176.0937,-38.6325,#WAIS
-              167.4725,-46.1474,#RRKS
-              167.7651,-46.2868,#ORPS
-              168.2378,-45.6678,#MOSS
-              168.1184,-45.3665,#MLZ
-              167.9470,-45.8924,#WHZ
-              172.4954,-43.3694,#SWNC
-              170.0198,-43.4632,#FGPS
-              178.0227,-38.6665,#GISS
-              174.7763,-41.2837,#WFES
-              174.7742,-41.2816,#WTES
-              175.4615,-41.2109,#MAVS
-              174.7848,-41.2931,#WCFS
-              175.1556,-38.3328,#TKHS
-              174.7585,-39.1243,#VRZ
-              175.5380,-38.3294,#TLZ
-              175.0930,-40.7894,#THOB
-              171.0062,-44.3832,#CVZ
-              172.7115,-43.5585,#MENS
-              176.9855,-37.9615,#WKHS
-              172.7693,-43.5784,#GODS
-              172.6634,-43.5053,#SHLC
-              172.4720,-43.5500,#TPLC
-              172.5644,-43.5362,#RHSC
-              172.6828,-43.5258,#PRPC
-              171.9525,-41.8571,#INGS
+    176.8761,-39.4984,176.8411,-38.8523,175.8698,-40.3382,175.9611,-40.0586,176.8968,-39.5066,
+    176.8720,-39.4687,177.4249,-39.0342,176.9149,-39.4859,173.8550,-39.4500,177.1109,-38.2592,
+    173.7847,-41.2723,174.9544,-41.2058,174.8259,-41.1275,173.2574,-42.0880,174.9310,-41.2312,
+    174.9211,-41.2335,173.2742,-41.2878,174.9538,-41.2023,174.1384,-41.8274,174.8218,-41.2320,
+    174.8650,-41.2575,174.7784,-41.2799,174.7811,-41.2906,174.9193,-41.2323,174.7813,-41.2954,
+    174.9401,-41.2074,174.8794,-41.2245,172.6119,-40.5570,173.3795,-41.2171,175.0651,-41.1264,
+    174.9042,-41.2294,174.6981,-41.2259,174.0764,-41.6723,174.9043,-41.2521,174.7739,-41.2987,
+    173.6821,-42.4258,174.7682,-41.2840,174.9485,-41.2574,174.8184,-41.3149,175.0409,-41.1268,
+    174.7055,-41.2654,172.7037,-41.4290,174.9548,-41.1804,174.7793,-41.2743,174.7763,-41.2792,
+    173.9051,-41.4395,174.8315,-41.1249,174.7421,-41.2848,174.8603,-41.2230,174.9260,-41.1914,
+    175.0050,-40.9143,174.9022,-41.2470,173.2768,-41.2665,174.8376,-41.3264,174.8090,-41.3264,
+    172.8305,-42.5232,172.5695,-43.5909,174.9855,-39.7546,172.6357,-43.6524,174.7746,-41.2722,
+    173.2837,-41.2709,172.1165,-41.2494,172.7272,-43.6303,171.5998,-41.7557,172.9216,-42.9386,
+    172.5433,-42.8695,172.8003,-42.7012,173.1285,-41.3892,172.6538,-43.7061,172.1803,-42.3346,
+    172.9052,-41.7625,172.3813,-43.3123,172.3280,-41.7999,172.7052,-42.9631,172.6638,-43.3765,
+    172.8026,-42.7594,173.0348,-42.9674,173.2749,-42.8135,171.8644,-42.1197,172.3363,-43.2622,
+    172.6572,-43.5794,172.4680,-43.6232,171.5677,-42.9489,172.2710,-42.7817,172.7309,-43.1547,
+    172.7314,-43.5069,176.9805,-38.6154,178.3066,-37.5623,178.2572,-38.0715,178.3008,-38.3728,
+    178.3654,-37.6333,173.0095,-41.1247,174.9815,-41.1519,175.7908,-39.8078,174.8739,-41.2247,
+    174.7037,-36.8223,177.2892,-38.0141,175.7956,-39.6800,175.4126,-39.4174,176.3111,-40.4009,
+    176.5843,-39.9439,176.2210,-40.8988,175.5785,-40.6605,175.2483,-38.8641,178.0319,-38.6822,
+    175.5931,-40.3629,175.6076,-40.3489,176.6118,-40.3022,169.1430,-44.6946,168.4065,-44.8644,
+    170.0972,-43.7364,168.6609,-43.9962,169.7194,-46.2491,170.0983,-44.2546,169.2329,-44.2304,
+    168.6629,-45.0322,171.9599,-43.5396,175.2340,-41.5891,171.9301,-43.3368,170.7368,-43.0744,
+    172.6351,-43.5219,172.5291,-40.8255,171.8548,-43.3215,174.2742,-39.5851,174.5681,-39.2605,
+    171.8635,-43.4577,172.8750,-41.6731,172.0258,-43.3912,170.7372,-43.0716,178.0177,-38.6418,
+    170.5561,-43.1489,173.9814,-41.9557,172.2524,-43.8087,172.9635,-43.8109,172.0938,-43.8968,
+    172.1979,-43.6675,172.0888,-43.5862,171.7236,-43.2265,171.2340,-43.9239,171.4728,-42.7267,
+    172.9738,-43.6374,171.1356,-42.8917,172.6732,-43.5120,170.3268,-43.3160,171.4217,-43.8231,
+    171.0539,-43.7146,171.7936,-43.7294,172.6069,-43.4928,172.6449,-43.6065,171.4023,-43.7046,
+    170.3590,-43.2612,171.2043,-42.4578,171.4079,-42.5240,172.5300,-43.4832,171.6110,-43.8373,
+    172.6474,-43.5381,172.0231,-43.7515,171.4441,-42.7245,172.3811,-43.5928,170.1842,-43.3891,
+    170.8287,-44.0987,172.0383,-43.3259,175.2260,-40.4614,175.6337,-40.3303,174.0734,-39.0624,
+    174.1905,-39.1562,175.0480,-39.9336,177.9216,-38.6257,172.7248,-43.6078,172.5928,-43.5575,
+    172.6605,-43.4446,172.6199,-43.5293,172.6643,-43.5562,175.6478,-40.9504,175.7088,-40.6495,
+    176.4670,-39.4334,174.7861,-41.2675,176.0675,-38.6863,175.8150,-38.9863,176.0937,-38.6325,
+    167.4725,-46.1474,167.7651,-46.2868,168.2378,-45.6678,168.1184,-45.3665,167.9470,-45.8924,
+    172.4954,-43.3694,170.0198,-43.4632,178.0227,-38.6665,174.7763,-41.2837,174.7742,-41.2816,
+    175.4615,-41.2109,174.7848,-41.2931,175.1556,-38.3328,174.7585,-39.1243,175.5380,-38.3294,
+    175.0930,-40.7894,171.0062,-44.3832,172.7115,-43.5585,176.9855,-37.9615,172.7693,-43.5784,
+    172.6634,-43.5053,172.4720,-43.5500,172.5644,-43.5362,172.6828,-43.5258,171.9525,-41.8571,
               167.7191,-45.4167,#TAFS
               172.7507,-43.5679,#PARS
               172.6242,-43.5656,#CMHS
@@ -848,17 +780,14 @@ xya = array(c(176.8801,-39.6710,175.9910,-40.6713,176.9159,-39.4896,177.5278,-38
               174.3169,-35.7150,#WBHS
               174.7746,-41.2700#POTR
 ))
-
-
 xy = data.frame(x=c(175.283333), y=c(-37.783333)) # Hamilton
 xy = data.frame(x=c(174.74), y=c(-36.840556)) # Auckland
 xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
 xy = data.frame(x=xya[c(T, F)], y=xya[c(F, T)])
+xy = SpatialPoints(read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll"))
 
 coordinates(xy) = ~ x + y
 crs(xy) = WGS84
-vspr_aak2 = vspr_aak
-vspr_aak2@data$lnMeasUncer = 0.01
 ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
 print(ahdiyong)
 
@@ -867,21 +796,6 @@ print(ahdiyong)
 ### WHOLE NZ
 ###
 
-#vs30points = as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")
-#xy00 = data.frame(vs30points@coords)
-#coordinates(xy00) = ~ x + y
-crs(xy00) = NZTM
-xy = spTransform(xy00, WGS84)
-#xy = read.table("/home/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh100_v18p6.ll")
-xy = read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll")
-coordinates(xy) = ~ V1 + V2
-crs(xy) = WGS84
-ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
-
-
-###
-###
-###
 library(parallel)
 
 # don't use this many cores in cluster, leave for other users/processes
@@ -890,90 +804,64 @@ leave_cores = 0
 geology = T
 terrain = F
 
-### STEP 1: single raster interpolation at a time (lower memory usage)
-
 # via SpatialPointsDataFrame to remove NA points (~ 1 min)
 print("loading points...")
+# TODO: generate grid from these constraints
 xy00 = SpatialPoints(as(raster("~/big_noDB/models/hyb_NZGD00_allNZ_AhdiAK_noQ3_hyb09c.tif"), "SpatialPointsDataFrame")@coords)
 crs(xy00) = NZTM
-
-# model input - coast distance
 location_chunks = split(x=data.frame(xy00), f=ceiling(seq(1, length(xy00))/3000))
-geology_model_run = function(xy00) {
-  # xy00: data.frame of NZTM points
-  library(raster)
-  library(rgeos)
 
-  blank = rep(NA, length(xy00))
-  result = data.frame(aak_values_log=blank, aak_variances=blank)
 
-  # coastline distance (not much memory)
-  xy00 = SpatialPoints(xy00)
-  crs(xy00) = NZTM
-  coastkm = coast_distance(xy00)
-
-  # slope (more memory required for rasters)
-  xy49 = spTransform(xy00, NZMG)
-  slp09c = xy49 %over% slp_nzsi_9c.sgdf
-  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-  slp09c[is.na(slp09c)] = 0.0
-  rm(xy49)
-
-  # large amount of memory for polygon dataset
-  gid = over(xy00, gidmap00)$groupID_AhdiAK
-  # make sure datatype is correct
-  # TODO: short integer based model to save memory (use int indexes instead of string)?
-  if (length(xy00) > 1) {
-      gid_aak = as.character(gid)
-  } else {
-      gid_aak=lapply(gid, as.character)
-  }
-  valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
-
-  model_params = data.frame(gid_aak, slp09c, coastkm)
-  rm(gid_aak, slp09c, coastkm, gid, xy00)
-  names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
-  model_params = model_params[valid_idx,]
-
-  # run model
-  result$aak_values_log[valid_idx] = log(AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T))
-  result$aak_variances[valid_idx] = AhdiAK_noQ3_hyb09c_set_stDv(model_params)^2
-
-  return(result)
-}
-pool = makeCluster(detectCores() - leave_cores)
-# coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
-clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
-                                 "slp_nzni_9c.sgdf", "slp_nzsi_9c.sgdf", "gidmap00",
-                                 "AhdiAK_noQ3_hyb09c_set_Vs30", "AhdiAK_noQ3_hyb09c_set_stDv"))
-# 30 processes memory requirement (only geology) ~ 19.3GB on top of workspace, 42 secs at 60 procs * 3000.
-a = Sys.time()
-geology_model_cluster = parLapply(cl=pool, X=location_chunks[1:60], fun=geology_model_run)
-# terrain model as separate cluster because of memory usage
-b = Sys.time()
-stopCluster(pool)
-
-# model input - slope
-xy49 = spTransform(xy, NZMG)
-slp09c = xy49 %over% slp_nzsi_9c.sgdf
-slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
-slp09c[is.na(slp09c)] = 0.0
-rm(xy49)
-location_chunks = split(x=xy00, f=ceiling(seq(1, dim(xy00)[1])/30))
-rm(vs30points)
-
-run = function(xy00, vspr_aak, vspr_yca, variogram) {
-  library(raster)
-  coordinates(xy00) = ~ x + y
-  crs(xy00) = NZGD2000
-  xy = spTransform(xy00, WGS84)
-  ahdi = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
-  return(ahdi)
+### STEP 1: GEOLOGY MODEL
+if (geology) {
+  print("running geology model...")
+  pool = makeCluster(detectCores() - leave_cores)
+  # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
+  clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
+                                   "slp_nzni_9c.sgdf", "slp_nzsi_9c.sgdf", "gidmap00"))
+  # 30 processes memory requirement (only geology) ~ 20GB on top of workspace, 42 secs at 60 procs * 3000. 2.83 hours full set (500MB)
+  t0 = Sys.time()
+  cluster_model = parLapply(cl=pool, X=location_chunks[1:64], fun=geology_model_run)
+  t1 = Sys.time()
+  stopCluster(pool)
+  print("Geology model complete.")
+  print(t1 - t0)
 }
 
-# exports variables to instances in cluster
-clusterExport(cl=pool, varlist=c("NZGD2000", "WGS84", "NZMG", "mvn_points",
-                                 "map_NZGD00", "slp_nzsi_9c.sgdf", "slp_nzni_9c.sgdf", "dist2coast", "IP"))
-vals = parLapply(cl=pool, X=location_chunks[1:60], fun=run,
-                 vspr_aak, vspr_yca, variogram)
-stopCluster(pool)
+
+### STEP 2: TERRAIN MODEL
+if (terrain) {
+  print("running terrain model...")
+}
+
+
+### STEP 3: GEOLOGY MVN
+if (geology) {
+  print("running geology mvn...")
+  pool = makeCluster(detectCores() - leave_cores)
+  clusterExport(cl=pool, varlist=c("mvn", "numVGpoints", "useNoisyMeasurements", "covReducPar",
+                                   "useDiscreteVariogram", "useDiscreteVariogram_replace",
+                                   "optimizeUsingMatrixPackage", "makeCovMatrix", "Sigma_Y2Y2",
+                                   "mu_Y1_given_y2", "Sigma_Y1Y2", "cov_Y1Y1_given_y2", "Sigma_Y1Y1",
+                                   "Sigma_Y2Y1"))
+  t0 = Sys.time()
+  cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_mvn_run, vspr_aak, variogram)
+  t1 = Sys.time()
+  stopCluster(pool)
+  print("Geology mvn complete.")
+  print(t1 - t0)
+}
+
+
+### STEP 4: TERRAIN MVN
+if (terrain) {
+  print("running geology mvn...")
+}
+
+
+### STEP 5: WEIGHTED MVN
+if (geology & terrain) {
+  print("running geology and terrain combination...")
+}
+
+### STEP 6: OUTPUT
