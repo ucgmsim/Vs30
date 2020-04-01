@@ -531,6 +531,11 @@ geology_model_run = function(xy00) {
 }
 
 
+terrain_model_run = function(model) {
+    return(F)
+}
+
+
 geology_mvn_run = function(model, vspr_aak, variogram) {
   library(gstat)
   library(Matrix)
@@ -795,8 +800,12 @@ xy = SpatialPoints(read.table("/nesi/project/nesi00213/StationInfo/non_uniform_w
 
 coordinates(xy) = ~ x + y
 crs(xy) = WGS84
-ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
-print(ahdiyong)
+xy00 = spTransform(xy, NZTM)
+
+model = geology_model_run(xy00)
+model = geology_mvn_run(model, vspr_aak, variogram)
+#ahdiyong = mvn_points(xy, vspr_aak, vspr_yca, variogram, new_weight=F)
+#print(ahdiyong)
 
 
 ###
@@ -886,3 +895,16 @@ coordinates(aak_vs30) = ~ x + y
 crs(aak_vs30) = NZTM
 aak_vs30 = rasterFromXYZ(aak_vs30)
 writeRaster(aak_vs30, filename="geology_model.nc", format="CDF", overwrite=TRUE)
+rm(aak_vs30)
+
+
+# to convert topography files to nztm equiv
+#t = raster("/nesi/project/nesi00213/PlottingData/Topo/srtm_all_filt_nz.hdf5")
+#u = projectRaster(t, crs=NZTM, method="ngb")
+#u = projectRaster(t, to=aak_vs30, method="ngb")
+
+# plotting done by GMT script instead
+#png("Rplot.png", height=12, width=9, res=600, units="in")
+#   raster::plot(aak_vs30, maxpixels=(aak_vs30@ncols * aak_vs30@nrows))
+#   mtext("Geology Model Vs30", line=0.5, cex=1)
+#dev.off()
