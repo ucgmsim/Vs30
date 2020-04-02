@@ -7,7 +7,7 @@ groupID_noUpdate           <- AhdiAK_lookup()$groupID
 # updTableFile <- "Rdata/BayesUpdateTables_201708.Rdata"
 # updTableFile <- "Rdata/BayesUpdateTables_20171129.Rdata"
 # updTableFile <- "Rdata/BayesUpdateTables_201711.Rdata"
-updTableFile <- "~/VsMap/Rdata0/BayesUpdateTables.Rdata"
+updTableFile <- "../Vs30_data/BayesUpdateTables.Rdata"
 
 
 

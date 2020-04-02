@@ -4,4 +4,4 @@ Retrieve Vs30/standard deviation/residual at locations using Kevin Foster's rese
 Run for specific locations or over a grid.
 
 ## Workflow
-
+Vs30_r/run.R creates models from points or grid.
