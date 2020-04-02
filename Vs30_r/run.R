@@ -1,4 +1,5 @@
 library(parallel) # cluster
+library(raster) # raster
 library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
@@ -57,14 +58,14 @@ vspr = vspr[(vspr$QualityFlag != "Q3" | nchar(vspr$StationID) == 3 | is.na(vspr$
 # remove points where MODEL predictions don't exist, helper function within loadVs?
 na = which(is.na(vspr[["Vs30_AhdiAK_noQ3_hyb09c"]]))
 if(length(na) > 0) {
-  warning("some locations don't have predictions for this model")
+  warning("some measured locations have no value for AhdiAK")
   vspr_aak = vspr[-na,]
 } else {
   vspr_aak = vspr
 }
 na = which(is.na(vspr[["Vs30_YongCA_noQ3"]]))
 if(length(na) > 0) {
-  warning("some locations don't have predictions for this model")
+  warning("some measured locations have no value for YongCA")
   vspr_yca = vspr[-na,]
 } else {
   vspr_yca = vspr
@@ -72,6 +73,7 @@ if(length(na) > 0) {
 rm(vspr, na)
 # update model values with geology model tweaks
 # TODO: use function instead to generate freshly, this step won't be necessary
+source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
 vspr_aak_points = SpatialPoints(vspr_aak@coords, proj4string=vspr_aak@proj4string)
 distances = coast_distance(vspr_aak_points)
 xy49 = spTransform(vspr_aak_points, NZMG)
@@ -366,11 +368,12 @@ if (! file.exists(OUT)) {dir.create(OUT)}
 
 ### STEP 1: GEOLOGY MODEL
 if (geology) {
-  cat("running geology model...\n")
+  cat("geology model loading resources into cluster...\n")
   pool = makeCluster(detectCores() - leave_cores)
   # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
   clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
                                    "slp_nzni_9c", "slp_nzsi_9c", "aak_map"))
+  cat("running geology model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
   t1 = Sys.time()
@@ -428,6 +431,7 @@ for (z in maps) {
 }
 rm(grid)
 
+cat("Finished.\n")
 
 # to convert topography files to nztm equiv
 #t = raster(paste0(PLOTRES, "Topo/srtm_all_filt_nz.hdf5"))
