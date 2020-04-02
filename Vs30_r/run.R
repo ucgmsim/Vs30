@@ -2,15 +2,25 @@ library(parallel) # cluster
 library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
-# TODO: tidy these up, they import lots of things unused into workspace
-source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
-source("Kevin/MODEL_YongCA_noQ3.R")
-
+# outputs placed into this directory
+OUT = "vs30out"
+PLOTRES = "/nesi/project/nesi00213/PlottingData/"
 PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 
 WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 NZMG = "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"
+
+# EX mvn_params.R
+# note that some if statements have been removed to match default values
+# should note down where this was and/or change back if ever modifying below values
+# at least applicable to useNoisyMeasurements, note loadVs.R
+numVGpoints = 128
+useNoisyMeasurements = T
+covReducPar = 1.5
+useDiscreteVariogram = F
+useDiscreteVariogram_replace = F
+optimizeUsingMatrixPackage = T
 
 # working files (aak_map, iwahashipike in NZTM, slp in NZMG)
 load(paste0(PREFIX, "aak_map.Rdata"))
@@ -18,11 +28,13 @@ slp_nzsi_9c = as(raster(paste0(PREFIX, "slp_nzsi_9c.nc")), "SpatialGridDataFrame
 slp_nzni_9c = as(raster(paste0(PREFIX, "slp_nzni_9c.nc")), "SpatialGridDataFrame")
 iwahashipike = as(raster(paste0(PREFIX, "IwahashiPike_NZ_100m_16.tif")), "SpatialGridDataFrame")
 variogram_aak = read.csv("../Vs30_data/variogram_AhdiAK_noQ3_hyb09c_v6.csv")[2:10]
+class(variogram_aak) = c("variogramModel", "data.frame")
 variogram_yca = read.csv("../Vs30_data/variogram_YongCA_noQ3_v7.csv")[2:10]
+class(variogram_yca) = c("variogramModel", "data.frame")
 
 # lowest LINZ resolution 1:500k
 # coast_poly to determine if on land or water, coast_line for distances
-coast_poly = readOGR(dsn="/nesi/project/nesi00213/PlottingData/Paths/lds-nz-coastlines-and-islands/EPSG_2193", layer="nz-coastlines-and-islands-polygons-topo-1500k")
+coast_poly = readOGR(dsn=paste0(PLOTRES, "Paths/lds-nz-coastlines-and-islands/EPSG_2193"), layer="nz-coastlines-and-islands-polygons-topo-1500k")
 coast_line = as(coast_poly, "SpatialLinesDataFrame")
 coast_distance = function(xy, km=T) {
   # xy: SpatialPoints with CRS EPSG:2193 NZGD2000/NZTM
@@ -64,7 +76,7 @@ vspr_aak_points = SpatialPoints(vspr_aak@coords, proj4string=vspr_aak@proj4strin
 distances = coast_distance(vspr_aak_points)
 xy49 = spTransform(vspr_aak_points, NZMG)
 slp09c = xy49 %over% slp_nzsi_9c
-slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c)[is.na(slp09c)]
 slp09c[is.na(slp09c)] = 0.0
 model_params = data.frame(vspr_aak@data$groupID_AhdiAK, slp09c, distances)
 names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
@@ -88,8 +100,8 @@ mvn_points = function(xy, vspr_aak, vspr_yca, variogram, new_weight=F, k=1, geol
   coastkm = coast_distance(xy00)
   # model input - slope
   xy49 = spTransform(xy, NZMG)
-  slp09c = xy49 %over% slp_nzsi_9c.sgdf
-  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+  slp09c = xy49 %over% slp_nzsi_9c
+  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c)[is.na(slp09c)]
   slp09c[is.na(slp09c)] = 0.0
   rm(xy49)
   
@@ -208,13 +220,13 @@ geology_model_run = function(model) {
   model$aak_variances = NA
   
   # large amount of memory for polygon dataset
-  gid_aak = over(xy00, gidmap00)$groupID_AhdiAK
+  gid_aak = over(xy00, aak_map)$groupID_AhdiAK
   # make sure datatype is correct
   # TODO: short integer based model to save memory (use int indexes instead of string)?
   if (length(xy00) > 1) {
     gid_aak = as.character(gid_aak)
   } else {
-    gid_aak=lapply(gid_aak, as.character)
+    gid_aak = lapply(gid_aak, as.character)
   }
   valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
   if (length(valid_idx) == 0) {return(model)}
@@ -226,8 +238,8 @@ geology_model_run = function(model) {
   
   # slope (more memory required for rasters)
   xy49 = spTransform(xy00, NZMG)
-  slp09c = xy49 %over% slp_nzsi_9c.sgdf
-  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c.sgdf)[is.na(slp09c)]
+  slp09c = xy49 %over% slp_nzsi_9c
+  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c)[is.na(slp09c)]
   slp09c[is.na(slp09c)] = 0.0
   rm(xy00, xy49)
   
@@ -272,10 +284,12 @@ terrain_model_run = function(model) {
 }
 
 
-geology_mvn_run = function(model, vspr_aak, variogram) {
+geology_mvn_run = function(model, vspr, variogram) {
   library(gstat)
   library(Matrix)
   library(raster)
+
+  source("Kevin/mvn.R")
   
   valid_idx = which(!is.na(model[, c("aak_values_log")]))
   if (length(valid_idx) == 0) {
@@ -286,11 +300,11 @@ geology_mvn_run = function(model, vspr_aak, variogram) {
   coords = coordinates(model[valid_idx, c("x", "y")])
   rownames(coords) = NULL
   
-  aak_obs_locations = coordinates(vspr_aak)
-  aak_obs_values_log = log(vspr_aak[["Vs30_AhdiAK_noQ3_hyb09c"]])
-  aak_obs_variances = (vspr_aak[["stDv_AhdiAK_noQ3_hyb09c"]])^2
-  aak_obs_residuals = log(vspr_aak$Vs30) - aak_obs_values_log
-  aak_obs_stdev_log = vspr_aak$lnMeasUncer
+  aak_obs_locations = coordinates(vspr)
+  aak_obs_values_log = log(vspr[["Vs30_AhdiAK_noQ3_hyb09c"]])
+  aak_obs_variances = (vspr[["stDv_AhdiAK_noQ3_hyb09c"]])^2
+  aak_obs_residuals = log(vspr$Vs30) - aak_obs_values_log
+  aak_obs_stdev_log = vspr$lnMeasUncer
   aak_values_log = model[valid_idx, "aak_values_log"]
   mvn_aak = mvn(aak_obs_locations, coords, model[valid_idx, "aak_variances"], variogram,
                 aak_values_log, aak_obs_variances, aak_obs_residuals,
@@ -329,8 +343,6 @@ geology_mvn_run = function(model, vspr_aak, variogram) {
 ### WHOLE NZ
 ###
 
-library(parallel)
-
 # don't use this many cores in cluster, leave for other users/processes
 leave_cores = 0
 # which models to generate
@@ -338,7 +350,7 @@ geology = T
 terrain = F
 job_size = 3000
 
-print("loading points...")
+cat("loading points...\n")
 # original grid
 #xy00 = sp::makegrid(as(raster::extent(1000050, 2126350, 4700050, 6338350), "SpatialPoints"), cellsize=100)
 # small christchurch centred grid for testing
@@ -347,82 +359,83 @@ colnames(xy00) = c("x", "y")
 cluster_model = split(x=data.frame(xy00), f=ceiling(seq(1, dim(xy00)[1])/job_size))
 rm(xy00)
 
+if (! file.exists(OUT)) {dir.create(OUT)}
 
-# each instance of cluster uses about input data size * 2
+# each instance of cluster uses about input data size * 2 RAM
 
 
 ### STEP 1: GEOLOGY MODEL
 if (geology) {
-  print("running geology model...")
+  cat("running geology model...\n")
   pool = makeCluster(detectCores() - leave_cores)
   # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
   clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
-                                   "slp_nzni_9c.sgdf", "slp_nzsi_9c.sgdf", "gidmap00"))
+                                   "slp_nzni_9c", "slp_nzsi_9c", "aak_map"))
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
   t1 = Sys.time()
   stopCluster(pool)
-  print("Geology model complete.")
+  cat("Geology model complete.\n")
   print(t1 - t0)
 }
 
 
 ### STEP 2: TERRAIN MODEL
 if (terrain) {
-  print("running terrain model...")
+  cat("running terrain model...\n")
 }
 
 
 ### STEP 3: GEOLOGY MVN
 if (geology) {
-  print("running geology mvn...")
+  cat("running geology mvn...\n")
   pool = makeCluster(detectCores() - leave_cores)
-  clusterExport(cl=pool, varlist=c("mvn", "numVGpoints", "useNoisyMeasurements", "covReducPar",
+  clusterExport(cl=pool, varlist=c("numVGpoints", "useNoisyMeasurements", "covReducPar",
                                    "useDiscreteVariogram", "useDiscreteVariogram_replace",
-                                   "optimizeUsingMatrixPackage", "makeCovMatrix", "Sigma_Y2Y2",
-                                   "mu_Y1_given_y2", "Sigma_Y1Y2", "cov_Y1Y1_given_y2", "Sigma_Y1Y1",
-                                   "Sigma_Y2Y1"))
+                                   "optimizeUsingMatrixPackage"))
   t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_mvn_run, vspr_aak, variogram)
+  cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_mvn_run, vspr_aak, variogram_aak)
   t1 = Sys.time()
   stopCluster(pool)
-  print("Geology mvn complete.")
+  cat("Geology mvn complete.\n")
   print(t1 - t0)
 }
 
 
 ### STEP 4: TERRAIN MVN
 if (terrain) {
-  print("running geology mvn...")
+  cat("running geology mvn...\n")
 }
 
 
 ### STEP 5: WEIGHTED MVN
 if (geology & terrain) {
-  print("running geology and terrain combination...")
+  cat("running geology and terrain combination...\n")
 }
 
 ### STEP 6: OUTPUT
 # combine
 cluster_model = do.call(rbind, cluster_model)
-# 
-aak_vs30 = cluster_model[, c("x", "y", "aak_vs30")]
-names(aak_vs30) = c("x", "y", "z")
-coordinates(aak_vs30) = ~ x + y
-crs(aak_vs30) = NZTM
-aak_vs30 = rasterFromXYZ(aak_vs30)
-writeRaster(aak_vs30, filename="geology_model.nc", format="CDF", overwrite=TRUE)
-rm(aak_vs30)
+maps = colnames(cluster_model)[-which(colnames(cluster_model) %in% c("x", "y"))]
+# write all columns into rasters / grids
+for (z in maps) {
+  grid = cluster_model[, c("x", "y", z)]
+  names(grid) = c("x", "y", "z")
+  coordinates(grid) = ~ x + y
+  crs(grid) = NZTM
+  grid = rasterFromXYZ(grid)
+  writeRaster(grid, filename=paste0(OUT, "/", z, ".nc"), format="CDF", overwrite=TRUE)
+}
+rm(grid)
 
 
 # to convert topography files to nztm equiv
-#t = raster("/nesi/project/nesi00213/PlottingData/Topo/srtm_all_filt_nz.hdf5")
-#u = projectRaster(t, crs=NZTM, method="ngb")
-#u = projectRaster(t, to=aak_vs30, method="ngb")
+#t = raster(paste0(PLOTRES, "Topo/srtm_all_filt_nz.hdf5"))
+#t = projectRaster(t, to=aak_vs30, method="ngb")
+#writeRaster(t, filename="vs30map_i5.nc", format="CDF", overwrite=TRUE)
 
 # plotting done by GMT script instead
 #png("Rplot.png", height=12, width=9, res=600, units="in")
 #   raster::plot(aak_vs30, maxpixels=(aak_vs30@ncols * aak_vs30@nrows))
 #   mtext("Geology Model Vs30", line=0.5, cex=1)
 #dev.off()
-
