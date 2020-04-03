@@ -82,10 +82,13 @@ xy49 = spTransform(vspr_aak_points, NZMG)
 slp09c = xy49 %over% slp_nzsi_9c
 slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c)[is.na(slp09c)]
 slp09c[is.na(slp09c)] = 0.0
-model_params = data.frame(vspr_aak@data$groupID_AhdiAK, slp09c, distances)
+gid = as(substring(vspr_aak@data$groupID_AhdiAK, first=1, last=2), "integer")
+gid[gid > 3] = gid[gid > 3] - 2
+gid[gid > 5] = gid[gid > 5] - 1
+model_params = data.frame(gid, slp09c, distances)
 names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
 vspr_aak[[paste0("Vs30_", GEOLOGY)]] = AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T)
-rm(model_params, slp09c, distances, vspr_aak_points, xy49)
+rm(model_params, gid, slp09c, distances, vspr_aak_points, xy49)
 
 
 geology_model_run = function(model) {
@@ -301,6 +304,7 @@ if (geology) {
 ### STEP 2: TERRAIN MODEL
 if (terrain) {
   cat("terrain model loading resources into cluster...\n")
+  # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
   pool = makeCluster(detectCores() - leave_cores)
   # iwahashipike dataset: ~700MB/core
   clusterExport(cl=pool, varlist=c("NZTM", "iwahashipike"))

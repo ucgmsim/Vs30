@@ -50,14 +50,6 @@ source("Kevin/MODEL_AhdiAK_noQ3.R")
  #  |   43|18_crystalline      |       750|          843.573|       837.130|    0.006|        0.641|         0.506|       0.058|
 
 
-
-AhdiAK_noQ3_hyb09c_lookup     <- AhdiAK_noQ3_lookup  # This will be modified below using "srf" (sigma reduction factors) to modify the sigma output for slope-dependent groups.
-
-
-AhdiAK_noQ3_hyb09c_setGroupID <- AhdiAK_noQ3_setGroupID
-
-
-
 #######################################################################
 #######################################################################
 ########        hybrid model params here   ############################
@@ -66,99 +58,61 @@ AhdiAK_noQ3_hyb09c_setGroupID <- AhdiAK_noQ3_setGroupID
 # Now define which units have a slope-Vs30 relation to apply:
 # 
 # One entry for each hybrid unit
-AhdiAK_noQ3_hyb09c_hybDF <- data.frame(
-  slopeUnits      = factor(c("04_fill" , "05_fluvialEstuarine", "06_alluvium", "09_beachBarDune"), levels = levels(AhdiAK_noQ3_hyb09c_lookup()$groupID)),
-  log10slope_0    = c(-1.85     , -2.70                , -3.44        , -3.56            ), # these four values define two points of reference
-  log10slope_1    = c(-1.22     , -1.35                , -0.88        , -0.93            ), # for interpolation. They should be chosen by eye
-  Vs30_0          = c( 242      ,  171                 ,  252         ,  183             ), # from the model this hybrid is based upon. They
-  Vs30_1          = c( 418      ,  228                 ,  275         ,  239             ), # become inputs to approx / approxfun.
-                                                                                            # (actually my slopePlotDetail.R has been updated
-                                                                                            #  to include endpoints of fit line. 20171205)
-  sigmaReducFac   = c( 0.4888   , 0.7103               , 0.9988       , 0.9348           )  # Added this on 20171223. Based on slope-Vs30 plots. (See new SIGMA notes added to plot subtitles in slopePlotDetail.R output.)
+AhdiAK_noQ3_hyb09c_hybDF = data.frame(
+  slopeUnits      = c(2, 3, 4, 6),
+  log10slope_0    = c(-1.85   , -2.70   , -3.44   , -3.56), # these four values define two points of reference
+  log10slope_1    = c(-1.22   , -1.35   , -0.88   , -0.93), # for interpolation. They should be chosen by eye
+  Vs30_0          = c( 242    ,  171    ,  252    ,  183 ), # from the model this hybrid is based upon. They
+  Vs30_1          = c( 418    ,  228    ,  275    ,  239 ), # become inputs to approx / approxfun.
+                                                            # (actually my slopePlotDetail.R has been updated
+                                                            #  to include endpoints of fit line. 20171205)
+  # Added this on 20171223. Based on slope-Vs30 plots. (See new SIGMA notes added to plot subtitles in slopePlotDetail.R output.)
+  sigmaReducFac   = c( 0.4888 , 0.7103  , 0.9988  , 0.9348)
 )
 
-# here, modify lookup function to incorporate sigma reduction factors....
-lookupDF.orig <- AhdiAK_noQ3_hyb09c_lookup()
-lookupDF.mod  <- lookupDF.orig
-# reduce values:
-for (i in seq(nrow(AhdiAK_noQ3_hyb09c_hybDF))) {
-  lookupDF.mod$stDv_AhdiAK_noQ3[lookupDF.mod$groupID==AhdiAK_noQ3_hyb09c_hybDF$slopeUnits[i]] <-
-    lookupDF.mod$stDv_AhdiAK_noQ3[lookupDF.mod$groupID==AhdiAK_noQ3_hyb09c_hybDF$slopeUnits[i]] * AhdiAK_noQ3_hyb09c_hybDF$sigmaReducFac[i]
-}
+AhdiAK_noQ3_hyb09c_set_Vs30_hyb = function(data, i) {
+  # Use slopes and intercepts entered above to compute Vs30 as f(slope) (using 09c resolution slopes)
 
-# finally, new version of lookup function.
-AhdiAK_noQ3_hyb09c_lookup <- function(){
-  return(lookupDF.mod)
-}
-
-AhdiAK_noQ3_hyb09c_set_Vs30_geo <- function(data) {
-# same function as UPDATED geo-only version of this model
-# 
-  lookup <- AhdiAK_noQ3_lookup()
-  Vs30   <- lookup$Vs30_AhdiAK_noQ3
-  names(Vs30)  <- as.character(lookup$groupID)
-  Vs30out <- Vs30[as.character(data$groupID_AhdiAK)]
-  names(Vs30out) <- NULL
-  return(Vs30out)
-}
-
-AhdiAK_noQ3_hyb09c_set_Vs30_hyb <- function(data, groupID) {
-# Use slopes and intercepts entered above to compute Vs30 as f(slope) (using 09c resolution slopes)
-# 
-  adf <- AhdiAK_noQ3_hyb09c_hybDF
-  i <- which(groupID==adf$slopeUnits)
-  # look up hybrid model parameters from vectors defined above
-  l10s_0    <- adf$log10slope_0[i]
-  l10s_1    <- adf$log10slope_1[i]
-  l10Vs30_0 <- log10(adf$Vs30_0[i])
-  l10Vs30_1 <- log10(adf$Vs30_1[i])
-    
-  slp  <- data$slp09c
-  lslp <- log10(slp)
-  
-  
+  row = AhdiAK_noQ3_hyb09c_hybDF[i,]
   # interpolate
-  x <- c(l10s_0,    l10s_1   )
-  y <- c(l10Vs30_0, l10Vs30_1)
-  Vs30out <- 10^approx(x=x, y=y, xout = lslp, rule=2)$y
-
-  return(Vs30out)
+  x = c(row$log10slope_0, row$log10slope_1)
+  y = c(log10(row$Vs30_0), log10(row$Vs30_1))
+  return(10^approx(x=x, y=y, xout=log10(data$slp09c), rule=2)$y)
 }
 
 AhdiAK_noQ3_hyb09c_set_Vs30 <- function(data, g06mod=T, g13mod=T){
-  # applies each of the individual functions above (geo, hyb) in turn.
+  # first apply geo (parent model)
+  vs30out = AhdiAK_noQ3_set_Vs30(data)
   
-  # first, apply geo function
-  Vs30out <- AhdiAK_noQ3_hyb09c_set_Vs30_geo(data)
-  
-  # next, loop over hybrid geology units as defined above.
-  df <- AhdiAK_noQ3_hyb09c_hybDF
-  for(i in 1:dim(df)[1]) {
-    gID         <- df$slopeUnits[i]
-    w           <- which(data$groupID_AhdiAK %in% gID)
-    Vs30out[w]  <- AhdiAK_noQ3_hyb09c_set_Vs30_hyb(data[w,], gID)
+  # then apply hybrid model changes
+  for (i in seq(nrow(AhdiAK_noQ3_hyb09c_hybDF))) {
+    gid = AhdiAK_noQ3_hyb09c_hybDF$slopeUnits[i]
+    if (g06mod & gid == 4) next # gid 10 (g13) not in table anyway
+    w = which(data$groupID_AhdiAK %in% gid)
+    if (length(w) == 0) next
+    vs30out[w] = AhdiAK_noQ3_hyb09c_set_Vs30_hyb(data[w,], i)
   }
   if (g06mod) {
-      # override G06
-      g06 = which(data$groupID_AhdiAK %in% "06_alluvium")
-      Vs30out[g06] = pmax(240, pmin(500, 240 + (500-240) * (data$coastkm[g06]-8)/(20-8)))
+      # override G06 (index 4)
+      g06 = which(data$groupID_AhdiAK %in% 4)
+      vs30out[g06] = pmax(240, pmin(500, 240 + (500-240) * (data$coastkm[g06]-8)/(20-8)))
   }
   if (g13mod) {
-      g13 = which(data$groupID_AhdiAK %in% "13_floodplain")
-      Vs30out[g13] = pmax(197, pmin(500, 197 + (500-197) * (data$coastkm[g13]-8)/(20-8)))
+      # (index 10)
+      g13 = which(data$groupID_AhdiAK %in% 10)
+      vs30out[g13] = pmax(197, pmin(500, 197 + (500-197) * (data$coastkm[g13]-8)/(20-8)))
   }
-  return(Vs30out)
+  return(vs30out)
 }
 
 
-AhdiAK_noQ3_hyb09c_set_stDv <- function(data) {
-  # same as parent model
-  lookup <- AhdiAK_noQ3_hyb09c_lookup()
-  stDv   <- lookup$stDv_AhdiAK_noQ3
-  
-  names(stDv)  <- as.character(lookup$groupID)
-  stDvOut <- stDv[as.character(data$groupID_AhdiAK)]
-  names(stDvOut) <- NULL
-  return(stDvOut)
+# modify standard deviation to incorporate sigma reduction factors....
+stDv_AhdiAk_noQ3_hyb09c = stDv_AhdiAK_noQ3
+for (i in seq(nrow(AhdiAK_noQ3_hyb09c_hybDF))) {
+  stDv_AhdiAk_noQ3_hyb09c[AhdiAK_noQ3_hyb09c_hybDF$slopeUnits[i]] =
+    stDv_AhdiAK_noQ3[AhdiAK_noQ3_hyb09c_hybDF$slopeUnits[i]] * AhdiAK_noQ3_hyb09c_hybDF$sigmaReducFac[i]
 }
 
+AhdiAK_noQ3_hyb09c_set_stDv = function(data) {
+  return(stDv_AhdiAk_noQ3_hyb09c[data$groupID_AhdiAK])
+}
