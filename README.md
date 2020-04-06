@@ -13,8 +13,8 @@ Run the command in `R` as the `root` user for system-wide installation.
 
 ## Workflow
 R scripts should be run with the working directory set as the repo root.
-1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update the vspr csv file.
-1. Run grid or point based plotting (below).
+1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update `data/vspr.csv`.
+1. Run grid or point based calculation (below).
 1. Optionally create a plot for gridded outputs.
 
 ## Grid based calculation
