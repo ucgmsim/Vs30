@@ -11,6 +11,8 @@ install.packages(c("raster", "rgdal", "gstat", "rgeos", "matrixcalc", "spatstat"
 ```
 Run the command in `R` as the `root` user for system-wide installation.
 
+Make sure you have the large data files available in the `PREFIX` definition of `shared.R`.
+
 ## Workflow
 R scripts should be run with the working directory set as the repo root.
 1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update `data/vspr.csv`.
