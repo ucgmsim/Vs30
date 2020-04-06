@@ -1,10 +1,10 @@
 
 # Gathers metadata for points with measured Vs30.
-# only columns needed are coordinates, Vs30/lnMeasUncer, Vs30/stDV for model(s), QualityFlag for subsetting
+# only columns needed are coordinates, Vs30/lnMeasUncer, Vs30/stDV for model(s),
+#                         QualityFlag/StationID for subsetting
 
 library(sp)
 
-# uncomment if this is being run standalone
 source("shared.R")
 source("Kevin/load_vs.R")
 
@@ -34,6 +34,7 @@ vspr_run = function() {
   vspr$Vs30 = vs_NZGD00$Vs30
   vspr$lnMeasUncer = vs_NZGD00$lnMeasUncer
   vspr$QualityFlag = vs_NZGD00$QualityFlag
+  vspr$StationID = vs_NZGD00$StationID
 
   # add model values
   vspr = geology_model_run(vspr)
@@ -45,3 +46,5 @@ vspr_run = function() {
 
   write.csv(vspr, "../Vs30_data/vspr.csv")
 }
+
+vspr_run()

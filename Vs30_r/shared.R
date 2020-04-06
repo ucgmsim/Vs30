@@ -51,8 +51,7 @@ vspr = read.csv("../Vs30_data/vspr.csv")
 coordinates(vspr) = ~ x + y
 crs(vspr) = NZTM
 # remove Q3 quality unless station name is 3 chars long.
-# TODO: just call loadVs function and it will do it for you instead of here
-vspr = vspr[(vspr$QualityFlag != "Q3" | nchar(vspr$StationID) == 3 | is.na(vspr$QualityFlag)),]
+vspr = vspr[(vspr$QualityFlag != "Q3" | nchar(as(vspr$StationID, "character")) == 3 | is.na(vspr$QualityFlag)),]
 # remove points where MODEL predictions don't exist
 vspr_aak = vspr[(!is.na(vspr[[paste0("Vs30_", GEOLOGY)]])),]
 vspr_yca = vspr[(!is.na(vspr[[paste0("Vs30_", TERRAIN)]])),]
