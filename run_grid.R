@@ -1,3 +1,5 @@
+#!/usr/bin/env Rscript
+
 library(parallel) # cluster
 
 source("shared.R")

@@ -28,8 +28,8 @@ load(paste0(PREFIX, "aak_map.Rdata"))
 slp_nzsi_9c = as(raster(paste0(PREFIX, "slp_nzsi_9c.nc")), "SpatialGridDataFrame")
 slp_nzni_9c = as(raster(paste0(PREFIX, "slp_nzni_9c.nc")), "SpatialGridDataFrame")
 iwahashipike = as(raster(paste0(PREFIX, "IwahashiPike_NZ_100m_16.tif")), "SpatialGridDataFrame")
-variogram_aak = read.csv(paste0("../Vs30_data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
-variogram_yca = read.csv(paste0("../Vs30_data/variogram_", TERRAIN, "_v7.csv"))[2:10]
+variogram_aak = read.csv(paste0("data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
+variogram_yca = read.csv(paste0("data/variogram_", TERRAIN, "_v7.csv"))[2:10]
 class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
 
 # lowest LINZ resolution 1:500k
@@ -47,7 +47,7 @@ coast_distance = function(xy, km=T) {
 }
 
 # vs site properties
-vspr = read.csv("../Vs30_data/vspr.csv")
+vspr = read.csv("data/vspr.csv")
 coordinates(vspr) = ~ x + y
 crs(vspr) = NZTM
 # remove Q3 quality unless station name is 3 chars long.

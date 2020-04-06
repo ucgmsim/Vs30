@@ -1,8 +1,12 @@
-source("run_grid.R")
+#!/usr/bin/env Rscript
+
+source("shared.R")
 
 ###
 ### CUSTOM POINTS VERSION
 ###
+
+OUT = "vs30out.csv"
 
 # pick a method to load stations
 xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
@@ -19,4 +23,4 @@ model = terrain_model_run(model)
 model = mvn_run(model, vspr_aak, variogram_aak, "aak")
 model = mvn_run(model, vspr_yca, variogram_yca, "yca")
 model = weighting_run(model)
-write.csv(model, paste0(OUT, "/", "custom_points.csv"))
+write.csv(model, OUT)
