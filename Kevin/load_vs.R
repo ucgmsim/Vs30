@@ -16,9 +16,9 @@ load_vs = function(downsample_McGann=TRUE){
   # McGann data is downsampled (downSampleMcGann)
   
   # load each Vs data source.
-  mcgann = loadvs_McGann("../Vs30_data/McGann_cptVs30data.csv", downsample=downsample_McGann)
-  wotherspoon = loadvs_Wotherspoon("../Vs30_data/Characterised Vs30 Canterbury_June2017_KFed.csv")
-  kaiseretal = loadvs_KaiserEtAl("../Vs30_data/20170817_vs_allNZ_duplicatesCulled.ll")
+  mcgann = loadvs_McGann("data/McGann_cptVs30data.csv", downsample=downsample_McGann)
+  wotherspoon = loadvs_Wotherspoon("data/Characterised Vs30 Canterbury_June2017_KFed.csv")
+  kaiseretal = loadvs_KaiserEtAl("data/20170817_vs_allNZ_duplicatesCulled.ll")
 
   # Bind data together (can be separated using DataSource field)
   vspoints = rbind(mcgann, wotherspoon, kaiseretal)  

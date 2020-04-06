@@ -12,15 +12,16 @@ install.packages(c("raster", "rgdal", "gstat", "rgeos", "matrixcalc", "spatstat"
 Run the command in `R` as the `root` user for system-wide installation.
 
 ## Workflow
-1. When measured site logic or data changes, re-run `Kevin/vspr.R` which will update the vspr csv file.
+R scripts should be run with the working directory set as the repo root.
+1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update the vspr csv file.
 1. Run grid or point based plotting (below).
 1. Optionally create a plot for gridded outputs.
 
 ## Grid based calculation
-`run_grid.R` will run the calculation over a grid.
+`./run_grid.R` will run the calculation over a grid (edit parameters as required).
 
 ### Plotting
-`plot_map.py` will use GMT to make maps of the NZ-wide grid data.
+`./plot_map.py` will use GMT to make maps of the NZ-wide grid data. Run with `--help` for options.
 
 ## Point based calculation
-`run_points.R` will run the calculation over arbitrary points.
+`./run_points.R` will run the calculation over arbitrary points (edit parameters as required).

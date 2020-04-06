@@ -1,3 +1,4 @@
+#!/usr/bin/env Rscript
 
 # Gathers metadata for points with measured Vs30.
 # only columns needed are coordinates, Vs30/lnMeasUncer, Vs30/stDV for model(s),
@@ -8,7 +9,7 @@ library(sp)
 source("shared.R")
 source("Kevin/load_vs.R")
 
-OUT = "../Vs30_data/vspr.csv"
+OUT = "data/vspr.csv"
 
 vspr_run = function() {
   # source coordinates with metadata
@@ -44,7 +45,7 @@ vspr_run = function() {
   names(vspr)[names(vspr) == "yca_vs30"] = paste0("Vs30_", TERRAIN)
   names(vspr)[names(vspr) == "yca_stdev"] = paste0("stDv_", TERRAIN)
 
-  write.csv(vspr, "../Vs30_data/vspr.csv")
+  write.csv(vspr, OUT)
 }
 
 vspr_run()
