@@ -17,9 +17,9 @@ OUT = "vs30out"
 
 cat("loading points...\n")
 # original grid
-#xy00 = sp::makegrid(as(raster::extent(1000050, 2126350, 4700050, 6338350), "SpatialPoints"), cellsize=100)
+xy00 = sp::makegrid(as(raster::extent(1000050, 2126350, 4700050, 6338350), "SpatialPoints"), cellsize=100)
 # small christchurch centred grid for testing
-xy00 = sp::makegrid(as(raster::extent(1420050, 1639550, 5064950, 5294550), "SpatialPoints"), cellsize=400)
+#xy00 = sp::makegrid(as(raster::extent(1420050, 1639550, 5064950, 5294550), "SpatialPoints"), cellsize=400)
 colnames(xy00) = c("x", "y")
 cluster_model = split(x=data.frame(xy00), f=ceiling(seq(1, dim(xy00)[1])/job_size))
 rm(xy00)
