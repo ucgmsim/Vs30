@@ -42,7 +42,7 @@ coast_distance = function(xy, km=T) {
   result = rep(0.0, nxy)
   mask = which(!is.na(over(xy, coast_poly)$name))
   result[mask] = apply(gDistance(xy[mask,], coast_line, byid=T), 2, min)
-  if (km) {return(result/1000.0)}
+  if (km) return(result/1000.0)
   return(result)
 }
 
@@ -62,7 +62,7 @@ geology_model_run = function(model) {
   library(raster) # raster
   library(rgeos) # gDistance
   
-  source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
+  source(paste0("Kevin/MODEL_", GEOLOGY, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
@@ -78,8 +78,10 @@ geology_model_run = function(model) {
   } else {
     gid_aak = lapply(gid_aak, as.character)
   }
-  valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
-  if (length(valid_idx) == 0) {return(model)}
+  # used to intersect with where gid_aak is water, water replaced with NA
+  # TODO: maybe just delete water polygons making it faster?
+  valid_idx = which(!is.na(gid_aak))
+  if (length(valid_idx) == 0) return(model)
   xy00 = xy00[valid_idx]
   gid_aak = gid_aak[valid_idx]
   
@@ -108,7 +110,7 @@ geology_model_run = function(model) {
 terrain_model_run = function(model) {
   library(raster) # crs, SpatialPoints
   
-  source("Kevin/MODEL_YongCA_noQ3.R")
+  source(paste0("Kevin/MODEL_", TERRAIN, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
