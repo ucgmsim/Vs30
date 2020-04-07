@@ -2,6 +2,7 @@
 library(ncdf4)
 rm(list=ls())
 setwd("/home/vap30/VsMap/Rdata/")
+PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 
 
 convert2nc = function(rdata, raster) {
@@ -37,34 +38,36 @@ convert2nc = function(rdata, raster) {
 ###
 ### ELEVATION / SLOPE
 ###
+# TODO: just use writeRaster instead!
 
 rdata = "nzni_9c_DEM.Rdata"
 load(rdata)
-convert2nc(rdata, nzni_9c)
+#convert2nc(rdata, nzni_9c)
 
 rdata = "nzni_30c_DEM.Rdata"
 load(rdata)
-convert2nc(rdata, nzni_30c)
+#convert2nc(rdata, nzni_30c)
 
 rdata = "nzsi_9c_DEM.Rdata"
 load(rdata)
-convert2nc(rdata, nzsi_9c)
+#convert2nc(rdata, nzsi_9c)
 
 rdata = "nzsi_30c_DEM.Rdata"
 load(rdata)
-convert2nc(rdata, nzsi_30c)
+#convert2nc(rdata, nzsi_30c)
 
 rdata = "nzni_9c_slp.Rdata"
 load(rdata)
-convert2nc(rdata, slp_nzni_9c)
+#convert2nc(rdata, slp_nzni_9c)
 
 rdata = "nzni_30c_slp.Rdata"
 load(rdata)
-convert2nc(rdata, slp_nzni_30c)
+#convert2nc(rdata, slp_nzni_30c)
 
 rdata = "nzsi_9c_slp.Rdata"
 load(rdata)
-convert2nc(rdata, slp_nzsi_9c)
+writeRaster(slp_nzsi_9c, filename=paste0(PREFIX, "slp_nzsi_9c.nc"), format="CDF", overwrite=TRUE)
+#convert2nc(rdata, slp_nzsi_9c)
 
 rdata = "nzsi_30c_slp.Rdata"
 load(rdata)
@@ -76,6 +79,8 @@ convert2nc(rdata, slp_nzsi_30c)
 
 load("variogram_AhdiAK_noQ3_hyb09c_v6.Rdata")
 write.csv(variogram, "variogram_AhdiAK_noQ3_hyb09c_v6.csv")
+load("variogram_YongCA_noQ3_v7.Rdata")
+write.csv(variogram, "variogram_YongCA_noQ3_v7.csv")
 
 ###
 ### QMAP
@@ -128,3 +133,10 @@ nzmg = CRS(paste0(
     doCheckCRSArgs=FALSE)
 map_NZGD49 = spTransform(map_NZGD00, CRS=nzmg)
 writeOGR(obj=map_NZGD49, dsn="QMAP_Seamless_July13K_NZGD00", layer="nzmg", driver="ESRI Shapefile")
+
+# polygons column subset
+load(paste0(PREFIX, "QMAP_Seamless_July13K_NZGD00.Rdata"))
+aak_map = map_NZGD00[, (names(map_NZGD00) %in% c("groupID_AhdiAK"))]
+save(list=c("aak_map"), file=paste0(PREFIX, "aak_map.Rdata"))
+# TODO: also save in Python friendly format
+rm(map_NZGD00, map_NZGD00.Cant, aak_map)
