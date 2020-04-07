@@ -1,19 +1,29 @@
 # Vs30
+Vs30 is used in the high frequency workflow.
+Retrieve Vs30/standard deviation/residual at locations using Kevin Foster's research codes (modified).
+Run for specific locations or over a grid.
 
-## data
-20170817_vs_allNZ_duplicatesCulled.ll : Wotherspoon measured Vs30
-Characterised Vs30 Canterbury_June2017_KFed.csv : Kaiser et al measured Vs30
-McGann_cptVs30data.csv : McGann measured Vs30
+## Setup
+Install R on your system. Rstudio is an optional IDE.
+There are a few R packages that the code requires. Packages that require system libraries such as rgdal require to be force re-installed with parent library ABI change.
+```r
+install.packages(c("raster", "rgdal", "gstat", "rgeos", "matrixcalc", "spatstat"))
+```
+Run the command in `R` as the `root` user for system-wide installation.
 
+Make sure you have the large data files available in the `PREFIX` definition of `shared.R`.
 
-## preprocess
-rdata2nc.R : convert Rdata files to interoperable formats
-vs_polygons.R : match measured Vs30 to polygons
+## Workflow
+R scripts should be run with the working directory set as the repo root.
+1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update `data/vspr.csv`.
+1. Run grid or point based calculation (below).
+1. Optionally create a plot for gridded outputs.
 
+## Grid based calculation
+`./run_grid.R` will run the calculation over a grid (edit parameters as required).
 
-## create
-load_vs.py : loads measured Vs30 points
-vspr.py : prepare data
-...
-join_tiles.py : converts tiles to complete images
-weighted.py : mean model
+### Plotting
+`./plot_map.py` will use GMT to make maps of the NZ-wide grid data. Run with `--help` for options.
+
+## Point based calculation
+`./run_points.R` will run the calculation over arbitrary points (edit parameters as required).
