@@ -180,7 +180,8 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   model$vs30 = NA
   model$stdev = NA
   
-  valid_idx = intersect(which(!is.na(model$aak_vs30)), which(!is.na(model$yca_vs30)))
+  valid_idx = intersect(which(!is.na(model$aak_mvn_vs30)),
+                        which(!is.na(model$yca_mvn_vs30)))
   if (length(valid_idx) == 0) {return(model)}
 
   log_a = log(model[valid_idx, "aak_mvn_vs30"])
@@ -200,7 +201,8 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   sig1sq = model[valid_idx, "aak_stdev"] ^ 2
   sig2sq = model[valid_idx, "yca_stdev"] ^ 2
   # Reference: https://en.wikipedia.org/wiki/Mixture_distribution#Moments
-  model[valid_idx, "stdev"] = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
+  model[valid_idx, "stdev"] = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + 
+                               w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
 
   return(model)
 }
