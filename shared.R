@@ -117,7 +117,7 @@ terrain_model_run = function(model) {
   
   gid_yca = over(xy00, iwahashipike)
   valid_idx = which(!is.na(gid_yca))
-  if (length(valid_idx) == 0) {return(model)}
+  if (length(valid_idx) == 0) return(model)
   gid_yca = data.frame(gid_yca[valid_idx,])
   colnames(gid_yca) = "groupID_YongCA_noQ3"
 
@@ -182,7 +182,7 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   
   valid_idx = intersect(which(!is.na(model$aak_mvn_vs30)),
                         which(!is.na(model$yca_mvn_vs30)))
-  if (length(valid_idx) == 0) {return(model)}
+  if (length(valid_idx) == 0) return(model)
 
   log_a = log(model[valid_idx, "aak_mvn_vs30"])
   log_y = log(model[valid_idx, "yca_mvn_vs30"])
@@ -198,8 +198,8 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   log_ay = log_a * w_a + log_y * w_y
   model[valid_idx, "vs30"] = exp(log_ay)
 
-  sig1sq = model[valid_idx, "aak_stdev"] ^ 2
-  sig2sq = model[valid_idx, "yca_stdev"] ^ 2
+  sig1sq = model[valid_idx, "aak_mvn_stdev"] ^ 2
+  sig2sq = model[valid_idx, "yca_mvn_stdev"] ^ 2
   # Reference: https://en.wikipedia.org/wiki/Mixture_distribution#Moments
   model[valid_idx, "stdev"] = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + 
                                w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
