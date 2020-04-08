@@ -71,13 +71,6 @@ geology_model_run = function(model) {
   
   # large amount of memory for polygon dataset
   gid_aak = over(xy00, aak_map)$groupID_AhdiAK
-  # make sure datatype is correct
-  # TODO: short integer based model to save memory (use int indexes instead of string)?
-  if (length(xy00) > 1) {
-    gid_aak = as.character(gid_aak)
-  } else {
-    gid_aak = lapply(gid_aak, as.character)
-  }
   # used to intersect with where gid_aak is water, water replaced with NA
   # TODO: maybe just delete water polygons making it faster?
   valid_idx = which(!is.na(gid_aak))
