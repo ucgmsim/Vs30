@@ -125,6 +125,7 @@ terrain_model_run = function(model) {
 
 
 mvn_run = function(model, vspr, variogram, model_type) {
+  # TODO: keep_original flag to not overwrite pre-mvn data
   library(gstat)
   library(Matrix)
   library(raster) # crs
