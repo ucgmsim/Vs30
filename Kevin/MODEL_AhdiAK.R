@@ -1,21 +1,22 @@
 # MODEL_AhdiAK
 
-# names of levels (indexed by order)
-#01_peat
-#04_fill
-#05_fluvialEstuarine
-#06_alluvium
-#08_lacustrine
-#09_beachBarDune
-#10_fan
-#11_loess
-#12_outwash
-#13_floodplain
-#14_moraineTill
-#15_undifSed
-#16_terrace
-#17_volcanic
-#18_crystalline
+# names of levels (indexed by order, water index to NA)
+# NA 00_water
+#  1 01_peat
+#  2 04_fill
+#  3 05_fluvialEstuarine
+#  4 06_alluvium
+#  5 08_lacustrine
+#  6 09_beachBarDune
+#  7 10_fan
+#  8 11_loess
+#  9 12_outwash
+# 10 13_floodplain
+# 11 14_moraineTill
+# 12 15_undifSed
+# 13 16_terrace
+# 14 17_volcanic
+# 15 18_crystalline
 
 Vs30_AhdiAK = c(161, 198, 239, 323, 326, 339, 360,
                  376, 399, 448, 453, 455, 458, 635, 750)

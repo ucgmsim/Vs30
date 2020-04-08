@@ -37,7 +37,7 @@ if (geology) {
   pool = makeCluster(detectCores() - leave_cores)
   # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
   clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
-                                   "slp_nzni_9c", "slp_nzsi_9c", "aak_map"))
+                                   "slp_nzni_9c", "slp_nzsi_9c", "aak_map", "GEOLOGY"))
   cat("running geology model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
@@ -54,7 +54,7 @@ if (terrain) {
   # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
   pool = makeCluster(detectCores() - leave_cores)
   # iwahashipike dataset: ~700MB/core
-  clusterExport(cl=pool, varlist=c("NZTM", "iwahashipike"))
+  clusterExport(cl=pool, varlist=c("NZTM", "iwahashipike", "TERRAIN"))
   cat("running terrain model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)
@@ -111,7 +111,6 @@ for (z in maps) {
   coordinates(grid) = ~ x + y
   crs(grid) = NZTM
   grid = rasterFromXYZ(grid)
-  plot(grid)
   writeRaster(grid, filename=paste0(OUT, "/", z, ".nc"), format="CDF", overwrite=TRUE)
 }
 rm(grid)

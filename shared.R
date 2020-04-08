@@ -42,7 +42,7 @@ coast_distance = function(xy, km=T) {
   result = rep(0.0, nxy)
   mask = which(!is.na(over(xy, coast_poly)$name))
   result[mask] = apply(gDistance(xy[mask,], coast_line, byid=T), 2, min)
-  if (km) {return(result/1000.0)}
+  if (km) return(result/1000.0)
   return(result)
 }
 
@@ -62,7 +62,7 @@ geology_model_run = function(model) {
   library(raster) # raster
   library(rgeos) # gDistance
   
-  source("Kevin/MODEL_AhdiAK_noQ3_hyb09c.R")
+  source(paste0("Kevin/MODEL_", GEOLOGY, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
@@ -71,15 +71,10 @@ geology_model_run = function(model) {
   
   # large amount of memory for polygon dataset
   gid_aak = over(xy00, aak_map)$groupID_AhdiAK
-  # make sure datatype is correct
-  # TODO: short integer based model to save memory (use int indexes instead of string)?
-  if (length(xy00) > 1) {
-    gid_aak = as.character(gid_aak)
-  } else {
-    gid_aak = lapply(gid_aak, as.character)
-  }
-  valid_idx = intersect(which(!is.na(gid_aak)), which(gid_aak != "00_WATER"))
-  if (length(valid_idx) == 0) {return(model)}
+  # used to intersect with where gid_aak is water, water replaced with NA
+  # TODO: maybe just delete water polygons making it faster?
+  valid_idx = which(!is.na(gid_aak))
+  if (length(valid_idx) == 0) return(model)
   xy00 = xy00[valid_idx]
   gid_aak = gid_aak[valid_idx]
   
@@ -108,7 +103,7 @@ geology_model_run = function(model) {
 terrain_model_run = function(model) {
   library(raster) # crs, SpatialPoints
   
-  source("Kevin/MODEL_YongCA_noQ3.R")
+  source(paste0("Kevin/MODEL_", TERRAIN, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
@@ -117,7 +112,7 @@ terrain_model_run = function(model) {
   
   gid_yca = over(xy00, iwahashipike)
   valid_idx = which(!is.na(gid_yca))
-  if (length(valid_idx) == 0) {return(model)}
+  if (length(valid_idx) == 0) return(model)
   gid_yca = data.frame(gid_yca[valid_idx,])
   colnames(gid_yca) = "groupID_YongCA_noQ3"
 
@@ -130,6 +125,7 @@ terrain_model_run = function(model) {
 
 
 mvn_run = function(model, vspr, variogram, model_type) {
+  # TODO: keep_original flag to not overwrite pre-mvn data
   library(gstat)
   library(Matrix)
   library(raster) # crs
@@ -180,8 +176,9 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   model$vs30 = NA
   model$stdev = NA
   
-  valid_idx = intersect(which(!is.na(model$aak_vs30)), which(!is.na(model$yca_vs30)))
-  if (length(valid_idx) == 0) {return(model)}
+  valid_idx = intersect(which(!is.na(model$aak_mvn_vs30)),
+                        which(!is.na(model$yca_mvn_vs30)))
+  if (length(valid_idx) == 0) return(model)
 
   log_a = log(model[valid_idx, "aak_mvn_vs30"])
   log_y = log(model[valid_idx, "yca_mvn_vs30"])
@@ -197,10 +194,11 @@ weighting_run = function(model, stdev_weight=F, k=1) {
   log_ay = log_a * w_a + log_y * w_y
   model[valid_idx, "vs30"] = exp(log_ay)
 
-  sig1sq = model[valid_idx, "aak_stdev"] ^ 2
-  sig2sq = model[valid_idx, "yca_stdev"] ^ 2
+  sig1sq = model[valid_idx, "aak_mvn_stdev"] ^ 2
+  sig2sq = model[valid_idx, "yca_mvn_stdev"] ^ 2
   # Reference: https://en.wikipedia.org/wiki/Mixture_distribution#Moments
-  model[valid_idx, "stdev"] = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
+  model[valid_idx, "stdev"] = (w_a * ((log_a - log_ay) ^ 2 + sig1sq) + 
+                               w_y * ((log_y - log_ay) ^ 2 + sig2sq)) ^ 0.5
 
   return(model)
 }
