@@ -16,7 +16,7 @@ Make sure you have the large data files available in the `PREFIX` definition of 
 ## Workflow
 R scripts should be run with the working directory set as the repo root.
 1. When measured site logic or data changes, re-run `./Kevin/vspr.R` which will update `data/vspr.csv`.
-1. Run grid or point based calculation (below).
+1. Run grid, point based or interactive web calculation (below).
 1. Optionally create a plot for gridded outputs.
 
 ## Grid based calculation
@@ -27,3 +27,6 @@ R scripts should be run with the working directory set as the repo root.
 
 ## Point based calculation
 `./run_points.R` will run the calculation over arbitrary points (edit parameters as required).
+
+## Interactive web app
+See [server](server) for instructions.
