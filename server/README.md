@@ -8,3 +8,4 @@
 ## Running
 Simply execute `run.sh`.
 This script may need modification of `uwsgi` parameters based on your system configuration.
+The server runs on port 5088 [http://localhost:5088](http://localhost:5088).

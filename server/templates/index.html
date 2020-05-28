@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block head %}
+<link href="https://api.mapbox.com/mapbox-gl-js/v1.10.1/mapbox-gl.css" rel="stylesheet" />
+<link rel="stylesheet" href="{{ url_for('static', filename='css/map.css') }}"/>
+{% endblock %}
+
+{% block script %}
+<script src="https://api.mapbox.com/mapbox-gl-js/v1.10.1/mapbox-gl.js"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div id="map"></div>
+<div class="dropdown" id="menu_mapstyle">
+  <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="menubutton_mapstyle"
+      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">style</button>
+  <div class="dropdown-menu" aria-labelledby="menubutton_mapstyle">
+    <a class="dropdown-item" href="#" id="streets-v11">streets</a>
+    <a class="dropdown-item active" href="#" id="light-v10">light</a>
+    <a class="dropdown-item" href="#" id="dark-v10">dark</a>
+    <a class="dropdown-item" href="#" id="outdoors-v11">outdoors</a>
+    <a class="dropdown-item" href="#" id="satellite-v9">satellite</a>
+  </div>
+</div>
+
+{% endblock %}
