@@ -5,6 +5,9 @@
 * uwsgi (with python, http support)
 * flask
 
+## Mapbox Service Requirements
+Map data is hosted by Mapbox which combines standard map tiles with our datasets. Preparation of this data is in the [data](data) directory.
+
 ## Running
 Simply execute `run.sh`.
 This script may need modification of `uwsgi` parameters based on your system configuration.
