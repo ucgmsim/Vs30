@@ -32,7 +32,7 @@ function map_mouseselect(e) {
     var geocat;
     for (var i=0; i < features.length; i++) {
         if (features[i].layer.id === ID_GEOCAT && geocat === undefined) {
-            geocat = features[i].properties.g;
+            geocat = features[i].properties.gid;
         }
     }
     console.log(geocat)
