@@ -20,5 +20,7 @@ Add layers above the baselayer but below all the roads/labels/etc.
 
 Because there are 16 `aak_map` categories (0-15), that makes for a spacing of 22.5 on the colour circle. Currently you can set the colour fill formula as `"hsl(" & get("gid") * 22.5 & ", 100%, 75%)"`. Unlike `rgb`, the `hsl` specification at time of writing needs to be a string.
 
-## Step 5: Udate references
-The layers in the map you create have names and these should be updated in the Javascript. Also the map itself has an ID which should be updated.
+## Step 5: Update references
+The layers in the map you create have IDs (names) and these should be updated in the Javascript such as `ID_GEOCAT`. Also the map itself has a style ID which should be updated in the Javascript and HTML.
+
+Make sure to update the accessToken to one from your account (Javascript).
