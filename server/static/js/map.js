@@ -1,5 +1,6 @@
 // map layer ids on server
 var ID_GEOCAT = "aak_map_fill"
+var ID_VSPR = "vspr"
 
 
 function load_map()
@@ -16,6 +17,8 @@ function load_map()
     map.addControl(new mapboxgl.NavigationControl({visualizePitch: true}));
     // distance scale
     map.addControl(new mapboxgl.ScaleControl({maxWidth: 200, unit: 'metric'}), 'bottom-right');
+    // popup not shown yet
+    popup = new mapboxgl.Popup({closeButton: true});
 
     var styles = document.getElementById('menu_mapstyle')
         .getElementsByTagName('a');
@@ -24,6 +27,28 @@ function load_map()
     }
 
     map.on("click", map_mouseselect);
+    map.on('mousemove', ID_VSPR, function(e) {
+        map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('click', ID_VSPR, function(e) {
+        var feature = e.features[0];
+        popup.setLngLat(feature.geometry.coordinates)
+            .setHTML('<strong>Site: ' + feature.properties.StationID + '</strong><p><table class="table table-sm"><tbody>' +
+                //'<tr><th scope="row">Easting</th><td>' + feature.properties.Easting + '</td></tr>' +
+                //'<tr><th scope="row">Northing</th><td>' + feature.properties.Northing + '</td></tr>' +
+                '<tr><th scope="row">Vs30 (m/s)</th><td>' + feature.properties.Vs30 + '</td></tr>' +
+                '<tr><th scope="row">lnMeasUncer</th><td>' + feature.properties.lnMeasUncer + '</td></tr>' +
+                '<tr><th scope="row">Quality Flag</th><td>' + feature.properties.QualityFlag + '</td></tr>' +
+                '<tr><th scope="row">AhdiAK Vs30</th><td>' + feature.properties.Vs30_AhdiAK_noQ3_hyb09c + '</td></tr>' +
+                '<tr><th scope="row">AhdiAK stdev</th><td>' + feature.properties.stDv_AhdiAK_noQ3_hyb09c + '</td></tr>' +
+                '<tr><th scope="row">YongCA Vs30</th><td>' + feature.properties.Vs30_YongCA_noQ3 + '</td></tr>' +
+                '<tr><th scope="row">YongCA stdev</th><td>' + feature.properties.stDv_YongCA_noQ3 + '</td></tr>' +
+                '</tbody></table></p>')
+            .addTo(map);
+        });
+    map.on('mouseleave', ID_VSPR, function() {
+        map.getCanvas().style.cursor = '';
+    });
 }
 
 
@@ -47,6 +72,7 @@ function switch_layer(layer) {
 
 
 var map;
+var popup;
 
 
 $(document).ready(function ()
