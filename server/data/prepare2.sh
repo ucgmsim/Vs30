@@ -4,4 +4,5 @@
 #
 TIPPECANOE="/opt/tippecanoe/bin/tippecanoe"
 
-$TIPPECANOE -l aak_map -n "AhdiAK Geology Category Map" -Z3 -z14 -o aak_map.mbtiles aak_map.geojson
+$TIPPECANOE -l vspr -n "Measured Vs30 Sites" -Z0 -z14 -rg -o vspr.mbtiles vspr.geojson --force
+$TIPPECANOE -l aak_map -n "AhdiAK Geology Category Map" -Z0 -z14 -rg -o aak_map.mbtiles aak_map.geojson --force
