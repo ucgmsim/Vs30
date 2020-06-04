@@ -28,8 +28,10 @@ vspr_run = function() {
   rm(vs_NZGD49)
 
   # create output table
-  vspr = data.frame(coordinates(vs_NZGD00))
-  names(vspr) = c("x", "y")
+  vs_WGS84 = sp::spTransform(vs_NZGD00, WGS84)
+  vspr = data.frame(coordinates(vs_NZGD00), coordinates(vs_WGS84))
+  names(vspr) = c("x", "y", "longitude", "latitude")
+  rm(vs_WGS84)
 
   # copy vs info
   vspr$Vs30 = vs_NZGD00$Vs30
@@ -45,7 +47,7 @@ vspr_run = function() {
   names(vspr)[names(vspr) == "yca_vs30"] = paste0("Vs30_", TERRAIN)
   names(vspr)[names(vspr) == "yca_stdev"] = paste0("stDv_", TERRAIN)
 
-  write.csv(vspr, OUT)
+  write.csv(vspr, OUT, row.names=F)
 }
 
 vspr_run()
