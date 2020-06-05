@@ -3,15 +3,16 @@
 # Do not source with echo in Rstudio (click the source button)
 # Prepares data for use with Mapbox
 #
-library(plotKML)
+library(sp)
 library(raster)
 
 PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 
 AAK_MAP_OUT = "aak_map.geojson"
-IP_OUT = "iwahashipike.tiff"
+IP_OUT = "iwahashipike.geojson"
 VSPR_OUT = "vspr.geojson"
 
+NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 WEBMERC = "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs"
 
@@ -89,8 +90,32 @@ sink()
 
 
 # IwahashiPike Terrain Map
-#iwahashipike = as(raster(paste0(PREFIX, "IwahashiPike_NZ_100m_16.tif")), "SpatialGridDataFrame")
-# use plotKML::reproject, regular grid not maintained with spTransform
-#iwahashipike_wm = plotKML::reproject(iwahashipike, WEBMERC)
-#iwahashipike = raster(iwahashipike)
-#writeRaster(raster(iwahashipike_wm), filename=IP_OUT, format="GTiff", datatype="INT1U", overwrite=TRUE)
+iwahashipike = as(raster(paste0(PREFIX, "IwahashiPike_NZ_100m_16.tif")), "SpatialPointsDataFrame")
+sink(IP_OUT, type="output")
+cat('{"type":"FeatureCollection","features":[')
+
+# plotKML::reproject has issues and also polygons are more accurate
+for (i in 1:length(iwahashipike@data[,])) {
+    # SpatialPointsDataFrame already removes NA from grid
+    gid = iwahashipike@data[i, 1]
+    # spacing = 100m
+    centre = iwahashipike@coords[i, ]
+    names(centre) = NULL
+    x = c(centre[1] - 50, centre[1] + 50, centre[1] + 50, centre[1] - 50)
+    y = c(centre[2] - 50, centre[2] - 50, centre[2] + 50, centre[2] + 50)
+    points = data.frame(x, y)
+    coordinates(points) = ~ x + y
+    crs(points) = NZTM
+    points = data.frame(spTransform(points, WGS84))
+
+    if (i > 1) cat(',')
+    cat(paste0('{"type":"Feature","properties":{"gid":', gid, '},"geometry":{"type":"Polygon","coordinates":[['))
+    for (p in 1:length(points[, 1])) {
+        if (p > 1) cat(',')
+        cat(paste0('[',paste0(sprintf(points[p, ], fmt='%#.5f'), collapse=","), ']'))
+    }
+    cat(']]}}')
+}
+
+cat(']}')
+sink()
