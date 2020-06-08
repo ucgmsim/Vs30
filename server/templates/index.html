@@ -12,11 +12,19 @@
 
 {% block content %}
 <div id="map"></div>
-<div class="dropdown" id="menu_mapstyle">
-  <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="menubutton_mapstyle"
-      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">style</button>
-  <div class="dropdown-menu" aria-labelledby="menubutton_mapstyle">
-    <a class="dropdown-item active" href="#" id="-viktor-/ckartgw8p3x071jlpifdt7h31">Satellite Streets</a>
+<div class="dropdown" id="menu_layer">
+  <button class="btn btn-secondary btn-sm dropdown-toggle" type="button" id="menubutton_layer"
+      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Layer</button>
+  <div class="dropdown-menu" aria-labelledby="menubutton_layer">
+    <a class="dropdown-item" href="#" id="none">None</a>
+    <a class="dropdown-item" href="#" id="aak_map_fill">Geology Category</a>
+    <a class="dropdown-item disabled" href="#" id="gvs30_map_fill">Geology Vs30</a>
+    <a class="dropdown-item disabled" href="#" id="gstdv_map_fill">Geology Standard Deviation</a>
+    <a class="dropdown-item active" href="#" id="ip_map_fill">Terrain Category</a>
+    <a class="dropdown-item disabled" href="#" id="tvs30_map_fill">Terrain Vs30</a>
+    <a class="dropdown-item disabled" href="#" id="tstdv_map_fill">Terrain Standard Deviation</a>
+    <a class="dropdown-item disabled" href="#" id="cvs30_map_fill">Combined Vs30</a>
+    <a class="dropdown-item disabled" href="#" id="cstdv_map_fill">Combined Standard Deviation</a>
   </div>
 </div>
 
