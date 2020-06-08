@@ -35,7 +35,8 @@ function load_map()
     }
 
     map.on("click", map_mouseselect);
-    map.on('mousemove', ID_VSPR, function(e) {
+    map.on("mousemove", map_mouseselect);
+    map.on("mousemove", ID_VSPR, function(e) {
         map.getCanvas().style.cursor = 'pointer';
     });
     map.on('click', ID_VSPR, function(e) {
@@ -60,7 +61,18 @@ function load_map()
 }
 
 
+function follow_mouse(cb) {
+    if (cb.checked) {
+        map.on("mousemove", map_mouseselect);
+    } else {
+        map.off("mousemove", map_mouseselect);
+    }
+}
+
 function map_mouseselect(e) {
+    document.getElementById("lon").value = e.lngLat.lng;
+    document.getElementById("lat").value = e.lngLat.lat;
+
     var features = map.queryRenderedFeatures(e.point);
     var geocat;
     var tercat;
