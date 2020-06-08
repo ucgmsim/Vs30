@@ -1,5 +1,12 @@
 // map layer ids on server
 var ID_GEOCAT = "aak_map_fill"
+var ID_GEOV30 = "gvs30_map_fill"
+var ID_GEOSDV = "gstdv_map_fill"
+var ID_TERCAT = "ip_map_fill"
+var ID_TERV30 = "tvs30_map_fill"
+var ID_TERSDV = "tstdv_map_fill"
+var ID_COMV30 = "cvs30_map_fill"
+var ID_COMSDV = "cstdv_map_fill"
 var ID_VSPR = "vspr"
 
 
@@ -20,10 +27,11 @@ function load_map()
     // popup not shown yet
     popup = new mapboxgl.Popup({closeButton: true});
 
-    var styles = document.getElementById('menu_mapstyle')
+    // control for layer to be visible
+    var layers = document.getElementById('menu_layer')
         .getElementsByTagName('a');
-    for (var i = 0; i < styles.length; i++) {
-        styles[i].onclick = switch_layer;
+    for (var i = 0; i < layers.length; i++) {
+        layers[i].onclick = switch_layer;
     }
 
     map.on("click", map_mouseselect);
@@ -55,18 +63,23 @@ function load_map()
 function map_mouseselect(e) {
     var features = map.queryRenderedFeatures(e.point);
     var geocat;
+    var tercat;
     for (var i=0; i < features.length; i++) {
         if (features[i].layer.id === ID_GEOCAT && geocat === undefined) {
             geocat = features[i].properties.gid;
+        } else if (features[i].layer.id === ID_TERCAT && tercat === undefined) {
+            tercat = features[i].properties.gid;
         }
     }
-    console.log(geocat)
+    console.log(geocat, tercat)
 }
 
 
 function switch_layer(layer) {
-    document.getElementById("menu_mapstyle").getElementsByClassName("active")[0].classList.remove("active");
-    map.setStyle('mapbox://styles/' + layer.target.id);
+    var old_element = document.getElementById("menu_layer").getElementsByClassName("active")[0]
+    old_element.classList.remove("active");
+    if (old_element.id !== "none") map.setPaintProperty(old_element.id, 'fill-opacity', 0);
+    if (layer.target.id != "none") map.setPaintProperty(layer.target.id, 'fill-opacity', 0.8);
     layer.target.classList.add("active");
 }
 
