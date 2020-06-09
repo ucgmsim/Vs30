@@ -1,8 +1,13 @@
 # Data preparation for upload to Mapbox
 
 ## Step 1: Convert datasets to be understood by tippecanoe
+Script has been split into larger chunks for multiprocessing.
 ```
-./prepare1.R
+./prepare1A.R
+./prepare1B.R
+./prepare1C.R
+./prepare1D.R
+./prepare1E.R
 ```
 
 ## Step 2: Create mbtiles with tippecanoe
