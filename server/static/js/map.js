@@ -78,6 +78,15 @@ function load_map()
     });
     map.on('click', ID_VSPR, function(e) {
         var feature = e.features[0];
+        // prevent [] instead of NA
+        var aak_vs30 = feature.properties.Vs30_AhdiAK_noQ3_hyb09c
+        var aak_stdv = feature.properties.stDv_AhdiAK_noQ3_hyb09c
+        var yca_vs30 = feature.properties.Vs30_YongCA_noQ3
+        var yca_stdv = feature.properties.stDv_YongCA_noQ3
+        if (aak_vs30 === "[]") aak_vs30 = "NA"
+        if (aak_stdv === "[]") aak_stdv = "NA"
+        if (yca_vs30 === "[]") yca_vs30 = "NA"
+        if (yca_stdv === "[]") yca_stdv = "NA"
         new mapboxgl.Popup({closeButton: true}).setLngLat(feature.geometry.coordinates)
             .setHTML('<strong>Site: ' + feature.properties.StationID + '</strong><p><table class="table table-sm"><tbody>' +
                 //'<tr><th scope="row">Easting</th><td>' + feature.properties.Easting + '</td></tr>' +
@@ -85,10 +94,10 @@ function load_map()
                 '<tr><th scope="row">Vs30 (m/s)</th><td>' + feature.properties.Vs30 + '</td></tr>' +
                 '<tr><th scope="row">lnMeasUncer</th><td>' + feature.properties.lnMeasUncer + '</td></tr>' +
                 '<tr><th scope="row">Quality Flag</th><td>' + feature.properties.QualityFlag + '</td></tr>' +
-                '<tr><th scope="row">AhdiAK Vs30</th><td>' + feature.properties.Vs30_AhdiAK_noQ3_hyb09c + '</td></tr>' +
-                '<tr><th scope="row">AhdiAK stdev</th><td>' + feature.properties.stDv_AhdiAK_noQ3_hyb09c + '</td></tr>' +
-                '<tr><th scope="row">YongCA Vs30</th><td>' + feature.properties.Vs30_YongCA_noQ3 + '</td></tr>' +
-                '<tr><th scope="row">YongCA stdev</th><td>' + feature.properties.stDv_YongCA_noQ3 + '</td></tr>' +
+                '<tr><th scope="row">AhdiAK Vs30</th><td>' + aak_vs30 + '</td></tr>' +
+                '<tr><th scope="row">AhdiAK stdev</th><td>' + aak_stdv + '</td></tr>' +
+                '<tr><th scope="row">YongCA Vs30</th><td>' + yca_vs30 + '</td></tr>' +
+                '<tr><th scope="row">YongCA stdev</th><td>' + yca_stdv + '</td></tr>' +
                 '</tbody></table></p>')
             .addTo(map);
         });
@@ -101,47 +110,41 @@ function load_map()
 function follow_mouse(cb) {
     if (cb.checked) {
         map.on("mousemove", map_mouseselect);
+        marker.remove();
     } else {
         map.off("mousemove", map_mouseselect);
     }
 }
 
-function map_mouseselect(e) {
-    var follow = document.getElementById("follow_mouse").checked;
 
-    var features = map.queryRenderedFeatures(e.point);
+function check_loaded(e) {
+    // checks if tiles loaded, no specific event in API for this
+    if (map.areTilesLoaded()) {
+        map.off("data", check_loaded);
+        map.off("moveend", check_loaded);
+
+        if ((! map.getBounds().contains(marker.getLngLat())) || (map.getZoom() < 10)) {
+            // user has since moved the map in an incompatible manner
+            marker.remove().setLngLat([0, 0]);
+        }
+        update_values(map.project(marker.getLngLat()), false);
+    }
+}
+
+
+function update_values(point, follow=true) {
+    var features = map.queryRenderedFeatures(point);
     var geocat;
     var tercat;
-    var vspr = false;
     for (var i=0; i < features.length; i++) {
         if (features[i].layer.id === ID_GEOCAT && geocat === undefined) {
             geocat = features[i].properties.gid;
         } else if (features[i].layer.id === ID_TERCAT && tercat === undefined) {
             tercat = features[i].properties.gid;
-        } else if (features[i].layer.id === ID_VSPR) {
-            if (! follow) {
-                // opening station info shouldn't update location if using marker
-                return;
-            }
         }
     }
 
-    // update UI
-    document.getElementById("lon").value = e.lngLat.lng;
-    document.getElementById("lat").value = e.lngLat.lat;
-    if (! follow) {
-        marker.setLngLat([e.lngLat.lng, e.lngLat.lat]).addTo(map);
-        if (map.getZoom() < 10) {
-            // can't see 100m grid
-            map.flyTo({center: e.lngLat, zoom: 10});
-        }
-        if (! map.areTilesLoaded()) {
-            document.getElementById("gid_aak").value = "loading...";
-            document.getElementById("gid_yca").value = "loading...";
-            // add event listener
-            return;
-        }
-    }
+    // UI values
     if (geocat === undefined) {
         document.getElementById("gid_aak").value = "NA";
     } else {
@@ -152,6 +155,71 @@ function map_mouseselect(e) {
     } else {
         document.getElementById("gid_yca").value = NAME_TERCAT[tercat - 1];
     }
+}
+
+
+function map_lnglatselect(e) {
+    if (event.which == 13 || event.keyCode == 13) {
+        var lng = document.getElementById("lon").value;
+        var lat = document.getElementById("lat").value;
+        if (isNaN(lng) || isNaN(lat)) {
+            alert("Not a valid latitude / longitude.");
+            return;
+        }
+        lng = parseFloat(lng);
+        lat = parseFloat(lat);
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90) {
+            alert("Not a valid latitude / longitude.");
+            return;
+        }
+
+        var checkbox = document.getElementById("follow_mouse");
+        checkbox.checked = false;
+        follow_mouse(checkbox);
+
+        map_runlocation(new mapboxgl.LngLat(lng, lat), false);
+    }
+}
+
+
+function map_mouseselect(e) {
+    map_runlocation(e.lngLat, true);
+}
+
+
+function map_runlocation(lngLat, mouse=true) {
+    var follow = document.getElementById("follow_mouse").checked;
+    // don't move marker if clicked on a measured site and click based selection
+    if (! follow && mouse) {
+        var features = map.queryRenderedFeatures(map.project(lngLat));
+        for (var i=0; i < features.length; i++) {
+            if (features[i].layer.id === ID_VSPR) return;
+        }
+    }
+
+    // update UI
+    if (mouse) {
+        document.getElementById("lon").value = lngLat.lng;
+        document.getElementById("lat").value = lngLat.lat;
+    }
+    if (! follow) {
+        marker.setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
+        if (map.getZoom() < 10 || ! map.areTilesLoaded()
+                || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
+            document.getElementById("gid_aak").value = "loading...";
+            document.getElementById("gid_yca").value = "loading...";
+            // can't see 100m grid
+            if (map.getZoom() < 10
+                    || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
+                map.flyTo({center: lngLat, zoom: 10});
+                map.on("moveend", check_loaded);
+            }
+            map.on("data", check_loaded);
+            return;
+        }
+    }
+
+    update_values(map.project(lngLat), follow);
 }
 
 
