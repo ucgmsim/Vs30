@@ -76,34 +76,37 @@ function load_map()
     map.on("mousemove", ID_VSPR, function(e) {
         map.getCanvas().style.cursor = 'pointer';
     });
-    map.on('click', ID_VSPR, function(e) {
-        var feature = e.features[0];
-        // prevent [] instead of NA
-        var aak_vs30 = feature.properties.Vs30_AhdiAK_noQ3_hyb09c
-        var aak_stdv = feature.properties.stDv_AhdiAK_noQ3_hyb09c
-        var yca_vs30 = feature.properties.Vs30_YongCA_noQ3
-        var yca_stdv = feature.properties.stDv_YongCA_noQ3
-        if (aak_vs30 === "[]") aak_vs30 = "NA"
-        if (aak_stdv === "[]") aak_stdv = "NA"
-        if (yca_vs30 === "[]") yca_vs30 = "NA"
-        if (yca_stdv === "[]") yca_stdv = "NA"
-        new mapboxgl.Popup({closeButton: true}).setLngLat(feature.geometry.coordinates)
-            .setHTML('<strong>Site: ' + feature.properties.StationID + '</strong><p><table class="table table-sm"><tbody>' +
-                //'<tr><th scope="row">Easting</th><td>' + feature.properties.Easting + '</td></tr>' +
-                //'<tr><th scope="row">Northing</th><td>' + feature.properties.Northing + '</td></tr>' +
-                '<tr><th scope="row">Vs30 (m/s)</th><td>' + feature.properties.Vs30 + '</td></tr>' +
-                '<tr><th scope="row">lnMeasUncer</th><td>' + feature.properties.lnMeasUncer + '</td></tr>' +
-                '<tr><th scope="row">Quality Flag</th><td>' + feature.properties.QualityFlag + '</td></tr>' +
-                '<tr><th scope="row">AhdiAK Vs30</th><td>' + aak_vs30 + '</td></tr>' +
-                '<tr><th scope="row">AhdiAK stdev</th><td>' + aak_stdv + '</td></tr>' +
-                '<tr><th scope="row">YongCA Vs30</th><td>' + yca_vs30 + '</td></tr>' +
-                '<tr><th scope="row">YongCA stdev</th><td>' + yca_stdv + '</td></tr>' +
-                '</tbody></table></p>')
-            .addTo(map);
-        });
+    map.on('click', ID_VSPR, show_measuredsite);
     map.on('mouseleave', ID_VSPR, function() {
         map.getCanvas().style.cursor = '';
     });
+}
+
+
+function show_measuredsite(e) {
+    var feature = e.features[0];
+    // prevent [] instead of NA
+    var aak_vs30 = feature.properties.Vs30_AhdiAK_noQ3_hyb09c
+    var aak_stdv = feature.properties.stDv_AhdiAK_noQ3_hyb09c
+    var yca_vs30 = feature.properties.Vs30_YongCA_noQ3
+    var yca_stdv = feature.properties.stDv_YongCA_noQ3
+    if (aak_vs30 === "[]") aak_vs30 = "NA"
+    if (aak_stdv === "[]") aak_stdv = "NA"
+    if (yca_vs30 === "[]") yca_vs30 = "NA"
+    if (yca_stdv === "[]") yca_stdv = "NA"
+    new mapboxgl.Popup({closeButton: true}).setLngLat(feature.geometry.coordinates)
+        .setHTML('<strong>Site: ' + feature.properties.StationID + '</strong><p><table class="table table-sm"><tbody>' +
+            //'<tr><th scope="row">Easting</th><td>' + feature.properties.Easting + '</td></tr>' +
+            //'<tr><th scope="row">Northing</th><td>' + feature.properties.Northing + '</td></tr>' +
+            '<tr><th scope="row">Vs30 (m/s)</th><td>' + feature.properties.Vs30 + '</td></tr>' +
+            '<tr><th scope="row">lnMeasUncer</th><td>' + feature.properties.lnMeasUncer + '</td></tr>' +
+            '<tr><th scope="row">Quality Flag</th><td>' + feature.properties.QualityFlag + '</td></tr>' +
+            '<tr><th scope="row">AhdiAK Vs30</th><td>' + aak_vs30 + '</td></tr>' +
+            '<tr><th scope="row">AhdiAK stdev</th><td>' + aak_stdv + '</td></tr>' +
+            '<tr><th scope="row">YongCA Vs30</th><td>' + yca_vs30 + '</td></tr>' +
+            '<tr><th scope="row">YongCA stdev</th><td>' + yca_stdv + '</td></tr>' +
+            '</tbody></table></p>')
+        .addTo(map);
 }
 
 
