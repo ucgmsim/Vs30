@@ -12,4 +12,19 @@ body {
 
 #control {
     position: absolute;
+    width: 16rem;
+}
+
+/* fix some bug */
+#yca_vs30,#yca_stdv,#aak_vs30,#aak_stdv {
+    background: #e9ecef;
+}
+
+.fix-lbl {
+    font-size: .875rem;
+    color: #495057;
+}
+
+.fix-bg {
+    background: #e9ecef;
 }
