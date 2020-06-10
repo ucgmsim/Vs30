@@ -2,6 +2,8 @@
 
 library(raster)
 
+source("prepare1R.R")
+
 RASTER_DIR = "../../vs30out/"
 OUT = "aak.geojson"
 NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
@@ -15,8 +17,8 @@ cat('{"type":"FeatureCollection","features":[')
 
 for (i in 1:length(spdf@data[,])) {
     # SpatialPointsDataFrame already removes NA from grid
-    vs30 = spdf@data[i, 1]
-    stdv = spdf_stdv@data[i, 1]
+    vs30 = roundmax(spdf@data[i, 1])
+    stdv = roundmax(spdf_stdv@data[i, 1])
     # spacing = 100m
     centre = spdf@coords[i, ]
     stopifnot(centre == spdf_stdv@coords[i, ])
