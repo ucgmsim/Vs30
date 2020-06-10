@@ -120,18 +120,14 @@ function follow_mouse(cb) {
 }
 
 
-function check_loaded(e) {
-    // checks if tiles loaded, no specific event in API for this
-    if (map.areTilesLoaded()) {
-        map.off("data", check_loaded);
-        map.off("moveend", check_loaded);
+function try_markervalues(e) {
+    map.off("idle", try_markervalues);
 
-        if ((! map.getBounds().contains(marker.getLngLat())) || (map.getZoom() < 10)) {
-            // user has since moved the map in an incompatible manner
-            marker.remove().setLngLat([0, 0]);
-        }
-        update_values(map.project(marker.getLngLat()), false);
+    if ((! map.getBounds().contains(marker.getLngLat())) || (map.getZoom() < 10)) {
+        // user has since moved the map in an incompatible manner
+        marker.remove().setLngLat([0, 0]);
     }
+    update_values(map.project(marker.getLngLat()), false);
 }
 
 
@@ -215,9 +211,8 @@ function map_runlocation(lngLat, mouse=true) {
             if (map.getZoom() < 10
                     || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
                 map.flyTo({center: lngLat, zoom: 10});
-                map.on("moveend", check_loaded);
             }
-            map.on("data", check_loaded);
+            map.on("idle", try_markervalues);
             return;
         }
     }
@@ -229,9 +224,18 @@ function map_runlocation(lngLat, mouse=true) {
 function switch_layer(layer) {
     var old_element = document.getElementById("menu_layer").getElementsByClassName("active")[0]
     old_element.classList.remove("active");
+    var opacity = parseFloat(document.getElementById("transparency").value);
     if (old_element.id !== "none") map.setPaintProperty(old_element.id, 'fill-opacity', 0);
-    if (layer.target.id != "none") map.setPaintProperty(layer.target.id, 'fill-opacity', 0.8);
+    if (layer.target.id !== "none") map.setPaintProperty(layer.target.id, 'fill-opacity', opacity);
     layer.target.classList.add("active");
+}
+
+
+function update_transparency() {
+    var layer = document.getElementById("menu_layer").getElementsByClassName("active")[0].id;
+    if (layer === "none") return;
+    var opacity = parseFloat(document.getElementById("transparency").value);
+    map.setPaintProperty(layer, 'fill-opacity', opacity);
 }
 
 
