@@ -38,6 +38,7 @@ vspr_run = function() {
   vspr$lnMeasUncer = vs_NZGD00$lnMeasUncer
   vspr$QualityFlag = vs_NZGD00$QualityFlag
   vspr$StationID = vs_NZGD00$StationID
+  vspr$Source = vs_NZGD00$DataSource
 
   # add model values
   vspr = geology_model_run(vspr)

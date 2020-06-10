@@ -32,7 +32,7 @@ for (i in 1:length(spdf@data[,])) {
     cat(paste0('{"type":"Feature","properties":{"vs30":', vs30, ',"stdv":', stdv, '},"geometry":{"type":"Polygon","coordinates":[['))
     for (p in 1:length(points[, 1])) {
         if (p > 1) cat(',')
-        cat(paste0('[',paste0(sprintf(points[p, ], fmt='%#.5f'), collapse=","), ']'))
+        cat(paste0('[',paste0(sprintf(points[p, ], fmt='%#.6f'), collapse=","), ']'))
     }
     cat(']]}}')
 }

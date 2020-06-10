@@ -78,7 +78,7 @@ for (i in 1:length(aak_map@data$groupID_AhdiAK)) {
         coords = polygons[[p]]@coords
         for (r in 1:nrow(coords)) {
             if (r > 1) cat(',')
-            cat(paste0('[',paste0(sprintf(coords[r,], fmt='%#.5f'), collapse=","), ']'))
+            cat(paste0('[',paste0(sprintf(coords[r,], fmt='%#.6f'), collapse=","), ']'))
         }
         cat(']')
     }
