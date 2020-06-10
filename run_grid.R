@@ -112,7 +112,7 @@ for (z in maps) {
   crs(grid) = NZTM
   grid = rasterFromXYZ(grid)
   writeRaster(grid, filename=paste0(OUT, "/", z, ".nc"), format="CDF", overwrite=TRUE)
-  writeRaster(grid, filename=paste0(OUT, "/", z, ".tiff"), format="GTiff", overwrite=TRUE)
+  writeRaster(grid, filename=paste0(OUT, "/", z, ".tif"), format="GTiff", overwrite=TRUE)
 }
 rm(grid)
 
