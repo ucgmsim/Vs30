@@ -2,6 +2,8 @@
 
 ## Step 1: Convert datasets to be understood by tippecanoe
 Script has been split into larger chunks for multiprocessing.
+
+Datasets include the static large datasets such as Iwahashi and Pike, Geology QMAP data as well as outputs from `run_grid.R`.
 ```
 ./prepare1A.R
 ./prepare1B.R
@@ -16,7 +18,7 @@ This allows more flexibility by being able to specify zoom levels where data is 
 ```
 
 ## Step 3: Upload data to Mapbox
-Upload the mbtiles to the tilesets section in your account. Once you have them in your account you can use the replace option to update data without changing the ID.
+Upload the mbtiles to the tilesets section in your account. Once you have them in your account you can use the replace option to update data without changing the ID. Once updated, it may take about an hour for the changes to show up on any maps using the tilesets.
 
 ## Step 4: Create a map on the server
 `Satellite Streets` is a good basemap to work with because it has a single baselayer with streets/labels above.
