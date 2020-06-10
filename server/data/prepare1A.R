@@ -6,6 +6,8 @@
 library(sp)
 library(raster)
 
+source("prepare1R.R")
+
 PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 
 AAK_MAP_OUT = "aak_map.geojson"
@@ -26,10 +28,10 @@ for (i in seq_len(nrow(vspr))) {
     # values may be NA if unavailable
     quality_flag = vspr[i, "QualityFlag"]
     station_id = vspr[i, "StationID"]
-    Vs30_AhdiAK_noQ3_hyb09c = vspr[i, "Vs30_AhdiAK_noQ3_hyb09c"]
-    stDv_AhdiAK_noQ3_hyb09c = vspr[i, "stDv_AhdiAK_noQ3_hyb09c"]
-    Vs30_YongCA_noQ3 = vspr[i, "Vs30_YongCA_noQ3"]
-    stDv_YongCA_noQ3 = vspr[i, "stDv_YongCA_noQ3"]
+    Vs30_AhdiAK_noQ3_hyb09c = roundmax(vspr[i, "Vs30_AhdiAK_noQ3_hyb09c"])
+    stDv_AhdiAK_noQ3_hyb09c = roundmax(vspr[i, "stDv_AhdiAK_noQ3_hyb09c"])
+    Vs30_YongCA_noQ3 = roundmax(vspr[i, "Vs30_YongCA_noQ3"])
+    stDv_YongCA_noQ3 = roundmax(vspr[i, "stDv_YongCA_noQ3"])
     if (is.na(quality_flag)) quality_flag = ""
     if (is.na(station_id)) station_id = ""
     if (is.na(Vs30_AhdiAK_noQ3_hyb09c)) Vs30_AhdiAK_noQ3_hyb09c = "[]"
@@ -38,18 +40,19 @@ for (i in seq_len(nrow(vspr))) {
     if (is.na(stDv_YongCA_noQ3)) stDv_YongCA_noQ3 = "[]"
 
     if (i > 1) cat(',')
-    cat(paste0('{"type":"Feature","properties":{"Easting":', vspr[i, "x"], 
-            ',"Northing":', vspr[i, "y"],
-            ',"Vs30":', vspr[i, "Vs30"],
+    cat(paste0('{"type":"Feature","properties":{"Easting":', roundmax(vspr[i, "x"], 2),
+            ',"Northing":', roundmax(vspr[i, "y"], 2),
+            ',"Vs30":', roundmax(vspr[i, "Vs30"]),
             ',"lnMeasUncer":', vspr[i, "lnMeasUncer"],
-            ',"QualityFlag":"', quality_flag,
+            ',"Source":"', vspr[i, "Source"],
+            '","QualityFlag":"', quality_flag,
             '","StationID":"', station_id,
             '","Vs30_AhdiAK_noQ3_hyb09c":', Vs30_AhdiAK_noQ3_hyb09c,
             ',"stDv_AhdiAK_noQ3_hyb09c":', stDv_AhdiAK_noQ3_hyb09c,
             ',"Vs30_YongCA_noQ3":', Vs30_YongCA_noQ3,
             ',"stDv_YongCA_noQ3":', stDv_YongCA_noQ3,
             '},"geometry":{"type":"Point","coordinates":[', 
-            vspr[i, "longitude"], ',', vspr[i, "latitude"], ']}}'))
+            roundmax(vspr[i, "longitude"]), ',', roundmax(vspr[i, "latitude"]), ']}}'))
 }
 
 cat(']}')
@@ -112,7 +115,7 @@ for (i in 1:length(iwahashipike@data[,])) {
     cat(paste0('{"type":"Feature","properties":{"gid":', gid, '},"geometry":{"type":"Polygon","coordinates":[['))
     for (p in 1:length(points[, 1])) {
         if (p > 1) cat(',')
-        cat(paste0('[',paste0(sprintf(points[p, ], fmt='%#.5f'), collapse=","), ']'))
+        cat(paste0('[',paste0(sprintf(points[p, ], fmt='%#.6f'), collapse=","), ']'))
     }
     cat(']]}}')
 }

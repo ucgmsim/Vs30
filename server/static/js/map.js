@@ -47,6 +47,11 @@ var NAME_TERCAT = [
 ]
 
 
+function roundmax(value, dp=6) {
+    return Math.round((value + Number.EPSILON) * 10**dp) / 10**dp
+}
+
+
 function load_map()
 {
     mapboxgl.accessToken = 'pk.eyJ1IjoiLXZpa3Rvci0iLCJhIjoiY2pzam9mNXVoMm9xdzQ0b2FmNnNqODE4NCJ9.AnNONHzKRb5vdl2Ikw2l2Q';
@@ -94,13 +99,16 @@ function show_measuredsite(e) {
     if (aak_stdv === "[]") aak_stdv = "NA"
     if (yca_vs30 === "[]") yca_vs30 = "NA"
     if (yca_stdv === "[]") yca_stdv = "NA"
+    // combine source with quality flag
+    var source = feature.properties.Source;
+    source = source + (feature.properties.QualityFlag === "" ? "":" ") + feature.properties.QualityFlag;
     new mapboxgl.Popup({closeButton: true}).setLngLat(feature.geometry.coordinates)
         .setHTML('<strong>Site: ' + feature.properties.StationID + '</strong><p><table class="table table-sm"><tbody>' +
             //'<tr><th scope="row">Easting</th><td>' + feature.properties.Easting + '</td></tr>' +
             //'<tr><th scope="row">Northing</th><td>' + feature.properties.Northing + '</td></tr>' +
             '<tr><th scope="row">Vs30 (m/s)</th><td>' + feature.properties.Vs30 + '</td></tr>' +
             '<tr><th scope="row">lnMeasUncer</th><td>' + feature.properties.lnMeasUncer + '</td></tr>' +
-            '<tr><th scope="row">Quality Flag</th><td>' + feature.properties.QualityFlag + '</td></tr>' +
+            '<tr><th scope="row">Source</th><td>' + source + '</td></tr>' +
             '<tr><th scope="row">AhdiAK Vs30</th><td>' + aak_vs30 + '</td></tr>' +
             '<tr><th scope="row">AhdiAK stdev</th><td>' + aak_stdv + '</td></tr>' +
             '<tr><th scope="row">YongCA Vs30</th><td>' + yca_vs30 + '</td></tr>' +
@@ -198,8 +206,8 @@ function map_runlocation(lngLat, mouse=true) {
 
     // update UI
     if (mouse) {
-        document.getElementById("lon").value = lngLat.lng;
-        document.getElementById("lat").value = lngLat.lat;
+        document.getElementById("lon").value = roundmax(lngLat.lng);
+        document.getElementById("lat").value = roundmax(lngLat.lat);
     }
     if (! follow) {
         marker.setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
