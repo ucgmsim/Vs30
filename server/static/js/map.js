@@ -131,7 +131,7 @@ function follow_mouse(cb) {
 function try_markervalues(e) {
     map.off("idle", try_markervalues);
 
-    if ((! map.getBounds().contains(marker.getLngLat())) || (map.getZoom() < 10)) {
+    if ((! map.getBounds().contains(marker.getLngLat())) || (map.getZoom() < 11)) {
         // user has since moved the map in an incompatible manner
         marker.remove().setLngLat([0, 0]);
     }
@@ -211,14 +211,14 @@ function map_runlocation(lngLat, mouse=true) {
     }
     if (! follow) {
         marker.setLngLat([lngLat.lng, lngLat.lat]).addTo(map);
-        if (map.getZoom() < 10 || ! map.areTilesLoaded()
+        if (map.getZoom() < 11 || ! map.areTilesLoaded()
                 || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
             document.getElementById("gid_aak").value = "loading...";
             document.getElementById("gid_yca").value = "loading...";
-            // can't see 100m grid
-            if (map.getZoom() < 10
+            // can't see 111m grid
+            if (map.getZoom() < 11
                     || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
-                map.flyTo({center: lngLat, zoom: 10});
+                map.flyTo({center: lngLat, zoom: 11});
             }
             map.on("idle", try_markervalues);
             return;
