@@ -266,10 +266,14 @@ function switch_layer(layer) {
     var old_element = document.getElementById("menu_layer").getElementsByClassName("active")[0]
     old_element.classList.remove("active");
     var opacity = parseFloat(document.getElementById("transparency").value);
-    var old_type = map.getLayer(old_element.id).type + "-opacity";
-    var new_type = map.getLayer(layer.target.id).type + "-opacity";
-    if (old_element.id !== "none") map.setPaintProperty(old_element.id, old_type, 0);
-    if (layer.target.id !== "none") map.setPaintProperty(layer.target.id, new_type, opacity);
+    if (old_element.id !== "none") {
+        var old_type = map.getLayer(old_element.id).type + "-opacity";
+        map.setPaintProperty(old_element.id, old_type, 0);
+    }
+    if (layer.target.id !== "none") {
+        var new_type = map.getLayer(layer.target.id).type + "-opacity";
+        map.setPaintProperty(layer.target.id, new_type, opacity);
+    }
     layer.target.classList.add("active");
 }
 
