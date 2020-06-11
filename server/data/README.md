@@ -28,6 +28,16 @@ Because there are 16 `aak_map` categories (0-15), that makes for a spacing of 22
 
 The `ip_map` categories range is (1-16) so the above formula can be used with `1` subtracted from the `gid`.
 
+To set the colour of Vs30 overlays, take example `min_val = 118.9; max_val = 1080.3`. The formula would be `(vs30 - 118) * 0.373` where 0.373 is `360/(max-min)` or `360/(1081-118)` truncated.
+
+Extrusion height can be set by range so that the heighest value is at 1000 meters. A better option would be Vs30 meters.
+
+Below are some screens from the map designer.
+
+<img src="img/size.png">
+<img src="img/colouring.png">
+<img src="img/extrusion.png">
+
 ## Step 5: Update references
 The layers in the map you create have IDs (names) and these should be updated in the Javascript `map.js` such as `ID_GEOCAT. These are also used in the template `index.html`. Also the map itself has a style ID which should be updated in the Javascript and HTML.
 
