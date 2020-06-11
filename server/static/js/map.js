@@ -1,12 +1,9 @@
 // map layer ids on server
 var ID_GEOCAT = "aak_map_fill"
 var ID_GEOV30 = "gvs30_map_fill"
-var ID_GEOSDV = "gstdv_map_fill"
 var ID_TERCAT = "ip_map_fill"
 var ID_TERV30 = "tvs30_map_fill"
-var ID_TERSDV = "tstdv_map_fill"
 var ID_COMV30 = "cvs30_map_fill"
-var ID_COMSDV = "cstdv_map_fill"
 var ID_VSPR = "vspr"
 
 var NAME_GEOCAT = [
@@ -143,11 +140,20 @@ function update_values(point, follow=true) {
     var features = map.queryRenderedFeatures(point);
     var geocat;
     var tercat;
+    var gvs30;
+    var tvs30;
+    var cvs30;
     for (var i=0; i < features.length; i++) {
         if (features[i].layer.id === ID_GEOCAT && geocat === undefined) {
             geocat = features[i].properties.gid;
         } else if (features[i].layer.id === ID_TERCAT && tercat === undefined) {
             tercat = features[i].properties.gid;
+        } else if (features[i].layer.id === ID_GEOV30 && gvs30 === undefined) {
+            gvs30 = [features[i].properties.vs30, features[i].properties.stdv];
+        } else if (features[i].layer.id === ID_TERV30 && tvs30 === undefined) {
+            tvs30 = [features[i].properties.vs30, features[i].properties.stdv];
+        } else if (features[i].layer.id === ID_COMV30 && cvs30 === undefined) {
+            cvs30 = [features[i].properties.vs30, features[i].properties.stdv];
         }
     }
 
@@ -161,6 +167,27 @@ function update_values(point, follow=true) {
         document.getElementById("gid_yca").value = "NA";
     } else {
         document.getElementById("gid_yca").value = NAME_TERCAT[tercat - 1];
+    }
+    if (gvs30 === undefined) {
+        document.getElementById("aak_vs30").value = "NA";
+        document.getElementById("aak_stdv").value = "NA";
+    } else {
+        document.getElementById("aak_vs30").value = gvs30[0];
+        document.getElementById("aak_stdv").value = gvs30[1];
+    }
+    if (tvs30 === undefined) {
+        document.getElementById("yca_vs30").value = "NA";
+        document.getElementById("yca_stdv").value = "NA";
+    } else {
+        document.getElementById("yca_vs30").value = tvs30[0];
+        document.getElementById("yca_stdv").value = tvs30[1];
+    }
+    if (cvs30 === undefined) {
+        document.getElementById("com_vs30").value = "NA";
+        document.getElementById("com_stdv").value = "NA";
+    } else {
+        document.getElementById("com_vs30").value = cvs30[0];
+        document.getElementById("com_stdv").value = cvs30[1];
     }
 }
 
@@ -215,6 +242,12 @@ function map_runlocation(lngLat, mouse=true) {
                 || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
             document.getElementById("gid_aak").value = "loading...";
             document.getElementById("gid_yca").value = "loading...";
+            document.getElementById("yca_vs30").value = "loading...";
+            document.getElementById("yca_stdv").value = "loading...";
+            document.getElementById("aak_vs30").value = "loading...";
+            document.getElementById("aak_stdv").value = "loading...";
+            document.getElementById("com_vs30").value = "loading...";
+            document.getElementById("com_stdv").value = "loading...";
             // can't see 111m grid
             if (map.getZoom() < 11
                     || (! mouse && ! map.getBounds().contains(marker.getLngLat()))) {
@@ -233,8 +266,10 @@ function switch_layer(layer) {
     var old_element = document.getElementById("menu_layer").getElementsByClassName("active")[0]
     old_element.classList.remove("active");
     var opacity = parseFloat(document.getElementById("transparency").value);
-    if (old_element.id !== "none") map.setPaintProperty(old_element.id, 'fill-opacity', 0);
-    if (layer.target.id !== "none") map.setPaintProperty(layer.target.id, 'fill-opacity', opacity);
+    var old_type = map.getLayer(old_element.id).type + "-opacity";
+    var new_type = map.getLayer(layer.target.id).type + "-opacity";
+    if (old_element.id !== "none") map.setPaintProperty(old_element.id, old_type, 0);
+    if (layer.target.id !== "none") map.setPaintProperty(layer.target.id, new_type, opacity);
     layer.target.classList.add("active");
 }
 
@@ -242,8 +277,9 @@ function switch_layer(layer) {
 function update_transparency() {
     var layer = document.getElementById("menu_layer").getElementsByClassName("active")[0].id;
     if (layer === "none") return;
+    var type = map.getLayer(layer).type + "-opacity";
     var opacity = parseFloat(document.getElementById("transparency").value);
-    map.setPaintProperty(layer, 'fill-opacity', opacity);
+    map.setPaintProperty(layer, type, opacity);
 }
 
 
