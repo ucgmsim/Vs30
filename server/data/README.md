@@ -18,7 +18,7 @@ This allows more flexibility by being able to specify zoom levels where data is 
 ```
 
 ## Step 3: Upload data to Mapbox
-Upload the mbtiles to the tilesets section in your account. Once you have them in your account you can use the replace option to update data without changing the ID. Once updated, it may take about an hour for the changes to show up on any maps using the tilesets.
+Upload the mbtiles to the tilesets section in your account. Once you have them in your account you can use the replace option to update data without changing the ID. Once updated, it may take about an hour for the changes to show up on any maps using the tilesets. In some cases it may appear to work at first but the map will revert to a previous version. In this case the issue should be resolved overnight.
 
 ## Step 4: Create a map on the server
 `Satellite Streets` is a good basemap to work with because it has a single baselayer with streets/labels above.
@@ -30,7 +30,9 @@ The `ip_map` categories range is (1-16) so the above formula can be used with `1
 
 To set the colour of Vs30 overlays, take example `min_val = 118.9; max_val = 1080.3`. The formula would be `(vs30 - 118) * 0.373` where 0.373 is `360/(max-min)` or `360/(1081-118)` truncated.
 
-Extrusion height can be set by range so that the heighest value is at 1000 meters. A better option would be Vs30 meters.
+Extrusion height is set by Vs30 (formula `Vs30 * 0.5` meters).
+
+It may take a full day for changes to be visible on any maps.
 
 Below are some screens from the map designer.
 
