@@ -13,24 +13,34 @@
 {% block content %}
 <div id="map"></div>
 <div class="m-2" id="control">
-<div class="row">
-<div class="dropdown col-md-4" id="menu_layer">
-  <button class="btn btn-secondary btn-sm dropdown-toggle mb-3" type="button" id="menubutton_layer"
-      data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Layer</button>
-  <div class="dropdown-menu" aria-labelledby="menubutton_layer">
-    <a class="dropdown-item" href="#" id="none">None</a>
-    <a class="dropdown-item" href="#" id="aak_map_fill">Geology Category</a>
-    <a class="dropdown-item" href="#" id="gvs30_map_fill">Geology Vs30</a>
-    <a class="dropdown-item" href="#" id="ip_map_fill">Terrain Category</a>
-    <a class="dropdown-item" href="#" id="tvs30_map_fill">Terrain Vs30</a>
-    <a class="dropdown-item active" href="#" id="cvs30_map_fill">Combined Vs30</a>
+<div class="d-flex">
+  <div class="dropdown d-inline" id="menu_layer" style="width: 5rem;">
+    <button class="btn btn-secondary btn-sm dropdown-toggle mb-1" type="button" id="menubutton_layer"
+        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Layer</button>
+    <div class="dropdown-menu" aria-labelledby="menubutton_layer">
+      <a class="dropdown-item" href="#" id="none">None</a>
+      <a class="dropdown-item" href="#" id="aak_map_fill">Geology Category</a>
+      <a class="dropdown-item" href="#" id="gvs30_map_fill">Geology Vs30</a>
+      <a class="dropdown-item" href="#" id="ip_map_fill">Terrain Category</a>
+      <a class="dropdown-item" href="#" id="tvs30_map_fill">Terrain Vs30</a>
+      <a class="dropdown-item active" href="#" id="cvs30_map_fill">Combined Vs30</a>
+    </div>
+  </div>
+  <div class="d-inline slide-width pl-0 pt-2">
+    <input type="range" id="transparency" onchange="update_transparency();" oninput="update_transparency();" class="form-control-range" min=0 max=1 step=0.01 value=0.8>
   </div>
 </div>
-<div class="col-md-8 pl-0 pt-2">
-  <input type="range" id="transparency" onchange="update_transparency();" oninput="update_transparency();" readonly class="form-control-range" min=0 max=1 step=0.01 value=0.8>
+<div class="collapse show" id="collapse">
+  <div class="d-flex">
+    <div class="d-inline my-1">
+      <span class="fix-lbl fix-bg rounded justify-content-center py-1 px-2 mr-3">Extrusion</span>
+    </div>
+    <div class="d-inline pl-0 pt-2 slide-width">
+      <input type="range" id="extrusion" onchange="update_extrusion();" oninput="update_extrusion();" class="form-control-range" min=0 max=2 step=0.01 value=0.5>
+    </div>
+  </div>
 </div>
-</div>
-<div class="input-group input-group-sm my-1">
+<div class="input-group input-group-sm my-1 mt-3">
   <div class="input-group-prepend">
     <span class="input-group-text" id="lbl_lon">Longitude</span>
   </div>
@@ -44,7 +54,7 @@
 </div>
 <div class="d-flex justify-content-center my-1 bg-light rounded">
   <div class="form-check" id="chk_mouse">
-    <input class="form-check-input" type="checkbox" onclick="follow_mouse(this);" id="follow_mouse" checked>
+    <input class="form-check-input" type="checkbox" onclick="follow_mouse(this);" id="follow_mouse">
     <label class="fix-lbl form-check-label" for="follow_mouse">follows mouse</label>
   </div>
 </div>
@@ -58,8 +68,8 @@
   <div class="input-group-prepend">
     <span class="input-group-text" id="lbl_aak_vs30">Vs30</span>
   </div>
-  <input type="text" id="aak_vs30" readonly class="form-control" placeholder="NA" aria-label="Vs30 (m/s)" aria-describedby="lbl_aak_vs30">
-  <input type="text" id="aak_stdv" readonly class="form-control" placeholder="NA" aria-label="Standard Deviation" aria-describedby="lbl_aak_stdv">
+  <input type="text" id="aak_vs30" readonly class="form-control fix-bg" placeholder="NA" aria-label="Vs30 (m/s)" aria-describedby="lbl_aak_vs30">
+  <input type="text" id="aak_stdv" readonly class="form-control fix-bg" placeholder="NA" aria-label="Standard Deviation" aria-describedby="lbl_aak_stdv">
   <div class="input-group-append">
     <span class="input-group-text" id="lbl_aak_stdv">stdev</span>
   </div>
@@ -74,8 +84,8 @@
   <div class="input-group-prepend">
     <span class="input-group-text" id="lbl_yca_vs30">Vs30</span>
   </div>
-  <input type="text" id="yca_vs30" readonly class="form-control" placeholder="NA" aria-label="Vs30 (m/s)" aria-describedby="lbl_yca_vs30">
-  <input type="text" id="yca_stdv" readonly class="form-control" placeholder="NA" aria-label="Standard Deviation" aria-describedby="lbl_yca_stdv">
+  <input type="text" id="yca_vs30" readonly class="form-control fix-bg" placeholder="NA" aria-label="Vs30 (m/s)" aria-describedby="lbl_yca_vs30">
+  <input type="text" id="yca_stdv" readonly class="form-control fix-bg" placeholder="NA" aria-label="Standard Deviation" aria-describedby="lbl_yca_stdv">
   <div class="input-group-append">
     <span class="input-group-text" id="lbl_yca_stdv">stdev</span>
   </div>

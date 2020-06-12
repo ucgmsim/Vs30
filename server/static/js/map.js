@@ -74,7 +74,6 @@ function load_map()
     }
 
     map.on("click", map_mouseselect);
-    map.on("mousemove", map_mouseselect);
     map.on("mousemove", ID_VSPR, function(e) {
         map.getCanvas().style.cursor = 'pointer';
     });
@@ -275,6 +274,13 @@ function switch_layer(layer) {
         map.setPaintProperty(layer.target.id, new_type, opacity);
     }
     layer.target.classList.add("active");
+
+    // show extrusion control if necessary
+    if (layer.target.id.substr(1, 4) === "vs30") {
+        $("#collapse").show();
+    } else {
+        $("#collapse").hide();
+    }
 }
 
 
@@ -284,6 +290,13 @@ function update_transparency() {
     var type = map.getLayer(layer).type + "-opacity";
     var opacity = parseFloat(document.getElementById("transparency").value);
     map.setPaintProperty(layer, type, opacity);
+}
+
+
+function update_extrusion() {
+    var layer = document.getElementById("menu_layer").getElementsByClassName("active")[0].id;
+    var extrusion = parseFloat(document.getElementById("extrusion").value);
+    map.setPaintProperty(layer, "fill-extrusion-height", ["*", extrusion, ["get", "vs30"]]);
 }
 
 
