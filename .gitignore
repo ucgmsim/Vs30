@@ -1,3 +1,11 @@
+# extras added
+*.swp
+.Rhistory
+*vs30out*
+*.geojson
+*.mbtiles
+*.tif
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
