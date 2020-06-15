@@ -41,6 +41,6 @@ Below are some screens from the map designer.
 <img src="img/extrusion.png">
 
 ## Step 5: Update references
-The layers in the map you create have IDs (names) and these should be updated in the Javascript `map.js` such as `ID_GEOCAT. These are also used in the template `index.html`. Also the map itself has a style ID which should be updated in the Javascript and HTML.
+The layers in the map you create have IDs (names) and these should be updated in the Javascript `map.js` such as `ID_GEOCAT`. These are also used in the template `index.html`. Also the map itself has a style ID which should be updated in the Javascript and HTML.
 
 Make sure to update the accessToken to one from your account (Javascript).
