@@ -13,6 +13,13 @@ body {
 #control {
     position: absolute;
     width: 16rem;
+    z-index: 999;
+}
+
+#logo {
+    position: absolute;
+    pointer-events: none;
+    z-index: 1;
 }
 
 .fix-lbl {
