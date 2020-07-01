@@ -12,7 +12,7 @@ Datasets include the static large datasets such as Iwahashi and Pike, Geology QM
 ```
 
 ## Step 2: Create mbtiles with tippecanoe
-This allows more flexibility by being able to specify zoom levels where data is available amongst other things.
+This allows more flexibility by being able to specify zoom levels where data is available amongst other things. Note the current pricing of tileset uploads and hosting. Currently zoom level 13 (~1m) is much cheaper than 14 (0.5m) or greater.
 ```
 ./prepare2.sh
 ```
