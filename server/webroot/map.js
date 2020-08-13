@@ -49,6 +49,16 @@ function roundmax(value, dp=6) {
 }
 
 
+function loaded() {
+    $("#spinner").hide();
+    $("#spinnero").hide();
+}
+function loading() {
+    $("#spinner").show();
+    $("#spinnero").show();
+}
+
+
 function load_map()
 {
     mapboxgl.accessToken = 'pk.eyJ1IjoiLXZpa3Rvci0iLCJhIjoiY2pzam9mNXVoMm9xdzQ0b2FmNnNqODE4NCJ9.AnNONHzKRb5vdl2Ikw2l2Q';
@@ -81,6 +91,8 @@ function load_map()
     map.on('mouseleave', ID_VSPR, function() {
         map.getCanvas().style.cursor = '';
     });
+    map.on('idle', loaded);
+    map.on('dataloading', loading);
 }
 
 
