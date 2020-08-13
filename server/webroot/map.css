@@ -16,6 +16,29 @@ body {
     z-index: 999;
 }
 
+#spinner {
+    position: absolute;
+    left: 50%;
+    width: 3rem;
+    height: 3rem;
+    margin-left: -1.5rem;
+    pointer-events: none;
+    z-index: 2;
+    font-size: 1.5rem;
+    bottom: 6rem;
+}
+#spinnero {
+    position: absolute;
+    left: 50%;
+    width: 3.3rem;
+    height: 3.3rem;
+    margin-left: -1.65rem;
+    pointer-events: none;
+    z-index: 1;
+    font-size: 2.6rem;
+    bottom: 5.85rem;
+}
+
 #logo {
     position: absolute;
     pointer-events: none;
