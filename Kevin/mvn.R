@@ -67,16 +67,11 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
     # rule 2 for nearest
     if (useDiscreteVariogram) interp_method = "constant" else interp_method = "linear"
     corrFn = approxfun(x=correlationFunction, rule=2, method=interp_method)
-  
-    # only used if useDiscreteVariogram_replace=TRUE!
-    # Create a lookup table containing discrete distances (m) and their covariance values:
-    variogramTable = data.frame(distanceMetres=distVec, correlation=corrFn(distVec))
-    
     
     if (useNoisyMeasurements) {
       # Wea equation 33, 40, 41
       omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
-      obs_resibuals = omegaObs * obs_residuals
+      #obs_resibuals = omegaObs * obs_residuals
     }
     
     
@@ -102,7 +97,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
 
         cov_matrix = makeCovMatrix(obs_locations, locPred=locPredChunk, modelVarObs,
                                    modelVarPred=modelVarPredChunks[[i]], corrFn,
-                                   interpVec, distVec, variogramTable)
+                                   interpVec, distVec)
   
         if (useNoisyMeasurements) {
             J_Y_1 = rep(1, length(modelVarPredChunks[[i]])) # Wea equation 37
@@ -138,7 +133,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
 
 
 makeCovMatrix = function(locObs, locPred, modelVarObs, modelVarPred,
-                         corrFn, interpVec, distVec, variogramTable) {
+                         corrFn, interpVec, distVec) {
   # Takes the following inputs:
   #   locObs, locations and observational data
   #   locPred, locations of desired prediction point(s)
@@ -148,55 +143,25 @@ makeCovMatrix = function(locObs, locPred, modelVarObs, modelVarPred,
   # 
   # locations and variogram function need to have consistent units (i.e. metres)
   #
-  #
-  
-  M = length(modelVarPred)
-  N = length(modelVarObs)
-  allPoints = rbind(locPred, locObs) # vector of all spatial points
-  distMat1 = as.matrix(dist(x=allPoints, diag=TRUE, upper=TRUE))
-  if (useDiscreteVariogram_replace) {
-    lookupFun = function(logDist_m) {
-      #  distVec[findInterval(x = logDist_m, vec = interpVec)]}
-      findInterval(x=logDist_m, vec=interpVec)}
 
-    # create rounded distance vector:
-    distMat1 = array(sapply(X=as.matrix(log(distMat1)), FUN=lookupFun, simplify=T), dim=dim(distMat1))
-  }
+  #M = length(modelVarPred)
+  #N = length(modelVarObs)
+  distMat = as.matrix(dist(x=rbind(locPred, locObs), diag=TRUE, upper=TRUE))
   if(optimizeUsingMatrixPackage) {
-    distMat = Matrix(data = as.matrix(distMat1)) # distances among all points. (metres)
-  } else {
-    distMat = as.matrix(distMat1) # distances among all points. (metres)
+    distMat = Matrix(data=distMat) # distances among all points. (metres)
   }
   
-  if(!(useDiscreteVariogram_replace)) {
-    # apply the correlation function for every pair of points
-    # multiply by two because variogram = 1/2 * Var(u), see e.g. Diggle & Ribeiro equation 3.1
-    # NB this does not seem to matter in outputs.
-    rhoMat = array(sapply(distMat, corrFn), 
-                    dim=dim(distMat)) # * 2 # i don't think multiplying by two is needed.
-  } else {  # If using replacement method...
-    rhoMat = array(data=0,dim=dim(distMat)) #initialise
-    for (distN in seq(1, nrow(variogramTable))) {
-      #thesePixels = distMat == variogramTable$distanceMetres[distN]
-      thesePixels = distMat == distN
-      rhoMat[which(thesePixels)] = variogramTable$correlation[distN]
-    }
-  }
-  
-  
+  # apply the correlation function for every pair of points
+  # multiply by two because variogram = 1/2 * Var(u), see e.g. Diggle & Ribeiro equation 3.1
+  # NB this does not seem to matter in outputs.
+  rhoMat = array(sapply(distMat, corrFn), dim=dim(distMat)) # * 2 # i don't think multiplying by two is needed.
   if(optimizeUsingMatrixPackage) {
     rhoMat = Matrix(data=rhoMat)
   }
-  modelVariance = as.matrix(c(modelVarPred, modelVarObs)) # column vector of model uncertainty corresponding to allPoints vector.
 
-  modelStdDev = sqrt(modelVariance)
-
+  modelStdDev = sqrt(as.matrix(c(modelVarPred, modelVarObs))) # column vector of model uncertainty corresponding to allPoints vector.
   # NOTE rhoMat and modelStdDev represent the matrix rho_{Y_iY_j} and vector sigma_{Y} respectively - found in equation 7 in Wea.
-
-
-
   covMatrix = modelStdDev %*% t(modelStdDev) * rhoMat # Equation 7, Wea
-  
   return(covMatrix)
 }
 

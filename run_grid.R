@@ -69,7 +69,7 @@ if (terrain) {
 cat("starting mvn cluster...\n")
 pool = makeCluster(detectCores() - leave_cores)
 clusterExport(cl=pool, varlist=c("numVGpoints", "useNoisyMeasurements", "covReducPar",
-                                 "useDiscreteVariogram", "useDiscreteVariogram_replace",
+                                 "useDiscreteVariogram",
                                  "optimizeUsingMatrixPackage", "GEOLOGY", "TERRAIN"))
 if (geology) {
   t0 = Sys.time()
