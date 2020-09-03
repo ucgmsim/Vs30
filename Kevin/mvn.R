@@ -97,15 +97,16 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
 
         cov_matrix = makeCovMatrix(obs_locations, locPred=locPredChunk, modelVarObs,
                                    modelVarPred=modelVarPredChunks[[i]], corrFn,
-                                   interpVec, distVec)
+                                   interpVec)
   
         if (useNoisyMeasurements) {
             J_Y_1 = rep(1, length(modelVarPredChunks[[i]])) # Wea equation 37
             omega = c(J_Y_1, omegaObs) # Wea equation 37
-            Omega = omega %*% t(omega) # Wea equation 38
+            Omega = tcrossprod(omega) # Wea equation 38
             diag(Omega) = 1 # Wea line 283
 
             cov_matrix = cov_matrix * Omega # Wea equation 39 (element-by-element product)
+            rm(Omega, omega, J_Y_1)
         }
 
         if (covReducPar > 0) {
@@ -133,7 +134,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
 
 
 makeCovMatrix = function(locObs, locPred, modelVarObs, modelVarPred,
-                         corrFn, interpVec, distVec) {
+                         corrFn, interpVec) {
   # Takes the following inputs:
   #   locObs, locations and observational data
   #   locPred, locations of desired prediction point(s)
@@ -146,6 +147,15 @@ makeCovMatrix = function(locObs, locPred, modelVarObs, modelVarPred,
 
   #M = length(modelVarPred)
   #N = length(modelVarObs)
+  # only observed which are within 5km to a prediction
+  wanted = which(apply(as.matrix(
+      dist(x=rbind(locPred, locObs), diag=TRUE, upper=TRUE)
+    )[-(1:nrow(locPred)), 1:nrow(locPred)], 1, FUN=min) < 5000)
+  names(wanted) = NULL
+  locObs = locObs[wanted, ]
+  modelVarObs = modelVarObs[wanted]
+  rm(wanted)
+  # todo: this should probably be in parent function
   distMat = as.matrix(dist(x=rbind(locPred, locObs), diag=TRUE, upper=TRUE))
   if(optimizeUsingMatrixPackage) {
     distMat = Matrix(data=distMat) # distances among all points. (metres)
@@ -159,9 +169,9 @@ makeCovMatrix = function(locObs, locPred, modelVarObs, modelVarPred,
     rhoMat = Matrix(data=rhoMat)
   }
 
-  modelStdDev = sqrt(as.matrix(c(modelVarPred, modelVarObs))) # column vector of model uncertainty corresponding to allPoints vector.
+  modelStdDev = sqrt(c(modelVarPred, modelVarObs)) # column vector of model uncertainty corresponding to allPoints vector.
   # NOTE rhoMat and modelStdDev represent the matrix rho_{Y_iY_j} and vector sigma_{Y} respectively - found in equation 7 in Wea.
-  covMatrix = modelStdDev %*% t(modelStdDev) * rhoMat # Equation 7, Wea
+  covMatrix = tcrossprod(modelStdDev) * rhoMat # Equation 7, Wea
   return(covMatrix)
 }
 
