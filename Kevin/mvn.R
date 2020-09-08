@@ -8,6 +8,122 @@ library(raster)
 
 library(matrixcalc)
 
+
+mvn2 = function(obs_locations, model_locations, model_variances, variogram,
+               modeledValues, modelVarObs, obs_residuals,
+               covReducPar, logModVs30obs, obs_stdev_log) {
+  # obs_locations: locations of observations. (i.e., coordinates(vspr)
+  # model_locations: locations where prediction & sigma estimates are desired
+  # model_variances: gives model variance information to the MVN method
+  # variogram: variogram table
+  # modeledValues: interpolate on *model* values rather than *residuals.* The MVN is unaffected
+  #                    (since sigma is linear) but it more closely resembles the formulation in the MVN paper.
+  #                    In order to do this properly, modeledValues for prediction locations (i.e.: mu_Y1 in Worden
+  #                    et al. parlance) must be provided as inputs.
+  # modelVarObs: The *model* variance (not measurement uncertainty) corresponding to each of the observations.
+  # residuals: The residuals (in log space) i.e. ln(obs/pred)
+  # covReducPar: "Covariance reduction parameter," "a", is used to generate a "covariance 
+  #              reduction factor." See script cov_red_coeff.R. Covariance reduction factor
+  #              is between 0 and 1, and used to reduce the value of rho (correlation
+  #              coefficient) to reduce the impact of MVN interpolation/extrapolation across
+  #              geologic boundaries.
+  #              0 for no covariance reduction.
+  # logModVs30obs: log of modeled values of Vs30 for observed locations. (log of modeled Vs30
+  #                for the prediction locations is passed in as "modeledValues".)
+  #                Only used if covReducPar > 0.
+  #
+  # output: dataframe with columns "var1.pred" and "var1.var" (prediction and variance).
+  
+  # interpolation is done on the residuals - i.e. in natural log space - not on the model predictions
+  # therefore must be careful that transformation of variables is handled properly.
+  
+  ###############################################################################
+  # prepare the components of the MVN formulation from Worden et al.
+  #
+  # Because of intractable size of covariance matrix (whose size increases as the
+  # square of the number of pixels being predicted), the prediction needs to be
+  # repeated many times for a subset of the pixels of interest.
+  # Below, two groups of variables are prepared: the ones whose values do not change
+  # (e.g. everything associated with observations), and the ones whose values 
+  # DO change for different pixels under consideration.
+  # The latter group are implemented in a loop.
+  
+  n_obs = length(obs_residuals)
+  n_new = nrow(model_locations)
+  minDist_m_log = log(0.1)
+  maxDist_m_log = log(2000e3) # 2000 km
+  logDelta = (maxDist_m_log - minDist_m_log) / (numVGpoints - 1)
+  # distances to evaluate variogram (metres)
+  distVec = exp(seq(minDist_m_log, maxDist_m_log, length.out=numVGpoints))
+  # Correlation vs covariance can be summarized by examining Diggle & Ribeiro eq 5.6:
+  # V_Y(u) = tau^2 + sigma^2 * {1 - rho(u)}.
+  # It is clear from this form that rho(u) MUST be 1 at u=0 and MUST be continuously decreasing with u.
+  # i.e., a discontinuity at u=0 is NOT going to yield the right answer here.
+  # This makes sense intuitively since in this formulation it is measurement uncertainty, RATHER THAN a nonzero nugget,
+  # that determines how "closely" the interpolation function should track the data.
+  correlationFunction = variogramLine(object=variogram, maxdist=maxDist_m, dist_vector=distVec, covariance=T)  # covariance=T yields covariance function, gamma() in Diggle & Ribeiro ch3.
+  # normalize
+  correlationFunction$gamma = correlationFunction$gamma / variogram$psill[2] # for Matern style variograms, model$psill[2] 
+  # is t the partial sill - aka "sigma^2" in 
+  # Diggle & Ribeiro Equation 5.6.
+  correlationFunction$gamma[correlationFunction$dist==0] = 1 # if nonzero nugget, this removes discontinuity at origin. (not really needed since distance vector starts at distance > 0.)
+  # rule 2 for nearest
+  if (useDiscreteVariogram) interp_method = "constant" else interp_method = "linear"
+  corrFn = approxfun(x=correlationFunction, rule=2, method=interp_method)
+  
+  if (useNoisyMeasurements) {
+    # Wea equation 33, 40, 41
+    omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
+    #obs_resibuals = omegaObs * obs_residuals
+  }
+  
+  
+  #### here are the changing values #######################
+  # 300 seems to still speed up over smaller chunk sizes
+  maxPixels = 1
+  # split location list into chunks of maximum size maxPixels
+  lpdf = data.frame(model_locations)
+  sequence = seq(1, n_new)
+  locPredChunks = split(x=lpdf, f=ceiling(sequence/maxPixels))
+  modelVarPredChunks = split(x=model_variances, f = ceiling(sequence/maxPixels))
+  modeledValuesChunks = split(x=modeledValues, f = ceiling(sequence/maxPixels))
+  # initialize outputs, pred and var
+  pred = var = c()
+  
+  for (i in seq(n_new)) {
+    locPredChunk = locPredChunks[[i]]
+    modeledValuesChunk = modeledValuesChunks[[i]]
+    modelVarPredChunk = modelVarPredChunks[[i]]
+    
+    # only observed which are within 5km to a point
+    distances = as.matrix(
+        proxy::dist(as.matrix(locPredChunk), obs_locations, diag=TRUE, upper=TRUE)
+    )
+    wanted = which(apply(distances, 2, FUN=min) < 5000)
+    names(wanted) = NULL
+    if (length(wanted) == 0) {
+      pred = c(pred, modeledValuesChunk)
+      var = c(var, modelVarPredChunk)
+      next
+    }
+
+    distances = distances[wanted]
+    covariance = sapply(distances, corrFn) * modelVarPredChunk
+    if (useNoisyMeasurements) covariance = covariance * omegaObs[wanted]
+    if (covReducPar > 0) {
+      covariace = covariance *
+        exp(abs(modeledValuesChunk - logModVs30obs[wanted]) * - covReducPar)
+    }
+
+    inverse = modelVarObs[wanted] * correlationFunction$gamma[1]
+    pred = c(pred, modeledValuesChunk + covariance * obs_residuals[wanted] * inverse)
+    var = c(var, modelVarPred * correlationFunction$gamma[1] - covariance^2 * inverse)
+  }
+  
+  return(data.frame(pred, var))
+}
+
+
 mvn = function(obs_locations, model_locations, model_variances, variogram,
                modeledValues, modelVarObs, obs_residuals,
                covReducPar, logModVs30obs, obs_stdev_log) {
