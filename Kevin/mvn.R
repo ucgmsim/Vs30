@@ -73,7 +73,10 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
   corr1 = correlationFunction$gamma[1]
   
   # Wea equation 33, 40, 41
-  if (useNoisyMeasurements) omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
+  if (useNoisyMeasurements) {
+    omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
+    obs_residuals = omegaObs * obs_residuals
+  }
   
   # initialize outputs, pred and var
   pred = var = vector(mode="numeric", length=n_new)
@@ -176,7 +179,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
     if (useNoisyMeasurements) {
       # Wea equation 33, 40, 41
       omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
-      #obs_resibuals = omegaObs * obs_residuals
+      obs_residuals = omegaObs * obs_residuals
     }
     
     
