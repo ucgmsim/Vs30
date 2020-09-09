@@ -48,7 +48,6 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
   # DO change for different pixels under consideration.
   # The latter group are implemented in a loop.
   
-  n_obs = length(obs_residuals)
   n_new = nrow(model_locations)
   minDist_m_log = log(0.1)
   maxDist_m_log = log(2000e3) # 2000 km
@@ -61,63 +60,49 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
   # i.e., a discontinuity at u=0 is NOT going to yield the right answer here.
   # This makes sense intuitively since in this formulation it is measurement uncertainty, RATHER THAN a nonzero nugget,
   # that determines how "closely" the interpolation function should track the data.
-  correlationFunction = variogramLine(object=variogram, maxdist=maxDist_m, dist_vector=distVec, covariance=T)  # covariance=T yields covariance function, gamma() in Diggle & Ribeiro ch3.
-  # normalize
-  correlationFunction$gamma = correlationFunction$gamma / variogram$psill[2] # for Matern style variograms, model$psill[2] 
-  # is t the partial sill - aka "sigma^2" in 
-  # Diggle & Ribeiro Equation 5.6.
-  correlationFunction$gamma[correlationFunction$dist==0] = 1 # if nonzero nugget, this removes discontinuity at origin. (not really needed since distance vector starts at distance > 0.)
-  # rule 2 for nearest
+  # covariance=T yields covariance function, gamma() in Diggle & Ribeiro ch3.
+  correlationFunction = variogramLine(object=variogram, maxdist=maxDist_m, dist_vector=distVec, covariance=T)
+  # normalize. for Matern style variograms, model$psill[2]
+  correlationFunction$gamma = correlationFunction$gamma / variogram$psill[2]
+  # is t the partial sill - aka "sigma^2" in Diggle & Ribeiro Equation 5.6.
+  # if nonzero nugget, this removes discontinuity at origin. (not needed, distance vector starts at > 0)
+  correlationFunction$gamma[correlationFunction$dist==0] = 1
   if (useDiscreteVariogram) interp_method = "constant" else interp_method = "linear"
   corrFn = approxfun(x=correlationFunction, rule=2, method=interp_method)
+  # this will be < 1 because distance starts at > 0
+  corr1 = correlationFunction$gamma[1]
   
-  if (useNoisyMeasurements) {
-    # Wea equation 33, 40, 41
-    omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
-    #obs_resibuals = omegaObs * obs_residuals
-  }
+  # Wea equation 33, 40, 41
+  if (useNoisyMeasurements) omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
   
-  
-  #### here are the changing values #######################
-  # 300 seems to still speed up over smaller chunk sizes
-  maxPixels = 1
-  # split location list into chunks of maximum size maxPixels
-  lpdf = data.frame(model_locations)
-  sequence = seq(1, n_new)
-  locPredChunks = split(x=lpdf, f=ceiling(sequence/maxPixels))
-  modelVarPredChunks = split(x=model_variances, f = ceiling(sequence/maxPixels))
-  modeledValuesChunks = split(x=modeledValues, f = ceiling(sequence/maxPixels))
   # initialize outputs, pred and var
-  pred = var = c()
-  
+  pred = var = vector(mode="numeric", length=n_new)
+  lpdf = data.frame(model_locations)
   for (i in seq(n_new)) {
-    locPredChunk = locPredChunks[[i]]
-    modeledValuesChunk = modeledValuesChunks[[i]]
-    modelVarPredChunk = modelVarPredChunks[[i]]
-    
-    # only observed which are within 5km to a point
+    # point to observations
     distances = as.matrix(
-        proxy::dist(as.matrix(locPredChunk), obs_locations, diag=TRUE, upper=TRUE)
+        proxy::dist(as.matrix(lpdf[i,]), obs_locations, diag=TRUE, upper=TRUE)
     )
+    # only observed which are within 5km to the point
     wanted = which(apply(distances, 2, FUN=min) < 5000)
     names(wanted) = NULL
     if (length(wanted) == 0) {
-      pred = c(pred, modeledValuesChunk)
-      var = c(var, modelVarPredChunk)
+      # not close enough to any points
+      pred[i] = c(pred, modeledValues[i])
+      var[i] = c(var, model_variances[i])
       next
     }
 
-    distances = distances[wanted]
-    covariance = sapply(distances, corrFn) * modelVarPredChunk
+    covariance = sapply(distances[wanted], corrFn) * model_variances[i]
     if (useNoisyMeasurements) covariance = covariance * omegaObs[wanted]
     if (covReducPar > 0) {
       covariace = covariance *
-        exp(abs(modeledValuesChunk - logModVs30obs[wanted]) * - covReducPar)
+        exp(abs(modeledValues[i] - logModVs30obs[wanted]) * - covReducPar)
     }
 
-    inverse = modelVarObs[wanted] * correlationFunction$gamma[1]
-    pred = c(pred, modeledValuesChunk + covariance * obs_residuals[wanted] * inverse)
-    var = c(var, modelVarPred * correlationFunction$gamma[1] - covariance^2 * inverse)
+    inverse = modelVarObs[wanted] * corr1
+    pred[i] = modeledValues[i] + covariance * obs_residuals[wanted] * inverse
+    var[i] = model_variances[i] * corr1 - covariance^2 * inverse
   }
   
   return(data.frame(pred, var))
