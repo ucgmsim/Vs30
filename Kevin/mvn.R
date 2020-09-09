@@ -90,6 +90,7 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
     wanted = which(apply(distances, 2, FUN=min) < 5000)
     #wanted = seq(ncol(distances))
     names(wanted) = NULL
+    print(length(wanted))
     if (length(wanted) == 0) {
       # not close enough to any points
       pred[i] = modeledValues[i]
@@ -97,7 +98,8 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
       next
     }
 
-    covariance = sapply(distances[wanted], corrFn) * model_variances[i]
+    # for diagonal use, also next step should be disabled (diag set to 1)
+    covariance = modelVarObs[wanted] * corr1
     if (useNoisyMeasurements) covariance = covariance * omegaObs[wanted]
     if (covReducPar > 0) {
       covariace = covariance *
@@ -105,6 +107,7 @@ mvn2 = function(obs_locations, model_locations, model_variances, variogram,
     }
 
     inverse = modelVarObs[wanted] * corr1
+    print(inverse)
     pred[i] = modeledValues[i] + covariance * obs_residuals[wanted] * inverse
     var[i] = model_variances[i] * corr1 - covariance^2 * inverse
   }
@@ -203,14 +206,20 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
         }
         modeledValuesChunk = modeledValuesChunks[[i]]
 
-        cov_matrix = makeCovMatrix(obs_locations, locPred=locPredChunk,
-                                   modelVarObs,
+        # only observed which are within 5km to a prediction
+        wanted = which(apply(as.matrix(
+          proxy::dist(as.matrix(locPredChunk), obs_locations, diag=TRUE, upper=TRUE)
+        ), 2, FUN=min) < 5000)
+        names(wanted) = NULL
+
+        cov_matrix = makeCovMatrix(obs_locations[wanted,], locPred=locPredChunk,
+                                   modelVarObs[wanted],
                                    modelVarPred=modelVarPredChunks[[i]], corrFn,
                                    interpVec)
   
         if (useNoisyMeasurements) {
             J_Y_1 = rep(1, length(modelVarPredChunks[[i]])) # Wea equation 37
-            omega = c(J_Y_1, omegaObs) # Wea equation 37
+            omega = c(J_Y_1, omegaObs[wanted]) # Wea equation 37
             Omega = tcrossprod(omega) # Wea equation 38
             diag(Omega) = 1 # Wea line 283
 
@@ -220,7 +229,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
 
         if (covReducPar > 0) {
             # Modify covariance matrix with covariance reduction factors
-            logModVs30 = c(modeledValuesChunk, logModVs30obs) # vector of log(modeled Vs30) for all points
+            logModVs30 = c(modeledValuesChunk, logModVs30obs[wanted]) # vector of log(modeled Vs30) for all points
             lnVs30iVs30j = as.matrix(stats::dist(logModVs30, diag=T, upper=T)) # this gives all pairwise abs(ln(obs)-ln(pred)) = abs(ln(obs/pred)).
             covReducMat = exp(-covReducPar*lnVs30iVs30j)
             cov_matrix = covReducMat * cov_matrix
@@ -232,9 +241,10 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
         #    #cov_matrix = nearPD(cov_matrix)$mat
         #}
 
-        cov_Y2Y2_inverse = solve(Sigma_Y2Y2(covMatrix=cov_matrix, n_obs))
+        cov_Y2Y2_inverse = solve(Sigma_Y2Y2(covMatrix=cov_matrix, length(wanted)))
+        print(cov_Y2Y2_inverse)
         pred = c(pred, as.numeric(mu_Y1_given_y2(modeledValuesChunk, covMatrix=cov_matrix, 
-                                   cov_Y2Y2_inverse=cov_Y2Y2_inverse, residuals=obs_residuals)))
+                                   cov_Y2Y2_inverse=cov_Y2Y2_inverse, residuals=obs_residuals[wanted])))
         var = c(var, diag(as.matrix(cov_Y1Y1_given_y2(cov_matrix, cov_Y2Y2_inverse))))
     }
 
