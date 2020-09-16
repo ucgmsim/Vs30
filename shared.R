@@ -20,7 +20,6 @@ numVGpoints = 128
 useNoisyMeasurements = T
 covReducPar = 1.5
 useDiscreteVariogram = F
-useDiscreteVariogram_replace = F
 optimizeUsingMatrixPackage = T
 
 # working files (aak_map, iwahashipike in NZTM, slp in NZMG)
