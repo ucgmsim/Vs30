@@ -11,7 +11,7 @@ OUT = "vs30out.csv"
 # pick a method to load stations
 xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
 #source("Misc/validation_stations.R")
-#xy = SpatialPoints(read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll"))
+#xy = SpatialPoints(read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll")[,1:2])
 
 coordinates(xy) = ~ x + y
 crs(xy) = WGS84
