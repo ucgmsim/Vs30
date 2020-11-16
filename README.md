@@ -7,7 +7,7 @@ Run for specific locations or over a grid.
 Install R on your system. Rstudio is an optional IDE.
 There are a few R packages that the code requires. Packages that require system libraries such as rgdal require to be force re-installed with parent library ABI change.
 ```r
-install.packages(c("raster", "rgdal", "gstat", "rgeos", "matrixcalc", "spatstat"))
+install.packages(c("raster", "rgdal", "gstat", "rgeos", "matrixcalc", "spatstat", "ncdf4"))
 ```
 Run the command in `R` as the `root` user for system-wide installation.
 

@@ -19,7 +19,6 @@ xy = data.frame(x=c(174.780278, 177), y=c(-41.300278, -37.983333))
 # ll file:
 #xy = read.table("/nesi/project/nesi00213/StationInfo/non_uniform_whole_nz_with_real_stations-hh400_v20p3_land.ll")[,1:2]
 #names(xy) = c("x", "y")
-#xy = SpatialPoints(xy)
 
 coordinates(xy) = ~ x + y
 crs(xy) = WGS84
