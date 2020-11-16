@@ -34,6 +34,7 @@ class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
 # lowest LINZ resolution 1:500k
 # coast_poly to determine if on land or water, coast_line for distances
 coast_poly = readOGR(dsn=paste0(PLOTRES, "Paths/lds-nz-coastlines-and-islands/EPSG_2193"), layer="nz-coastlines-and-islands-polygons-topo-1500k")
+crs(coast_poly) = NZTM
 coast_line = as(coast_poly, "SpatialLinesDataFrame")
 coast_distance = function(xy, km=T) {
   # xy: SpatialPoints with CRS EPSG:2193 NZGD2000/NZTM
