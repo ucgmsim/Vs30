@@ -4,6 +4,8 @@ library(rgeos) # gDistance
 
 PLOTRES = "/nesi/project/nesi00213/PlottingData/"
 PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
+#PLOTRES = "/run/media/vap30/Hathor/work/plotting_data/"
+#PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 
 GEOLOGY = "AhdiAK_noQ3_hyb09c"
 TERRAIN = "YongCA_noQ3"
@@ -58,7 +60,7 @@ vspr_yca = vspr[(!is.na(vspr[[paste0("Vs30_", TERRAIN)]])),]
 rm(vspr)
 
 
-geology_model_run = function(model) {
+geology_model_run = function(model, only_id=F) {
   library(raster) # raster
   library(rgeos) # gDistance
   
@@ -71,6 +73,7 @@ geology_model_run = function(model) {
   
   # large amount of memory for polygon dataset
   gid_aak = over(xy00, aak_map)$groupID_AhdiAK
+  if (only_id) return(gid_aak)
   # used to intersect with where gid_aak is water, water replaced with NA
   # TODO: maybe just delete water polygons making it faster?
   valid_idx = which(!is.na(gid_aak))
@@ -100,7 +103,7 @@ geology_model_run = function(model) {
 }
 
 
-terrain_model_run = function(model) {
+terrain_model_run = function(model, only_id=F) {
   library(raster) # crs, SpatialPoints
   
   source(paste0("Kevin/MODEL_", TERRAIN, ".R"))
@@ -110,7 +113,8 @@ terrain_model_run = function(model) {
   model$yca_vs30 = NA
   model$yca_stdev = NA
   
-  gid_yca = over(xy00, iwahashipike)
+  gid_yca = over(xy00, iwahashipike)$IwahashiPike_NZ_100m_16
+  if (only_id) return(gid_yca)
   valid_idx = which(!is.na(gid_yca))
   if (length(valid_idx) == 0) return(model)
   gid_yca = data.frame(gid_yca[valid_idx,])
