@@ -40,7 +40,11 @@ vspr_run = function() {
   vspr$StationID = vs_NZGD00$StationID
   vspr$Source = vs_NZGD00$DataSource
 
-  # add model values
+  # add model categories
+  vspr$gid_aak = geology_model_run(vspr, only_id=T)
+  vspr$gid_yca = terrain_model_run(vspr, only_id=T)
+
+  # add model values (not in version saved to disk)
   vspr = geology_model_run(vspr)
   names(vspr)[names(vspr) == "aak_vs30"] = paste0("Vs30_", GEOLOGY)
   names(vspr)[names(vspr) == "aak_stdev"] = paste0("stDv_", GEOLOGY)
