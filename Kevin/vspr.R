@@ -1,58 +1,44 @@
-#!/usr/bin/env Rscript
-
 # Gathers metadata for points with measured Vs30.
 # only columns needed are coordinates, Vs30/lnMeasUncer, Vs30/stDV for model(s),
 #                         QualityFlag/StationID for subsetting
 
 library(sp)
 
-source("shared.R")
+source("Kevin/const.R")
+source("config.R")
 source("Kevin/load_vs.R")
+source("Kevin/model_ahdiak.R")
+source("Kevin/model_yongca.R")
 
-OUT = "data/vspr.csv"
 
 vspr_run = function() {
-  # source coordinates with metadata
-  vs_NZGD49 = load_vs(downsample_McGann=TRUE)
-  vs_NZGD00 = sp::spTransform(vs_NZGD49, NZTM)
+    # source coordinates with metadata
+    vspr = sp::spTransform(load_vs(downsample_McGann=TRUE), NZTM)
 
-  # remove points in the same location with the same Vs30
-  mask = rep(TRUE, length(vs_NZGD00))
-  dup_pairs = sp::zerodist(vs_NZGD00)
-  for (i in seq(dim(dup_pairs)[1])) {
-      if(vs_NZGD00[dup_pairs[i,1],]$Vs30 == vs_NZGD00[dup_pairs[i,2],]$Vs30) {
-          mask[dup_pairs[i,2]] = FALSE
-      }
-  }
-  vs_NZGD00 = vs_NZGD00[mask,]
-  rm(vs_NZGD49)
+    # remove points in the same location with the same Vs30
+    mask = rep(TRUE, length(vspr))
+    dup_pairs = sp::zerodist(vspr)
+    for (i in seq(dim(dup_pairs)[1])) {
+        if(vspr[dup_pairs[i,1],]$Vs30 == vspr[dup_pairs[i,2],]$Vs30) {
+            mask[dup_pairs[i,2]] = FALSE
+        }
+    }
+    vspr = vspr[mask, !names(vspr) == "DataSourceW"]
 
-  # create output table
-  vs_WGS84 = sp::spTransform(vs_NZGD00, WGS84)
-  vspr = data.frame(coordinates(vs_NZGD00), coordinates(vs_WGS84))
-  names(vspr) = c("x", "y", "longitude", "latitude")
-  rm(vs_WGS84)
+    # add model categories
+    vspr$gid_aak = model_ahdiak_get_gid(vspr)
+    vspr$gid_yca = model_yongca_get_gid(vspr)
+    # create posterior models
+    if (POSTERIOR_UPDATE) {
+        source("Kevin/bayes.R")
+        source("Kevin/model_ahdiak_prior.R")
+        source("Kevin/model_yongca_prior.R")
+        model_ahdiak <<- bayes_posterior(vspr, vspr$gid_aak, model_ahdiak)
+        model_yongca <<- bayes_posterior(vspr, vspr$gid_yca, model_yongca)
+    } else {
+        source("Kevin/model_ahdiak_posterior.R")
+        source("Kevin/model_yongca_posterior.R")
+    }
 
-  # copy vs info
-  vspr$Vs30 = vs_NZGD00$Vs30
-  vspr$lnMeasUncer = vs_NZGD00$lnMeasUncer
-  vspr$QualityFlag = vs_NZGD00$QualityFlag
-  vspr$StationID = vs_NZGD00$StationID
-  vspr$Source = vs_NZGD00$DataSource
-
-  # add model categories
-  vspr$gid_aak = geology_model_run(vspr, only_id=T)
-  vspr$gid_yca = terrain_model_run(vspr, only_id=T)
-
-  # add model values (not in version saved to disk)
-  vspr = geology_model_run(vspr)
-  names(vspr)[names(vspr) == "aak_vs30"] = paste0("Vs30_", GEOLOGY)
-  names(vspr)[names(vspr) == "aak_stdev"] = paste0("stDv_", GEOLOGY)
-  vspr = terrain_model_run(vspr)
-  names(vspr)[names(vspr) == "yca_vs30"] = paste0("Vs30_", TERRAIN)
-  names(vspr)[names(vspr) == "yca_stdev"] = paste0("stDv_", TERRAIN)
-
-  write.csv(vspr, OUT, row.names=F)
+    return(vspr)
 }
-
-vspr_run()

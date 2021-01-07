@@ -19,15 +19,7 @@
 #16 - Fluvial plain, alluvial fan, low-lying flat plains, etc.
 
 # position 13 was a guess - Kevin
-Vs30_YongCA = c(519, 393, 547, 459, 402, 345, 388, 374,
-                497, 349, 328, 297, 500, 209, 363, 246)
-stDv_YongCA = c(0.3521, 0.4161, 0.4695, 0.3540, 0.3136, 0.2800, 0.4161, 0.3249,
-                 0.3516, 0.2800, 0.2736, 0.2931, 0.5,    0.1749, 0.2800, 0.2206)
-
-YongCA_set_Vs30 = function(data) {
-  return(Vs30_YongCA[data$groupID_YongCA])
-}
-
-YongCA_set_stDv = function(data) {
-  return(stDv_YongCA[data$groupID_YongCA])
-}
+model_yongca = list(vs30=c(519, 393, 547, 459, 402, 345, 388, 374,
+                           497, 349, 328, 297, 500, 209, 363, 246),
+                    stdv=c(0.3521, 0.4161, 0.4695, 0.3540, 0.3136, 0.2800, 0.4161, 0.3249,
+                           0.3516, 0.2800, 0.2736, 0.2931, 0.5,    0.1749, 0.2800, 0.2206))
