@@ -1,11 +1,8 @@
 library(rgdal)
 library(sp)
 
+source("Kevin/const.R")
 source("Kevin/downsample_McGann.R")
-
-WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-NZMG = "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"
 
 
 load_vs = function(downsample_McGann=TRUE){

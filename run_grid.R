@@ -2,7 +2,7 @@
 
 library(parallel) # cluster
 
-source("shared.R")
+source("Kevin/main.R")
 
 ###
 ### WHOLE NZ
@@ -54,7 +54,7 @@ if (terrain) {
   # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
   pool = makeCluster(detectCores() - leave_cores)
   # iwahashipike dataset: ~700MB/core
-  clusterExport(cl=pool, varlist=c("NZTM", "iwahashipike", "TERRAIN"))
+  clusterExport(cl=pool, varlist=c("NZTM", "yca_map", "TERRAIN"))
   cat("running terrain model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)

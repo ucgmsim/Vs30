@@ -2,33 +2,14 @@ library(raster) # raster
 library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
-PLOTRES = "/nesi/project/nesi00213/PlottingData/"
-PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
-#PLOTRES = "/run/media/vap30/Hathor/work/plotting_data/"
-#PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
+source("config.R")
+source("Kevin/const.R")
+source("Kevin/vspr.R")
 
-GEOLOGY = "AhdiAK_noQ3_hyb09c"
-TERRAIN = "YongCA_noQ3"
 
-WGS84 = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-NZTM = "+proj=tmerc +lat_0=0 +lon_0=173 +k=0.9996 +x_0=1600000 +y_0=10000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
-NZMG = "+proj=nzmg +lat_0=-41 +lon_0=173 +x_0=2510000 +y_0=6023150 +units=m +no_defs +ellps=intl +towgs84=59.47,-5.04,187.44,0.47,-0.1,1.024,-4.5993"
-
-# EX mvn_params.R
-# note that some if statements have been removed to match default values
-# should note down where this was and/or change back if ever modifying below values
-# at least applicable to useNoisyMeasurements, note loadVs.R
-numVGpoints = 128
-useNoisyMeasurements = T
-covReducPar = 1.5
-useDiscreteVariogram = F
-optimizeUsingMatrixPackage = T
-
-# working files (aak_map, iwahashipike in NZTM, slp in NZMG)
-load(paste0(PREFIX, "aak_map.Rdata"))
+# working files (slp in NZMG)
 slp_nzsi_9c = as(raster(paste0(PREFIX, "slp_nzsi_9c.nc")), "SpatialGridDataFrame")
 slp_nzni_9c = as(raster(paste0(PREFIX, "slp_nzni_9c.nc")), "SpatialGridDataFrame")
-iwahashipike = as(raster(paste0(PREFIX, "IwahashiPike_NZ_100m_16.tif")), "SpatialGridDataFrame")
 variogram_aak = read.csv(paste0("data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
 variogram_yca = read.csv(paste0("data/variogram_", TERRAIN, "_v7.csv"))[2:10]
 class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
@@ -49,9 +30,7 @@ coast_distance = function(xy, km=T) {
 }
 
 # vs site properties
-vspr = read.csv("data/vspr.csv")
-coordinates(vspr) = ~ x + y
-crs(vspr) = NZTM
+vspr = vspr_run()
 # remove Q3 quality unless station name is 3 chars long.
 vspr = vspr[(vspr$QualityFlag != "Q3" | nchar(as(vspr$StationID, "character")) == 3 | is.na(vspr$QualityFlag)),]
 # remove points where MODEL predictions don't exist
@@ -64,7 +43,7 @@ geology_model_run = function(model, only_id=F) {
   library(raster) # raster
   library(rgeos) # gDistance
   
-  source(paste0("Kevin/MODEL_", GEOLOGY, ".R"))
+  source(paste0("Kevin/model_", GEOLOGY, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
@@ -81,9 +60,9 @@ geology_model_run = function(model, only_id=F) {
   xy00 = xy00[valid_idx]
   gid_aak = gid_aak[valid_idx]
   
+  # coast and slope only required if using hybrid model
   # coastline distance (not much memory)
   coastkm = coast_distance(xy00)
-  
   # slope (more memory required for rasters)
   xy49 = spTransform(xy00, NZMG)
   slp09c = xy49 %over% slp_nzsi_9c
@@ -93,11 +72,11 @@ geology_model_run = function(model, only_id=F) {
   
   model_params = data.frame(gid_aak, slp09c, coastkm)
   rm(gid_aak, slp09c, coastkm)
-  names(model_params) = c("groupID_AhdiAK", "slp09c", "coastkm")
+  names(model_params) = c("gid", "slp09c", "coastkm")
   
   # run model
-  model$aak_vs30[valid_idx] = AhdiAK_noQ3_hyb09c_set_Vs30(model_params, g06mod=T, g13mod=T)
-  model$aak_stdev[valid_idx] = AhdiAK_noQ3_hyb09c_set_stDv(model_params)
+  model$aak_vs30[valid_idx] = model_ahdiak_get_vs30(model_params, g06mod=T, g13mod=T)
+  model$aak_stdev[valid_idx] = model_ahdiak_hybrid$stdv(model_params$gid)
   
   return(model)
 }
@@ -106,7 +85,7 @@ geology_model_run = function(model, only_id=F) {
 terrain_model_run = function(model, only_id=F) {
   library(raster) # crs, SpatialPoints
   
-  source(paste0("Kevin/MODEL_", TERRAIN, ".R"))
+  source(paste0("Kevin/model_", TERRAIN, ".R"))
   
   xy00 = SpatialPoints(model[, c("x", "y")])
   crs(xy00) = NZTM
@@ -117,12 +96,10 @@ terrain_model_run = function(model, only_id=F) {
   if (only_id) return(gid_yca)
   valid_idx = which(!is.na(gid_yca))
   if (length(valid_idx) == 0) return(model)
-  gid_yca = data.frame(gid_yca[valid_idx,])
-  colnames(gid_yca) = "groupID_YongCA_noQ3"
 
   # run model
-  model$yca_vs30[valid_idx] = YongCA_noQ3_set_Vs30(gid_yca)
-  model$yca_stdev[valid_idx] = YongCA_noQ3_set_stDv(gid_yca)
+  model$yca_vs30[valid_idx] = model_yongca$vs30[gid_yca]
+  model$yca_stdev[valid_idx] = model_yongca$stdv[gid_yca]
   
   return(model)
 }
