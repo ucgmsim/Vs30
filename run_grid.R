@@ -9,7 +9,7 @@ source("Kevin/main.R")
 ###
 
 # don't use this many cores in cluster, leave for other users/processes
-leave_cores = 2
+leave_cores = 0
 # which models to generate
 geology = T
 terrain = T
@@ -37,7 +37,8 @@ if (geology) {
   pool = makeCluster(detectCores() - leave_cores)
   # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
   clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
-                                   "slp_nzni_9c", "slp_nzsi_9c", "aak_map", "GEOLOGY"))
+                                   "slp_nzni_9c", "slp_nzsi_9c", "GEOLOGY",
+                                   "aak_map", "model_ahdiak_get_gid", "model_ahdiak"))
   cat("running geology model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
@@ -54,7 +55,8 @@ if (terrain) {
   # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
   pool = makeCluster(detectCores() - leave_cores)
   # iwahashipike dataset: ~700MB/core
-  clusterExport(cl=pool, varlist=c("NZTM", "yca_map", "TERRAIN"))
+  clusterExport(cl=pool, varlist=c("NZTM", "TERRAIN",
+                                   "yca_map", "model_yongca_get_gid", "model_yongca"))
   cat("running terrain model...\n")
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)
@@ -69,8 +71,7 @@ if (terrain) {
 cat("starting mvn cluster...\n")
 pool = makeCluster(detectCores() - leave_cores)
 clusterExport(cl=pool, varlist=c("numVGpoints", "useNoisyMeasurements", "covReducPar",
-                                 "useDiscreteVariogram",
-                                 "optimizeUsingMatrixPackage", "GEOLOGY", "TERRAIN"))
+                                 "useDiscreteVariogram", "GEOLOGY", "TERRAIN"))
 if (geology) {
   t0 = Sys.time()
   cluster_model = parLapply(cl=pool, X=cluster_model, fun=mvn_run, vspr_aak, variogram_aak, "aak")

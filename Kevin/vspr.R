@@ -40,5 +40,15 @@ vspr_run = function() {
         source("Kevin/model_yongca_posterior.R")
     }
 
+    # remove Q3 quality unless station name is 3 chars long.
+    vspr = vspr[(vspr$QualityFlag != "Q3" |
+                 nchar(as(vspr$StationID, "character")) == 3 |
+                 is.na(vspr$QualityFlag)),]
+
+    # models currently run on dataframes
+    # TODO: make sure cluster can split and work on SpatialPointsDataFrame
+    vspr = as.data.frame(vspr, row.names=NULL)
+    names(vspr)[names(vspr) == "Easting"] = "x"
+    names(vspr)[names(vspr) == "Northing"] = "y"
     return(vspr)
 }
