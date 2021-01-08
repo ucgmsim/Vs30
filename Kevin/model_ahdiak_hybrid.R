@@ -5,7 +5,7 @@
 # and enforcing a minimum sigma of 0.5 in the prior.
 
 # the model that will be modified needs to be loaded
-stopifnot(exists(model_ahdiak))
+stopifnot(exists("model_ahdiak"))
 model_ahdiak_hybrid = model_ahdiak
 
 # define which units have a slope-Vs30 relation to apply
@@ -17,6 +17,7 @@ hybconf = data.frame(
   vs30       = I(list(c(242, 418),     c(171, 228),     c(252, 275),     c(183, 239))),
   sigmafac   = c(     0.4888,          0.7103,          0.9988,          0.9348)
 )
+# TODO: should we apply reduction factors for g06 (idx 4) if g06 mod used?
 # modify standard deviation to incorporate sigma reduction factors
 model_ahdiak_hybrid$stdv[hybconf$gid] = model_ahdiak$stdv[hybconf$gid] *
                                         hybconf$sigmafac

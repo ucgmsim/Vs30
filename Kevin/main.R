@@ -29,127 +29,125 @@ coast_distance = function(xy, km=T) {
   return(result)
 }
 
-# vs site properties
+# vs observed, also creates posterior model
 vspr = vspr_run()
-# remove Q3 quality unless station name is 3 chars long.
-vspr = vspr[(vspr$QualityFlag != "Q3" | nchar(as(vspr$StationID, "character")) == 3 | is.na(vspr$QualityFlag)),]
 # remove points where MODEL predictions don't exist
-vspr_aak = vspr[(!is.na(vspr[[paste0("Vs30_", GEOLOGY)]])),]
-vspr_yca = vspr[(!is.na(vspr[[paste0("Vs30_", TERRAIN)]])),]
+vspr_aak = vspr[(!is.na(vspr[["gid_aak"]])),]
+vspr_yca = vspr[(!is.na(vspr[["gid_yca"]])),]
 rm(vspr)
 
 
 geology_model_run = function(model, only_id=F) {
-  library(raster) # raster
-  library(rgeos) # gDistance
-  
-  source(paste0("Kevin/model_", GEOLOGY, ".R"))
-  
-  xy00 = SpatialPoints(model[, c("x", "y")])
-  crs(xy00) = NZTM
-  model$aak_vs30 = NA
-  model$aak_stdev = NA
-  
-  # large amount of memory for polygon dataset
-  gid_aak = over(xy00, aak_map)$groupID_AhdiAK
-  if (only_id) return(gid_aak)
-  # used to intersect with where gid_aak is water, water replaced with NA
-  # TODO: maybe just delete water polygons making it faster?
-  valid_idx = which(!is.na(gid_aak))
-  if (length(valid_idx) == 0) return(model)
-  xy00 = xy00[valid_idx]
-  gid_aak = gid_aak[valid_idx]
-  
-  # coast and slope only required if using hybrid model
-  # coastline distance (not much memory)
-  coastkm = coast_distance(xy00)
-  # slope (more memory required for rasters)
-  xy49 = spTransform(xy00, NZMG)
-  slp09c = xy49 %over% slp_nzsi_9c
-  slp09c[is.na(slp09c)] = (xy49 %over% slp_nzni_9c)[is.na(slp09c)]
-  slp09c[is.na(slp09c)] = 0.0
-  rm(xy00, xy49)
-  
-  model_params = data.frame(gid_aak, slp09c, coastkm)
-  rm(gid_aak, slp09c, coastkm)
-  names(model_params) = c("gid", "slp09c", "coastkm")
-  
-  # run model
-  model$aak_vs30[valid_idx] = model_ahdiak_get_vs30(model_params, g06mod=T, g13mod=T)
-  model$aak_stdev[valid_idx] = model_ahdiak_hybrid$stdv(model_params$gid)
-  
-  return(model)
+    library(raster) # raster
+    library(rgeos) # gDistance
+
+    source(paste0("Kevin/model_", GEOLOGY, ".R"))
+
+    # find group IDs
+    xy00 = SpatialPoints(model[, c("x", "y")], proj4string=crs(NZTM))
+    gid_aak = model_ahdiak_get_gid(xy00)
+    if (only_id) return(gid_aak)
+    model$aak_vs30 = NA
+    model$aak_stdev = NA
+    # water or outside any polygons is NA
+    valid_idx = which(!is.na(gid_aak))
+    if (length(valid_idx) == 0) return(model)
+    xy00 = xy00[valid_idx]
+    model_params = data.frame(gid=gid_aak[valid_idx])
+    rm(gid_aak)
+
+    # coast and slope required for hybrid model
+    # coastline distance (not much memory)
+    model_params$coastkm = coast_distance(xy00)
+    # slope (more memory required for rasters)
+    xy49 = spTransform(xy00, NZMG)
+    # TODO: combine ni and si
+    slp09c = xy49 %over% slp_nzsi_9c
+    slp09c$slope[is.na(slp09c)] = (xy49[is.na(slp09c)] %over% slp_nzni_9c)$slope
+    slp09c$slope[is.na(slp09c)] = 0.0
+    model_params$slp09c = slp09c$slope
+    rm(xy00, xy49, slp09c)
+
+    # run model
+    model$aak_vs30[valid_idx] = model_ahdiak_get_vs30(model_params, g06mod=T, g13mod=T)
+    model$aak_stdev[valid_idx] = model_ahdiak_hybrid$stdv[model_params$gid]
+
+    return(model)
 }
 
 
 terrain_model_run = function(model, only_id=F) {
-  library(raster) # crs, SpatialPoints
-  
-  source(paste0("Kevin/model_", TERRAIN, ".R"))
-  
-  xy00 = SpatialPoints(model[, c("x", "y")])
-  crs(xy00) = NZTM
-  model$yca_vs30 = NA
-  model$yca_stdev = NA
-  
-  gid_yca = over(xy00, iwahashipike)$IwahashiPike_NZ_100m_16
-  if (only_id) return(gid_yca)
-  valid_idx = which(!is.na(gid_yca))
-  if (length(valid_idx) == 0) return(model)
+    library(raster) # crs, SpatialPoints
 
-  # run model
-  model$yca_vs30[valid_idx] = model_yongca$vs30[gid_yca]
-  model$yca_stdev[valid_idx] = model_yongca$stdv[gid_yca]
-  
-  return(model)
+    xy00 = SpatialPoints(model[, c("x", "y")], crs(NZTM))
+    gid_yca = model_yongca_get_gid(xy00)
+    if (only_id) return(gid_yca)
+    model$yca_vs30 = NA
+    model$yca_stdev = NA
+    valid_idx = which(!is.na(gid_yca))
+    if (length(valid_idx) == 0) return(model)
+
+    # run model
+    model$yca_vs30[valid_idx] = model_yongca$vs30[gid_yca[valid_idx]]
+    model$yca_stdev[valid_idx] = model_yongca$stdv[gid_yca[valid_idx]]
+
+    return(model)
 }
 
 
-mvn_run = function(model, vspr, variogram, model_type) {
-  # TODO: keep_original flag to not overwrite pre-mvn data
-  library(gstat)
-  library(Matrix)
-  library(raster) # crs
+# run models for vspr
+vspr_aak = geology_model_run(vspr_aak)
+names(vspr_aak)[names(vspr_aak) == "aak_vs30"] = "model_vs30"
+names(vspr_aak)[names(vspr_aak) == "aak_stdev"] = "model_stdv"
+vspr_yca = terrain_model_run(vspr_yca)
+names(vspr_yca)[names(vspr_yca) == "yca_vs30"] = "model_vs30"
+names(vspr_yca)[names(vspr_yca) == "yca_stdev"] = "model_stdv"
 
-  source("Kevin/mvn.R")
-  
-  if (model_type == "aak") {
-      m_name = GEOLOGY
-  } else if (model_type == "yca") {
-      m_name = TERRAIN
-  }
-  m_vs30 = paste0(model_type, "_vs30")
-  m_stdev = paste0(model_type, "_stdev")
-  m_vs30_out = paste0(model_type, "_mvn_vs30")
-  m_stdev_out = paste0(model_type, "_mvn_stdev")
-  
-  valid_idx = which(!is.na(model[, m_vs30]))
-  if (length(valid_idx) == 0) {
-    names(model)[names(model) == m_vs30] = m_vs30_out
-    names(model)[names(model) == m_stdev] = m_stdev_out
+
+mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
+    # TODO: keep_original flag to not overwrite pre-mvn data
+    library(gstat)
+    library(Matrix)
+    library(raster) # crs
+
+    source("Kevin/mvn.R")
+
+    m_vs30 = paste0(model_type, "_vs30")
+    m_stdev = paste0(model_type, "_stdev")
+    m_vs30_out = paste0(model_type, "_mvn_vs30")
+    m_stdev_out = paste0(model_type, "_mvn_stdev")
+    if (overwrite) {
+        # save memory, overwrite instead of add columns
+        names(model)[names(model) == m_vs30] = m_vs30_out
+        names(model)[names(model) == m_stdev] = m_stdev_out
+        m_vs30 = m_vs30_out
+        m_stdv = m_stdev_out
+    } else {
+        model[m_vs30_out] = NA
+        model[m_stdv_out] = NA
+    }
+
+    valid_idx = which(!is.na(model[, m_vs30]))
+    if (length(valid_idx) == 0) return(model)
+
+    obs_model_values_log = log(vspr[["model_vs30"]])
+    model_values_log = log(model[valid_idx, m_vs30])
+    mvn_out = mvn(vspr[c("x", "y")],
+                model[valid_idx, c("x", "y")],
+                model[valid_idx, m_stdev]^2,
+                variogram,
+                model_values_log,
+                vspr[["model_stdv"]] ^ 2,
+                log(vspr$Vs30) - obs_model_values_log,
+                covReducPar,
+                obs_model_values_log,
+                vspr$lnMeasUncer)
+
+    model[valid_idx, m_stdev_out] = sqrt(mvn_out$var)
+    model[valid_idx, m_vs30_out] = exp(model_values_log) *
+                                   exp(mvn_out$pred - model_values_log)
+
     return(model)
-  }
-  coords = coordinates(model[valid_idx, c("x", "y")])
-  rownames(coords) = NULL
-  
-  obs_locations = coordinates(vspr)
-  obs_values_log = log(vspr[[paste0("Vs30_", m_name)]])
-  obs_variances = (vspr[[paste0("stDv_", m_name)]])^2
-  obs_residuals = log(vspr$Vs30) - obs_values_log
-  obs_stdev_log = vspr$lnMeasUncer
-  values_log = log(model[valid_idx, m_vs30])
-  variances = model[valid_idx, m_stdev]^2
-  mvn_out = mvn(obs_locations, coords, variances, variogram,
-                values_log, obs_variances, obs_residuals,
-                covReducPar, obs_values_log, obs_stdev_log)
-  # save memory, overwrite instead of add columns
-  names(model)[names(model) == m_vs30] = m_vs30_out
-  names(model)[names(model) == m_stdev] = m_stdev_out
-  aak_resid = mvn_out$pred - values_log
-  model[valid_idx, m_stdev_out] = sqrt(mvn_out$var)
-  model[valid_idx, m_vs30_out] = exp(values_log) * exp(aak_resid)
-  
-  return(model)
 }
 
 

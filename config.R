@@ -11,4 +11,3 @@ numVGpoints = 128
 useNoisyMeasurements = T
 covReducPar = 1.5
 useDiscreteVariogram = F
-optimizeUsingMatrixPackage = T
