@@ -20,6 +20,7 @@ bayes_posterior = function(vspr, gids, model, n_prior=3, min_sigma=0.5) {
     nn_prior = rep(n_prior, length(model$vs30))
     for(o in 1:length(gids)) {
         g = gids[o]
+        if (is.na(g)) next
         n0 = nn_prior[g]
         var = new_var(update_stdv[g], n0, vspr$lnMeasUncer[o])
         update_vs30[g] = new_mean(update_vs30[g], n0, var, vspr$Vs30[o])
