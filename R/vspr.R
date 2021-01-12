@@ -11,7 +11,7 @@ source("Kevin/model_ahdiak.R")
 source("Kevin/model_yongca.R")
 
 
-vspr_run = function() {
+vspr_run = function(outfile="data/vspr.csv", clusters=T) {
     # source coordinates with metadata
     vspr = sp::spTransform(load_vs(downsample_McGann=TRUE), NZTM)
 
@@ -50,5 +50,15 @@ vspr_run = function() {
     vspr = as.data.frame(vspr, row.names=NULL)
     names(vspr)[names(vspr) == "Easting"] = "x"
     names(vspr)[names(vspr) == "Northing"] = "y"
+
+    # save for Python clustering code to read and update
+    write.csv(vspr, outfile, row.names=F)
+    if (clusters) {
+        system("./python/cluster.py")
+        vspr = read.csv("data/vspr.csv")
+        # average clusters
+        # TODO:
+    }
+
     return(vspr)
 }
