@@ -4,11 +4,11 @@
 
 library(sp)
 
-source("Kevin/const.R")
+source("R/const.R")
 source("config.R")
-source("Kevin/load_vs.R")
-source("Kevin/model_ahdiak.R")
-source("Kevin/model_yongca.R")
+source("R/load_vs.R")
+source("R/model_ahdiak.R")
+source("R/model_yongca.R")
 
 
 vspr_run = function(outfile="data/vspr.csv", clusters=T) {
@@ -28,37 +28,33 @@ vspr_run = function(outfile="data/vspr.csv", clusters=T) {
     # add model categories
     vspr$gid_aak = model_ahdiak_get_gid(vspr)
     vspr$gid_yca = model_yongca_get_gid(vspr)
+    # save for Python clustering code to read and update
+    vspr = as.data.frame(vspr, row.names=NULL)
+    names(vspr)[names(vspr) == "Easting"] = "x"
+    names(vspr)[names(vspr) == "Northing"] = "y"
+    write.csv(vspr_df, file=outfile, row.names=F)
+    if (clusters) {
+        system("./python/cluster.py")
+        vspr = read.csv("data/vspr.csv")
+        # average clusters for posterior update
+        # TODO:
+    }
     # create posterior models
     if (POSTERIOR_UPDATE) {
-        source("Kevin/bayes.R")
-        source("Kevin/model_ahdiak_prior.R")
+        source("R/bayes.R")
+        source("R/model_ahdiak_prior.R")
         source("Kevin/model_yongca_prior.R")
         model_ahdiak <<- bayes_posterior(vspr, vspr$gid_aak, model_ahdiak)
         model_yongca <<- bayes_posterior(vspr, vspr$gid_yca, model_yongca)
     } else {
-        source("Kevin/model_ahdiak_posterior.R")
-        source("Kevin/model_yongca_posterior.R")
+        source("R/model_ahdiak_posterior.R")
+        source("R/model_yongca_posterior.R")
     }
 
     # remove Q3 quality unless station name is 3 chars long.
     vspr = vspr[(vspr$QualityFlag != "Q3" |
                  nchar(as(vspr$StationID, "character")) == 3 |
                  is.na(vspr$QualityFlag)),]
-
-    # models currently run on dataframes
-    # TODO: make sure cluster can split and work on SpatialPointsDataFrame
-    vspr = as.data.frame(vspr, row.names=NULL)
-    names(vspr)[names(vspr) == "Easting"] = "x"
-    names(vspr)[names(vspr) == "Northing"] = "y"
-
-    # save for Python clustering code to read and update
-    write.csv(vspr, outfile, row.names=F)
-    if (clusters) {
-        system("./python/cluster.py")
-        vspr = read.csv("data/vspr.csv")
-        # average clusters
-        # TODO:
-    }
 
     return(vspr)
 }
