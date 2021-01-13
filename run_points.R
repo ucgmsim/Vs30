@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-source("Kevin/main.R")
+source("R/main.R")
 
 ###
 ### CUSTOM POINTS VERSION

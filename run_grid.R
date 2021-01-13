@@ -2,7 +2,7 @@
 
 library(parallel) # cluster
 
-source("Kevin/main.R")
+source("R/main.R")
 
 ###
 ### WHOLE NZ

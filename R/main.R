@@ -3,8 +3,8 @@ library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
 source("config.R")
-source("Kevin/const.R")
-source("Kevin/vspr.R")
+source("R/const.R")
+source("R/vspr.R")
 
 
 # working files (slp in NZMG)
@@ -41,7 +41,7 @@ geology_model_run = function(model, only_id=F) {
     library(raster) # raster
     library(rgeos) # gDistance
 
-    source(paste0("Kevin/model_", GEOLOGY, ".R"))
+    source(paste0("R/model_", GEOLOGY, ".R"))
 
     # find group IDs
     xy00 = SpatialPoints(model[, c("x", "y")], proj4string=crs(NZTM))
@@ -110,7 +110,7 @@ mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
     library(Matrix)
     library(raster) # crs
 
-    source("Kevin/mvn.R")
+    source("R/mvn.R")
 
     m_vs30 = paste0(model_type, "_vs30")
     m_stdev = paste0(model_type, "_stdev")
