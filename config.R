@@ -2,6 +2,7 @@
 #PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 PLOTRES = "/run/media/vap30/Hathor/work/plotting_data/"
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
+CPT = T
 POSTERIOR_UPDATE = T
 POSTERIOR_CLUSTERS = T
 # EX mvn_params.R

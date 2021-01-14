@@ -30,7 +30,7 @@ coast_distance = function(xy, km=T) {
 }
 
 # vs observed, also creates posterior model
-vspr = vspr_run()
+vspr = vspr_run(posterior_update=POSTERIOR_UPDATE, clusters=POSTERIOR_CLUSTERS, cpt=CPT)
 # remove points where MODEL predictions don't exist
 vspr_aak = vspr[(!is.na(vspr[["gid_aak"]])),]
 vspr_yca = vspr[(!is.na(vspr[["gid_yca"]])),]
