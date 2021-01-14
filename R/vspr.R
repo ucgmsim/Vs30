@@ -1,59 +1,51 @@
 # Gathers metadata for points with measured Vs30.
+# Creates posterior model from measured values.
 # only columns needed are coordinates, Vs30/lnMeasUncer, Vs30/stDV for model(s),
 #                         QualityFlag/StationID for subsetting
 
-library(sp)
-
-source("R/const.R")
 source("config.R")
 source("R/load_vs.R")
 source("R/model_ahdiak.R")
 source("R/model_yongca.R")
 
 
-vspr_clustering = function(vspr, model="aak") {
-    # originally assuming that clusters are being reduced to single value
-    # stdev is actually sqrt(<sum>Wi*(V30i-V30mean)^2)
-    # mean is like normal mean but clusters are meaned first and treated as n=1
-    # posterior needs only $lnMeasUncer and $Vs30
-    out = data.frame(lnMeasUncer=logical(), Vs30=logical(), gid=integer())
-    ids = unique(vspr[,paste0("gid_", model)])
-    ids = ids[!is.na(ids)]
-    for (id in ids) {
+cluster_model = function(vspr, model="aak", prior) {
+    # creates a model from the distribution of measured sites as clustered
+    # prior: prior model, values only taken if no measurements available for ID
+    out = prior
+    # overwrite prior model looping through IDs
+    for (id in seq(length(prior$vs30))) {
+        vs_n = 0
+        vs_sum = 0
         idtable = vspr[which(vspr[,paste0("gid_", model)] == id),]
-        clusters = unique(idtable[,paste0("cluster_", model)])
-        for (c in clusters) {
-            ctable = idtable[which(idtable[,paste0("cluster_", model)] == c),]
+        clusters = table(idtable[,paste0("cluster_", model)])
+        # overall N is one per cluster, clusters labeled -1 are individual clusters
+        n = length(clusters)
+        if ("-1" %in% names(clusters)) n = n + unname(clusters["-1"]) - 1
+        if (n == 0) next
+        w = rep(1/n, nrow(idtable))
+        for (c in as.integer(names(clusters))) {
+            cidx = which(idtable[,paste0("cluster_", model)] == c)
+            ctable = idtable[cidx,]
             if (c == -1) {
-                # not part of a cluster, treat as individual values
-                out = rbind(out, data.frame(ctable[c("lnMeasUncer", "Vs30")], gid=id))
+                # values not part of cluster, weight = 1 per value
+                vs_sum = vs_sum + sum(ctable$Vs30)
             } else {
-                # combine values
-                # Vs30 is being averaged on a per-cluster basis
-                # uncertainty needs overall average per this geo/terrain ID in above formula
-                out = rbind(out, data.frame(lnMeasUncer=combined$stdv,
-                                            Vs30=sum(ctable$Vs30) / nrow(ctable),
-                                            gid=id))
+                # values in cluster, weight = 1 / cluster_size per value
+                vs_sum = vs_sum + sum(ctable$Vs30) / nrow(ctable)
+                w[cidx] = w[cidx] / nrow(ctable)
             }
         }
+        out$vs30[id] = vs_sum / vs_n
+        out$stdv[id] = sqrt(sum(w * (idtable$Vs30 - out$vs30[id]) ^ 2))
     }
     return(out)
 }
 
 
-vspr_run = function(outfile="data/vspr.csv") {
+vspr_run = function(outfile="data/vspr.csv", posterior_update=F, clusters=F, cpt=F) {
     # source coordinates with metadata
-    vspr = sp::spTransform(load_vs(downsample_McGann=TRUE), NZTM)
-
-    # remove points in the same location with the same Vs30
-    mask = rep(TRUE, length(vspr))
-    dup_pairs = sp::zerodist(vspr)
-    for (i in seq(dim(dup_pairs)[1])) {
-        if(vspr[dup_pairs[i,1],]$Vs30 == vspr[dup_pairs[i,2],]$Vs30) {
-            mask[dup_pairs[i,2]] = FALSE
-        }
-    }
-    vspr = vspr[mask, !names(vspr) == "DataSourceW"]
+    vspr = load_vs(cpt=cpt, downsample_McGann=TRUE)
 
     # add model categories
     vspr$gid_aak = model_ahdiak_get_gid(vspr)
@@ -62,27 +54,21 @@ vspr_run = function(outfile="data/vspr.csv") {
     vspr = as.data.frame(vspr, row.names=NULL)
     names(vspr)[names(vspr) == "Easting"] = "x"
     names(vspr)[names(vspr) == "Northing"] = "y"
-    # remove Q3 quality unless station name is 3 chars long.
-    vspr = vspr[(vspr$QualityFlag != "Q3" |
-                 nchar(as(vspr$StationID, "character")) == 3 |
-                 is.na(vspr$QualityFlag)),]
-    write.csv(vspr, file=outfile, row.names=F)
     # save for Python clustering code to read and update
-    if (POSTERIOR_CLUSTERS) {
+    write.csv(vspr, file=outfile, row.names=F)
+    if (clusters) {
         system("./python/cluster.py")
         vspr = read.csv("data/vspr.csv")
     }
     # create posterior models
-    if (POSTERIOR_UPDATE) {
+    if (posterior_update) {
         source("R/bayes.R")
         source("R/model_ahdiak_prior.R")
         source("R/model_yongca_prior.R")
         # average clusters for posterior update
-        if (POSTERIOR_CLUSTERS) {
-            vsprc = vspr_clustering(vspr, model="aak")
-            model_ahdiak <<- bayes_posterior(vsprc, vsprc$gid, model_ahdiak)
-            vsprc = vspr_clustering(vspr, model="yca")
-            model_yongca <<- bayes_posterior(vsprc, vsprc$gid, model_yongca)
+        if (clusters) {
+            model_ahdiak = cluster_model(vspr, model="aak", model_ahdiak)
+            model_yongca = cluster_model(vspr, model="yca", model_yongca)
         } else {
             model_ahdiak <<- bayes_posterior(vspr, vspr$gid_aak, model_ahdiak)
             model_yongca <<- bayes_posterior(vspr, vspr$gid_yca, model_yongca)

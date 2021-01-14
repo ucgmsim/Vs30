@@ -5,24 +5,51 @@ source("R/const.R")
 source("R/downsample_McGann.R")
 
 
-load_vs = function(downsample_McGann=TRUE){
-  # load measured sites
-  # - McGann Vs30 map (McGann, submitted, 2016 SDEE "Development of regional Vs30 Model and typical profiles... Christchurch CPT correlation")
-  # - Kaiser et al.
-  # - Internal communication with Wotherspoon: Characterised Vs30 Canterbury_June2017_KFed.csv
-  # McGann data is downsampled (downSampleMcGann)
-  
-  # load each Vs data source.
-  mcgann = loadvs_McGann("data/McGann_cptVs30data.csv", downsample=downsample_McGann)
-  wotherspoon = loadvs_Wotherspoon("data/Characterised Vs30 Canterbury_June2017_KFed.csv")
-  kaiseretal = loadvs_KaiserEtAl("data/20170817_vs_allNZ_duplicatesCulled.ll")
+load_vs = function(cpt=F, downsample_McGann=TRUE){
+    # load measured sites
+    # - McGann Vs30 map (McGann, submitted, 2016 SDEE "Development of regional Vs30 Model and typical profiles... Christchurch CPT correlation")
+    # - Kaiser et al.
+    # - Internal communication with Wotherspoon: Characterised Vs30 Canterbury_June2017_KFed.csv
+    # McGann data is downsampled (downSampleMcGann)
 
-  # Bind data together (can be separated using DataSource field)
-  vspoints = rbind(mcgann, wotherspoon, kaiseretal)  
-  colnames(vspoints@coords) = c("Easting", "Northing")
+    if (cpt) {
+        cpt = read.table("data/cptvs30.ssv", header=T, fill=T, row.names=NULL)
+        # remove blank columns
+        cpt = cpt[which(!is.na(cpt$Vs30)),]
+        names(cpt) = c("Easting", "Northing", "Vs30")
+        coordinates(cpt) = ~ Easting + Northing
+        crs(cpt) = NZTM
+        # default uncertainty
+        cpt$lnMeasUncer = 0.5
+        return(cpt)
+    } else {
+        # load each Vs data source.
+        mcgann = loadvs_McGann("data/McGann_cptVs30data.csv", downsample=downsample_McGann)
+        wotherspoon = loadvs_Wotherspoon("data/Characterised Vs30 Canterbury_June2017_KFed.csv")
+        kaiseretal = loadvs_KaiserEtAl("data/20170817_vs_allNZ_duplicatesCulled.ll")
 
-  # in NZMG
-  return(vspoints)
+        # Bind data together (can be separated using DataSource field)
+        vspoints = rbind(mcgann, wotherspoon, kaiseretal)  
+        colnames(vspoints@coords) = c("Easting", "Northing")
+
+        # remove points in the same location with the same Vs30
+        mask = rep(TRUE, length(vspr))
+        dup_pairs = sp::zerodist(vspr)
+        for (i in seq(dim(dup_pairs)[1])) {
+            if(vspr[dup_pairs[i,1],]$Vs30 == vspr[dup_pairs[i,2],]$Vs30) {
+                mask[dup_pairs[i,2]] = FALSE
+            }
+        }
+        vspr = vspr[mask, !names(vspr) == "DataSourceW"]
+
+        # remove Q3 quality unless station name is 3 chars long.
+        vspr = vspr[(vspr$QualityFlag != "Q3" |
+                         nchar(as(vspr$StationID, "character")) == 3 |
+                         is.na(vspr$QualityFlag)),]
+
+        # in NZTM from NZMG
+        return(sp::spTransform(vspoints, NZTM))
+    }
 }
 
 
