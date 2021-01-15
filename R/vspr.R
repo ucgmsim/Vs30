@@ -36,7 +36,7 @@ cluster_model = function(vspr, model="aak", prior) {
             }
         }
         out$vs30[id] = vs_sum / n
-        out$stdv[id] = sqrt(sum(w * (idtable$Vs30 - out$vs30[id]) ^ 2))
+        out$stdv[id] = sqrt(sum(w * (log(idtable$Vs30) - log(out$vs30[id])) ^ 2))
     }
     return(out)
 }
