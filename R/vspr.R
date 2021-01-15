@@ -28,15 +28,15 @@ cluster_model = function(vspr, model="aak", prior) {
             ctable = idtable[cidx,]
             if (c == -1) {
                 # values not part of cluster, weight = 1 per value
-                vs_sum = vs_sum + sum(ctable$Vs30)
+                vs_sum = vs_sum + sum(log(ctable$Vs30))
             } else {
                 # values in cluster, weight = 1 / cluster_size per value
-                vs_sum = vs_sum + sum(ctable$Vs30) / nrow(ctable)
+                vs_sum = vs_sum + sum(log(ctable$Vs30)) / nrow(ctable)
                 w[cidx] = w[cidx] / nrow(ctable)
             }
         }
-        out$vs30[id] = vs_sum / n
-        out$stdv[id] = sqrt(sum(w * (log(idtable$Vs30) - log(out$vs30[id])) ^ 2))
+        out$vs30[id] = exp(vs_sum / n)
+        out$stdv[id] = sqrt(sum(w * (log(idtable$Vs30) - vs_sum / n) ^ 2))
     }
     return(out)
 }
