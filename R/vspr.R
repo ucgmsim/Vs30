@@ -15,7 +15,6 @@ cluster_model = function(vspr, model="aak", prior) {
     out = prior
     # overwrite prior model looping through IDs
     for (id in seq(length(prior$vs30))) {
-        vs_n = 0
         vs_sum = 0
         idtable = vspr[which(vspr[,paste0("gid_", model)] == id),]
         clusters = table(idtable[,paste0("cluster_", model)])
@@ -36,7 +35,7 @@ cluster_model = function(vspr, model="aak", prior) {
                 w[cidx] = w[cidx] / nrow(ctable)
             }
         }
-        out$vs30[id] = vs_sum / vs_n
+        out$vs30[id] = vs_sum / n
         out$stdv[id] = sqrt(sum(w * (idtable$Vs30 - out$vs30[id]) ^ 2))
     }
     return(out)
