@@ -33,19 +33,19 @@ load_vs = function(cpt=F, downsample_McGann=TRUE){
         colnames(vspoints@coords) = c("Easting", "Northing")
 
         # remove points in the same location with the same Vs30
-        mask = rep(TRUE, length(vspr))
-        dup_pairs = sp::zerodist(vspr)
+        mask = rep(TRUE, length(vspoints))
+        dup_pairs = sp::zerodist(vspoints)
         for (i in seq(dim(dup_pairs)[1])) {
-            if(vspr[dup_pairs[i,1],]$Vs30 == vspr[dup_pairs[i,2],]$Vs30) {
+            if(vspoints[dup_pairs[i,1],]$Vs30 == vspoints[dup_pairs[i,2],]$Vs30) {
                 mask[dup_pairs[i,2]] = FALSE
             }
         }
-        vspr = vspr[mask, !names(vspr) == "DataSourceW"]
+        vspoints = vspoints[mask, !names(vspoints) == "DataSourceW"]
 
         # remove Q3 quality unless station name is 3 chars long.
-        vspr = vspr[(vspr$QualityFlag != "Q3" |
-                         nchar(as(vspr$StationID, "character")) == 3 |
-                         is.na(vspr$QualityFlag)),]
+        vspoints = vspoints[(vspoints$QualityFlag != "Q3" |
+                         nchar(as(vspoints$StationID, "character")) == 3 |
+                         is.na(vspoints$QualityFlag)),]
 
         # in NZTM from NZMG
         return(sp::spTransform(vspoints, NZTM))
