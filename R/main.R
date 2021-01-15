@@ -1,3 +1,6 @@
+# silence annoying warnings (before importing rgdal)
+options("rgdal_show_exportToProj4_warnings"="none")
+
 library(raster) # raster
 library(rgdal) # shapefiles
 library(rgeos) # gDistance
