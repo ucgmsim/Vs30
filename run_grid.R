@@ -24,46 +24,59 @@ xy00 = sp::makegrid(as(raster::extent(1000050, 2126350, 4700050, 6338350), "Spat
 #xy00 = sp::makegrid(as(raster::extent(1420050, 1639550, 5064950, 5294550), "SpatialPoints"), cellsize=400)
 colnames(xy00) = c("x", "y")
 cluster_model = split(x=data.frame(xy00), f=ceiling(seq(1, dim(xy00)[1])/job_size))
-rm(xy00)
+rm(xy00); gc()
 
 if (! file.exists(OUT)) {dir.create(OUT)}
 
-# each instance of cluster uses about input data size * 2 RAM
-
+# geology and terrain both have large data files
+# remove when not necessary to save on RAM
+clean_geology = function() {
+    rm(coast_distance, coast_poly, coast_line, slp_nzni_9c, slp_nzsi_9c,
+       aak_mak, model_ahdiak_get_gid, envir=globalenv()); gc()
+}
+clean_terrain = function() {
+    rm(yca_map, model_yongca_get_gid, envir=globalenv()); gc()
+}
 
 ### STEP 1: GEOLOGY MODEL
 if (geology) {
-  cat("geology model loading resources into cluster...\n")
-  pool = makeCluster(detectCores() - leave_cores)
-  # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
-  clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
-                                   "slp_nzni_9c", "slp_nzsi_9c", "GEOLOGY",
-                                   "aak_map", "model_ahdiak_get_gid", "model_ahdiak"))
-  cat("running geology model...\n")
-  t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
-  t1 = Sys.time()
-  stopCluster(pool)
-  cat("Geology model complete.\n")
-  print(t1 - t0)
+    clean_terrain()
+    cat("geology model loading resources into cluster...\n")
+    pool = makeCluster(detectCores() - leave_cores)
+    # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
+    clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
+                                     "slp_nzni_9c", "slp_nzsi_9c", "GEOLOGY",
+                                     "aak_map", "model_ahdiak_get_gid", "model_ahdiak"))
+    clean_geology()
+    cat("running geology model...\n")
+    t0 = Sys.time()
+    cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
+    t1 = Sys.time()
+    stopCluster(pool); gc()
+    cat("Geology model complete.\n")
+    print(t1 - t0)
+} else {
+    clean_geology()
 }
 
 
 ### STEP 2: TERRAIN MODEL
 if (terrain) {
-  cat("terrain model loading resources into cluster...\n")
-  # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
-  pool = makeCluster(detectCores() - leave_cores)
-  # iwahashipike dataset: ~700MB/core
-  clusterExport(cl=pool, varlist=c("NZTM", "TERRAIN",
-                                   "yca_map", "model_yongca_get_gid", "model_yongca"))
-  cat("running terrain model...\n")
-  t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)
-  t1 = Sys.time()
-  stopCluster(pool)
-  cat("Terrain model complete.\n")
-  print(t1 - t0)
+    source("R/model_yongca.R")
+    cat("terrain model loading resources into cluster...\n")
+    # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
+    pool = makeCluster(detectCores() - leave_cores)
+    # iwahashipike dataset: ~700MB/core
+    clusterExport(cl=pool, varlist=c("NZTM", "TERRAIN",
+                                     "yca_map", "model_yongca_get_gid", "model_yongca"))
+    clean_terrain()
+    cat("running terrain model...\n")
+    t0 = Sys.time()
+    cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)
+    t1 = Sys.time()
+    stopCluster(pool); gc()
+    cat("Terrain model complete.\n")
+    print(t1 - t0)
 }
 
 
@@ -86,7 +99,7 @@ if (terrain) {
   cat("Terrain mvn complete.\n")
   print(t1 - t0)
 }
-stopCluster(pool)
+stopCluster(pool); gc()
 
 
 ### STEP 4: WEIGHTED MVN
@@ -98,7 +111,7 @@ if (geology & terrain) {
   t1 = Sys.time()
   cat("Geology and Terrain combination complete.\n")
   print(t1 - t0)
-  stopCluster(pool)
+  stopCluster(pool); gc()
 }
 
 ### STEP 5: OUTPUT

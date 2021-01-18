@@ -57,7 +57,7 @@ geology_model_run = function(model, only_id=F) {
     if (length(valid_idx) == 0) return(model)
     xy00 = xy00[valid_idx]
     model_params = data.frame(gid=gid_aak[valid_idx])
-    rm(gid_aak)
+    rm(gid_aak); gc()
 
     # coast and slope required for hybrid model
     # coastline distance (not much memory)
@@ -69,7 +69,7 @@ geology_model_run = function(model, only_id=F) {
     slp09c$slope[is.na(slp09c)] = (xy49[is.na(slp09c)] %over% slp_nzni_9c)$slope
     slp09c$slope[is.na(slp09c)] = 0.0
     model_params$slp09c = slp09c$slope
-    rm(xy00, xy49, slp09c)
+    rm(xy00, xy49, slp09c); gc()
 
     # run model
     model$aak_vs30[valid_idx] = model_ahdiak_get_vs30(model_params, g06mod=T, g13mod=T)
@@ -184,3 +184,5 @@ weighting_run = function(model, stdev_weight=F, k=1) {
 
   return(model)
 }
+
+gc()
