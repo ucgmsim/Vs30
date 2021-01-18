@@ -2,9 +2,9 @@
 #PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
 PLOTRES = "/run/media/vap30/Hathor/work/plotting_data/"
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
-CPT = T
-POSTERIOR_UPDATE = T
-POSTERIOR_CLUSTERS = T
+CPT = F
+POSTERIOR_UPDATE = F
+POSTERIOR_CLUSTERS = F
 # EX mvn_params.R
 # note that some if statements have been removed to match default values
 # should note down where this was and/or change back if ever modifying below values
