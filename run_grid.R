@@ -11,11 +11,13 @@ source("R/main.R")
 # don't use this many cores in cluster, leave for other users/processes
 leave_cores = 0
 # which models to generate
-geology = T
+geology = F
 terrain = T
 job_size = 3000
 # outputs placed into this directory
 OUT = "vs30out"
+
+ncores = detectCores() - leave_cores
 
 cat("loading points...\n")
 # original grid
@@ -32,7 +34,7 @@ if (! file.exists(OUT)) {dir.create(OUT)}
 # remove when not necessary to save on RAM
 clean_geology = function() {
     rm(coast_distance, coast_poly, coast_line, slp_nzni_9c, slp_nzsi_9c,
-       aak_mak, model_ahdiak_get_gid, envir=globalenv()); gc()
+       aak_map, model_ahdiak_get_gid, envir=globalenv()); gc()
 }
 clean_terrain = function() {
     rm(yca_map, model_yongca_get_gid, envir=globalenv()); gc()
@@ -42,7 +44,7 @@ clean_terrain = function() {
 if (geology) {
     clean_terrain()
     cat("geology model loading resources into cluster...\n")
-    pool = makeCluster(detectCores() - leave_cores)
+    pool = makeCluster(ncores)
     # coast dataset: ~7MB/core, slope dataset: ~110MB/core, ahdiak gid dataset ~290MB/core
     clusterExport(cl=pool, varlist=c("coast_distance", "coast_poly", "coast_line", "NZTM", "NZMG",
                                      "slp_nzni_9c", "slp_nzsi_9c", "GEOLOGY",
@@ -50,7 +52,9 @@ if (geology) {
     clean_geology()
     cat("running geology model...\n")
     t0 = Sys.time()
-    cluster_model = parLapply(cl=pool, X=cluster_model, fun=geology_model_run)
+    # chunk.size 1 should take a couple of seconds so give it 4
+    # default is large and unnecessarily uses too much RAM
+    cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=geology_model_run, chunk.size=4)
     t1 = Sys.time()
     stopCluster(pool); gc()
     cat("Geology model complete.\n")
@@ -62,17 +66,18 @@ if (geology) {
 
 ### STEP 2: TERRAIN MODEL
 if (terrain) {
-    source("R/model_yongca.R")
+    if (geology) source("R/model_yongca.R")
     cat("terrain model loading resources into cluster...\n")
     # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
-    pool = makeCluster(detectCores() - leave_cores)
+    pool = makeCluster(ncores)
     # iwahashipike dataset: ~700MB/core
     clusterExport(cl=pool, varlist=c("NZTM", "TERRAIN",
                                      "yca_map", "model_yongca_get_gid", "model_yongca"))
     clean_terrain()
     cat("running terrain model...\n")
     t0 = Sys.time()
-    cluster_model = parLapply(cl=pool, X=cluster_model, fun=terrain_model_run)
+    # terrain model is very simple, run large chunks to fill CPU capacity
+    cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=terrain_model_run, chunk.size=100)
     t1 = Sys.time()
     stopCluster(pool); gc()
     cat("Terrain model complete.\n")
@@ -82,19 +87,19 @@ if (terrain) {
 
 ### STEP 3: MVN
 cat("starting mvn cluster...\n")
-pool = makeCluster(detectCores() - leave_cores)
+pool = makeCluster(ncores)
 clusterExport(cl=pool, varlist=c("numVGpoints", "useNoisyMeasurements", "covReducPar",
                                  "useDiscreteVariogram", "GEOLOGY", "TERRAIN"))
 if (geology) {
   t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=mvn_run, vspr_aak, variogram_aak, "aak")
+  cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=mvn_run, vspr_aak, variogram_aak, "aak")
   t1 = Sys.time()
   cat("Geology mvn complete.\n")
   print(t1 - t0)
 }
 if (terrain) {
   t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=mvn_run, vspr_yca, variogram_yca, "yca")
+  cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=mvn_run, vspr_yca, variogram_yca, "yca")
   t1 = Sys.time()
   cat("Terrain mvn complete.\n")
   print(t1 - t0)
@@ -104,10 +109,10 @@ stopCluster(pool); gc()
 
 ### STEP 4: WEIGHTED MVN
 if (geology & terrain) {
-  pool = makeCluster(detectCores() - leave_cores)
+  pool = makeCluster(ncores)
   cat("running geology and terrain combination...\n")
   t0 = Sys.time()
-  cluster_model = parLapply(cl=pool, X=cluster_model, fun=weighting_run)
+  cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=weighting_run)
   t1 = Sys.time()
   cat("Geology and Terrain combination complete.\n")
   print(t1 - t0)
@@ -117,6 +122,8 @@ if (geology & terrain) {
 ### STEP 5: OUTPUT
 # combine
 cluster_model = do.call(rbind, cluster_model)
+# this is required because R is a meme
+gc()
 maps = colnames(cluster_model)[-which(colnames(cluster_model) %in% c("x", "y"))]
 # write all columns into rasters / grids
 for (z in maps) {
