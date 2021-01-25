@@ -10,15 +10,16 @@ QMAP = os.path.join(PREFIX, "qmap/qmap.shp")
 
 def gidx(points):
     """
-    Returns the category ID index for given locations. 255 for NaN.
+    Returns the category ID index (including 0 for water) for given locations.
+    TODO: if there are many points, allow creating an intermediate raster.
     points: 2D numpy array of NZTM coords
     """
-    drv = ogr.GetDriverByName("ESRI Shapefile")
-    shp = drv.Open(QMAP, gdal.GA_ReadOnly)
+    shp = ogr.Open(QMAP, gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
     values = np.empty(len(points), dtype=np.float32)
+    # ocean is NaN while water polygons are 0
     values[...] = np.nan
     pt = ogr.Geometry(ogr.wkbPoint)
     for i, p in enumerate(points):
@@ -32,51 +33,40 @@ def gidx(points):
     return values
     
 
-def gidx_grid(xmin, xmax, ymin, ymax, xd, yd):
+def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     """
     Optimised polygon interpolation using geotiff rasterisation.
     """
-    xmin = 1000000
-    xmax = 2126400
-    ymin = 4700000
-    ymax = 6338400
-    xd = 100
-    yd = 100
-    width = round((xmax - xmin) / xd)
-    height = round((ymax - ymin) / yd)
-    shp = ogr.Open(QMAP, gdal.GA_ReadOnly)
-    lay = shp.GetLayer(0)
-    
+    # make sure output raster has a nicely defined projection
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(2193)
-    ds = gdal.Rasterize("new.tif",
+    # calling Rasterize without saving result to variable will fail
+    ds = gdal.Rasterize(filename,
                         QMAP,
+                        creationOptions=["COMPRESS=DEFLATE"],
                         outputSRS=srs,
                         outputBounds=[xmin, ymin, xmax, ymax],
                         xRes=xd,
                         yRes=yd,
-                        #noData=255,
-                        targetAlignedPixels=True,
+                        noData=255,
+                        targetAlignedPixels=False,
                         attribute="gid",
-                        outputType=gdal.GDT_Float32)
-    
+                        outputType=gdal.GDT_Byte)
+    ds = None
+
+
 
 # grid setup
-x0 = 1000050
-xn = 2126350
-y0 = 4700050
-yn = 6338350
+x0 = 1000000
+xn = 2126400
+y0 = 4700000
+yn = 6338400
 xd = 100
 yd = 100
 nx = round((xn - x0) / xd + 1)
 ny = round((yn - y0) / yd + 1)
-
-
-
-exit()
 # run
-points = np.vstack(np.mgrid[x0:xn + 1:xd,y0:yn + 1:yd].T)
-gids = gidx(points)
+gids = gidx_grid("geology.tiff", x0, xn, y0, yn, xd, yd)
 model = model_posterior_paper()
 vals = gidx2val(model, gids)
 save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
