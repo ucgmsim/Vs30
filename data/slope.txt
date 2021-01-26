@@ -1,0 +1,18 @@
+Slope for input to Geology Model
+
+1. download slope tiffs (used NZGD2000 EPSG:2193)
+https://lris.scinfo.org.nz/layer/131-nzdem-north-island-25-metre/
+https://lris.scinfo.org.nz/layer/127-nzdem-south-island-25-metre/
+
+2. clean
+found some broken rasters in south island when opened in qgis
+remove broken ones, tiles still had full coverage
+
+3. combine
+nodata value is taken from one of the tiles using gdalinfo
+gdal_merge.py -o nzdem.tif -co COMPRESS=DEFLATE -ot Float32 -n -3.4028234663852886e+38 -a_nodata -3.4028234663852886e+38 ni/*.tif si/*.tif
+
+4. calculate slope
+gdaldem slope nzdem.tif nzslope.tif -co COMPRESS=DEFLATE -s 1 -p -compute_edges -alg Horn
+
+5. downsampling
