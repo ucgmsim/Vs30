@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 from osgeo import gdal, ogr, osr
+gdal.UseExceptions()
 
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 QMAP = os.path.join(PREFIX, "qmap/qmap.shp")

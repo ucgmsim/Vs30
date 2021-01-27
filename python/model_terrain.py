@@ -3,6 +3,7 @@ import os
 
 import numpy as np
 from osgeo import gdal, osr
+gdal.UseExceptions()
 
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 YCA_MAP = os.path.join(PREFIX, "IwahashiPike_NZ_100m_16.tif")
