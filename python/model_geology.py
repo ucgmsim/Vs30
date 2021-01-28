@@ -128,22 +128,23 @@ def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
 
 def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     # calling Rasterize without saving result to variable will fail
-    ds = gdal.Rasterize(filename,
-                        QMAP,
+    ds = gdal.Rasterize("coast.tif",
+                        COAST,
                         creationOptions=["COMPRESS=DEFLATE"],
                         outputBounds=[xmin, ymin, xmax, ymax],
                         xRes=xd,
                         yRes=yd,
                         noData=0,
                         burnValues=1,
-                        outputType=gdal.GDT_Byte)
+                        outputType=gdal.GetDataTypeByName("UInt16"))
+    # distance calculation from outside polygons (0 value)
+    band = ds.GetRasterBand(1)
+    # ComputeProximity doesn't respect any NODATA options, add NODATA value after
+    ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
+    # 0 is outside polygon
+    #dstband.SetNoDataValue(0)
+    band = None
     ds = None
-    # distance calculation
-    # TODO: follow gdal_proximity.py coast.tif test.tif -co COMPRESS=DEFLATE -distunits GEO -ot Uint16 -values 0 -use_input_nodata YES
-    ds = gdal.ComputeProximity(srcband, dstband, ["USE_INPUT_NODATA=YES"])
-    ds = None
-    srcband = None
-    dstband = None
 
 
 # grid setup
@@ -156,8 +157,8 @@ yd = 100
 nx = round((xn - x0) / xd + 1)
 ny = round((yn - y0) / yd + 1)
 # run
-gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
+#gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
 test = coast_distance_grid("coast.tif", x0, xn, y0, yn, xd, yd)
-model = model_posterior_paper()
-vals = gidx2val(model, gids)
-save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
+#model = model_posterior_paper()
+#vals = gidx2val(model, gids)
+#save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
