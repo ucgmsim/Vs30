@@ -1,26 +1,24 @@
 Slope for input to Hybrid Geology Model
 
-1. download slope tiffs (used NZGD2000/NZTM EPSG:2193)
+1. download slope tiffs (NZGD2000/NZTM EPSG:2193 for consistency)
+LRIS seems to have some issues though
 https://lris.scinfo.org.nz/layer/131-nzdem-north-island-25-metre/
 https://lris.scinfo.org.nz/layer/127-nzdem-south-island-25-metre/
 LINZ has an 8m version can be downloaded with 15GB limit if selection cropped first
 https://data.linz.govt.nz/layer/51768-nz-8m-digital-elevation-model-2012/
 
-2. clean
-found some broken rasters in south island when opened in qgis
-most likely issues converting from original NZGD49 EPSG:27200
-remove broken ones, tiles still had full coverage
-
-3. combine
+2. combine
 25m dataset downloaded in EPSG:2193 has horizontals different between tiles, still needed to use -tap to get vertical alignment correct
 gdal_merge.py -tap -o nzdem.tif -co COMPRESS=DEFLATE -ot Float32 -n -3.4028234663852886e+38 -a_nodata -3.4028234663852886e+38 ni/*.tif si/*.tif
 for the 8m dataset -n and -a_nodata should be -32767, -co BIGTIFF=YES and -tap is not necessary
-gdal_merge.py -v -o nzdem.tif -co COMPRESS=DEFLATE -ot Float32 -n -32767 -a_nodata -32767 ni/*.tif si/*.tif
+gdal_merge.py -v -o nzdem.tif -co COMPRESS=DEFLATE -co BIGTIFF=YES -ot Float32 -n -32767 -a_nodata -32767 ni/*.tif si/*.tif
 
-4. downsample (optional)
-original code used 270m EPSG:27200 resolution (billinear resampling)
+3. downsample
+original code used 270m EPSG:27200 resolution (bilinear resampling)
+keeping 270m for consistency with other research but keep EPSG:2193
+gdal_translate nzdem.tif nzdem9c.tif -tr 270 270 -r bilinear -co COMPRESS=DEFLATE
 
-5. calculate slope
+4. calculate slope
 the -s 100 here is to make output units as 0.01 per percentage instead of 1/percentage
-compute edges makes sure there are values on the coast instead of nan. wasn't used originally
-gdaldem slope nzdem.tif slope.tif -co COMPRESS=DEFLATE -s 100 -p -compute_edges -alg Horn
+compute edges makes sure there are values on the coast instead of nan. wasn't used originally, not needed because nans treated as 0 in code
+gdaldem slope nzdem9c.tif slope.tif -co COMPRESS=DEFLATE -s 100 -p -alg Horn

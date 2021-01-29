@@ -5,9 +5,10 @@ import numpy as np
 from osgeo import gdal, ogr, osr
 gdal.UseExceptions()
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 QMAP = os.path.join(PREFIX, "qmap/qmap.shp")
-COAST = os.path.join(PREFIX, "../Paths/lds-nz-coastlines-and-islands/EPSG_2193/nz-coastlines-and-islands-polygons-topo-1500k.shp")
+COAST = os.path.join(SCRIPT_DIR, "../data/coast/nz-coastlines-and-islands-polygons-topo-1500k.shp")
 
 
 def model_prior():
@@ -107,8 +108,10 @@ def gidx(points):
 
 def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     """
-    Optimised polygon interpolation using geotiff rasterisation.
+    Optimised polygon search using geotiff rasterisation.
     """
+    if os.path.isfile(filename):
+        os.remove(filename)
     # make sure output raster has a nicely defined projection
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(2193)
@@ -127,8 +130,13 @@ def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
 
 
 def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
-    # calling Rasterize without saving result to variable will fail
-    ds = gdal.Rasterize("coast.tif",
+    """
+    Calculate coast distance needed for G06 and G13 mods.
+    """
+    if os.path.isfile(filename):
+        os.remove(filename)
+    # only need UInt16 (~65k max val) because coast only used 8->20k
+    ds = gdal.Rasterize(filename,
                         COAST,
                         creationOptions=["COMPRESS=DEFLATE"],
                         outputBounds=[xmin, ymin, xmax, ymax],
@@ -139,12 +147,18 @@ def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
                         outputType=gdal.GetDataTypeByName("UInt16"))
     # distance calculation from outside polygons (0 value)
     band = ds.GetRasterBand(1)
-    # ComputeProximity doesn't respect any NODATA options, add NODATA value after
+    # ComputeProximity doesn't respect any NODATA options (writing into self though)
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
-    # 0 is outside polygon
-    #dstband.SetNoDataValue(0)
     band = None
     ds = None
+
+def values_grid():
+    # sample: /usr/lib/python3.8/site-packages/osgeo/utils/gdal_calc.py
+    
+    # command line example
+    gdal_calc.py -A geology.tif -B coast.tif --outfile="model.tif" --calc "numpy.where(A==4, numpy.maximum(240, numpy.minimum(500, 240 + (500-240) * (B.astype(numpy.float32)-8000)/(20000-8000))), numpy.where(A==10, numpy.maximum(197, numpy.minimum(500, 197 + (500-197) * (B.astype(numpy.float32)-8000)/(20000-8000))), <MODEL>[numpy.where(A!=255, A, 0)]))"
+    # saved as float32, nodata something negative
+    # 2nd step: slope based modifications
 
 
 # grid setup
@@ -157,7 +171,7 @@ yd = 100
 nx = round((xn - x0) / xd + 1)
 ny = round((yn - y0) / yd + 1)
 # run
-#gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
+gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
 test = coast_distance_grid("coast.tif", x0, xn, y0, yn, xd, yd)
 #model = model_posterior_paper()
 #vals = gidx2val(model, gids)
