@@ -1,14 +1,16 @@
-
 import os
 
 import numpy as np
 from osgeo import gdal, ogr, osr
+
 gdal.UseExceptions()
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 QMAP = os.path.join(PREFIX, "qmap/qmap.shp")
-COAST = os.path.join(SCRIPT_DIR, "../data/coast/nz-coastlines-and-islands-polygons-topo-1500k.shp")
+COAST = os.path.join(PREFIX, "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp")
+SLOPE = os.path.join(PREFIX, "slope.tif")
+GEOLOGY_NODATA = 255
+HYBRID_NODATA = -32767
 
 
 def model_prior():
@@ -104,7 +106,7 @@ def gidx(points):
             values[i] = f.GetField(col)
 
     return values
-    
+
 
 def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     """
@@ -116,16 +118,18 @@ def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(2193)
     # calling Rasterize without saving result to variable will fail
-    ds = gdal.Rasterize(filename,
-                        QMAP,
-                        creationOptions=["COMPRESS=DEFLATE"],
-                        outputSRS=srs,
-                        outputBounds=[xmin, ymin, xmax, ymax],
-                        xRes=xd,
-                        yRes=yd,
-                        noData=255,
-                        attribute="gid",
-                        outputType=gdal.GDT_Byte)
+    ds = gdal.Rasterize(
+        filename,
+        QMAP,
+        creationOptions=["COMPRESS=DEFLATE"],
+        outputSRS=srs,
+        outputBounds=[xmin, ymin, xmax, ymax],
+        xRes=xd,
+        yRes=yd,
+        noData=GEOLOGY_NODATA,
+        attribute="gid",
+        outputType=gdal.GDT_Byte,
+    )
     ds = None
 
 
@@ -136,15 +140,17 @@ def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     if os.path.isfile(filename):
         os.remove(filename)
     # only need UInt16 (~65k max val) because coast only used 8->20k
-    ds = gdal.Rasterize(filename,
-                        COAST,
-                        creationOptions=["COMPRESS=DEFLATE"],
-                        outputBounds=[xmin, ymin, xmax, ymax],
-                        xRes=xd,
-                        yRes=yd,
-                        noData=0,
-                        burnValues=1,
-                        outputType=gdal.GetDataTypeByName("UInt16"))
+    ds = gdal.Rasterize(
+        filename,
+        COAST,
+        creationOptions=["COMPRESS=DEFLATE"],
+        outputBounds=[xmin, ymin, xmax, ymax],
+        xRes=xd,
+        yRes=yd,
+        noData=0,
+        burnValues=1,
+        outputType=gdal.GetDataTypeByName("UInt16"),
+    )
     # distance calculation from outside polygons (0 value)
     band = ds.GetRasterBand(1)
     # ComputeProximity doesn't respect any NODATA options (writing into self though)
@@ -152,13 +158,115 @@ def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     band = None
     ds = None
 
-def values_grid():
-    # sample: /usr/lib/python3.8/site-packages/osgeo/utils/gdal_calc.py
+
+def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True, g13mod=True):
+    if os.path.isfile(filename):
+        os.remove(filename)
+    # geology grid
+    gds = gdal.Open(geology, gdal.GA_ReadOnly)
+    g_band = gds.GetRasterBand(1)
+    g_nodata = g_band.GetNoDataValue()
+    nx = gds.RasterXSize
+    ny = gds.RasterYSize
+    # coastline distances
+    # TODO: determine coast distances here
+    if g6mod or g13mod:
+        cds = gdal.Open(coast, gdal.GA_ReadOnly)
+        c_band = cds.GetRasterBand(1)
+        c_nodata = c_band.GetNoDataValue()
+    if hybrid:
+        sds = gdal.Open(SLOPE, gdal.GA_ReadOnly)
+        s_band = sds.GetRasterBand(1)
+        s_nodata = s_band.GetNoDataValue()
+    # output
+    driver = gdal.GetDriverByName("GTiff")
+    ods = driver.Create(
+        filename,
+        xsize=nx,
+        ysize=ny,
+        bands=2,
+        eType=gdal.GDT_Float32,
+        options=["COMPRESS=DEFLATE"],
+    )
+    ods.SetGeoTransform(gds.GetGeoTransform())
+    ods.SetProjection(gds.GetProjection())
+    band_vs30 = ods.GetRasterBand(1)
+    band_stdv = ods.GetRasterBand(2)
+    band_vs30.SetNoDataValue(HYBRID_NODATA)
+    band_stdv.SetNoDataValue(HYBRID_NODATA)
+
+    # model version for indexing (water id 0 and source NODATA -> NODATA)
+    vs30 = np.append(HYBRID_NODATA, model[:, 0], dtype=np.float32)
+    stdv = np.append(HYBRID_NODATA, model[:, 1], dtype=np.float32)
+    if hybrid:
+        stdv[np.array([2, 3, 4, 6])] *= np.array([0.4888, 0.7103, 0.9988, 0.9348])
+
+    # processing chunk/block sizing
+    block = band_vs30.GetBlockSize()
+    nxb = (int)((nx + block[0] - 1) / block[0])
+    nyb = (int)((ny + block[1] - 1) / block[1])
+
+    for x in range(nxb):
+        # offset
+        xoff = x * block[0]
+        # reduce block size if last block (which may be smaller)
+        if x == nxb - 1:
+            block[0] = nx - x * block[0]
+        # reset y-block size
+        block_y = block[1]
+
+        for y in range(nyb):
+            # offset
+            yoff = y * block[1]
+            # last block may be smaller
+            if y == nyb - 1:
+                block_y = ny - y * block[1]
+
+            # determine results on block
+            g_val = g_band.ReadAsArray(
+                xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+            )
+            # treat ocean (out of polygon) as water (id 0)
+            idx = np.where(g_val != g_nodata, g_val, 0)
+            result_vs30 = vs30[idx]
+            result_stdv = stdv[idx]
+            if hybrid:
+                # TODO: hybrid slope table mods
+            if g6mod or g13mod:
+                c_val = c_band.ReadAsArray(
+                    xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+                ).astype(np.float32)
+                if g6mod:
+                    result_vs30 = np.where(
+                        g_val == 4,
+                        np.maximum(
+                            240,
+                            np.minimum(
+                                500, 240 + (500 - 240) * (c_val - 8000) / (20000 - 8000)
+                            ),
+                        ),
+                        result_vs30,
+                    )
+                if g13mod:
+                    result_vs30 = np.where(
+                        g_val == 10,
+                        np.maximum(
+                            197,
+                            np.minimum(
+                                500, 197 + (500 - 197) * (c_val - 8000) / (20000 - 8000)
+                            ),
+                        ),
+                        result_vs30,
+                    )
+
+            # write results
+            band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
+            band_stdv.WriteArray(result_stdv, xoff=xoff, yoff=yoff)
     
-    # command line example
-    gdal_calc.py -A geology.tif -B coast.tif --outfile="model.tif" --calc "numpy.where(A==4, numpy.maximum(240, numpy.minimum(500, 240 + (500-240) * (B.astype(numpy.float32)-8000)/(20000-8000))), numpy.where(A==10, numpy.maximum(197, numpy.minimum(500, 197 + (500-197) * (B.astype(numpy.float32)-8000)/(20000-8000))), <MODEL>[numpy.where(A!=255, A, 0)]))"
-    # saved as float32, nodata something negative
-    # 2nd step: slope based modifications
+    # close
+    band_vs30 = None
+    band_stdv = None
+    ods = None
 
 
 # grid setup
@@ -173,6 +281,6 @@ ny = round((yn - y0) / yd + 1)
 # run
 gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
 test = coast_distance_grid("coast.tif", x0, xn, y0, yn, xd, yd)
-#model = model_posterior_paper()
-#vals = gidx2val(model, gids)
-#save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
+model = model_posterior_paper()
+vals = gidx2val_grid("model.tif", "geology.tif", model, coast="coast.tif")
+# save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
