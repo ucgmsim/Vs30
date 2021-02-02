@@ -1,12 +1,14 @@
-
 import os
+from subprocess import call
 
 import numpy as np
-from osgeo import gdal, osr
+from osgeo import gdal, gdalconst, osr
+
 gdal.UseExceptions()
 
-PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
-YCA_MAP = os.path.join(PREFIX, "IwahashiPike_NZ_100m_16.tif")
+IWAHASHI_PIKE = "IwahashiPike.tif"
+IP_NODATA = 255
+TERRAIN_NODATA = -32767
 
 
 def model_prior():
@@ -82,75 +84,85 @@ def model_posterior_paper():
     # fmt: on
 
 
-def gidx(points):
+def mid(points):
     """
-    Returns the category ID index for given locations. 255 for NaN.
+    Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    raster = gdal.Open(YCA_MAP, gdal.GA_ReadOnly)
+    raster = gdal.Open(IWAHASHI_PIKE, gdal.GA_ReadOnly)
     transform = raster.GetGeoTransform()
     band = raster.GetRasterBand(1)
-    # 255, convert it to raster data type dynamically?
     nodata = int(band.GetNoDataValue())
 
-    # np.round would give duplicate pairs in some (default) grids
-    # just floor because coords are left edges of pixels
-    # origin 50 metres off, spacing 100
     xpos = np.floor((points[:, 0] - transform[0]) / transform[1]).astype(np.int32)
     ypos = np.floor((points[:, 1] - transform[3]) / transform[5]).astype(np.int32)
-    # assume not given values out of range for this raster
-    # this raster gives uint8 values, 255 for nan
+    # TODO: assuming not given values out of range for this raster
     values = band.ReadAsArray()[ypos, xpos]
     # minus 1 because ids start at 1
-    values = np.where(values == nodata, nodata, values - 1)
+    values = np.where(values == nodata, np.nan, values - 1)
 
     return values
 
 
-def gidx2val(model, gidx):
+def mid_map(args):
     """
-    
+    Calculate id at map points by resampling / resizing origin id map.
+    """
+    path = os.path.join(args.wd, "tid.tif")
+    gdal.Warp(
+        path,
+        os.path.join(args.mapdata, IWAHASHI_PIKE),
+        creationOptions=["COMPRESS=DEFLATE"],
+        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
+        xRes=args.xd,
+        yRes=args.yd,
+        resampleAlg=gdalconst.GRIORA_NearestNeighbour,
+    )
+    return path
+
+
+def mid2val(mid, model):
+    """
+    Convert IDs returned by the mid function into model values.
     """
     vals = np.empty((len(gidx), 2), dtype=np.float32)
     vals[...] = np.nan
 
-    valid_idx = gidx != 255
-    vals[valid_idx] = model[gidx[valid_idx]]
+    valid_idx = np.invert(np.isnan(gid))
+    vals[valid_idx] = model[gid[valid_idx]]
 
     return vals
 
 
-def save(vals, x0, y0, nx, ny, xd, yd, filename):
-    driver = gdal.GetDriverByName("GTiff")
-    # https://gdal.org/drivers/raster/gtiff.html
-    # TILED=YES much smaller (entire nan blocks), slower with eg: QGIS
-    # COMPRESS=DEFLATE smaller, =LZW larger
-    gfile = driver.Create(filename, xsize=nx, ysize=ny, bands=1,
-                          eType=gdal.GDT_Float32, options=["COMPRESS=DEFLATE"])
-    gfile.SetGeoTransform([x0, xd, 0, y0, 0, yd])
-    # projection
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(2193)
-    gfile.SetProjection(srs.ExportToWkt())
-    # data
-    gfile.GetRasterBand(1).WriteArray(vals.reshape(ny, nx))
-    # close file
-    gfile = None
-    
+def model_map(args, model):
+    path = os.path.join(args.wd, "terrain.tif")
+    # terrain IDs for given map spec
+    tid_tif = mid_map(args)
 
-# grid setup
-x0 = 1000050
-xn = 2126350
-y0 = 4700050
-yn = 6338350
-xd = 100
-yd = 100
-nx = round((xn - x0) / xd + 1)
-ny = round((yn - y0) / yd + 1)
+    # model version for indexing (index 0 for NODATA)
+    vs30 = np.append(TERRAIN_NODATA, model[:, 0]).astype(np.float32)
+    stdv = np.append(TERRAIN_NODATA, model[:, 1]).astype(np.float32)
+    # string array
+    vs30 = ",".join([f"{x:.8f}" for x in vs30])
+    stdv = ",".join([f"{x:.8f}" for x in stdv])
+    # string expression to pass into calc
+    vs30 = f"numpy.array([{vs30}], dtype=numpy.float32)[numpy.where(A == {IP_NODATA}, 0, A)]"
+    stdv = f"numpy.array([{stdv}], dtype=numpy.float32)[numpy.where(A == {IP_NODATA}, 0, A)]"
 
-# run
-points = np.vstack(np.mgrid[x0:xn + 1:xd,y0:yn + 1:yd].T)
-gids = gidx(points)
-model = model_posterior_paper()
-vals = gidx2val(model, gids)
-save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
+    # simple formula so just call command line
+    call(
+        [
+            "gdal_calc.py",
+            "-A",
+            tid_tif,
+            "--outfile",
+            path,
+            f"--calc={vs30}",
+            f"--calc={stdv}",
+            f"--NoDataValue={TERRAIN_NODATA}",
+            "--type=Float32",
+            "--co=COMPRESS=DEFLATE",
+            "--quiet",
+        ]
+    )
+    return path

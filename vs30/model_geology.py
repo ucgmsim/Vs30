@@ -1,14 +1,14 @@
 import os
 
 import numpy as np
-from osgeo import gdal, ogr, osr
+from osgeo import gdal, gdalconst, ogr, osr
 
 gdal.UseExceptions()
 
-PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
-QMAP = os.path.join(PREFIX, "qmap/qmap.shp")
-COAST = os.path.join(PREFIX, "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp")
-SLOPE = os.path.join(PREFIX, "slope.tif")
+
+QMAP = "qmap/qmap.shp"
+COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
+SLOPE = "slope.tif"
 GEOLOGY_NODATA = 255
 HYBRID_NODATA = -32767
 
@@ -83,7 +83,7 @@ def model_posterior_paper():
     # fmt: on
 
 
-def gidx(points):
+def mid(points):
     """
     Returns the category ID index (including 0 for water) for given locations.
     TODO: if there are many points, allow creating an intermediate raster.
@@ -108,45 +108,44 @@ def gidx(points):
     return values
 
 
-def gidx_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
+def mid_map(args):
     """
     Optimised polygon search using geotiff rasterisation.
     """
-    if os.path.isfile(filename):
-        os.remove(filename)
+    path = os.path.join(args.wd, "gid.tif")
     # make sure output raster has a nicely defined projection
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(2193)
     # calling Rasterize without saving result to variable will fail
     ds = gdal.Rasterize(
-        filename,
-        QMAP,
+        path,
+        os.path.join(args.mapdata, QMAP),
         creationOptions=["COMPRESS=DEFLATE"],
         outputSRS=srs,
-        outputBounds=[xmin, ymin, xmax, ymax],
-        xRes=xd,
-        yRes=yd,
+        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
+        xRes=args.xd,
+        yRes=args.yd,
         noData=GEOLOGY_NODATA,
         attribute="gid",
         outputType=gdal.GDT_Byte,
     )
     ds = None
+    return path
 
 
-def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
+def coast_distance_map(args):
     """
     Calculate coast distance needed for G06 and G13 mods.
     """
-    if os.path.isfile(filename):
-        os.remove(filename)
+    path = os.path.join(args.wd, "coast.tif")
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
-        filename,
-        COAST,
+        path,
+        os.path.join(args.mapdata, COAST),
         creationOptions=["COMPRESS=DEFLATE"],
-        outputBounds=[xmin, ymin, xmax, ymax],
-        xRes=xd,
-        yRes=yd,
+        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
+        xRes=args.xd,
+        yRes=args.yd,
         noData=0,
         burnValues=1,
         outputType=gdal.GetDataTypeByName("UInt16"),
@@ -157,33 +156,49 @@ def coast_distance_grid(filename, xmin, xmax, ymin, ymax, xd, yd):
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
     band = None
     ds = None
+    return path
 
 
-def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True, g13mod=True):
-    if os.path.isfile(filename):
-        os.remove(filename)
+def slope_map(args):
+    """
+    Calculate slope at map points by resampling / resizing origin slope map.
+    """
+    path = os.path.join(args.wd, "slope.tif")
+    gdal.Warp(
+        path,
+        os.path.join(args.mapdata, SLOPE),
+        creationOptions=["COMPRESS=DEFLATE"],
+        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
+        xRes=args.xd,
+        yRes=args.yd,
+        resampleAlg=gdalconst.GRIORA_NearestNeighbour,
+    )
+    return path
+
+
+def model_map(args, model):
+    path = os.path.join(args.wd, "geology.tif")
     # geology grid
-    gds = gdal.Open(geology, gdal.GA_ReadOnly)
+    gid_tif = mid_map(args)
+    gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)
     g_band = gds.GetRasterBand(1)
     g_nodata = g_band.GetNoDataValue()
-    nx = gds.RasterXSize
-    ny = gds.RasterYSize
     # coastline distances
-    # TODO: determine coast distances here
-    if g6mod or g13mod:
-        cds = gdal.Open(coast, gdal.GA_ReadOnly)
+    if args.g6mod or args.g13mod:
+        cdist_tif = coast_distance_map(args)
+        cds = gdal.Open(cdist_tif, gdal.GA_ReadOnly)
         c_band = cds.GetRasterBand(1)
-        c_nodata = c_band.GetNoDataValue()
-    if hybrid:
-        sds = gdal.Open(SLOPE, gdal.GA_ReadOnly)
+    if args.ghybrid:
+        slope_tif = slope_map(args)
+        sds = gdal.Open(slope_tif, gdal.GA_ReadOnly)
         s_band = sds.GetRasterBand(1)
         s_nodata = s_band.GetNoDataValue()
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
-        filename,
-        xsize=nx,
-        ysize=ny,
+        path,
+        xsize=args.nx,
+        ysize=args.ny,
         bands=2,
         eType=gdal.GDT_Float32,
         options=["COMPRESS=DEFLATE"],
@@ -196,31 +211,30 @@ def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True,
     band_stdv.SetNoDataValue(HYBRID_NODATA)
 
     # model version for indexing (water id 0 and source NODATA -> NODATA)
-    vs30 = np.append(HYBRID_NODATA, model[:, 0], dtype=np.float32)
-    stdv = np.append(HYBRID_NODATA, model[:, 1], dtype=np.float32)
-    if hybrid:
+    vs30 = np.append(HYBRID_NODATA, model[:, 0]).astype(np.float32)
+    stdv = np.append(HYBRID_NODATA, model[:, 1]).astype(np.float32)
+    if args.ghybrid:
+        # sigma reduction factors
         stdv[np.array([2, 3, 4, 6])] *= np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
     # processing chunk/block sizing
     block = band_vs30.GetBlockSize()
-    nxb = (int)((nx + block[0] - 1) / block[0])
-    nyb = (int)((ny + block[1] - 1) / block[1])
+    nxb = (int)((args.nx + block[0] - 1) / block[0])
+    nyb = (int)((args.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
-        # offset
         xoff = x * block[0]
-        # reduce block size if last block (which may be smaller)
+        # last block may be smaller
         if x == nxb - 1:
-            block[0] = nx - x * block[0]
-        # reset y-block size
+            block[0] = args.nx - x * block[0]
+        # reset y block size
         block_y = block[1]
 
         for y in range(nyb):
-            # offset
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = ny - y * block[1]
+                block_y = args.ny - y * block[1]
 
             # determine results on block
             g_val = g_band.ReadAsArray(
@@ -230,13 +244,14 @@ def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True,
             idx = np.where(g_val != g_nodata, g_val, 0)
             result_vs30 = vs30[idx]
             result_stdv = stdv[idx]
-            if hybrid:
+            if args.ghybrid:
                 # TODO: hybrid slope table mods
-            if g6mod or g13mod:
+                pass
+            if args.g6mod or args.g13mod:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 ).astype(np.float32)
-                if g6mod:
+                if args.g6mod:
                     result_vs30 = np.where(
                         g_val == 4,
                         np.maximum(
@@ -247,7 +262,7 @@ def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True,
                         ),
                         result_vs30,
                     )
-                if g13mod:
+                if args.g13mod:
                     result_vs30 = np.where(
                         g_val == 10,
                         np.maximum(
@@ -262,25 +277,8 @@ def gidx2val_grid(filename, geology, model, coast=None, hybrid=True, g6mod=True,
             # write results
             band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
             band_stdv.WriteArray(result_stdv, xoff=xoff, yoff=yoff)
-    
     # close
     band_vs30 = None
     band_stdv = None
     ods = None
-
-
-# grid setup
-x0 = 1000000
-xn = 2126400
-y0 = 4700000
-yn = 6338400
-xd = 100
-yd = 100
-nx = round((xn - x0) / xd + 1)
-ny = round((yn - y0) / yd + 1)
-# run
-gids = gidx_grid("geology.tif", x0, xn, y0, yn, xd, yd)
-test = coast_distance_grid("coast.tif", x0, xn, y0, yn, xd, yd)
-model = model_posterior_paper()
-vals = gidx2val_grid("model.tif", "geology.tif", model, coast="coast.tif")
-# save(vals[:, 0], x0, y0, nx, ny, xd, yd, "terrain.tif")
+    return path
