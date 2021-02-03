@@ -1,14 +1,17 @@
-
 from math import sqrt
 
 import numpy as np
 import pandas as pd
-from pyproj import Proj, transform
+from pyproj import Transformer
 from scipy.spatial import distance_matrix
 
-# requires pyproj 6
-wgs84 = Proj("epsg:4326")
-nzmg = Proj("epsg:27200")
+DATA_CPT = "data/cptvs30.ssv"
+DATA_KAISERETAL = "data/20170817_vs_allNZ_duplicatesCulled.ll"
+DATA_MCGANN = "data/McGann_cptVs30data.csv"
+DATA_WOTHERSPOON = "data/Characterised Vs30 Canterbury_June2017_KFed.csv"
+
+wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
+nzmg2nztm = Transformer.from_crs(27200, 2193, always_xy=True)
 
 
 def downsample_mcg(df, res=1000):
@@ -18,11 +21,11 @@ def downsample_mcg(df, res=1000):
     """
 
     max_dist = sqrt(res ** 2 * 2) / 2
-    x = df["Easting"].values
-    y = df["Northing"].values
+    x = df["easting"].values
+    y = df["northing"].values
 
     # trying to copy R logic - extents
-    # works for this dataset, needs testing for others
+    # works for this dataset
     xmin = min(x)
     nx = round((max(x) - xmin) / res)
     if ((max(x) - xmin) / res) % 1 < 0.5:
@@ -52,108 +55,126 @@ def downsample_mcg(df, res=1000):
     # cut out if no points within search area
     nn = nn[dist[np.arange(nn.size), nn] <= max_dist]
 
-    return df.iloc[nn]
+    # remove duplicate points from downsample algorithm
+    mcg = df.iloc[nn]
+    return mcg[~mcg.duplicated()]
 
 
-def load_vs(downsample_mcgann=True):
+def load_vs(cpt=False, downsample_mcgann=True):
     """
-    As of 2017-11 this comprises 3 sources
-    McGann Vs30 map (McGann, submitted, 2016 SDEE "Development of regional Vs30 Model and typical profiles... Christchurch CPT correlation")
-    Kaiser et al.
-    Internal communication with Wotherspoon: Characterised Vs30 Canterbury_June2017_KFed.csv
+    Load measured sites. Either newer CPT based or paper version using 3 sources.
     """
 
-    # load each Vs data source.
+    if cpt:
+        return load_cpt_vs()
+
+    # load each Vs data source
     mcgann = load_mcgann_vs(downsample=downsample_mcgann)
     wotherspoon = load_wotherspoon_vs()
     kaiseretal = load_kaiseretal_vs()
 
-    vs = pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
+    # remove Kaiser Q3 unless station name is 3 chars long
+    kaiseretal = kaiseretal[(kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)]
 
-    return vs
+    return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
 
+
+def load_cpt_vs():
+    """
+    Newer collection of Vs30 from CPT data.
+    """
+    cpt = pd.read_csv(
+            DATA_CPT,
+            sep=" ",
+            usecols=[0, 1, 2],
+            names=["easting", "northing", "vs30"],
+            skiprows=1,
+            engine="c",
+            dtype=np.float32,
+        )
+    # remove rows with no vs30 value
+    cpt = cpt[~np.isnan(cpt.vs30)]
+
+    cpt["uncertainty"] = np.float32(0.5)
+
+    return cpt
 
 def load_mcgann_vs(downsample=True):
-    # note this uses nzmg cols, wotherspoon starts with lon/lat and goes to nzmg
+    """
+    McGann Vs30 map
+    (McGann, submitted, 2016 SDEE
+    "Development of regional Vs30 Model and typical profiles... Christchurch CPT correlation")
+    """
 
-    PATH = "../Vs30_data/McGann_cptVs30data.csv"
+    # downsampling was originally done on the NZMG grid
     mcgann = pd.read_csv(
-        PATH,
-        usecols=[3, 4, 7],
-        names=["Easting", "Northing", "Vs30"],
+        DATA_MCGANN,
+        usecols=[3, 4, 7] if downsample else [5, 6, 7],
+        names=["easting", "northing", "vs30"],
         skiprows=1,
         engine="c",
         dtype=np.float32,
     )
-
-    mcgann["Uncertainty"] = np.float32(0.2)
-
-    # apply downsampling criterion to McGann CPT-based data
     if downsample:
-        return downsample_mcg(mcgann)
+        mcgann = downsample_mcg(mcgann)
+        mcgann["easting"], mcgann["northing"] = nzmg2nztm.transform(
+            mcgann["easting"].values, mcgann["northing"].values
+        )
+
+    mcgann["uncertainty"] = np.float32(0.2)
+
     return mcgann
 
 
 def load_wotherspoon_vs():
-    """Liam Wotherspoon's spreadsheet for the Canterbury region."""
+    """
+    Internal communication with Wotherspoon: Characterised Vs30
+    """
 
-    PATH = "../Vs30_data/Characterised Vs30 Canterbury_June2017_KFed.csv"
     wotherspoon = pd.read_csv(
-        PATH,
+        DATA_WOTHERSPOON,
         sep="\t",
         usecols=[2, 3, 4],
-        names=["Northing", "Easting", "Vs30"],
+        names=["northing", "easting", "vs30"],
         skiprows=1,
         engine="c",
         dtype=np.float32,
     )
-    easts, norths = transform(
-        wgs84, nzmg, wotherspoon["Northing"].values, wotherspoon["Easting"].values
+    wotherspoon["easting"], wotherspoon["northing"] = wgs2nztm.transform(
+        wotherspoon["easting"].values, wotherspoon["northing"].values
     )
-    wotherspoon["Easting"] = easts
-    wotherspoon["Northing"] = norths
 
-    wotherspoon["Uncertainty"] = np.float32(0.2)
+    wotherspoon["uncertainty"] = np.float32(0.2)
 
     return wotherspoon
 
 
 def load_kaiseretal_vs():
-    """Values from Kaiser et al. (2017)"""
+    """
+    Values from Kaiser et al. (2017)
+    """
 
     # with removed duplicate points
-    PATH = "../Vs30_data/20170817_vs_allNZ_duplicatesCulled.ll"
     kaiseretal = pd.read_csv(
-        PATH,
-        usecols=[1, 2, 3, 4],
-        names=["Easting", "Northing", "Vs30", "Q"],
+        DATA_KAISERETAL,
+        usecols=[0, 1, 2, 3, 4],
+        names=["station", "easting", "northing", "vs30", "q"],
         skiprows=5,
         engine="c",
-        dtype={"Easting": np.float32, "Northing": np.float32, "Vs30": np.float32},
-        converters={"Q": lambda text: int(text.strip()[2])},
+        dtype={"easting": np.float32, "northing": np.float32, "vs30": np.float32},
+        converters={"q": lambda text: int(text.strip()[2]), "station": str.strip},
     )
-    easts, norths = transform(
-        wgs84, nzmg, kaiseretal["Northing"].values, kaiseretal["Easting"].values
+    kaiseretal["easting"], kaiseretal["northing"] = wgs2nztm.transform(
+        kaiseretal["easting"].values, kaiseretal["northing"].values
     )
-    kaiseretal["Easting"] = easts
-    kaiseretal["Northing"] = norths
 
-    kaiseretal["Uncertainty"] = np.float32(np.nan)
-    # Kaiser et al. states:
-    #   "[Q1, Q2 and Q3] correspond to approximate uncertainties
-    #    of <10%, 10-20% and >20% respectively."
-    #
-    #
-    # I choose the following values:
-    #
-    #     10%    :   ln(1.1) ~= 0.1
-    #     20%    :   ln(1.2) ~= 0.2
-    #     50%    :   ln(1.5) ~= 0.5
-    #
-    kaiseretal["Uncertainty"][kaiseretal["Q"] == 1] = 0.1
-    kaiseretal["Uncertainty"][kaiseretal["Q"] == 2] = 0.2
-    kaiseretal["Uncertainty"][kaiseretal["Q"] == 3] = 0.5
-
-    del kaiseretal["Q"]
+    # [Q1, Q2 and Q3] correspond to approximate uncertainties
+    # of <10%, 10-20% and >20% respectively
+    # 10% : ln(1.1) ~= 0.1
+    # 20% : ln(1.2) ~= 0.2
+    # 50% : ln(1.5) ~= 0.5
+    kaiseretal["uncertainty"] = np.where(
+        kaiseretal["q"] == 3, 0.5, kaiseretal["q"] / 10
+    )
 
     return kaiseretal

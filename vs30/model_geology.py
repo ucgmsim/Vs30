@@ -266,7 +266,9 @@ def model_map(args, model):
                     w = np.where(g_val == spec[0])
                     # prevent -Inf warnings
                     s_val[np.where((s_val == 0) | (s_val == s_nodata))] = 1e-9
-                    result_vs30[w] = 10 ** np.interp(np.log10(s_val[w]), spec[1], spec[2])
+                    result_vs30[w] = 10 ** np.interp(
+                        np.log10(s_val[w]), spec[1], spec[2]
+                    )
             if args.g6mod or args.g13mod:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y

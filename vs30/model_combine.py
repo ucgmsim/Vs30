@@ -3,6 +3,8 @@ import os
 import numpy as np
 from osgeo import gdal
 
+gdal.UseExceptions()
+
 
 def combine(args, a, b):
     """
@@ -30,6 +32,8 @@ def combine(args, a, b):
     ods.SetProjection(ads.GetProjection())
     o_vs30 = ods.GetRasterBand(1)
     o_stdv = ods.GetRasterBand(2)
+    o_vs30.SetDescription("Vs30")
+    o_stdv.SetDescription("Standard Deviation")
     vnd = a_vs30.GetNoDataValue()
     snd = a_stdv.GetNoDataValue()
     o_vs30.SetNoDataValue(vnd)
