@@ -11,6 +11,16 @@ COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
 SLOPE = "slope.tif"
 GEOLOGY_NODATA = 255
 HYBRID_NODATA = -32767
+# hybrid model vs30 based on interpolation of slope
+# group ID, log10(slope) array, vs30 array
+HYBRID_VS30 = [
+    [2, [-1.85, -1.22], np.log10(np.array([242, 418]))],
+    [3, [-2.70, -1.35], np.log10(np.array([171, 228]))],
+    [4, [-3.44, -0.88], np.log10(np.array([252, 275]))],
+    [6, [-3.56, -0.93], np.log10(np.array([183, 239]))],
+]
+# hybrid model sigma reduction factors
+HYBRID_SRF = np.array([2, 3, 4, 6]), np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 
 def model_prior():
@@ -207,6 +217,8 @@ def model_map(args, model):
     ods.SetProjection(gds.GetProjection())
     band_vs30 = ods.GetRasterBand(1)
     band_stdv = ods.GetRasterBand(2)
+    band_vs30.SetDescription("Vs30")
+    band_stdv.SetDescription("Standard Deviation")
     band_vs30.SetNoDataValue(HYBRID_NODATA)
     band_stdv.SetNoDataValue(HYBRID_NODATA)
 
@@ -215,7 +227,7 @@ def model_map(args, model):
     stdv = np.append(HYBRID_NODATA, model[:, 1]).astype(np.float32)
     if args.ghybrid:
         # sigma reduction factors
-        stdv[np.array([2, 3, 4, 6])] *= np.array([0.4888, 0.7103, 0.9988, 0.9348])
+        stdv[HYBRID_SRF[0]] *= HYBRID_SRF[1]
 
     # processing chunk/block sizing
     block = band_vs30.GetBlockSize()
@@ -245,8 +257,16 @@ def model_map(args, model):
             result_vs30 = vs30[idx]
             result_stdv = stdv[idx]
             if args.ghybrid:
-                # TODO: hybrid slope table mods
-                pass
+                s_val = s_band.ReadAsArray(
+                    xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+                )
+                for spec in HYBRID_VS30:
+                    if spec[0] == 4 and args.g6mod:
+                        continue
+                    w = np.where(g_val == spec[0])
+                    # prevent -Inf warnings
+                    s_val[np.where((s_val == 0) | (s_val == s_nodata))] = 1e-9
+                    result_vs30[w] = 10 ** np.interp(np.log10(s_val[w]), spec[1], spec[2])
             if args.g6mod or args.g13mod:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
