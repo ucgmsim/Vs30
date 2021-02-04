@@ -1,7 +1,9 @@
 import os
 
 import numpy as np
-from osgeo import gdal, gdalconst, ogr, osr
+from osgeo import gdal, ogr, osr
+
+from vs30.model import resample
 
 gdal.UseExceptions()
 
@@ -9,8 +11,8 @@ gdal.UseExceptions()
 QMAP = "qmap/qmap.shp"
 COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
 SLOPE = "slope.tif"
-GEOLOGY_NODATA = 255
-HYBRID_NODATA = -32767
+ID_NODATA = 255
+MODEL_NODATA = -32767
 # hybrid model vs30 based on interpolation of slope
 # group ID, log10(slope) array, vs30 array
 HYBRID_VS30 = [
@@ -93,19 +95,19 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points):
+def mid(points, modeldata):
     """
     Returns the category ID index (including 0 for water) for given locations.
     TODO: if there are many points, allow creating an intermediate raster.
     points: 2D numpy array of NZTM coords
     """
-    shp = ogr.Open(QMAP, gdal.GA_ReadOnly)
+    shp = ogr.Open(os.path.join(modeldata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
     values = np.empty(len(points), dtype=np.float32)
     # ocean is NaN while water polygons are 0
-    values[...] = np.nan
+    values[...] = ID_NODATA
     pt = ogr.Geometry(ogr.wkbPoint)
     for i, p in enumerate(points):
         # why not decimal values??
@@ -123,6 +125,8 @@ def mid_map(args):
     Optimised polygon search using geotiff rasterisation.
     """
     path = os.path.join(args.wd, "gid.tif")
+    if os.path.isfile(path):
+        return path
     # make sure output raster has a nicely defined projection
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(2193)
@@ -135,10 +139,13 @@ def mid_map(args):
         outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
         xRes=args.xd,
         yRes=args.yd,
-        noData=GEOLOGY_NODATA,
+        noData=ID_NODATA,
         attribute="gid",
         outputType=gdal.GDT_Byte,
     )
+    band = ds.GetRasterBand(1)
+    band.SetDescription("Geology ID Index")
+    band = None
     ds = None
     return path
 
@@ -162,6 +169,7 @@ def coast_distance_map(args):
     )
     # distance calculation from outside polygons (0 value)
     band = ds.GetRasterBand(1)
+    band.SetDescription("Distance to Coast (m)")
     # ComputeProximity doesn't respect any NODATA options (writing into self though)
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
     band = None
@@ -173,17 +181,12 @@ def slope_map(args):
     """
     Calculate slope at map points by resampling / resizing origin slope map.
     """
-    path = os.path.join(args.wd, "slope.tif")
-    gdal.Warp(
-        path,
-        os.path.join(args.mapdata, SLOPE),
-        creationOptions=["COMPRESS=DEFLATE"],
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
-        resampleAlg=gdalconst.GRIORA_NearestNeighbour,
-    )
-    return path
+    dst = os.path.join(args.wd, "slope.tif")
+    if os.path.isfile(dst):
+        return dst
+    src = os.path.join(args.mapdata, SLOPE)
+    resample(src, dst, args.xmin, args.xmax, args.ymin, args.ymax, args.xd, args.yd)
+    return dst
 
 
 def model_map(args, model):
@@ -219,12 +222,12 @@ def model_map(args, model):
     band_stdv = ods.GetRasterBand(2)
     band_vs30.SetDescription("Vs30")
     band_stdv.SetDescription("Standard Deviation")
-    band_vs30.SetNoDataValue(HYBRID_NODATA)
-    band_stdv.SetNoDataValue(HYBRID_NODATA)
+    band_vs30.SetNoDataValue(MODEL_NODATA)
+    band_stdv.SetNoDataValue(MODEL_NODATA)
 
     # model version for indexing (water id 0 and source NODATA -> NODATA)
-    vs30 = np.append(HYBRID_NODATA, model[:, 0]).astype(np.float32)
-    stdv = np.append(HYBRID_NODATA, model[:, 1]).astype(np.float32)
+    vs30 = np.append(MODEL_NODATA, model[:, 0]).astype(np.float32)
+    stdv = np.append(MODEL_NODATA, model[:, 1]).astype(np.float32)
     if args.ghybrid:
         # sigma reduction factors
         stdv[HYBRID_SRF[0]] *= HYBRID_SRF[1]

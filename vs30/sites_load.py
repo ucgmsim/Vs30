@@ -93,7 +93,7 @@ def load_cpt_vs():
             dtype=np.float32,
         )
     # remove rows with no vs30 value
-    cpt = cpt[~np.isnan(cpt.vs30)]
+    cpt = cpt[~np.isnan(cpt.vs30)].reset_index()
 
     cpt["uncertainty"] = np.float32(0.5)
 

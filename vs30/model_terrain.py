@@ -2,13 +2,16 @@ import os
 from subprocess import call
 
 import numpy as np
-from osgeo import gdal, gdalconst, osr
+from osgeo import gdal
+
+from vs30.model import resample
 
 gdal.UseExceptions()
 
-IWAHASHI_PIKE = "IwahashiPike.tif"
-IP_NODATA = 255
-TERRAIN_NODATA = -32767
+# input location
+MODEL_RASTER = "IwahashiPike.tif"
+# for output model
+MODEL_NODATA = -32767
 
 
 def model_prior():
@@ -84,70 +87,55 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points):
+def mid(points, mapdata):
     """
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    raster = gdal.Open(IWAHASHI_PIKE, gdal.GA_ReadOnly)
-    transform = raster.GetGeoTransform()
-    band = raster.GetRasterBand(1)
-    nodata = int(band.GetNoDataValue())
-
-    xpos = np.floor((points[:, 0] - transform[0]) / transform[1]).astype(np.int32)
-    ypos = np.floor((points[:, 1] - transform[3]) / transform[5]).astype(np.int32)
-    # TODO: assuming not given values out of range for this raster
-    values = band.ReadAsArray()[ypos, xpos]
-    # minus 1 because ids start at 1
-    values = np.where(values == nodata, np.nan, values - 1)
-
-    return values
+    return interpolate(points, os.path.join(mapdata, MODEL_RASTER))
 
 
 def mid_map(args):
     """
     Calculate id at map points by resampling / resizing origin id map.
     """
-    path = os.path.join(args.wd, "tid.tif")
-    gdal.Warp(
-        path,
-        os.path.join(args.mapdata, IWAHASHI_PIKE),
-        creationOptions=["COMPRESS=DEFLATE"],
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
-        resampleAlg=gdalconst.GRIORA_NearestNeighbour,
-    )
-    return path
-
-
-def mid2val(mid, model):
-    """
-    Convert IDs returned by the mid function into model values.
-    """
-    vals = np.empty((len(gidx), 2), dtype=np.float32)
-    vals[...] = np.nan
-
-    valid_idx = np.invert(np.isnan(gid))
-    vals[valid_idx] = model[gid[valid_idx]]
-
-    return vals
+    dst = os.path.join(args.wd, "tid.tif")
+    if os.path.isfile(dst):
+        return dst
+    src = os.path.join(args.mapdata, MODEL_RASTER)
+    resample(src, dst, args.xmin, args.xmax, args.ymin, args.ymax, args.xd, args.yd)
+    r = gdal.Open(dst)
+    b = r.GetRasterBand(1)
+    b.SetDescription("Terrain ID Index")
+    b = None
+    r = None
+    return dst
 
 
 def model_map(args, model):
+    """
+    Make a tif map of model values.
+    """
     path = os.path.join(args.wd, "terrain.tif")
     # terrain IDs for given map spec
     tid_tif = mid_map(args)
+    raster = gdal.Open(tid_tif, gdal.GA_ReadOnly)
+    nodata = raster.GetRasterBand(1).GetNoDataValue()
+    raster = None
 
     # model version for indexing (index 0 for NODATA)
-    vs30 = np.append(TERRAIN_NODATA, model[:, 0]).astype(np.float32)
-    stdv = np.append(TERRAIN_NODATA, model[:, 1]).astype(np.float32)
+    vs30 = np.append(MODEL_NODATA, model[:, 0]).astype(np.float32)
+    stdv = np.append(MODEL_NODATA, model[:, 1]).astype(np.float32)
     # string array
     vs30 = ",".join([f"{x:.8f}" for x in vs30])
     stdv = ",".join([f"{x:.8f}" for x in stdv])
     # string expression to pass into calc
-    vs30 = f"numpy.array([{vs30}], dtype=numpy.float32)[numpy.where(A == {IP_NODATA}, 0, A)]"
-    stdv = f"numpy.array([{stdv}], dtype=numpy.float32)[numpy.where(A == {IP_NODATA}, 0, A)]"
+    vs30 = (
+        f"numpy.array([{vs30}], dtype=numpy.float32)[numpy.where(A == {nodata}, 0, A)]"
+    )
+    stdv = (
+        f"numpy.array([{stdv}], dtype=numpy.float32)[numpy.where(A == {nodata}, 0, A)]"
+    )
 
     # simple formula so just call command line
     call(
@@ -159,10 +147,20 @@ def model_map(args, model):
             path,
             f"--calc={vs30}",
             f"--calc={stdv}",
-            f"--NoDataValue={TERRAIN_NODATA}",
+            f"--NoDataValue={MODEL_NODATA}",
             "--type=Float32",
             "--co=COMPRESS=DEFLATE",
             "--quiet",
         ]
     )
+    # name bands
+    raster = gdal.Open(path)
+    bvs30 = raster.GetRasterBand(1)
+    bstdv = raster.GetRasterBand(2)
+    bvs30.SetDescription("Vs30")
+    bstdv.SetDescription("Standard Deviation")
+    bvs30 = None
+    bstdv = None
+    raster = None
+
     return path
