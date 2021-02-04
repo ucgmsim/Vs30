@@ -1,14 +1,18 @@
 #!/usr/bin/env python
 
 from argparse import ArgumentParser
-from tempfile import mkdtemp
+from shutil import rmtree
+import os, sys
+from time import time
 
-from vs30 import model_geology, model_terrain, model_combine
+from vs30 import model, model_geology, model_terrain, sites_load
 
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 
 parser = ArgumentParser()
 arg = parser.add_argument
+arg("--wd", help="output location", default="./vs30map")
+arg("--overwrite", help="overwrite output location", action="store_true")
 arg("--mapdata", help="location to map sources", type=str, default=PREFIX)
 # grid options
 arg("--xmin", help="minimum easting", type=int, default=1000000)
@@ -33,24 +37,71 @@ parser.set_defaults(ghybrid=True)
 # combination arguments
 parser.add_argument('--stdv-weight', help="use standard deviation for model combination", action='store_true')
 parser.add_argument('--k', help="k factor for stdv based weight combination", type=float, default=1)
+# measured site arguments
+parser.add_argument('--cpt', help="use CPT based data for observed", action="store_true")
+parser.add_argument('--downsample', dest='dsmcg', action='store_true')
+parser.add_argument('--no-downsample', dest='dsmcg', action='store_false')
+parser.set_defaults(dsmcg=True)
+
 # process arguments
 args = parser.parse_args()
 # add a few shared details and derivatives
-args.wd = mkdtemp()
 args.nx = round((args.xmax - args.xmin) / args.xd)
 args.ny = round((args.ymax - args.ymin) / args.yd)
 
+
+# working directory/output setup
+if os.path.exists(args.wd):
+    if args.overwrite:
+        rmtree(args.wd)
+    else:
+        sys.exit("output exists")
+else:
+    os.makedirs(args.wd)
+
+# measured sites
+print("loading sites...")
+sites = sites_load.load_vs(cpt=args.cpt, downsample_mcgann=args.dsmcg)
+points = np.column_stack(sites.easting.values, sites.northing.values)
+
+# models
 if args.gupdate != "off":
-    # geology model
-    model = model_geology.model_posterior_paper()
-    g_tiff = model_geology.model_map(args, model)
+    print("geology map...")
+    t = time()
+    sites["gid"] = 1
+    if args.gupdate == "prior":
+        m = model_geology.model_prior()
+    elif args.gupdate == "posterior_paper":
+        m = model_geology.model_posterior_paper()
+    elif args.gupdate == "posterior":
+        if args.clusters:
+            pass
+        else:
+            m = model.bayes_posterior(model_geology.model_prior(), sites, "gid")
+    g_tiff = model_geology.model_map(args, m)
+    print(f"{time()-t:.2f}s")
+
 if args.tupdate != "off":
-    # terrain model
-    model = model_terrain.model_posterior_paper()
-    t_tiff = model_terrain.model_map(args, model)
+    print("terrain map...")
+    t = time()
+    sites["tid"] = model_terrain.mid(points, args.mapdata)
+    if args.tupdate == "prior":
+        m = model_terrain.model_prior()
+    elif args.tupdate == "posterior_paper":
+        m = model_terrain.model_posterior_paper()
+    elif args.tupdate == "posterior":
+        if args.clusters:
+            pass
+        else:
+            m = model.bayes_posterior(model_terrain.model_prior(), sites, "tid")
+    t_tiff = model_terrain.model_map(args, m)
+    print(f"{time()-t:.2f}s")
+
 if args.gupdate != "off" and args.tupdate != "off":
     # combined model
-    model_combine.combine(args, g_tiff, t_tiff)
+    print("combining geology and terrain...")
+    t = time()
+    model.combine(args, g_tiff, t_tiff)
+    print(f"{time()-t:.2f}s")
 
-
-print(args.wd)
+print("complete.")
