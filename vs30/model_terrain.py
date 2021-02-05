@@ -4,7 +4,7 @@ from subprocess import call
 import numpy as np
 from osgeo import gdal
 
-from vs30.model import resample
+from vs30.model import interpolate, resample
 
 gdal.UseExceptions()
 
@@ -87,12 +87,12 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points, mapdata):
+def mid(points, args):
     """
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    return interpolate(points, os.path.join(mapdata, MODEL_RASTER))
+    return interpolate(points, os.path.join(args.mapdata, MODEL_RASTER))
 
 
 def mid_map(args):
@@ -120,7 +120,9 @@ def model_map(args, model):
     # terrain IDs for given map spec
     tid_tif = mid_map(args)
     raster = gdal.Open(tid_tif, gdal.GA_ReadOnly)
-    nodata = raster.GetRasterBand(1).GetNoDataValue()
+    band = raster.GetRasterBand(1)
+    nodata = band.GetNoDataValue()
+    band = None
     raster = None
 
     # model version for indexing (index 0 for NODATA)
@@ -150,6 +152,7 @@ def model_map(args, model):
             f"--NoDataValue={MODEL_NODATA}",
             "--type=Float32",
             "--co=COMPRESS=DEFLATE",
+            "--co=BIGTIFF=YES",
             "--quiet",
         ]
     )
