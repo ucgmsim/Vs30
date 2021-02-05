@@ -5,7 +5,9 @@ from shutil import rmtree
 import os, sys
 from time import time
 
-from vs30 import model, model_geology, model_terrain, sites_load
+import numpy as np
+
+from vs30 import model, model_geology, model_terrain, sites_cluster, sites_load
 
 PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 
@@ -56,52 +58,49 @@ if os.path.exists(args.wd):
         rmtree(args.wd)
     else:
         sys.exit("output exists")
-else:
-    os.makedirs(args.wd)
+os.makedirs(args.wd)
 
 # measured sites
 print("loading sites...")
 sites = sites_load.load_vs(cpt=args.cpt, downsample_mcgann=args.dsmcg)
-points = np.column_stack(sites.easting.values, sites.northing.values)
+points = np.column_stack((sites.easting.values, sites.northing.values))
 
-# models
-if args.gupdate != "off":
-    print("geology map...")
-    t = time()
-    sites["gid"] = 1
-    if args.gupdate == "prior":
-        m = model_geology.model_prior()
-    elif args.gupdate == "posterior_paper":
-        m = model_geology.model_posterior_paper()
-    elif args.gupdate == "posterior":
-        if args.clusters:
-            pass
-        else:
-            m = model.bayes_posterior(model_geology.model_prior(), sites, "gid")
-    g_tiff = model_geology.model_map(args, m)
-    print(f"{time()-t:.2f}s")
+# model loop
+tiffs = []
+specs = [
+    {"update":args.gupdate, "class":model_geology, "letter":"g", "name":"geology"},
+    {"update":args.tupdate, "class":model_terrain, "letter":"t", "name":"terrain"},
+]
+for s in specs:
+    if s["update"] != "off":
+        print(s["name"], "map...")
+        t = time()
 
-if args.tupdate != "off":
-    print("terrain map...")
-    t = time()
-    sites["tid"] = model_terrain.mid(points, args.mapdata)
-    if args.tupdate == "prior":
-        m = model_terrain.model_prior()
-    elif args.tupdate == "posterior_paper":
-        m = model_terrain.model_posterior_paper()
-    elif args.tupdate == "posterior":
-        if args.clusters:
-            pass
-        else:
-            m = model.bayes_posterior(model_terrain.model_prior(), sites, "tid")
-    t_tiff = model_terrain.model_map(args, m)
-    print(f"{time()-t:.2f}s")
+        # load model
+        sites[f'{s["letter"]}id'] = s["class"].mid(points, args)
+        if s["update"] == "prior":
+            m = s["class"].model_prior()
+        elif s["update"] == "posterior_paper":
+            m = s["class"].model_posterior_paper()
+        elif s["update"] == "posterior":
+            m = s["class"].model_prior()
+            if args.cpt:
+                sites = sites_cluster.cluster(sites, s["letter"])
+                m = model.cluster_update(m, sites, s["letter"])
+            else:
+                m = model.posterior(m, sites, f'{s["letter"]}id')
+
+        # run model for map
+        tiffs.append(s["class"].model_map(args, m))
+        print(f"{time()-t:.2f}s")
 
 if args.gupdate != "off" and args.tupdate != "off":
     # combined model
     print("combining geology and terrain...")
     t = time()
-    model.combine(args, g_tiff, t_tiff)
+    model.combine(args, *tiffs)
     print(f"{time()-t:.2f}s")
+
+# save sites
 
 print("complete.")

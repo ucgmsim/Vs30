@@ -53,7 +53,7 @@ def resample(
     gdal.Warp(
         dst,
         src,
-        creationOptions=["COMPRESS=DEFLATE"],
+        creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputBounds=[xmin, ymin, xmax, ymax],
         xRes=xd,
         yRes=yd,
@@ -81,7 +81,7 @@ def combine(args, a, b):
         ysize=args.ny,
         bands=2,
         eType=gdal.GDT_Float32,
-        options=["COMPRESS=DEFLATE"],
+        options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
     )
     ods.SetGeoTransform(ads.GetGeoTransform())
     ods.SetProjection(ads.GetProjection())
@@ -157,36 +157,36 @@ def combine(args, a, b):
     ods = None
 
 
-def cluster_model(vspr, model="aak", prior)
+def cluster_update(prior, sites, letter):
     # creates a model from the distribution of measured sites as clustered
     # prior: prior model, values only taken if no measurements available for ID
-    out = prior
-    # overwrite prior model looping through IDs
-    for (id in seq(length(prior$vs30))) {
+    posterior = prior
+    # looping through model IDs
+    for m in range(len(posterior)):
         vs_sum = 0
-        idtable = vspr[which(vspr[,paste0("gid_", model)] == id),]
-        clusters = table(idtable[,paste0("cluster_", model)])
+        idtable = sites[sites[f"{letter}id"] == m]
+        clusters = idtable[f"{letter}cluster"].value_counts()
         # overall N is one per cluster, clusters labeled -1 are individual clusters
-        n = length(clusters)
-        if ("-1" %in% names(clusters)) n = n + unname(clusters["-1"]) - 1
-        if (n == 0) next
-        w = rep(1/n, nrow(idtable))
-        for (c in as.integer(names(clusters))) {
-            cidx = which(idtable[,paste0("cluster_", model)] == c)
-            ctable = idtable[cidx,]
-            if (c == -1) {
+        n = len(clusters)
+        if -1 in clusters.index:
+            n += clusters[-1] - 1
+        if n == 0:
+            continue
+        w = np.repeat(1 / n, len(idtable))
+        for c in clusters.index:
+            cidx = idtable[f"{letter}cluster"] == c
+            ctable = idtable[cidx]
+            if c == -1:
                 # values not part of cluster, weight = 1 per value
-                vs_sum = vs_sum + sum(log(ctable$Vs30))
-            } else {
+                vs_sum += sum(np.log(ctable.vs30.values))
+            else:
                 # values in cluster, weight = 1 / cluster_size per value
-                vs_sum = vs_sum + sum(log(ctable$Vs30)) / nrow(ctable)
-                w[cidx] = w[cidx] / nrow(ctable)
-            }
-        }
-        out$vs30[id] = exp(vs_sum / n)
-        out$stdv[id] = sqrt(sum(w * (log(idtable$Vs30) - vs_sum / n) ^ 2))
-    }
-    return out
+                vs_sum += sum(np.log(ctable.vs30)) / len(ctable)
+                w[cidx] /= len(ctable)
+        posterior[m, 0] = exp(vs_sum / n)
+        posterior[m, 1] = np.sqrt(sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2))
+
+    return posterior
 
 
 def _new_mean(mu_0, n0, var, y):
@@ -197,7 +197,7 @@ def _new_var(sigma_0, n0, uncertainty):
     return (n0 * sigma_0 * sigma_0 + uncertainty * uncertainty) / (n0 + 1)
 
 
-def bayes_posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
+def posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
     """
     model: prior model
     sites: sites containing vs30 and uncertainty
@@ -216,8 +216,8 @@ def bayes_posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
         m = r[idcol]
         if m == ID_NODATA:
             continue
-        var = _new_var(stdv[mid], n0[m], r.uncertainty)
-        vs30[m] = _new_mean(vs30[mid], n0[m], var, r.vs30)
+        var = _new_var(stdv[m], n0[m], r.uncertainty)
+        vs30[m] = _new_mean(vs30[m], n0[m], var, r.vs30)
         stdv[m] = sqrt(var)
         n0[m] += 1
 

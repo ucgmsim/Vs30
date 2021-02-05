@@ -3,7 +3,7 @@ import os
 import numpy as np
 from osgeo import gdal, ogr, osr
 
-from vs30.model import resample
+from vs30.model import interpolate, resample
 
 gdal.UseExceptions()
 
@@ -28,22 +28,22 @@ HYBRID_SRF = np.array([2, 3, 4, 6]), np.array([0.4888, 0.7103, 0.9988, 0.9348])
 def model_prior():
     """
     names of levels
-       00_water (not used)
-    0  01_peat
-    1  04_fill
-    2  05_fluvialEstuarine
-    3  06_alluvium
-    4  08_lacustrine
-    5  09_beachBarDune
-    6  10_fan
-    7  11_loess
-    8  12_outwash
-    9  13_floodplain
-    10 14_moraineTill
-    11 15_undifSed
-    12 16_terrace
-    13 17_volcanic
-    14 18_crystalline
+    0  00_water (not used)
+    1  01_peat
+    2  04_fill
+    3  05_fluvialEstuarine
+    4  06_alluvium
+    5  08_lacustrine
+    6  09_beachBarDune
+    7  10_fan
+    8  11_loess
+    9  12_outwash
+    10 13_floodplain
+    11 14_moraineTill
+    12 15_undifSed
+    13 16_terrace
+    14 17_volcanic
+    15 18_crystalline
     """
     # fmt: off
     return np.array([[161, 0.522],
@@ -95,10 +95,17 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points, modeldata):
+def mid(points, args):
+    """
+    Faster method for model ID that uses rasterization.
+    """
+    gid_tif = mid_map(args)
+    return interpolate(points, gid_tif)
+
+
+def mid_polygon(points, modeldata):
     """
     Returns the category ID index (including 0 for water) for given locations.
-    TODO: if there are many points, allow creating an intermediate raster.
     points: 2D numpy array of NZTM coords
     """
     shp = ogr.Open(os.path.join(modeldata, QMAP), gdal.GA_ReadOnly)
@@ -134,7 +141,7 @@ def mid_map(args):
     ds = gdal.Rasterize(
         path,
         os.path.join(args.mapdata, QMAP),
-        creationOptions=["COMPRESS=DEFLATE"],
+        creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputSRS=srs,
         outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
         xRes=args.xd,
@@ -159,7 +166,7 @@ def coast_distance_map(args):
     ds = gdal.Rasterize(
         path,
         os.path.join(args.mapdata, COAST),
-        creationOptions=["COMPRESS=DEFLATE"],
+        creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
         xRes=args.xd,
         yRes=args.yd,
@@ -214,7 +221,7 @@ def model_map(args, model):
         ysize=args.ny,
         bands=2,
         eType=gdal.GDT_Float32,
-        options=["COMPRESS=DEFLATE"],
+        options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
     )
     ods.SetGeoTransform(gds.GetGeoTransform())
     ods.SetProjection(gds.GetProjection())
