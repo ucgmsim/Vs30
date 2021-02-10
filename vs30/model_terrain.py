@@ -99,7 +99,7 @@ def mid_map(args):
     """
     Calculate id at map points by resampling / resizing origin id map.
     """
-    dst = os.path.join(args.wd, "tid.tif")
+    dst = os.path.join(args.out, "tid.tif")
     if os.path.isfile(dst):
         return dst
     src = os.path.join(args.mapdata, MODEL_RASTER)
@@ -116,7 +116,7 @@ def model_map(args, model):
     """
     Make a tif map of model values.
     """
-    path = os.path.join(args.wd, "terrain.tif")
+    path = os.path.join(args.out, "terrain.tif")
     # terrain IDs for given map spec
     tid_tif = mid_map(args)
     raster = gdal.Open(tid_tif, gdal.GA_ReadOnly)

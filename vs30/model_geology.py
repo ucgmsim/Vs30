@@ -131,7 +131,7 @@ def mid_map(args):
     """
     Optimised polygon search using geotiff rasterisation.
     """
-    path = os.path.join(args.wd, "gid.tif")
+    path = os.path.join(args.out, "gid.tif")
     if os.path.isfile(path):
         return path
     # make sure output raster has a nicely defined projection
@@ -161,7 +161,7 @@ def coast_distance_map(args):
     """
     Calculate coast distance needed for G06 and G13 mods.
     """
-    path = os.path.join(args.wd, "coast.tif")
+    path = os.path.join(args.out, "coast.tif")
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
@@ -188,7 +188,7 @@ def slope_map(args):
     """
     Calculate slope at map points by resampling / resizing origin slope map.
     """
-    dst = os.path.join(args.wd, "slope.tif")
+    dst = os.path.join(args.out, "slope.tif")
     if os.path.isfile(dst):
         return dst
     src = os.path.join(args.mapdata, SLOPE)
@@ -197,7 +197,10 @@ def slope_map(args):
 
 
 def model_map(args, model):
-    path = os.path.join(args.wd, "geology.tif")
+    """
+    Make a tif map of model values.
+    """
+    path = os.path.join(args.out, "geology.tif")
     # geology grid
     gid_tif = mid_map(args)
     gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)

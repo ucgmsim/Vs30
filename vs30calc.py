@@ -13,7 +13,7 @@ PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
 
 parser = ArgumentParser()
 arg = parser.add_argument
-arg("--wd", help="output location", default="./vs30map")
+arg("--out", help="output location", default="./vs30map")
 arg("--overwrite", help="overwrite output location", action="store_true")
 arg("--mapdata", help="location to map sources", type=str, default=PREFIX)
 # grid options
@@ -27,38 +27,32 @@ arg("--yd", help="vertical spacing", type=int, default=100)
 arg("--gupdate", help="geology model updating", choices=["off", "prior", "posterior", "posterior_paper"], default="posterior_paper")
 arg("--tupdate", help="terrain model updating", choices=["off", "prior", "posterior", "posterior_paper"], default="posterior_paper")
 # geology model has a few parametric processing options
-parser.add_argument('--g6mod', dest='g6mod', action='store_true')
 parser.add_argument('--no-g6mod', dest='g6mod', action='store_false')
-parser.set_defaults(g6mod=True)
-parser.add_argument('--g13mod', dest='g13mod', action='store_true')
 parser.add_argument('--no-g13mod', dest='g13mod', action='store_false')
-parser.set_defaults(g13mod=True)
-parser.add_argument('--ghybrid', dest='ghybrid', action='store_true')
 parser.add_argument('--no-ghybrid', dest='ghybrid', action='store_false')
-parser.set_defaults(ghybrid=True)
 # combination arguments
 parser.add_argument('--stdv-weight', help="use standard deviation for model combination", action='store_true')
 parser.add_argument('--k', help="k factor for stdv based weight combination", type=float, default=1)
 # measured site arguments
 parser.add_argument('--cpt', help="use CPT based data for observed", action="store_true")
-parser.add_argument('--downsample', dest='dsmcg', action='store_true')
 parser.add_argument('--no-downsample', dest='dsmcg', action='store_false')
-parser.set_defaults(dsmcg=True)
 
 # process arguments
 args = parser.parse_args()
+print(args.g6mod)
+exit()
 # add a few shared details and derivatives
 args.nx = round((args.xmax - args.xmin) / args.xd)
 args.ny = round((args.ymax - args.ymin) / args.yd)
 
 
 # working directory/output setup
-if os.path.exists(args.wd):
+if os.path.exists(args.out):
     if args.overwrite:
-        rmtree(args.wd)
+        rmtree(args.out)
     else:
         sys.exit("output exists")
-os.makedirs(args.wd)
+os.makedirs(args.out)
 
 # measured sites
 print("loading sites...")

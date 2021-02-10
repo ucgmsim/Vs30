@@ -13,9 +13,7 @@ def model_val(mid, model, nodata=ID_NODATA):
     """
     Convert IDs returned by the <model>.mid function into model values.
     """
-    vals = np.empty((len(mid), 2), dtype=np.float32)
-    vals[...] = np.nan
-
+    vals = np.full((len(mid), 2), np.nan, dtype=np.float32)
     valid_idx = mid != nodata
     vals[valid_idx] = model[mid[valid_idx]]
 
@@ -35,8 +33,7 @@ def interpolate(points, raster, band=1, nodata=ID_NODATA):
     x = np.floor((points[:, 0] - t[0]) / t[1]).astype(np.int32)
     y = np.floor((points[:, 1] - t[3]) / t[5]).astype(np.int32)
     valid = np.where((x >= 0) & (x < r.RasterXSize) & (y >= 0) & (y < r.RasterYSize))
-    v = np.empty(len(points), dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
-    v[...] = nodata
+    v = np.full(len(points), nodata, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
     v[valid] = b.ReadAsArray()[y[valid], x[valid]]
     # defined nodata in case nodata in tif is different, so model_val() understands
     # minus 1 because ids in rasters start at 1
@@ -76,7 +73,7 @@ def combine(args, a, b):
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
-        os.path.join(args.wd, "combined.tif"),
+        os.path.join(args.out, "combined.tif"),
         xsize=args.nx,
         ysize=args.ny,
         bands=2,
