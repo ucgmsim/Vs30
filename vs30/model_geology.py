@@ -95,15 +95,15 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points, args):
+def model_id(points, args):
     """
     Faster method for model ID that uses rasterization.
     """
-    gid_tif = mid_map(args)
+    gid_tif = model_id_map(args)
     return interpolate(points, gid_tif)
 
 
-def mid_polygon(points, modeldata):
+def model_id_polygon(points, modeldata):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
@@ -127,7 +127,7 @@ def mid_polygon(points, modeldata):
     return values
 
 
-def mid_map(args):
+def model_id_map(args):
     """
     Optimised polygon search using geotiff rasterisation.
     """
@@ -202,7 +202,7 @@ def model_map(args, model):
     """
     path = os.path.join(args.out, "geology.tif")
     # geology grid
-    gid_tif = mid_map(args)
+    gid_tif = model_id_map(args)
     gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)
     g_band = gds.GetRasterBand(1)
     g_nodata = g_band.GetNoDataValue()
