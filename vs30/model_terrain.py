@@ -87,7 +87,7 @@ def model_posterior_paper():
     # fmt: on
 
 
-def mid(points, args):
+def model_id(points, args):
     """
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
@@ -95,7 +95,7 @@ def mid(points, args):
     return interpolate(points, os.path.join(args.mapdata, MODEL_RASTER))
 
 
-def mid_map(args):
+def model_id_map(args):
     """
     Calculate id at map points by resampling / resizing origin id map.
     """
@@ -118,7 +118,7 @@ def model_map(args, model):
     """
     path = os.path.join(args.out, "terrain.tif")
     # terrain IDs for given map spec
-    tid_tif = mid_map(args)
+    tid_tif = model_id_map(args)
     raster = gdal.Open(tid_tif, gdal.GA_ReadOnly)
     band = raster.GetRasterBand(1)
     nodata = band.GetNoDataValue()

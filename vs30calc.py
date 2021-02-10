@@ -69,7 +69,7 @@ for s in specs:
         t = time()
 
         # load model
-        sites[f'{s["letter"]}id'] = s["class"].mid(points, args)
+        sites[f'{s["letter"]}id'] = s["class"].model_id(points, args)
         if s["update"] == "prior":
             m = s["class"].model_prior()
         elif s["update"] == "posterior_paper":
