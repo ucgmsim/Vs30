@@ -1,0 +1,3 @@
+qmap downloaded from gns
+only geology category integers kept
+scaled to not skip numbers starting at 1

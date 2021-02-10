@@ -80,7 +80,7 @@ mvn = function(obs_locations, model_locations, model_variances, variogram,
  
     # initialize outputs, pred and var
     pred = var = vector(mode="numeric", length=n_new)
-    lpdf = data.frame(model_locations)
+    lpdf = data.frame(model_locations, row.names=NULL)
     for (i in seq(n_new)) {
         # point to observations
         distances = as.matrix(
