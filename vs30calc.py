@@ -39,8 +39,6 @@ parser.add_argument('--no-downsample', dest='dsmcg', action='store_false')
 
 # process arguments
 args = parser.parse_args()
-print(args.g6mod)
-exit()
 # add a few shared details and derivatives
 args.nx = round((args.xmax - args.xmin) / args.xd)
 args.ny = round((args.ymax - args.ymin) / args.yd)
