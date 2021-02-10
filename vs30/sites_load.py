@@ -73,7 +73,7 @@ def load_vs(cpt=False, downsample_mcgann=True):
     wotherspoon = load_wotherspoon_vs()
     kaiseretal = load_kaiseretal_vs()
 
-    # remove Kaiser Q3 unless station name is 3 chars long
+    # remove Kaiser Q3 unless station name is 3 chars long (broadband seismometers)
     kaiseretal = kaiseretal[(kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)]
 
     return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
