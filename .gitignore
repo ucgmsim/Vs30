@@ -1,4 +1,5 @@
 # extras added
+vspr.csv
 *.swp
 .Rhistory
 *vs30out*
