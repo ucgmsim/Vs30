@@ -54,6 +54,7 @@ if (geology) {
     t0 = Sys.time()
     # chunk.size 1 should take a couple of seconds so give it 4
     # default is large and unnecessarily uses too much RAM
+    # use LoadBalanced version which doesn't keep every iterations RAM in use
     cluster_model = parLapplyLB(cl=pool, X=cluster_model, fun=geology_model_run, chunk.size=4)
     t1 = Sys.time()
     stopCluster(pool); gc()
