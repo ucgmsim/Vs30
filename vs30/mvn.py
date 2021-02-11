@@ -2,15 +2,10 @@ import math
 
 import numpy as np
 
-obs_locations = np.array([
-    [1997000, 5502000],
-    [2000000, 5500000],
-    [2200000, 5800000]])
-model_locations = np.array([
-    [1999000, 5500000],
-    [2000000, 5500000],
-    [2002000, 5500000],
-    [2220000, 5500000]])
+obs_locations = np.array([[1997000, 5502000], [2000000, 5500000], [1998000, 5501000]])
+model_locations = np.array(
+    [[1999000, 5500000], [2000000, 5500000], [2002000, 5500000], [2220000, 5500000]]
+)
 model_variances = np.array([0.2, 0.1, 0.5, 0.5]) ** 2
 modeledValues = np.log(np.array([400, 500, 600, 800]))
 modelVarObs = np.array([0.2, 0.1, 0.2]) ** 2
@@ -19,70 +14,66 @@ obs_residuals = np.log(np.array([50, 1500, 1500])) - logModVs30obs
 covReducPar = 1.5
 obs_stdev_log = np.array([0.1, 0.1, 0.1])
 numVGpoints = 128
-useDiscreteVariogram = False
 useNoisyMeasurements = True
-phi = 993 # terrain
-phi = 1407 # geology
+phi = 993  # terrain
+phi = 1407  # geology
 
 
 n_new = len(model_locations)
 minDist_m_log = math.log(0.1)
-maxDist_m_log = math.log(2000e3) # 2000 km
+maxDist_m_log = math.log(2000e3)  # 2000 km
 distVec = np.exp(np.linspace(minDist_m_log, maxDist_m_log, numVGpoints))
 
 corr = 1 / np.e ** (distVec / phi)
-    if (useDiscreteVariogram) interp_method = "constant" else interp_method = "linear"
-    corrFn = approxfun(x=correlationFunction, rule=2, method=interp_method)
-    # this will be < 1 because distance starts at > 0
-    corr1 = correlationFunction$gamma[1]
+corrFn = lambda x: np.interp(x, distVec, corr)
 
-    # Wea equation 33, 40, 41
-    if (useNoisyMeasurements) {
-        omegaObs = sqrt(modelVarObs / (modelVarObs + obs_stdev_log^2))
-        obs_residuals = omegaObs * obs_residuals
-    }
- 
-    # initialize outputs, pred and var
-    pred = var = vector(mode="numeric", length=n_new)
-    lpdf = data.frame(model_locations, row.names=NULL)
-    for (i in seq(n_new)) {
-        # point to observations
-        distances = as.matrix(
-            proxy::dist(as.matrix(lpdf[i,]), obs_locations, diag=TRUE, upper=TRUE)
-        )
-        # only observed which are within 10km to the point
-        wanted = which(apply(distances, 2, FUN=min) < 10000)
-        names(wanted) = NULL
-        if len(wanted) == 0:
-            # not close enough to any points
-            pred[i] = modeledValues[i]
-            var[i] = model_variances[i] * corr[0]
-            continue
+# Wea equation 33, 40, 41
+if useNoisyMeasurements:
+    omegaObs = np.sqrt(modelVarObs / (modelVarObs + obs_stdev_log ** 2))
+    # don't use *= to prevent overwriting function input
+    obs_residuals = omegaObs * obs_residuals
 
-        # distances between all
-        cov_matrix = as.matrix(stats::dist(x=rbind(lpdf[i,], obs_locations[wanted,]), diag=TRUE, upper=TRUE))
-        # correlation function
-        cov_matrix = array(sapply(cov_matrix, corrFn), dim=dim(cov_matrix))
-        # uncertainties
-        cov_matrix = cov_matrix * tcrossprod(sqrt(c(model_variances[i], modelVarObs[wanted])))
+# initialize outputs, pred and var
+pred = np.copy(modeledValues)
+var = model_variances * corr[0]
+for i in range(n_new):
+    # point to observations
+    # distances = np.linalg.norm(obs_locations - model_locations[i], axis=1)
+    dist_diffs = (obs_locations - model_locations[i]).T
+    distances = np.sqrt(np.einsum("ij,ij->j", dist_diffs, dist_diffs))
+    # only observed which are within 10km to the point
+    wanted = distances < 10000
+    if max(wanted) == False:
+        # not close enough to any points
+        continue
 
-        if (useNoisyMeasurements) {
-            omega = tcrossprod(c(1, omegaObs[wanted]))
-            diag(omega) = 1
-            cov_matrix = cov_matrix * omega
-        }
+    # distances between all
+    locs = np.vstack((model_locations[i], obs_locations[wanted]))
+    locs = locs[:, 0] + 1j * locs[:, 1]
+    cov_matrix = abs(locs[:, np.newaxis] - locs)
+    # correlation function
+    cov_matrix = np.interp(cov_matrix, distVec, corr)
+    # uncertainties
+    uncer = np.sqrt(np.insert(modelVarObs[wanted], 0, model_variances[i]))
+    cov_matrix = cov_matrix * uncer[:, np.newaxis] * uncer
 
-        # covariance reduction factors
-        if (covReducPar > 0) {
-            cov_matrix = cov_matrix * exp(-covReducPar *
-                    as.matrix(stats::dist(c(modeledValues[i], logModVs30obs[wanted]), 
-                                diag=T, upper=T)))
-        }
+    if useNoisyMeasurements:
+        omega = np.insert(omegaObs[wanted], 0, 1)
+        omega = omega[:, np.newaxis] * omega
+        omega[np.eye(len(omega), dtype=np.bool)] = 1
+        cov_matrix *= omega
 
-        cov_matrix[-1, -1] = solve(cov_matrix[-1, -1])
-        pred[i] = modeledValues[i] +
-            cov_matrix[1, -1] %*% cov_matrix[-1, -1] %*% obs_residuals[wanted]
-        var[i] = cov_matrix[1, 1] -
-            (cov_matrix[1, -1] %*% cov_matrix[-1, -1] %*% cov_matrix[-1, 1])
-    }
-    return(data.frame(pred, var))
+    # covariance reduction factors
+    if covReducPar > 0:
+        model = np.insert(logModVs30obs[wanted], 0, modeledValues[i])
+        cov_matrix *= np.exp(-covReducPar * np.abs(model[:, np.newaxis] - model))
+
+    cov_matrix2 = np.linalg.solve(cov_matrix[1:, 1:], np.eye(len(cov_matrix) - 1))
+    pred[i] = modeledValues[i] + np.dot(
+        np.dot(cov_matrix[0, 1:], cov_matrix2), obs_residuals[wanted]
+    )
+    var[i] = cov_matrix[0, 0] - np.dot(
+        np.dot(cov_matrix[0, 1:], cov_matrix2), cov_matrix[1:, 0]
+    )
+
+print(pred, var)
