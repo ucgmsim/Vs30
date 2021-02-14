@@ -5,15 +5,14 @@ import numpy as np
 obs_locs = np.array([[1997000, 5502000], [2000000, 5500000], [1998000, 5501000]])
 obs_vs30 = np.array([50, 1500, 1500])
 obs_stdv = np.array([0.1, 0.1, 0.1])
-
-modelVarObs = np.array([0.2, 0.1, 0.2]) ** 2
-logModVs30obs = np.log(np.array([300, 500, 800]))
+obs_model_vs30 = np.array([300, 500, 800])
+obs_model_stdv = np.array([0.2, 0.1, 0.2])
 
 model_locs = np.array(
     [[1999000, 5500000], [2000000, 5500000], [2002000, 5500000], [2220000, 5500000]]
 )
 model_stdv = np.array([0.2, 0.1, 0.5, 0.5])
-model_vs30 = np.log(np.array([400, 500, 600, 800]))
+model_vs30 = np.array([400, 500, 600, 800])
 
 
 def corr_func(distances, phi):
@@ -21,8 +20,10 @@ def corr_func(distances, phi):
     Correlation function by distance.
     phi is 993 for terrain model, 1407 for geology
     """
-    # original was interpolated from distances:
-    # exp(np.linspace(log(0.1), log(2000e3), 128))
+    # originally linearly interpolated from logarithmically spaced distances:
+    d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
+    c = 1 / np.e ** (d / phi)
+    return np.interp(distances, d, c)
     # minimum distance of 0.1 metres enforced
     return 1 / np.e ** (np.maximum(0.1, distances) / phi)
 
@@ -38,9 +39,9 @@ def dists(x):
     """
     Euclidean distance from 2d diff array.
     """
-    #distances = np.linalg.norm(x, axis=1)
+    # return np.linalg.norm(x, axis=1)
     # alternative, may be faster
-    distances = np.sqrt(np.einsum("ij,ij->i", x, x))
+    return np.sqrt(np.einsum("ij,ij->i", x, x))
 
 
 def xy2complex(x):
@@ -59,22 +60,37 @@ def dist_mat(x):
     return np.abs(x[:, np.newaxis] - x)
 
 
-def mvn(model_locs, model_vs30, model_stdv, obs_locs, obs_vs30, obs_stdv, sites, phi, cov_reduc=1.5, noisy=True, min_dist=0.1, max_dist=10000, dist_points=88):
+def mvn(
+    model_locs,
+    model_vs30,
+    model_stdv,
+    obs_locs,
+    obs_vs30,
+    obs_stdv,
+    obs_model_vs30,
+    obs_model_stdv,
+    phi,
+    cov_reduc=1.5,
+    noisy=True,
+    min_dist=0.1,
+    max_dist=10000,
+):
     """
     Modify model with observed locations.
     phi: correlation range factor, see corr_func()
     noisy: noisy measurements
     """
-    obs_residuals = np.log(obs_vs30) - logModVs30obs
+    obs_residuals = np.log(obs_vs30 / obs_model_vs30)
 
     # Wea equation 33, 40, 41
     if noisy:
-        omega_obs = np.sqrt(modelVarObs / (modelVarObs + obs_stdv ** 2))
+        omega_obs = np.sqrt(obs_model_stdv ** 2 / (obs_model_stdv ** 2 + obs_stdv ** 2))
         obs_residuals *= omega_obs
-    
+
+    # TODO: skip NaN
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
-    var = model_stdv * model_stdv * corr_func(0, phi)
+    var = model_stdv ** 2 * corr_func(0, phi)
 
     # model point to observations
     for i in range(len(model_locs)):
@@ -83,25 +99,30 @@ def mvn(model_locs, model_vs30, model_stdv, obs_locs, obs_vs30, obs_stdv, sites,
         if max(wanted) == False:
             # not close enough to any observed locations
             continue
-    
+
         # distances between interesting points
         cov_matrix = dist_mat(xy2complex(np.vstack((model_locs[i], obs_locs[wanted]))))
         # correlation
         cov_matrix = corr_func(cov_matrix, phi)
         # uncertainties
-        cov_matrix *= tcrossprod(np.insert(np.sqrt(modelVarObs[wanted]), 0, model_stdv[i]))
-    
+        cov_matrix *= tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
+
         if noisy:
-            cov_matrix *= np.fill_diagonal(tcrossprod(np.insert(omega_obs[wanted], 0, 1)), 1)
+            omega = tcrossprod(np.insert(omega_obs[wanted], 0, 1))
+            np.fill_diagonal(omega, 1)
+            cov_matrix *= omega
 
         # covariance reduction factors
         if cov_reduc > 0:
-            cov_matrix *= np.exp(-cov_reduc * dist_mat(np.insert(logModVs30obs[wanted], 0, pred[i])))
-    
+            cov_matrix *= np.exp(
+                -cov_reduc
+                * dist_mat(np.insert(np.log(obs_model_vs30[wanted]), 0, pred[i]))
+            )
+
         inv_matrix = np.linalg.inv(cov_matrix[1:, 1:])
         pred[i] += np.dot(np.dot(cov_matrix[0, 1:], inv_matrix), obs_residuals[wanted])
         var[i] = cov_matrix[0, 0] - np.dot(
             np.dot(cov_matrix[0, 1:], inv_matrix), cov_matrix[1:, 0]
         )
-    
-    return pred, var
+
+    return model_vs30 * exp(pred - log(model_vs30)), np.sqrt(var)
