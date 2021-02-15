@@ -36,8 +36,8 @@ def interpolate(points, raster, band=1, nodata=ID_NODATA):
     v = np.full(len(points), nodata, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
     v[valid] = b.ReadAsArray()[y[valid], x[valid]]
     # defined nodata in case nodata in tif is different, so model_val() understands
-    # minus 1 because ids in rasters start at 1
-    v = np.where(v == n, nodata, v - 1)
+    if n != nodata:
+        v = np.where(v == n, nodata, v)
 
     b = None
     r = None
@@ -161,7 +161,8 @@ def cluster_update(prior, sites, letter):
     # looping through model IDs
     for m in range(len(posterior)):
         vs_sum = 0
-        idtable = sites[sites[f"{letter}id"] == m]
+        # add 1 because IDs being used start at 1 in tiffs
+        idtable = sites[sites[f"{letter}id"] == m + 1]
         clusters = idtable[f"{letter}cluster"].value_counts()
         # overall N is one per cluster, clusters labeled -1 are individual clusters
         n = len(clusters)

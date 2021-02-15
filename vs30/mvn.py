@@ -2,18 +2,6 @@ import math
 
 import numpy as np
 
-obs_locs = np.array([[1997000, 5502000], [2000000, 5500000], [1998000, 5501000]])
-obs_vs30 = np.array([50, 1500, 1500])
-obs_stdv = np.array([0.1, 0.1, 0.1])
-obs_model_vs30 = np.array([300, 500, 800])
-obs_model_stdv = np.array([0.2, 0.1, 0.2])
-
-model_locs = np.array(
-    [[1999000, 5500000], [2000000, 5500000], [2002000, 5500000], [2220000, 5500000]]
-)
-model_stdv = np.array([0.2, 0.1, 0.5, 0.5])
-model_vs30 = np.array([400, 500, 600, 800])
-
 
 def corr_func(distances, phi):
     """
@@ -21,9 +9,9 @@ def corr_func(distances, phi):
     phi is 993 for terrain model, 1407 for geology
     """
     # originally linearly interpolated from logarithmically spaced distances:
-    d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
-    c = 1 / np.e ** (d / phi)
-    return np.interp(distances, d, c)
+    # d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
+    # c = 1 / np.e ** (d / phi)
+    # return np.interp(distances, d, c)
     # minimum distance of 0.1 metres enforced
     return 1 / np.e ** (np.maximum(0.1, distances) / phi)
 
@@ -64,15 +52,10 @@ def mvn(
     model_locs,
     model_vs30,
     model_stdv,
-    obs_locs,
-    obs_vs30,
-    obs_stdv,
-    obs_model_vs30,
-    obs_model_stdv,
-    phi,
+    sites,
+    model,
     cov_reduc=1.5,
     noisy=True,
-    min_dist=0.1,
     max_dist=10000,
 ):
     """
@@ -80,14 +63,22 @@ def mvn(
     phi: correlation range factor, see corr_func()
     noisy: noisy measurements
     """
-    obs_residuals = np.log(obs_vs30 / obs_model_vs30)
+    if model == "geology":
+        phi = 1407
+    elif model == "terrain":
+        phi = 993
+
+    obs_locs = np.column_stack((sites.easting.values, sites.northing.values))
+    obs_model_stdv = sites[f"{model}_uncertainty"].values
+    obs_residuals = np.log(sites.vs30.values / sites[f"{model}_vs30"].values)
 
     # Wea equation 33, 40, 41
     if noisy:
-        omega_obs = np.sqrt(obs_model_stdv ** 2 / (obs_model_stdv ** 2 + obs_stdv ** 2))
+        omega_obs = np.sqrt(
+            obs_model_stdv ** 2 / (obs_model_stdv ** 2 + sites.uncertainty.values ** 2)
+        )
         obs_residuals *= omega_obs
 
-    # TODO: skip NaN
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
     var = model_stdv ** 2 * corr_func(0, phi)
@@ -116,7 +107,11 @@ def mvn(
         if cov_reduc > 0:
             cov_matrix *= np.exp(
                 -cov_reduc
-                * dist_mat(np.insert(np.log(obs_model_vs30[wanted]), 0, pred[i]))
+                * dist_mat(
+                    np.insert(
+                        np.log(sites.loc[wanted, f"{model}_vs30"].values), 0, pred[i]
+                    )
+                )
             )
 
         inv_matrix = np.linalg.inv(cov_matrix[1:, 1:])

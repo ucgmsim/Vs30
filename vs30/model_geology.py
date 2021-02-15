@@ -27,7 +27,7 @@ HYBRID_SRF = np.array([2, 3, 4, 6]), np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 def model_prior():
     """
-    names of levels
+    ID NAME (id in datasource)
     0  00_water (not used)
     1  01_peat
     2  04_fill
@@ -64,14 +64,6 @@ def model_prior():
     # fmt: on
 
 
-def model_posterior():
-    """
-    Update prior model based on observations.
-    """
-    prior = model_prior
-    return []
-
-
 def model_posterior_paper():
     """
     Posterior model from the paper.
@@ -95,26 +87,22 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, args):
-    """
-    Faster method for model ID that uses rasterization.
-    """
-    gid_tif = model_id_map(args)
-    return interpolate(points, gid_tif)
-
-
-def model_id_polygon(points, modeldata):
+def model_id(points, args, polygon=False):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
     """
-    shp = ogr.Open(os.path.join(modeldata, QMAP), gdal.GA_ReadOnly)
+    if not polygon:
+        # faster method for model ID that uses rasterization
+        gid_tif = model_id_map(args)
+        return interpolate(points, gid_tif)
+
+    shp = ogr.Open(os.path.join(args.modeldata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
-    values = np.empty(len(points), dtype=np.float32)
     # ocean is NaN while water polygons are 0
-    values[...] = ID_NODATA
+    values = np.full(len(points), ID_NODATA, dtype=np.float32)
     pt = ogr.Geometry(ogr.wkbPoint)
     for i, p in enumerate(points):
         # why not decimal values??
@@ -162,6 +150,8 @@ def coast_distance_map(args):
     Calculate coast distance needed for G06 and G13 mods.
     """
     path = os.path.join(args.out, "coast.tif")
+    if os.path.isfile(path):
+        return path
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
@@ -196,7 +186,47 @@ def slope_map(args):
     return dst
 
 
-def model_map(args, model):
+def _hyb_calc()
+    """
+    Return model values given inputs.
+    """
+    pass
+
+
+def model_val(args, model, polygon=False):
+    """
+    Return model values for IDs (vs30, stdv).
+    """
+    # geology grid
+    gid = model_id(points, args, polygon=polygon)
+    # coastline distances and slope rough enough to keep as rasters (for now)
+    if args.g6mod or args.g13mod:
+        cdist = interpolate(points, coast_distance_map(args))
+    if args.ghybrid:
+        slope = interpolate(points, slope_map(args))
+
+    # treat ocean (out of polygon) as water (id 0)
+    idx = np.where(gid != g_nodata, gid, 0)
+    # TODO: only idx, clean input gid
+    vs30 = model[gid, 0]
+    stdv = model[gid, 1]
+    if args.ghybrid:
+        # prevent -Inf warnings
+        slope[np.where((slope == 0) | (slope == s_nodata))] = 1e-9
+        for spec in HYBRID_VS30:
+            if spec[0] == 4 and args.g6mod:
+                continue
+            w = np.where(gid == spec[0])
+            vs30[w] = 10 ** np.interp(np.log10(slope[w]), spec[1], spec[2])
+    if args.g6mod:
+        w = np.where(gid == 4)
+        vs30[w] = np.maximum(240, np.minimum(500, 240 + (500 - 240) * (cdist[w] - 8000) / (20000 - 8000)))
+    if args.g13mod:
+        w = np.where(gid == 10)
+        vs30[w] = np.maximum(197, np.minimum(500, 197 + (500 - 197) * (cdist[w] - 8000) / (20000 - 8000)))
+
+
+def model_val_map(args, model):
     """
     Make a tif map of model values.
     """
