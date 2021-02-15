@@ -9,7 +9,7 @@ import numpy as np
 
 from vs30 import model, model_geology, model_terrain, sites_cluster, sites_load
 
-PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
+PREFIX = "/mnt/nvme/work/plotting_data/Vs30/"
 
 parser = ArgumentParser()
 arg = parser.add_argument
@@ -82,8 +82,11 @@ for s in specs:
             else:
                 m = model.posterior(m, sites, f'{s["letter"]}id')
 
+        # model at sites for mvn
+        #sites[f'{s["name"]}_vs30'], sites[f'{s["name"]}_stdv'] =
+
         # run model for map
-        tiffs.append(s["class"].model_map(args, m))
+        tiffs.append(s["class"].model_val_map(args, m))
         print(f"{time()-t:.2f}s")
 
 if args.gupdate != "off" and args.tupdate != "off":

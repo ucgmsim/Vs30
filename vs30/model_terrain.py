@@ -4,7 +4,7 @@ from subprocess import call
 import numpy as np
 from osgeo import gdal
 
-from vs30.model import interpolate, resample
+from vs30.model import ID_NODATA, interpolate, resample
 
 gdal.UseExceptions()
 
@@ -16,7 +16,7 @@ MODEL_NODATA = -32767
 
 def model_prior():
     """
-    names of levels
+    ID in datasource, name of level
     01 - Well dissected alpine summits, mountains, etc.
     02 - Large volcano, high block plateaus, etc.
     03 - Well dissected, low mountains, etc.
@@ -53,14 +53,6 @@ def model_prior():
                      [363, 0.2800],
                      [246, 0.2206]], dtype=np.float32)
     # fmt: on
-
-
-def model_posterior():
-    """
-    Update prior model based on observations.
-    """
-    prior = model_prior
-    return []
 
 
 def model_posterior_paper():
@@ -112,7 +104,17 @@ def model_id_map(args):
     return dst
 
 
-def model_map(args, model):
+def model_val(ids, model):
+    """
+    Return model values for IDs (vs30, stdv).
+    """
+    idx = ids != ID_NODATA
+    result = np.full((len(ids), 2), np.nan, dtype=np.float32)
+    result[idx] = model[ids[idx] - 1]
+    return result
+
+
+def model_val_map(args, model):
     """
     Make a tif map of model values.
     """
