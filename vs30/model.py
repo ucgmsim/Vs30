@@ -9,18 +9,7 @@ gdal.UseExceptions()
 ID_NODATA = 255
 
 
-def model_val(mid, model, nodata=ID_NODATA):
-    """
-    Convert IDs returned by the <model>.mid function into model values.
-    """
-    vals = np.full((len(mid), 2), np.nan, dtype=np.float32)
-    valid_idx = mid != nodata
-    vals[valid_idx] = model[mid[valid_idx]]
-
-    return vals
-
-
-def interpolate(points, raster, band=1, nodata=ID_NODATA):
+def interpolate(points, raster, band=1):
     """
     Returns values of raster at points (nearneighbour).
     points: 2D numpy array of coords in raster srs.
@@ -33,11 +22,11 @@ def interpolate(points, raster, band=1, nodata=ID_NODATA):
     x = np.floor((points[:, 0] - t[0]) / t[1]).astype(np.int32)
     y = np.floor((points[:, 1] - t[3]) / t[5]).astype(np.int32)
     valid = np.where((x >= 0) & (x < r.RasterXSize) & (y >= 0) & (y < r.RasterYSize))
-    v = np.full(len(points), nodata, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
+    v = np.full(len(points), ID_NODATA, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
     v[valid] = b.ReadAsArray()[y[valid], x[valid]]
     # defined nodata in case nodata in tif is different, so model_val() understands
-    if n != nodata:
-        v = np.where(v == n, nodata, v)
+    if n != ID_NODATA:
+        v = np.where(v == n, ID_NODATA, v)
 
     b = None
     r = None
