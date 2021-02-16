@@ -3,7 +3,7 @@ import os
 import numpy as np
 from osgeo import gdal, ogr, osr
 
-from vs30.model import interpolate, resample
+from vs30.model import ID_NODATA, interpolate, resample
 
 gdal.UseExceptions()
 
@@ -11,7 +11,6 @@ gdal.UseExceptions()
 QMAP = "qmap/qmap.shp"
 COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
 SLOPE = "slope.tif"
-ID_NODATA = 255
 MODEL_NODATA = -32767
 # hybrid model vs30 based on interpolation of slope
 # group ID, log10(slope) array, vs30 array
@@ -186,30 +185,23 @@ def slope_map(args):
     return dst
 
 
-def _hyb_calc()
+def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-9999):
     """
     Return model values given inputs.
     """
-    pass
-
-
-def model_val(args, model, polygon=False):
-    """
-    Return model values for IDs (vs30, stdv).
-    """
-    # geology grid
-    gid = model_id(points, args, polygon=polygon)
-    # coastline distances and slope rough enough to keep as rasters (for now)
-    if args.g6mod or args.g13mod:
-        cdist = interpolate(points, coast_distance_map(args))
+    # sigma reduction factors
     if args.ghybrid:
-        slope = interpolate(points, slope_map(args))
-
-    # treat ocean (out of polygon) as water (id 0)
-    idx = np.where(gid != g_nodata, gid, 0)
-    # TODO: only idx, clean input gid
-    vs30 = model[gid, 0]
-    stdv = model[gid, 1]
+        model = np.copy(model)
+        # still updating g06 even if using coast function instead of hybrid
+        model[HYBRID_SRF[0] - 1, 1] *= HYBRID_SRF[1]
+    # output
+    vs30 = np.empty(gid.shape, dtype=np.float32)
+    stdv = np.empty_like(vs30)
+    # water points are NaN
+    w = (gid != ID_NODATA) | (gid != 0)
+    vs30[w], stdv[w] = model[gid[w] - 1].T
+    vs30[~w] = nan
+    stdv[~w] = nan
     if args.ghybrid:
         # prevent -Inf warnings
         slope[np.where((slope == 0) | (slope == s_nodata))] = 1e-9
@@ -225,6 +217,24 @@ def model_val(args, model, polygon=False):
         w = np.where(gid == 10)
         vs30[w] = np.maximum(197, np.minimum(500, 197 + (500 - 197) * (cdist[w] - 8000) / (20000 - 8000)))
 
+    return vs30, stdv
+
+
+def model_val(ids, model, points=None):
+    """
+    Return model values for IDs (vs30, stdv).
+    """
+    # collect inputs
+    cdist = None
+    slope = None
+    # coastline distances and slope rough enough to keep as rasters (for now)
+    if args.g6mod or args.g13mod:
+        cdist = interpolate(points, coast_distance_map(args))
+    if args.ghybrid:
+        slope = interpolate(points, slope_map(args))
+    # run
+    return np.column_stack(_hyb_calc(args, model, ids, slope=slope, cdist=cdist))
+
 
 def model_val_map(args, model):
     """
@@ -237,10 +247,12 @@ def model_val_map(args, model):
     g_band = gds.GetRasterBand(1)
     g_nodata = g_band.GetNoDataValue()
     # coastline distances
+    c_val = None
     if args.g6mod or args.g13mod:
         cdist_tif = coast_distance_map(args)
         cds = gdal.Open(cdist_tif, gdal.GA_ReadOnly)
         c_band = cds.GetRasterBand(1)
+    s_val = None
     if args.ghybrid:
         slope_tif = slope_map(args)
         sds = gdal.Open(slope_tif, gdal.GA_ReadOnly)
@@ -295,49 +307,17 @@ def model_val_map(args, model):
             g_val = g_band.ReadAsArray(
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
-            # treat ocean (out of polygon) as water (id 0)
-            idx = np.where(g_val != g_nodata, g_val, 0)
-            result_vs30 = vs30[idx]
-            result_stdv = stdv[idx]
             if args.ghybrid:
                 s_val = s_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 )
-                for spec in HYBRID_VS30:
-                    if spec[0] == 4 and args.g6mod:
-                        continue
-                    w = np.where(g_val == spec[0])
-                    # prevent -Inf warnings
-                    s_val[np.where((s_val == 0) | (s_val == s_nodata))] = 1e-9
-                    result_vs30[w] = 10 ** np.interp(
-                        np.log10(s_val[w]), spec[1], spec[2]
-                    )
             if args.g6mod or args.g13mod:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 ).astype(np.float32)
-                if args.g6mod:
-                    result_vs30 = np.where(
-                        g_val == 4,
-                        np.maximum(
-                            240,
-                            np.minimum(
-                                500, 240 + (500 - 240) * (c_val - 8000) / (20000 - 8000)
-                            ),
-                        ),
-                        result_vs30,
-                    )
-                if args.g13mod:
-                    result_vs30 = np.where(
-                        g_val == 10,
-                        np.maximum(
-                            197,
-                            np.minimum(
-                                500, 197 + (500 - 197) * (c_val - 8000) / (20000 - 8000)
-                            ),
-                        ),
-                        result_vs30,
-                    )
+            result_vs30, result_stdv = _hyb_calc(
+                args, model, g_val, slope=s_val, cdist=c_val, nan=MODEL_NODATA
+            )
 
             # write results
             band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
