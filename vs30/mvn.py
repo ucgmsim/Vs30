@@ -1,13 +1,20 @@
 import math
+import os
+from shutil import copyfile
 
 import numpy as np
+from osgeo import gdal
 
 
-def corr_func(distances, phi):
+def corr_func(distances, model):
     """
     Correlation function by distance.
     phi is 993 for terrain model, 1407 for geology
     """
+    if model == "geology":
+        phi = 1407
+    elif model == "terrain":
+        phi = 993
     # originally linearly interpolated from logarithmically spaced distances:
     # d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
     # c = 1 / np.e ** (d / phi)
@@ -60,16 +67,11 @@ def mvn(
 ):
     """
     Modify model with observed locations.
-    phi: correlation range factor, see corr_func()
     noisy: noisy measurements
     """
-    if model == "geology":
-        phi = 1407
-    elif model == "terrain":
-        phi = 993
 
     obs_locs = np.column_stack((sites.easting.values, sites.northing.values))
-    obs_model_stdv = sites[f"{model}_uncertainty"].values
+    obs_model_stdv = sites[f"{model}_stdv"].values
     obs_residuals = np.log(sites.vs30.values / sites[f"{model}_vs30"].values)
 
     # Wea equation 33, 40, 41
@@ -81,10 +83,12 @@ def mvn(
 
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
-    var = model_stdv ** 2 * corr_func(0, phi)
+    var = model_stdv ** 2 * corr_func(0, model)
 
     # model point to observations
     for i in range(len(model_locs)):
+        if np.isnan(model_vs30[i]):
+            continue
         distances = dists(obs_locs - model_locs[i])
         wanted = distances < max_dist
         if max(wanted) == False:
@@ -94,7 +98,7 @@ def mvn(
         # distances between interesting points
         cov_matrix = dist_mat(xy2complex(np.vstack((model_locs[i], obs_locs[wanted]))))
         # correlation
-        cov_matrix = corr_func(cov_matrix, phi)
+        cov_matrix = corr_func(cov_matrix, model)
         # uncertainties
         cov_matrix *= tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
 
@@ -120,4 +124,70 @@ def mvn(
             np.dot(cov_matrix[0, 1:], inv_matrix), cov_matrix[1:, 0]
         )
 
-    return model_vs30 * exp(pred - log(model_vs30)), np.sqrt(var)
+    return model_vs30 * np.exp(pred - np.log(model_vs30)), np.sqrt(var)
+
+
+def mvn_tiff(args, model, sites):
+    """
+    Run MVN over GeoTIFF.
+    """
+    # mvn based on original model, modified if in proximity to measured sites
+    out_tiff = os.path.join(args.out, f"{model}_mvn.tif")
+    copyfile(os.path.join(args.out, f"{model}.tif"), out_tiff)
+    ds = gdal.Open(out_tiff, gdal.GA_Update)
+    trans = ds.GetGeoTransform()
+    vs30b = ds.GetRasterBand(1)
+    stdvb = ds.GetRasterBand(2)
+    vnd = vs30b.GetNoDataValue()
+    snd = stdvb.GetNoDataValue()
+
+    # processing chunk/block sizing
+    block = vs30b.GetBlockSize()
+    nxb = (int)((args.nx + block[0] - 1) / block[0])
+    nyb = (int)((args.ny + block[1] - 1) / block[1])
+
+    for x in range(nxb):
+        xoff = x * block[0]
+        # last block may be smaller
+        if x == nxb - 1:
+            block[0] = args.nx - x * block[0]
+        # reset y block size
+        block_y = block[1]
+
+        for y in range(nyb):
+            yoff = y * block[1]
+            # last block may be smaller
+            if y == nyb - 1:
+                block_y = args.ny - y * block[1]
+
+            # determine results on block
+            vs30v = vs30b.ReadAsArray(
+                xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+            )
+            vs30v[vs30v == vnd] = np.nan
+            stdvv = stdvb.ReadAsArray(
+                xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+            )
+            stdvv[stdvv == snd] = np.nan
+
+            locs = np.vstack(
+                np.mgrid[
+                    trans[0]
+                    + xoff * trans[1] : trans[0]
+                    + (xoff + block[0]) * trans[1] : trans[1],
+                    trans[3]
+                    + yoff * trans[5] : trans[3]
+                    + (yoff + block_y) * trans[5] : trans[5],
+                ].T
+            ).astype(np.float32)
+            vs30v, stdvv = mvn(
+                locs, vs30v.flatten(), stdvv.flatten(), sites, model
+            )
+
+            # write results
+            vs30b.WriteArray(vs30v.reshape(block_y, block[0]), xoff=xoff, yoff=yoff)
+            stdvb.WriteArray(stdvv.reshape(block_y, block[0]), xoff=xoff, yoff=yoff)
+    # close
+    vs30b = None
+    stdvb = None
+    ds = None

@@ -135,7 +135,7 @@ def combine(args, a, b):
                     w_a * ((np.log(asv) - log_ab) ** 2 + asv ** 2)
                     + w_b * ((np.log(bsv) - log_ab) ** 2 + bsv ** 2)
                 )
-                ** 0.5
+                ** 0.5, xoff=xoff, yoff=yoff
             )
     # close
     o_vs30 = None
