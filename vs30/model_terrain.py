@@ -104,7 +104,7 @@ def model_id_map(args):
     return dst
 
 
-def model_val(ids, model):
+def model_val(ids, model, args=None, points=None):
     """
     Return model values for IDs (vs30, stdv).
     """

@@ -7,7 +7,7 @@ from time import time
 
 import numpy as np
 
-from vs30 import model, model_geology, model_terrain, sites_cluster, sites_load
+from vs30 import model, model_geology, model_terrain, mvn, sites_cluster, sites_load
 
 PREFIX = "/mnt/nvme/work/plotting_data/Vs30/"
 
@@ -24,18 +24,36 @@ arg("--ymax", help="maximum northing", type=int, default=6338400)
 arg("--xd", help="horizontal spacing", type=int, default=100)
 arg("--yd", help="vertical spacing", type=int, default=100)
 # model update options
-arg("--gupdate", help="geology model updating", choices=["off", "prior", "posterior", "posterior_paper"], default="posterior_paper")
-arg("--tupdate", help="terrain model updating", choices=["off", "prior", "posterior", "posterior_paper"], default="posterior_paper")
+arg(
+    "--gupdate",
+    help="geology model updating",
+    choices=["off", "prior", "posterior", "posterior_paper"],
+    default="posterior_paper",
+)
+arg(
+    "--tupdate",
+    help="terrain model updating",
+    choices=["off", "prior", "posterior", "posterior_paper"],
+    default="posterior_paper",
+)
 # geology model has a few parametric processing options
-parser.add_argument('--no-g6mod', dest='g6mod', action='store_false')
-parser.add_argument('--no-g13mod', dest='g13mod', action='store_false')
-parser.add_argument('--no-ghybrid', dest='ghybrid', action='store_false')
+parser.add_argument("--no-g6mod", dest="g6mod", action="store_false")
+parser.add_argument("--no-g13mod", dest="g13mod", action="store_false")
+parser.add_argument("--no-ghybrid", dest="ghybrid", action="store_false")
 # combination arguments
-parser.add_argument('--stdv-weight', help="use standard deviation for model combination", action='store_true')
-parser.add_argument('--k', help="k factor for stdv based weight combination", type=float, default=1)
+parser.add_argument(
+    "--stdv-weight",
+    help="use standard deviation for model combination",
+    action="store_true",
+)
+parser.add_argument(
+    "--k", help="k factor for stdv based weight combination", type=float, default=1
+)
 # measured site arguments
-parser.add_argument('--cpt', help="use CPT based data for observed", action="store_true")
-parser.add_argument('--no-downsample', dest='dsmcg', action='store_false')
+parser.add_argument(
+    "--cpt", help="use CPT based data for observed", action="store_true"
+)
+parser.add_argument("--no-downsample", dest="dsmcg", action="store_false")
 
 # process arguments
 args = parser.parse_args()
@@ -60,15 +78,15 @@ points = np.column_stack((sites.easting.values, sites.northing.values))
 # model loop
 tiffs = []
 specs = [
-    {"update":args.gupdate, "class":model_geology, "letter":"g", "name":"geology"},
-    {"update":args.tupdate, "class":model_terrain, "letter":"t", "name":"terrain"},
+    {"update": args.gupdate, "class": model_geology, "letter": "g", "name": "geology"},
+    {"update": args.tupdate, "class": model_terrain, "letter": "t", "name": "terrain"},
 ]
 for s in specs:
     if s["update"] != "off":
-        print(s["name"], "map...")
+        print(s["name"], "model...")
         t = time()
 
-        # load model
+        print("    model measured update...")
         sites[f'{s["letter"]}id'] = s["class"].model_id(points, args)
         if s["update"] == "prior":
             m = s["class"].model_prior()
@@ -82,11 +100,19 @@ for s in specs:
             else:
                 m = model.posterior(m, sites, f'{s["letter"]}id')
 
-        # model at sites for mvn
-        #sites[f'{s["name"]}_vs30'], sites[f'{s["name"]}_stdv'] =
+        print("    model at measured sites...")
+        sites[f'{s["name"]}_vs30'], sites[f'{s["name"]}_stdv'] = (
+            s["class"]
+            .model_val(sites[f'{s["letter"]}id'], m, args=args, points=points)
+            .T
+        )
 
-        # run model for map
+        print("    model map...")
         tiffs.append(s["class"].model_val_map(args, m))
+
+        print("    measured mvn...")
+        mvn.mvn_tiff(args, s["name"], sites)
+
         print(f"{time()-t:.2f}s")
 
 if args.gupdate != "off" and args.tupdate != "off":

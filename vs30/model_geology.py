@@ -198,7 +198,7 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
     vs30 = np.empty(gid.shape, dtype=np.float32)
     stdv = np.empty_like(vs30)
     # water points are NaN
-    w = (gid != ID_NODATA) | (gid != 0)
+    w = (gid != ID_NODATA) & (gid != 0)
     vs30[w], stdv[w] = model[gid[w] - 1].T
     vs30[~w] = nan
     stdv[~w] = nan
@@ -220,7 +220,7 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
     return vs30, stdv
 
 
-def model_val(ids, model, points=None):
+def model_val(ids, model, args=None, points=None):
     """
     Return model values for IDs (vs30, stdv).
     """
@@ -277,13 +277,6 @@ def model_val_map(args, model):
     band_vs30.SetNoDataValue(MODEL_NODATA)
     band_stdv.SetNoDataValue(MODEL_NODATA)
 
-    # model version for indexing (water id 0 and source NODATA -> NODATA)
-    vs30 = np.append(MODEL_NODATA, model[:, 0]).astype(np.float32)
-    stdv = np.append(MODEL_NODATA, model[:, 1]).astype(np.float32)
-    if args.ghybrid:
-        # sigma reduction factors
-        stdv[HYBRID_SRF[0]] *= HYBRID_SRF[1]
-
     # processing chunk/block sizing
     block = band_vs30.GetBlockSize()
     nxb = (int)((args.nx + block[0] - 1) / block[0])
@@ -318,7 +311,6 @@ def model_val_map(args, model):
             result_vs30, result_stdv = _hyb_calc(
                 args, model, g_val, slope=s_val, cdist=c_val, nan=MODEL_NODATA
             )
-
             # write results
             band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
             band_stdv.WriteArray(result_stdv, xoff=xoff, yoff=yoff)
