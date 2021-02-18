@@ -103,6 +103,7 @@ points = np.column_stack((sites.easting.values, sites.northing.values))
 
 # model loop
 tiffs = []
+tiffs_mvn = []
 specs = [
     {"update": args.gupdate, "class": model_geology, "letter": "g", "name": "geology"},
     {"update": args.tupdate, "class": model_terrain, "letter": "t", "name": "terrain"},
@@ -155,7 +156,7 @@ for s in specs:
             print("    model map...")
             tiffs.append(s["class"].model_val_map(args, m))
             print("    measured mvn...")
-            mvn.mvn_tiff(args, s["name"], sites)
+            tiffs_mvn.append(mvn.mvn_tiff(args, s["name"], sites))
 
         print(f"{time()-t:.2f}s")
 
@@ -174,6 +175,7 @@ if args.gupdate != "off" and args.tupdate != "off":
             )
     else:
         model.combine_tiff(args, *tiffs)
+        model.combine_tiff(args, *tiffs_mvn)
     print(f"{time()-t:.2f}s")
 
 # save point based data

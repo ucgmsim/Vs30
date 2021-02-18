@@ -191,3 +191,4 @@ def mvn_tiff(args, model, sites):
     vs30b = None
     stdvb = None
     ds = None
+    return out_tiff
