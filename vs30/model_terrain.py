@@ -108,6 +108,10 @@ def model_val(ids, model, args=None, points=None):
     """
     Return model values for IDs (vs30, stdv).
     """
+    # allow just giving locations if ids not wanted
+    if ids is None:
+        ids = model_id(points, args)
+
     idx = ids != ID_NODATA
     result = np.full((len(ids), 2), np.nan, dtype=np.float32)
     result[idx] = model[ids[idx] - 1]

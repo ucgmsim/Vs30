@@ -6,17 +6,26 @@ import os, sys
 from time import time
 
 import numpy as np
+import pandas as pd
+from pyproj import Transformer
 
 from vs30 import model, model_geology, model_terrain, mvn, sites_cluster, sites_load
 
 PREFIX = "/mnt/nvme/work/plotting_data/Vs30/"
+wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 
 parser = ArgumentParser()
 arg = parser.add_argument
 arg("--out", help="output location", default="./vs30map")
 arg("--overwrite", help="overwrite output location", action="store_true")
 arg("--mapdata", help="location to map sources", type=str, default=PREFIX)
-# grid options
+# point options
+arg("--ll", help="locations from file, space separated longitude latitude columns")
+arg("--lon", help="set column containing longitude", type=int, default=0)
+arg("--lat", help="set column containing latitude", type=int, default=1)
+arg("--sep", help="set column separator", default=" ")
+arg("--head", help="set rows to skip", type=int, default=0)
+# grid options (used with points as well)
 arg("--xmin", help="minimum easting", type=int, default=1000000)
 arg("--xmax", help="maximum easting", type=int, default=2126400)
 arg("--ymin", help="minimum northing", type=int, default=4700000)
@@ -70,6 +79,23 @@ if os.path.exists(args.out):
         sys.exit("output exists")
 os.makedirs(args.out)
 
+# input locations
+if args.ll is not None:
+    print("loading locations...")
+    table = pd.read_csv(
+        args.ll,
+        usecols=(args.lon, args.lat),
+        names=["longitude", "latitude"],
+        engine="c",
+        skiprows=args.head,
+        dtype=np.float32,
+        sep=args.sep,
+    )
+    table["easting"], table["northing"] = wgs2nztm.transform(
+        table.longitude.values, table.latitude.values
+    )
+    table_points = table[["easting", "northing"]].values
+
 # measured sites
 print("loading sites...")
 sites = sites_load.load_vs(cpt=args.cpt, downsample_mcgann=args.dsmcg)
@@ -107,11 +133,29 @@ for s in specs:
             .T
         )
 
-        print("    model map...")
-        tiffs.append(s["class"].model_val_map(args, m))
-
-        print("    measured mvn...")
-        mvn.mvn_tiff(args, s["name"], sites)
+        if args.ll is not None:
+            print("    model points...")
+            table[f'{s["letter"]}id'] = s["class"].model_id(table_points, args)
+            table[f'{s["name"]}_vs30'], table[f'{s["name"]}_stdv'] = (
+                s["class"]
+                .model_val(
+                    table[f'{s["letter"]}id'].values, m, args=args, points=table_points
+                )
+                .T
+            )
+            print("    measured mvn...")
+            table[f'{s["name"]}_mvn_vs30'], table[f'{s["name"]}_mvn_stdv'] = mvn.mvn(
+                table_points,
+                table[f'{s["name"]}_vs30'],
+                table[f'{s["name"]}_stdv'],
+                sites,
+                s["name"],
+            )
+        else:
+            print("    model map...")
+            tiffs.append(s["class"].model_val_map(args, m))
+            print("    measured mvn...")
+            mvn.mvn_tiff(args, s["name"], sites)
 
         print(f"{time()-t:.2f}s")
 
@@ -119,9 +163,22 @@ if args.gupdate != "off" and args.tupdate != "off":
     # combined model
     print("combining geology and terrain...")
     t = time()
-    model.combine(args, *tiffs)
+    if args.ll is not None:
+        for prefix in ["", "mvn_"]:
+            table[f"{prefix}vs30"], table[f"{prefix}stdv"] = model.combine(
+                args,
+                table[f"geology_{prefix}vs30"],
+                table[f"geology_{prefix}stdv"],
+                table[f"terrain_{prefix}vs30"],
+                table[f"terrain_{prefix}stdv"],
+            )
+    else:
+        model.combine_tiff(args, *tiffs)
     print(f"{time()-t:.2f}s")
 
-# save sites
+# save point based data
+sites.to_csv(os.path.join(args.out, "measured_sites.csv"), na_rep="NA", index=False)
+if args.ll is not None:
+    table.to_csv(os.path.join(args.out, "vs30points.csv"), na_rep="NA", index=False)
 
 print("complete.")
