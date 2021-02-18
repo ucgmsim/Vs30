@@ -22,7 +22,9 @@ def interpolate(points, raster, band=1):
     x = np.floor((points[:, 0] - t[0]) / t[1]).astype(np.int32)
     y = np.floor((points[:, 1] - t[3]) / t[5]).astype(np.int32)
     valid = np.where((x >= 0) & (x < r.RasterXSize) & (y >= 0) & (y < r.RasterYSize))
-    v = np.full(len(points), ID_NODATA, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
+    v = np.full(
+        len(points), ID_NODATA, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype
+    )
     v[valid] = b.ReadAsArray()[y[valid], x[valid]]
     # defined nodata in case nodata in tif is different, so model_val() understands
     if n != ID_NODATA:
@@ -47,9 +49,31 @@ def resample(
     )
 
 
-def combine(args, a, b):
+def combine(args, vs30a, stdva, vs30b, stdvb):
     """
-    Combine geology and terrain models (path to geotiff files).
+    Combine 2 models.
+    """
+    if args.stdv_weight:
+        m_a = (stdva ** 2) ** -args.k
+        m_b = (stdvb ** 2) ** -args.k
+        w_a = m_g / (m_g + m_t)
+        w_b = m_t / (m_g + m_t)
+    else:
+        w_a = 0.5
+        w_b = 0.5
+
+    log_ab = np.log(vs30a) * w_a + np.log(vs30b) * w_b
+    stdv = (
+        w_a * ((np.log(stdva) - log_ab) ** 2 + stdva ** 2)
+        + w_b * ((np.log(stdvb) - log_ab) ** 2 + stdvb ** 2)
+    ) ** 0.5
+
+    return np.exp(log_ab), stdv
+
+
+def combine_tiff(args, a, b):
+    """
+    Combine geology and terrain models (given path to geotiff files).
     """
     # model a
     ads = gdal.Open(a, gdal.GA_ReadOnly)
@@ -116,27 +140,11 @@ def combine(args, a, b):
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
             bsv[bsv == snd] = np.nan
-
-            if args.stdv_weight:
-                m_a = (asv ** 2) ** -args.k
-                m_b = (bsv ** 2) ** -args.k
-                w_a = m_g / (m_g + m_t)
-                w_b = m_t / (m_g + m_t)
-            else:
-                w_a = 0.5
-                w_b = 0.5
-
-            log_ab = np.log(avv) * w_a + np.log(bvv) * w_b
+            vs30, stdv = combine(args, avv, asv, bvv, bsv)
 
             # write results
-            o_vs30.WriteArray(np.exp(log_ab), xoff=xoff, yoff=yoff)
-            o_stdv.WriteArray(
-                (
-                    w_a * ((np.log(asv) - log_ab) ** 2 + asv ** 2)
-                    + w_b * ((np.log(bsv) - log_ab) ** 2 + bsv ** 2)
-                )
-                ** 0.5, xoff=xoff, yoff=yoff
-            )
+            o_vs30.WriteArray(vs30, xoff=xoff, yoff=yoff)
+            o_stdv.WriteArray(stdv, xoff=xoff, yoff=yoff)
     # close
     o_vs30 = None
     o_stdv = None
@@ -171,7 +179,9 @@ def cluster_update(prior, sites, letter):
                 vs_sum += sum(np.log(ctable.vs30)) / len(ctable)
                 w[cidx] /= len(ctable)
         posterior[m, 0] = exp(vs_sum / n)
-        posterior[m, 1] = np.sqrt(sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2))
+        posterior[m, 1] = np.sqrt(
+            sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2)
+        )
 
     return posterior
 

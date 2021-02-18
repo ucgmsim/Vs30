@@ -225,6 +225,8 @@ def model_val(ids, model, args=None, points=None):
     Return model values for IDs (vs30, stdv).
     """
     # collect inputs
+    if ids is None:
+        ids = model_id(points, args)
     cdist = None
     slope = None
     # coastline distances and slope rough enough to keep as rasters (for now)
