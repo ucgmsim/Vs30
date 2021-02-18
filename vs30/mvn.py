@@ -15,6 +15,8 @@ def corr_func(distances, model):
         phi = 1407
     elif model == "terrain":
         phi = 993
+    else:
+        raise ValueError("unknown model")
     # originally linearly interpolated from logarithmically spaced distances:
     # d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
     # c = 1 / np.e ** (d / phi)
