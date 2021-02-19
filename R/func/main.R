@@ -107,7 +107,7 @@ names(vspr_yca)[names(vspr_yca) == "yca_vs30"] = "model_vs30"
 names(vspr_yca)[names(vspr_yca) == "yca_stdev"] = "model_stdv"
 
 
-mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
+mvn_run = function(model, vspr, variogram, model_type) {
     # TODO: keep_original flag to not overwrite pre-mvn data
     library(gstat)
     library(Matrix)
@@ -119,7 +119,7 @@ mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
     m_stdev = paste0(model_type, "_stdev")
     m_vs30_out = paste0(model_type, "_mvn_vs30")
     m_stdev_out = paste0(model_type, "_mvn_stdev")
-    if (overwrite) {
+    if (MVN_OVERWRITE) {
         # save memory, overwrite instead of add columns
         names(model)[names(model) == m_vs30] = m_vs30_out
         names(model)[names(model) == m_stdev] = m_stdev_out
