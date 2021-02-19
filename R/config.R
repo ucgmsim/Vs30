@@ -3,7 +3,8 @@
 PLOTRES = "/mnt/nvme/work/plotting_data/"
 PREFIX = "/mnt/nvme/work/plotting_data/Vs30/old/"
 CPT = F
-POSTERIOR_UPDATE = F
+MVN_OVERWRITE = F # overwrite pre-mvn with mvn
+POSTERIOR_UPDATE = F # updates prior models using observed sites (T) or use posterior from paper (F)
 POSTERIOR_CLUSTERS = F
 # EX mvn_params.R
 # note that some if statements have been removed to match default values
