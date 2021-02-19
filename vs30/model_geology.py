@@ -212,10 +212,26 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
             vs30[w] = 10 ** np.interp(np.log10(slope[w]), spec[1], spec[2])
     if args.g6mod:
         w = np.where(gid == 4)
-        vs30[w] = np.maximum(240, np.minimum(500, 240 + (500 - 240) * (cdist[w] - 8000) / (20000 - 8000)))
+        # explicitly set cdist as float32 which can propagate through
+        # keeping it as uint16 causes overflows with integer multiplication
+        vs30[w] = np.maximum(
+            240,
+            np.minimum(
+                500,
+                240
+                + (500 - 240) * (cdist[w].astype(np.float32) - 8000) / (20000 - 8000),
+            ),
+        )
     if args.g13mod:
         w = np.where(gid == 10)
-        vs30[w] = np.maximum(197, np.minimum(500, 197 + (500 - 197) * (cdist[w] - 8000) / (20000 - 8000)))
+        vs30[w] = np.maximum(
+            197,
+            np.minimum(
+                500,
+                197
+                + (500 - 197) * (cdist[w].astype(np.float32) - 8000) / (20000 - 8000),
+            ),
+        )
 
     return vs30, stdv
 
