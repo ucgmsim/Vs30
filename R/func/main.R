@@ -127,7 +127,7 @@ mvn_run = function(model, vspr, variogram, model_type) {
         m_stdev = m_stdev_out
     } else {
         model[m_vs30_out] = NA
-        model[m_stdv_out] = NA
+        model[m_stdev_out] = NA
     }
 
     valid_idx = which(!is.na(model[, m_vs30]))
