@@ -88,7 +88,7 @@ if args.ll is not None:
         names=["longitude", "latitude"],
         engine="c",
         skiprows=args.head,
-        dtype=np.float32,
+        dtype=np.float64,
         sep=args.sep,
     )
     table["easting"], table["northing"] = wgs2nztm.transform(

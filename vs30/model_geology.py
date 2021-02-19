@@ -86,7 +86,7 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, args, polygon=False):
+def model_id(points, args, polygon=True):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
@@ -96,16 +96,15 @@ def model_id(points, args, polygon=False):
         gid_tif = model_id_map(args)
         return interpolate(points, gid_tif)
 
-    shp = ogr.Open(os.path.join(args.modeldata, QMAP), gdal.GA_ReadOnly)
+    shp = ogr.Open(os.path.join(args.mapdata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
     # ocean is NaN while water polygons are 0
-    values = np.full(len(points), ID_NODATA, dtype=np.float32)
+    values = np.full(len(points), ID_NODATA, dtype=np.uint8)
     pt = ogr.Geometry(ogr.wkbPoint)
     for i, p in enumerate(points):
-        # why not decimal values??
-        pt.AddPoint_2D(round(p[0]), round(p[1]))
+        pt.AddPoint_2D(p[0], p[1])
         lay.SetSpatialFilter(pt)
         f = lay.GetNextFeature()
         if f is not None:
