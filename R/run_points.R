@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-source("R/main.R")
+source("func/main.R")
 
 ###
 ### CUSTOM POINTS VERSION
@@ -31,3 +31,4 @@ model = mvn_run(model, vspr_aak, variogram_aak, "aak")
 model = mvn_run(model, vspr_yca, variogram_yca, "yca")
 model = weighting_run(model)
 write.csv(model, OUT)
+

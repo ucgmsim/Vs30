@@ -1,6 +1,6 @@
 # use version from Kevin's paper
 
-load("data/BayesUpdateTables.Rdata")
+load("../data/BayesUpdateTables.Rdata")
 model_ahdiak = list(vs30=upd_AhdiAK_noQ3$summary$posteriorVs30,
                     stdv=upd_AhdiAK_noQ3$summary$posteriorStDv)
 # unload Rdata file contents

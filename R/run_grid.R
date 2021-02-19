@@ -2,7 +2,7 @@
 
 library(parallel) # cluster
 
-source("R/main.R")
+source("func/main.R")
 
 ###
 ### WHOLE NZ
@@ -67,7 +67,7 @@ if (geology) {
 
 ### STEP 2: TERRAIN MODEL
 if (terrain) {
-    if (geology) source("R/model_yongca.R")
+    if (geology) source("func/model_yongca.R")
     cat("terrain model loading resources into cluster...\n")
     # uses slightly more ram than geology but much faster so could decrcease cores here if RAM issue
     pool = makeCluster(ncores)

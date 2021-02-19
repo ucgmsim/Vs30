@@ -6,15 +6,15 @@ library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
 source("config.R")
-source("R/const.R")
-source("R/vspr.R")
+source("func/const.R")
+source("func/vspr.R")
 
 
 # working files (slp in NZMG)
 slp_nzsi_9c = as(raster(paste0(PREFIX, "slp_nzsi_9c.nc")), "SpatialGridDataFrame")
 slp_nzni_9c = as(raster(paste0(PREFIX, "slp_nzni_9c.nc")), "SpatialGridDataFrame")
-variogram_aak = read.csv(paste0("data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
-variogram_yca = read.csv(paste0("data/variogram_", TERRAIN, "_v7.csv"))[2:10]
+variogram_aak = read.csv(paste0("../data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
+variogram_yca = read.csv(paste0("../data/variogram_", TERRAIN, "_v7.csv"))[2:10]
 class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
 
 # lowest LINZ resolution 1:500k
@@ -44,7 +44,7 @@ geology_model_run = function(model, only_id=F) {
     library(raster) # raster
     library(rgeos) # gDistance
 
-    source(paste0("R/model_", GEOLOGY, ".R"))
+    source(paste0("func/model_", GEOLOGY, ".R"))
 
     # find group IDs
     xy00 = SpatialPoints(model[, c("x", "y")], proj4string=crs(NZTM))
@@ -113,7 +113,7 @@ mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
     library(Matrix)
     library(raster) # crs
 
-    source("R/mvn.R")
+    source("func/mvn.R")
 
     m_vs30 = paste0(model_type, "_vs30")
     m_stdev = paste0(model_type, "_stdev")

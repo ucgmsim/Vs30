@@ -1,7 +1,7 @@
 #PLOTRES = "/nesi/project/nesi00213/PlottingData/"
 #PREFIX = "/nesi/project/nesi00213/PlottingData/Vs30/"
-PLOTRES = "/run/media/vap30/Hathor/work/plotting_data/"
-PREFIX = "/run/media/vap30/Hathor/work/plotting_data/Vs30/"
+PLOTRES = "/mnt/nvme/work/plotting_data/"
+PREFIX = "/mnt/nvme/work/plotting_data/Vs30/old/"
 CPT = F
 POSTERIOR_UPDATE = F
 POSTERIOR_CLUSTERS = F

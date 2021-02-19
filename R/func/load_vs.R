@@ -1,8 +1,8 @@
 library(rgdal)
 library(sp)
 
-source("R/const.R")
-source("R/downsample_McGann.R")
+source("func/const.R")
+source("func/downsample_McGann.R")
 
 
 load_vs = function(cpt=F, downsample_McGann=TRUE){
@@ -13,7 +13,7 @@ load_vs = function(cpt=F, downsample_McGann=TRUE){
     # McGann data is downsampled (downSampleMcGann)
 
     if (cpt) {
-        cpt = read.table("data/cptvs30.ssv", header=T, fill=T, row.names=NULL)
+        cpt = read.table("../data/cptvs30.ssv", header=T, fill=T, row.names=NULL)
         # remove blank columns
         cpt = cpt[which(!is.na(cpt$Vs30)),]
         names(cpt) = c("Easting", "Northing", "Vs30")
@@ -24,9 +24,9 @@ load_vs = function(cpt=F, downsample_McGann=TRUE){
         return(cpt)
     } else {
         # load each Vs data source.
-        mcgann = loadvs_McGann("data/McGann_cptVs30data.csv", downsample=downsample_McGann)
-        wotherspoon = loadvs_Wotherspoon("data/Characterised Vs30 Canterbury_June2017_KFed.csv")
-        kaiseretal = loadvs_KaiserEtAl("data/20170817_vs_allNZ_duplicatesCulled.ll")
+        mcgann = loadvs_McGann("../data/McGann_cptVs30data.csv", downsample=downsample_McGann)
+        wotherspoon = loadvs_Wotherspoon("../data/Characterised Vs30 Canterbury_June2017_KFed.csv")
+        kaiseretal = loadvs_KaiserEtAl("../data/20170817_vs_allNZ_duplicatesCulled.ll")
 
         # Bind data together (can be separated using DataSource field)
         vspoints = rbind(mcgann, wotherspoon, kaiseretal)  
