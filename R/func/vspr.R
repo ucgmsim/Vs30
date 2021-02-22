@@ -56,7 +56,7 @@ vspr_run = function(outfile="../data/vspr.csv", posterior_update=F, clusters=F, 
     # save for Python clustering code to read and update
     write.csv(vspr, file=outfile, row.names=F)
     if (clusters) {
-        system("./python/cluster.py")
+        system("./func/cluster.py")
         vspr = read.csv("../data/vspr.csv")
     }
     # create posterior models
