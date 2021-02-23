@@ -56,8 +56,8 @@ def combine(comb, vs30a, stdva, vs30b, stdvb):
     if comb.stdv_weight:
         m_a = (stdva ** 2) ** -comb.k
         m_b = (stdvb ** 2) ** -comb.k
-        w_a = m_g / (m_g + m_t)
-        w_b = m_t / (m_g + m_t)
+        w_a = m_a / (m_a + m_b)
+        w_b = m_b / (m_a + m_b)
     else:
         w_a = 0.5
         w_b = 0.5
