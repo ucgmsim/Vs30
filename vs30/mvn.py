@@ -17,7 +17,7 @@ def corr_func(distances, model):
         phi = 993
     else:
         raise ValueError("unknown model")
-    # originally linearly interpolated from logarithmically spaced distances:
+    # r code linearly interpolated from logarithmically spaced distances:
     # d = np.exp(np.linspace(np.log(0.1), np.log(2000e3), 128))
     # c = 1 / np.e ** (d / phi)
     # return np.interp(distances, d, c)
@@ -129,13 +129,13 @@ def mvn(
     return model_vs30 * np.exp(pred - np.log(model_vs30)), np.sqrt(var)
 
 
-def mvn_tiff(args, model, sites):
+def mvn_tiff(paths, grid, model, sites):
     """
     Run MVN over GeoTIFF.
     """
     # mvn based on original model, modified if in proximity to measured sites
-    out_tiff = os.path.join(args.out, f"{model}_mvn.tif")
-    copyfile(os.path.join(args.out, f"{model}.tif"), out_tiff)
+    out_tiff = os.path.join(paths.out, f"{model}_mvn.tif")
+    copyfile(os.path.join(paths.out, f"{model}.tif"), out_tiff)
     ds = gdal.Open(out_tiff, gdal.GA_Update)
     trans = ds.GetGeoTransform()
     vs30b = ds.GetRasterBand(1)
@@ -145,14 +145,14 @@ def mvn_tiff(args, model, sites):
 
     # processing chunk/block sizing
     block = vs30b.GetBlockSize()
-    nxb = (int)((args.nx + block[0] - 1) / block[0])
-    nyb = (int)((args.ny + block[1] - 1) / block[1])
+    nxb = (int)((grid.nx + block[0] - 1) / block[0])
+    nyb = (int)((grid.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = args.nx - x * block[0]
+            block[0] = grid.nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -160,7 +160,7 @@ def mvn_tiff(args, model, sites):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = args.ny - y * block[1]
+                block_y = grid.ny - y * block[1]
 
             # determine results on block
             vs30v = vs30b.ReadAsArray(
@@ -182,9 +182,7 @@ def mvn_tiff(args, model, sites):
                     + (yoff + block_y) * trans[5] : trans[5],
                 ].T
             ).astype(np.float32)
-            vs30v, stdvv = mvn(
-                locs, vs30v.flatten(), stdvv.flatten(), sites, model
-            )
+            vs30v, stdvv = mvn(locs, vs30v.flatten(), stdvv.flatten(), sites, model)
 
             # write results
             vs30b.WriteArray(vs30v.reshape(block_y, block[0]), xoff=xoff, yoff=yoff)

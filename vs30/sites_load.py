@@ -60,23 +60,26 @@ def downsample_mcg(df, res=1000):
     return mcg[~mcg.duplicated()]
 
 
-def load_vs(cpt=False, downsample_mcgann=True):
+def load_vs(source="original"):
     """
     Load measured sites. Either newer CPT based or paper version using 3 sources.
     """
 
-    if cpt:
+    if source == "original":
+        # load each Vs data source
+        mcgann = load_mcgann_vs()
+        wotherspoon = load_wotherspoon_vs()
+        kaiseretal = load_kaiseretal_vs()
+
+        # remove Kaiser Q3 unless station name is 3 chars long (broadband seismometers)
+        kaiseretal = kaiseretal[
+            (kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)
+        ]
+
+        return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
+
+    if source == "cpt":
         return load_cpt_vs()
-
-    # load each Vs data source
-    mcgann = load_mcgann_vs(downsample=downsample_mcgann)
-    wotherspoon = load_wotherspoon_vs()
-    kaiseretal = load_kaiseretal_vs()
-
-    # remove Kaiser Q3 unless station name is 3 chars long (broadband seismometers)
-    kaiseretal = kaiseretal[(kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)]
-
-    return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
 
 
 def load_cpt_vs():
@@ -84,20 +87,21 @@ def load_cpt_vs():
     Newer collection of Vs30 from CPT data.
     """
     cpt = pd.read_csv(
-            DATA_CPT,
-            sep=" ",
-            usecols=[0, 1, 2],
-            names=["easting", "northing", "vs30"],
-            skiprows=1,
-            engine="c",
-            dtype=np.float32,
-        )
+        DATA_CPT,
+        sep=" ",
+        usecols=[0, 1, 2],
+        names=["easting", "northing", "vs30"],
+        skiprows=1,
+        engine="c",
+        dtype=np.float32,
+    )
     # remove rows with no vs30 value
     cpt = cpt[~np.isnan(cpt.vs30)].reset_index()
 
     cpt["uncertainty"] = np.float32(0.5)
 
     return cpt
+
 
 def load_mcgann_vs(downsample=True):
     """
