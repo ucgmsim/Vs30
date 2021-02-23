@@ -5,9 +5,9 @@ PREFIX = "/mnt/nvme/work/plotting_data/Vs30/"
 
 
 @dataclass
-class Paths:
+class PathsParams:
     """
-    Locations to things.
+    Locations to resources, ouputs and anything else.
     """
 
     out: str = "./vs30map"
@@ -16,7 +16,7 @@ class Paths:
 
 
 @dataclass
-class Sites:
+class SitesParams:
     """
     Parameters for measured sites.
     """
@@ -27,7 +27,7 @@ class Sites:
 
 
 @dataclass
-class Grid:
+class GridParams:
     """
     Grid parameters for rasterization.
     """
@@ -48,20 +48,20 @@ class Grid:
 
 
 @dataclass
-class LLFile:
+class LLFileParams:
     """
     Long/Lat file for locations of interest.
     """
 
-    ll: str
-    lon: int = 0
-    lat: int = 1
-    sep: str = " "
-    head: int = 0
+    ll_path: str
+    lon_col_ix: int = 0
+    lat_col_ix: int = 1
+    col_sep: str = " "
+    skip_rows: int = 0
 
 
 @dataclass
-class Geology:
+class GeologyParams:
     """
     Geology model parameters.
     """
@@ -77,7 +77,7 @@ class Geology:
 
 
 @dataclass
-class Terrain:
+class TerrainParams:
     """
     Terrain model parameters.
     """
@@ -90,7 +90,7 @@ class Terrain:
 
 
 @dataclass
-class Combination:
+class CombinationParams:
     """
     Model combination parameters.
     """
@@ -102,62 +102,94 @@ class Combination:
 def load_args():
     parser = ArgumentParser()
     arg = parser.add_argument
-    arg("--out", help="output location", type=type(Paths.out), default=Paths.out)
+    arg(
+        "--out",
+        help="output location",
+        type=type(PathsParams.out),
+        default=PathsParams.out,
+    )
     arg("--overwrite", help="overwrite output location", action="store_true")
     arg(
         "--mapdata",
         help="location to map sources",
-        type=type(Paths.mapdata),
-        default=Paths.mapdata,
+        type=type(PathsParams.mapdata),
+        default=PathsParams.mapdata,
     )
     # point options
     arg(
-        "--ll",
+        "--ll-file",
         help="locations from file instead of running over a grid, space separated longitude latitude columns",
     )
     arg(
-        "--lon",
+        "--lon-col-ix",
         help="ll file column containing longitude",
-        type=type(LLFile.lon),
-        default=LLFile.lon,
+        type=type(LLFileParams.lon_col_ix),
+        default=LLFileParams.lon_col_ix,
     )
     arg(
-        "--lat",
+        "--lat-col-ix",
         help="ll file column containing latitude",
-        type=type(LLFile.lat),
-        default=LLFile.lat,
+        type=type(LLFileParams.lat_col_ix),
+        default=LLFileParams.lat_col_ix,
     )
     arg(
-        "--sep",
+        "--col-sep",
         help="ll file column separator",
-        type=type(LLFile.sep),
-        default=LLFile.sep,
+        type=type(LLFileParams.col_sep),
+        default=LLFileParams.col_sep,
     )
     arg(
-        "--head",
+        "--skip-rows",
         help="ll file rows to skip",
-        type=type(LLFile.head),
-        default=LLFile.head,
+        type=type(LLFileParams.skip_rows),
+        default=LLFileParams.skip_rows,
     )
     # grid options (used with points as well)
-    arg("--xmin", help="minimum easting", type=type(Grid.xmin), default=Grid.xmin)
-    arg("--xmax", help="maximum easting", type=type(Grid.xmax), default=Grid.xmax)
-    arg("--dx", help="horizontal spacing", type=type(Grid.dx), default=Grid.dx)
-    arg("--ymin", help="minimum northing", type=type(Grid.ymin), default=Grid.ymin)
-    arg("--ymax", help="maximum northing", type=type(Grid.ymax), default=Grid.ymax)
-    arg("--dy", help="vertical spacing", type=type(Grid.dy), default=Grid.dy)
+    arg(
+        "--xmin",
+        help="minimum easting",
+        type=type(GridParams.xmin),
+        default=GridParams.xmin,
+    )
+    arg(
+        "--xmax",
+        help="maximum easting",
+        type=type(GridParams.xmax),
+        default=GridParams.xmax,
+    )
+    arg(
+        "--dx",
+        help="horizontal spacing",
+        type=type(GridParams.dx),
+        default=GridParams.dx,
+    )
+    arg(
+        "--ymin",
+        help="minimum northing",
+        type=type(GridParams.ymin),
+        default=GridParams.ymin,
+    )
+    arg(
+        "--ymax",
+        help="maximum northing",
+        type=type(GridParams.ymax),
+        default=GridParams.ymax,
+    )
+    arg(
+        "--dy", help="vertical spacing", type=type(GridParams.dy), default=GridParams.dy
+    )
     # model update options
     arg(
         "--gupdate",
         help="geology model updating",
-        choices=Geology.choices,
-        default=Geology.update,
+        choices=GeologyParams.choices,
+        default=GeologyParams.update,
     )
     arg(
         "--tupdate",
         help="terrain model updating",
-        choices=Terrain.choices,
-        default=Terrain.update,
+        choices=TerrainParams.choices,
+        default=TerrainParams.update,
     )
     # geology model has a few parametric processing options
     parser.add_argument("--no-g6mod", dest="g6mod", action="store_false")
@@ -172,23 +204,23 @@ def load_args():
     parser.add_argument(
         "--k",
         help="k factor for stdv based weight combination",
-        type=type(Combination.k),
-        default=Combination.k,
+        type=type(CombinationParams.k),
+        default=CombinationParams.k,
     )
     # measured site arguments
     arg(
         "--source",
         help="measured site dataset",
-        choices=Sites.choices,
-        default=Sites.source,
+        choices=SitesParams.choices,
+        default=SitesParams.source,
     )
 
     # process arguments
     args = parser.parse_args()
     # argument sets
-    p_paths = Paths(out=args.out, overwrite=args.overwrite, mapdata=args.mapdata)
-    p_sites = Sites(source=args.source)
-    p_grid = Grid(
+    p_paths = PathsParams(out=args.out, overwrite=args.overwrite, mapdata=args.mapdata)
+    p_sites = SitesParams(source=args.source)
+    p_grid = GridParams(
         xmin=args.xmin,
         xmax=args.xmax,
         dx=args.dx,
@@ -197,14 +229,20 @@ def load_args():
         dy=args.dy,
     )
     if args.ll is not None:
-        p_ll = LLFile(args.ll, lon=args.lon, lat=args.lat, sep=args.sep, head=args.head)
+        p_ll = LLFileParams(
+            args.ll_file,
+            lon_col_ix=args.lon_col_ix,
+            lat_col_ix=args.lat_col_ix,
+            col_sep=args.col_sep,
+            skip_rows=args.skip_rows,
+        )
     else:
         p_ll = None
-    p_geol = Geology(
+    p_geol = GeologyParams(
         hybrid=args.ghybrid, mod6=args.g6mod, mod13=args.g13mod, update=args.gupdate
     )
-    p_terr = Terrain(update=args.tupdate)
-    p_comb = Combination(stdv_weight=args.stdv_weight, k=args.k)
+    p_terr = TerrainParams(update=args.tupdate)
+    p_comb = CombinationParams(stdv_weight=args.stdv_weight, k=args.k)
 
     return {
         "paths": p_paths,

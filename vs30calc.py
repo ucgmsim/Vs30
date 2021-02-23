@@ -33,13 +33,13 @@ os.makedirs(a["paths"].out)
 if a["ll"] is not None:
     print("loading locations...")
     table = pd.read_csv(
-        a["ll"].ll,
-        usecols=(a["ll"].lon, a["ll"].lat),
+        a["ll"].ll_file,
+        usecols=(a["ll"].lon_col_ix, a["ll"].lat_col_ix),
         names=["longitude", "latitude"],
         engine="c",
-        skiprows=a["ll"].head,
+        skiprows=a["ll"].skip_rows,
         dtype=np.float64,
-        sep=a["ll"].sep,
+        sep=a["ll"].col_sep,
     )
     table["easting"], table["northing"] = wgs2nztm.transform(
         table.longitude.values, table.latitude.values
@@ -97,7 +97,7 @@ for s in [a["geol"], a["terr"]]:
             grid=a["grid"],
         ).T
         print("    measured mvn...")
-        table[f"{sname}_mvn_vs30"], table[f"{s.name}_mvn_stdv"] = mvn.mvn(
+        table[f"{s.name}_mvn_vs30"], table[f"{s.name}_mvn_stdv"] = mvn.mvn(
             table_points,
             table[f"{s.name}_vs30"],
             table[f"{s.name}_stdv"],
