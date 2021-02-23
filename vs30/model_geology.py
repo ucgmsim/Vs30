@@ -262,7 +262,6 @@ def model_val_map(paths, grid, model, opts):
     gid_tif = model_id_map(paths, grid)
     gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)
     g_band = gds.GetRasterBand(1)
-    g_nodata = g_band.GetNoDataValue()
     # coastline distances
     c_val = None
     if opts.mod6 or opts.mod13:
@@ -274,7 +273,6 @@ def model_val_map(paths, grid, model, opts):
         slope_tif = slope_map(paths, grid)
         sds = gdal.Open(slope_tif, gdal.GA_ReadOnly)
         s_band = sds.GetRasterBand(1)
-        s_nodata = s_band.GetNoDataValue()
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
