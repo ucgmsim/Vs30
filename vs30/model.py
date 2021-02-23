@@ -49,13 +49,13 @@ def resample(
     )
 
 
-def combine(args, vs30a, stdva, vs30b, stdvb):
+def combine(comb, vs30a, stdva, vs30b, stdvb):
     """
     Combine 2 models.
     """
-    if args.stdv_weight:
-        m_a = (stdva ** 2) ** -args.k
-        m_b = (stdvb ** 2) ** -args.k
+    if comb.stdv_weight:
+        m_a = (stdva ** 2) ** -comb.k
+        m_b = (stdvb ** 2) ** -comb.k
         w_a = m_g / (m_g + m_t)
         w_b = m_t / (m_g + m_t)
     else:
@@ -71,7 +71,7 @@ def combine(args, vs30a, stdva, vs30b, stdvb):
     return np.exp(log_ab), stdv
 
 
-def combine_tiff(args, a, b):
+def combine_tiff(out_dir, filename, grid, comb, a, b):
     """
     Combine geology and terrain models (given path to geotiff files).
     """
@@ -86,9 +86,9 @@ def combine_tiff(args, a, b):
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
-        os.path.join(args.out, "combined.tif"),
-        xsize=args.nx,
-        ysize=args.ny,
+        os.path.join(out_dir, filename),
+        xsize=grid.nx,
+        ysize=grid.ny,
         bands=2,
         eType=gdal.GDT_Float32,
         options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
@@ -106,14 +106,14 @@ def combine_tiff(args, a, b):
 
     # processing chunk/block sizing
     block = o_vs30.GetBlockSize()
-    nxb = (int)((args.nx + block[0] - 1) / block[0])
-    nyb = (int)((args.ny + block[1] - 1) / block[1])
+    nxb = (int)((grid.nx + block[0] - 1) / block[0])
+    nyb = (int)((grid.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = args.nx - x * block[0]
+            block[0] = grid.nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -121,7 +121,7 @@ def combine_tiff(args, a, b):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = args.ny - y * block[1]
+                block_y = grid.ny - y * block[1]
 
             # determine results on block
             avv = a_vs30.ReadAsArray(
@@ -140,7 +140,7 @@ def combine_tiff(args, a, b):
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
             bsv[bsv == snd] = np.nan
-            vs30, stdv = combine(args, avv, asv, bvv, bsv)
+            vs30, stdv = combine(comb, avv, asv, bvv, bsv)
 
             # write results
             o_vs30.WriteArray(vs30, xoff=xoff, yoff=yoff)

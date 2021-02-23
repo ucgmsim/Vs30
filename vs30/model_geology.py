@@ -86,17 +86,17 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, args, polygon=True):
+def model_id(points, paths, grid=None, polygon=True):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
     """
     if not polygon:
         # faster method for model ID that uses rasterization
-        gid_tif = model_id_map(args)
+        gid_tif = model_id_map(paths, grid)
         return interpolate(points, gid_tif)
 
-    shp = ogr.Open(os.path.join(args.mapdata, QMAP), gdal.GA_ReadOnly)
+    shp = ogr.Open(os.path.join(paths.mapdata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
@@ -113,11 +113,11 @@ def model_id(points, args, polygon=True):
     return values
 
 
-def model_id_map(args):
+def model_id_map(paths, grid):
     """
     Optimised polygon search using geotiff rasterisation.
     """
-    path = os.path.join(args.out, "gid.tif")
+    path = os.path.join(paths.out, "gid.tif")
     if os.path.isfile(path):
         return path
     # make sure output raster has a nicely defined projection
@@ -126,12 +126,12 @@ def model_id_map(args):
     # calling Rasterize without saving result to variable will fail
     ds = gdal.Rasterize(
         path,
-        os.path.join(args.mapdata, QMAP),
+        os.path.join(paths.mapdata, QMAP),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputSRS=srs,
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
+        outputBounds=[grid.xmin, grid.ymin, grid.xmax, grid.ymax],
+        xRes=grid.dx,
+        yRes=grid.dy,
         noData=ID_NODATA,
         attribute="gid",
         outputType=gdal.GDT_Byte,
@@ -143,21 +143,21 @@ def model_id_map(args):
     return path
 
 
-def coast_distance_map(args):
+def coast_distance_map(paths, grid):
     """
     Calculate coast distance needed for G06 and G13 mods.
     """
-    path = os.path.join(args.out, "coast.tif")
+    path = os.path.join(paths.out, "coast.tif")
     if os.path.isfile(path):
         return path
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
-        os.path.join(args.mapdata, COAST),
+        os.path.join(paths.mapdata, COAST),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
+        outputBounds=[grid.xmin, grid.ymin, grid.xmax, grid.ymax],
+        xRes=grid.dx,
+        yRes=grid.dy,
         noData=0,
         burnValues=1,
         outputType=gdal.GetDataTypeByName("UInt16"),
@@ -172,24 +172,24 @@ def coast_distance_map(args):
     return path
 
 
-def slope_map(args):
+def slope_map(paths, grid):
     """
     Calculate slope at map points by resampling / resizing origin slope map.
     """
-    dst = os.path.join(args.out, "slope.tif")
+    dst = os.path.join(paths.out, "slope.tif")
     if os.path.isfile(dst):
         return dst
-    src = os.path.join(args.mapdata, SLOPE)
-    resample(src, dst, args.xmin, args.xmax, args.ymin, args.ymax, args.xd, args.yd)
+    src = os.path.join(paths.mapdata, SLOPE)
+    resample(src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy)
     return dst
 
 
-def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-9999):
+def _hyb_calc(geol, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-9999):
     """
     Return model values given inputs.
     """
     # sigma reduction factors
-    if args.ghybrid:
+    if geol.hybrid:
         model = np.copy(model)
         # still updating g06 even if using coast function instead of hybrid
         model[HYBRID_SRF[0] - 1, 1] *= HYBRID_SRF[1]
@@ -201,15 +201,15 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
     vs30[w], stdv[w] = model[gid[w] - 1].T
     vs30[~w] = nan
     stdv[~w] = nan
-    if args.ghybrid:
+    if geol.hybrid:
         # prevent -Inf warnings
         slope[np.where((slope == 0) | (slope == s_nodata))] = 1e-9
         for spec in HYBRID_VS30:
-            if spec[0] == 4 and args.g6mod:
+            if spec[0] == 4 and geol.mod6:
                 continue
             w = np.where(gid == spec[0])
             vs30[w] = 10 ** np.interp(np.log10(slope[w]), spec[1], spec[2])
-    if args.g6mod:
+    if geol.mod6:
         w = np.where(gid == 4)
         # explicitly set cdist as float32 which can propagate through
         # keeping it as uint16 causes overflows with integer multiplication
@@ -221,7 +221,7 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
                 + (500 - 240) * (cdist[w].astype(np.float32) - 8000) / (20000 - 8000),
             ),
         )
-    if args.g13mod:
+    if geol.mod13:
         w = np.where(gid == 10)
         vs30[w] = np.maximum(
             197,
@@ -235,43 +235,43 @@ def _hyb_calc(args, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
     return vs30, stdv
 
 
-def model_val(ids, model, args=None, points=None):
+def model_val(ids, model, opts, paths=None, points=None, grid=None):
     """
     Return model values for IDs (vs30, stdv).
     """
     # collect inputs
     if ids is None:
-        ids = model_id(points, args)
+        ids = model_id(points, paths, grid=grid)
     cdist = None
     slope = None
     # coastline distances and slope rough enough to keep as rasters (for now)
-    if args.g6mod or args.g13mod:
-        cdist = interpolate(points, coast_distance_map(args))
-    if args.ghybrid:
-        slope = interpolate(points, slope_map(args))
+    if opts.mod6 or opts.mod13:
+        cdist = interpolate(points, coast_distance_map(paths, grid))
+    if opts.hybrid:
+        slope = interpolate(points, slope_map(paths, grid))
     # run
-    return np.column_stack(_hyb_calc(args, model, ids, slope=slope, cdist=cdist))
+    return np.column_stack(_hyb_calc(opts, model, ids, slope=slope, cdist=cdist))
 
 
-def model_val_map(args, model):
+def model_val_map(paths, grid, model, opts):
     """
     Make a tif map of model values.
     """
-    path = os.path.join(args.out, "geology.tif")
+    path = os.path.join(paths.out, "geology.tif")
     # geology grid
-    gid_tif = model_id_map(args)
+    gid_tif = model_id_map(paths, grid)
     gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)
     g_band = gds.GetRasterBand(1)
     g_nodata = g_band.GetNoDataValue()
     # coastline distances
     c_val = None
-    if args.g6mod or args.g13mod:
-        cdist_tif = coast_distance_map(args)
+    if opts.mod6 or opts.mod13:
+        cdist_tif = coast_distance_map(paths, grid)
         cds = gdal.Open(cdist_tif, gdal.GA_ReadOnly)
         c_band = cds.GetRasterBand(1)
     s_val = None
-    if args.ghybrid:
-        slope_tif = slope_map(args)
+    if opts.hybrid:
+        slope_tif = slope_map(paths, grid)
         sds = gdal.Open(slope_tif, gdal.GA_ReadOnly)
         s_band = sds.GetRasterBand(1)
         s_nodata = s_band.GetNoDataValue()
@@ -279,8 +279,8 @@ def model_val_map(args, model):
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
         path,
-        xsize=args.nx,
-        ysize=args.ny,
+        xsize=grid.nx,
+        ysize=grid.ny,
         bands=2,
         eType=gdal.GDT_Float32,
         options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
@@ -296,14 +296,14 @@ def model_val_map(args, model):
 
     # processing chunk/block sizing
     block = band_vs30.GetBlockSize()
-    nxb = (int)((args.nx + block[0] - 1) / block[0])
-    nyb = (int)((args.ny + block[1] - 1) / block[1])
+    nxb = (int)((grid.nx + block[0] - 1) / block[0])
+    nyb = (int)((grid.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = args.nx - x * block[0]
+            block[0] = grid.nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -311,22 +311,22 @@ def model_val_map(args, model):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = args.ny - y * block[1]
+                block_y = grid.ny - y * block[1]
 
             # determine results on block
             g_val = g_band.ReadAsArray(
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
-            if args.ghybrid:
+            if opts.hybrid:
                 s_val = s_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 )
-            if args.g6mod or args.g13mod:
+            if opts.mod6 or opts.mod13:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 ).astype(np.float32)
             result_vs30, result_stdv = _hyb_calc(
-                args, model, g_val, slope=s_val, cdist=c_val, nan=MODEL_NODATA
+                opts, model, g_val, slope=s_val, cdist=c_val, nan=MODEL_NODATA
             )
             # write results
             band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
