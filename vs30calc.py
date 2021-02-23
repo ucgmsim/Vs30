@@ -9,11 +9,11 @@ import pandas as pd
 from pyproj import Transformer
 
 from vs30 import (
-    args,
     model,
     model_geology,
     model_terrain,
     mvn,
+    params,
     sites_cluster,
     sites_load,
 )
