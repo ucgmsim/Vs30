@@ -3,9 +3,12 @@ from sklearn.cluster import DBSCAN
 
 ID_NODATA = 255
 
-def cluster(sites, letter, min_group=5, eps=15000, plots=False):
+def cluster(sites, letter, min_group=5, eps=15000):
     """
-    plots: make figures, not expected to be used very often
+    Sort sites into clusters spatially.
+    letter: which id? "t"(id) for terrain or "g"(id) for geology
+    min_group: the minimum group size
+    eps: (metres) how far points are to be considered a different cluster
     """
 
     features = np.column_stack((sites.easting.values, sites.northing.values))
