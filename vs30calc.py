@@ -36,7 +36,7 @@ os.makedirs(a["paths"].out)
 if a["ll"] is not None:
     print("loading locations...")
     table = pd.read_csv(
-        a["ll"].ll_file,
+        a["ll"].ll_path,
         usecols=(a["ll"].lon_col_ix, a["ll"].lat_col_ix),
         names=["longitude", "latitude"],
         engine="c",

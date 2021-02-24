@@ -117,7 +117,7 @@ def load_args():
     )
     # point options
     arg(
-        "--ll-file",
+        "--ll-path",
         help="locations from file instead of running over a grid, space separated longitude latitude columns",
     )
     arg(
@@ -228,9 +228,9 @@ def load_args():
         ymax=args.ymax,
         dy=args.dy,
     )
-    if args.ll is not None:
+    if args.ll_path is not None:
         p_ll = LLFileParams(
-            args.ll_file,
+            args.ll_path,
             lon_col_ix=args.lon_col_ix,
             lat_col_ix=args.lat_col_ix,
             col_sep=args.col_sep,
