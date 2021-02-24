@@ -91,14 +91,14 @@ def mvn(
     for i, model_loc in enumerate(model_locs):
         if np.isnan(model_vs30[i]):
             continue
-        distances = dists(obs_locs - model_locs[i])
+        distances = dists(obs_locs - model_loc)
         wanted = distances < max_dist
         if max(wanted) is False:
             # not close enough to any observed locations
             continue
 
         # distances between interesting points
-        cov_matrix = dist_mat(xy2complex(np.vstack((model_locs[i], obs_locs[wanted]))))
+        cov_matrix = dist_mat(xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
         # correlation
         cov_matrix = corr_func(cov_matrix, model)
         # uncertainties

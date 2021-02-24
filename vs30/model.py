@@ -63,10 +63,10 @@ def combine(comb, vs30a, stdva, vs30b, stdvb):
         w_b = 0.5
 
     log_ab = np.log(vs30a) * w_a + np.log(vs30b) * w_b
-    stdv = (
-        w_a * ((np.log(stdva) - log_ab) ** 2 + stdva ** 2)
-        + w_b * ((np.log(stdvb) - log_ab) ** 2 + stdvb ** 2)
-    ) ** 0.5
+    stdv = np.sqrt(
+        w_a * ((np.log(vs30a) - log_ab) ** 2 + stdva ** 2)
+        + w_b * ((np.log(vs30b) - log_ab) ** 2 + stdvb ** 2)
+    )
 
     return np.exp(log_ab), stdv
 
