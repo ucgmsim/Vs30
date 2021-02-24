@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+"""
+Calclulate Vs30 over a region (default) or specify points at which to output for instead.
+"""
 
 from shutil import rmtree
 import os, sys
@@ -19,7 +22,7 @@ from vs30 import (
 )
 
 wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
-a = args.load_args()
+a = params.load_args()
 
 # working directory/output setup
 if os.path.exists(a["paths"].out):

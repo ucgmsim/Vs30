@@ -88,12 +88,12 @@ def mvn(
     var = model_stdv ** 2 * corr_func(0, model)
 
     # model point to observations
-    for i in range(len(model_locs)):
+    for i, model_loc in enumerate(model_locs):
         if np.isnan(model_vs30[i]):
             continue
         distances = dists(obs_locs - model_locs[i])
         wanted = distances < max_dist
-        if max(wanted) == False:
+        if max(wanted) is False:
             # not close enough to any observed locations
             continue
 
