@@ -1,3 +1,4 @@
+from copy import deepcopy
 import os
 
 import numpy as np
@@ -143,6 +144,28 @@ def model_id_map(paths, grid):
     return path
 
 
+def _full_land_grid(grid):
+    """
+    Extends grid for full land coverage.
+    """
+    landgrid = deepcopy(grid)
+    gridmod = False
+    if grid.xmin > 1060050:
+        landgrid.xmin -= np.ceil((grid.xmin - 1060050) / grid.dx) * grid.dx
+        gridmod = True
+    if grid.xmax < 2120050:
+        landgrid.xmax += np.ceil((2120050 - grid.xmax) / grid.dx) * grid.dx
+        gridmod = True
+    if grid.ymin > 4730050:
+        landgrid.ymin -= np.ceil((grid.ymin - 4730050) / grid.dy) * grid.dy
+        gridmod = True
+    if grid.ymax < 6250050:
+        landgrid.ymax += np.ceil((6250050 - grid.ymax) / grid.dy) * grid.dy
+        gridmod = True
+
+    return landgrid, gridmod
+
+
 def coast_distance_map(paths, grid):
     """
     Calculate coast distance needed for G06 and G13 mods.
@@ -150,14 +173,17 @@ def coast_distance_map(paths, grid):
     path = os.path.join(paths.out, "coast.tif")
     if os.path.isfile(path):
         return path
+
+    # algorithm requires full land coverage
+    landgrid, gridmod = _full_land_grid(grid)
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
         os.path.join(paths.mapdata, COAST),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-        outputBounds=[grid.xmin, grid.ymin, grid.xmax, grid.ymax],
-        xRes=grid.dx,
-        yRes=grid.dy,
+        outputBounds=[landgrid.xmin, landgrid.ymin, landgrid.xmax, landgrid.ymax],
+        xRes=landgrid.dx,
+        yRes=landgrid.dy,
         noData=0,
         burnValues=1,
         outputType=gdal.GetDataTypeByName("UInt16"),
@@ -169,6 +195,13 @@ def coast_distance_map(paths, grid):
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
     band = None
     ds = None
+
+    if gridmod:
+        # had to extend for land coverage, cut down to wanted size
+        resample_raster(
+            path, path, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+        )
+
     return path
 
 

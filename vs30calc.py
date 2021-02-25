@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Calclulate Vs30 over a region (default) or specify points at which to output for instead.
+Calculate Vs30 over a region (default) or specify points at which to output for instead.
 """
 
 from shutil import rmtree
