@@ -3,7 +3,7 @@ import os
 import numpy as np
 from osgeo import gdal, ogr, osr
 
-from vs30.model import ID_NODATA, interpolate, resample
+from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
 gdal.UseExceptions()
 
@@ -94,7 +94,7 @@ def model_id(points, paths, grid=None, polygon=True):
     if not polygon:
         # faster method for model ID that uses rasterization
         gid_tif = model_id_map(paths, grid)
-        return interpolate(points, gid_tif)
+        return interpolate_raster(points, gid_tif)
 
     shp = ogr.Open(os.path.join(paths.mapdata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
@@ -180,7 +180,9 @@ def slope_map(paths, grid):
     if os.path.isfile(dst):
         return dst
     src = os.path.join(paths.mapdata, SLOPE)
-    resample(src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy)
+    resample_raster(
+        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+    )
     return dst
 
 
@@ -246,9 +248,9 @@ def model_val(ids, model, opts, paths=None, points=None, grid=None):
     slope = None
     # coastline distances and slope rough enough to keep as rasters (for now)
     if opts.mod6 or opts.mod13:
-        cdist = interpolate(points, coast_distance_map(paths, grid))
+        cdist = interpolate_raster(points, coast_distance_map(paths, grid))
     if opts.hybrid:
-        slope = interpolate(points, slope_map(paths, grid))
+        slope = interpolate_raster(points, slope_map(paths, grid))
     # run
     return np.column_stack(_hyb_calc(opts, model, ids, slope=slope, cdist=cdist))
 

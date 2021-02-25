@@ -4,7 +4,8 @@ Calclulate Vs30 over a region (default) or specify points at which to output for
 """
 
 from shutil import rmtree
-import os, sys
+import os
+import sys
 from time import time
 
 import numpy as np
@@ -121,7 +122,7 @@ if a["geol"].update != "off" and a["terr"].update != "off":
     t = time()
     if a["ll"] is not None:
         for prefix in ["", "mvn_"]:
-            table[f"{prefix}vs30"], table[f"{prefix}stdv"] = model.combine(
+            table[f"{prefix}vs30"], table[f"{prefix}stdv"] = model.combine_models(
                 a["comb"],
                 table[f"geology_{prefix}vs30"],
                 table[f"geology_{prefix}stdv"],
