@@ -18,7 +18,7 @@ You can either install the packages via the system package manager or using pip.
 Make sure you have the large data files available in the `mapdata` argument, to prevent specifying on every run, change the default (`PREFIX` in `vs30/params.py`).
 
 ## Workflow
-Everything is run from the vs30calc.py script which can be run directly or installed.
+Everything is run from the `vs30calc.py` script which can be run directly or installed.
 If you have installed the library outside an environment under your user account, you may have to add the location to the `PATH`:
 ```shell
 export PATH=$PATH:$HOME/.local/bin
@@ -33,3 +33,4 @@ The grid has parameters which control the extent and spacing.
 ## Point based calculation
 This mode is much faster because it only calculates the model values at given locations, not at millions of points around the country.
 Specify a file containing locations with `--ll-path`. The default is no header to skip, longitude in the first column and latitude in the second. There are options for this as well.
+Note that grids are used for some intermediate parts of the calculation in this mode so the parameters are still applicable.
