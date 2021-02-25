@@ -4,7 +4,7 @@ from subprocess import call
 import numpy as np
 from osgeo import gdal
 
-from vs30.model import ID_NODATA, interpolate, resample
+from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
 gdal.UseExceptions()
 
@@ -84,7 +84,7 @@ def model_id(points, paths, grid=None):
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    return interpolate(points, os.path.join(paths.mapdata, MODEL_RASTER))
+    return interpolate_raster(points, os.path.join(paths.mapdata, MODEL_RASTER))
 
 
 def model_id_map(paths, grid):
@@ -95,7 +95,9 @@ def model_id_map(paths, grid):
     if os.path.isfile(dst):
         return dst
     src = os.path.join(paths.mapdata, MODEL_RASTER)
-    resample(src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy)
+    resample_raster(
+        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+    )
     r = gdal.Open(dst)
     b = r.GetRasterBand(1)
     b.SetDescription("Terrain ID Index")

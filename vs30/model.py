@@ -9,7 +9,7 @@ gdal.UseExceptions()
 ID_NODATA = 255
 
 
-def interpolate(points, raster, band=1):
+def interpolate_raster(points, raster, band=1):
     """
     Returns values of raster at points (nearneighbour).
     points: 2D numpy array of coords in raster srs.
@@ -35,7 +35,7 @@ def interpolate(points, raster, band=1):
     return v
 
 
-def resample(
+def resample_raster(
     src, dst, xmin, xmax, ymin, ymax, xd, yd, alg=gdalconst.GRIORA_NearestNeighbour
 ):
     gdal.Warp(
@@ -49,13 +49,13 @@ def resample(
     )
 
 
-def combine(comb, vs30a, stdva, vs30b, stdvb):
+def combine_models(opts, vs30a, stdva, vs30b, stdvb):
     """
     Combine 2 models.
     """
-    if comb.stdv_weight:
-        m_a = (stdva ** 2) ** -comb.k
-        m_b = (stdvb ** 2) ** -comb.k
+    if opts.stdv_weight:
+        m_a = (stdva ** 2) ** -opts.k
+        m_b = (stdvb ** 2) ** -opts.k
         w_a = m_a / (m_a + m_b)
         w_b = m_b / (m_a + m_b)
     else:
