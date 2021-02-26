@@ -71,7 +71,7 @@ def combine_models(opts, vs30a, stdva, vs30b, stdvb):
     return np.exp(log_ab), stdv
 
 
-def combine_tiff(out_dir, filename, grid, comb, a, b):
+def combine_tiff(out_dir, filename, grid, opts, a, b):
     """
     Combine geology and terrain models (given path to geotiff files).
     """
@@ -140,7 +140,7 @@ def combine_tiff(out_dir, filename, grid, comb, a, b):
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
             bsv[bsv == snd] = np.nan
-            vs30, stdv = combine_models(comb, avv, asv, bvv, bsv)
+            vs30, stdv = combine_models(opts, avv, asv, bvv, bsv)
 
             # write results
             o_vs30.WriteArray(vs30, xoff=xoff, yoff=yoff)

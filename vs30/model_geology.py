@@ -12,6 +12,7 @@ gdal.UseExceptions()
 QMAP = "qmap/qmap.shp"
 COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
 SLOPE = "slope.tif"
+SLOPE_NODATA = -9999
 MODEL_NODATA = -32767
 # hybrid model vs30 based on interpolation of slope
 # group ID, log10(slope) array, vs30 array
@@ -219,7 +220,9 @@ def slope_map(paths, grid):
     return dst
 
 
-def _hyb_calc(geol, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-9999):
+def _hyb_calc(
+    geol, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=SLOPE_NODATA
+):
     """
     Return model values given inputs.
     """
@@ -229,41 +232,43 @@ def _hyb_calc(geol, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=-99
         # still updating g06 even if using coast function instead of hybrid
         model[HYBRID_SRF[0] - 1, 1] *= HYBRID_SRF[1]
     # output
-    vs30 = np.empty(gid.shape, dtype=np.float32)
-    stdv = np.empty_like(vs30)
+    vs30 = np.full(gid.shape, nan, dtype=np.float32)
+    stdv = np.copy(vs30)
     # water points are NaN
-    w = (gid != ID_NODATA) & (gid != 0)
-    vs30[w], stdv[w] = model[gid[w] - 1].T
-    vs30[~w] = nan
-    stdv[~w] = nan
+    w_mask = (gid != ID_NODATA) & (gid != 0)
+    vs30[w_mask], stdv[w_mask] = model[gid[w_mask] - 1].T
     if geol.hybrid:
         # prevent -Inf warnings
         slope[np.where((slope == 0) | (slope == s_nodata))] = 1e-9
         for spec in HYBRID_VS30:
             if spec[0] == 4 and geol.mod6:
                 continue
-            w = np.where(gid == spec[0])
-            vs30[w] = 10 ** np.interp(np.log10(slope[w]), spec[1], spec[2])
+            w_mask = np.where(gid == spec[0])
+            vs30[w_mask] = 10 ** np.interp(np.log10(slope[w_mask]), spec[1], spec[2])
     if geol.mod6:
-        w = np.where(gid == 4)
+        w_mask = np.where(gid == 4)
         # explicitly set cdist as float32 which can propagate through
         # keeping it as uint16 causes overflows with integer multiplication
-        vs30[w] = np.maximum(
+        vs30[w_mask] = np.maximum(
             240,
             np.minimum(
                 500,
                 240
-                + (500 - 240) * (cdist[w].astype(np.float32) - 8000) / (20000 - 8000),
+                + (500 - 240)
+                * (cdist[w_mask].astype(np.float32) - 8000)
+                / (20000 - 8000),
             ),
         )
     if geol.mod13:
-        w = np.where(gid == 10)
-        vs30[w] = np.maximum(
+        w_mask = np.where(gid == 10)
+        vs30[w_mask] = np.maximum(
             197,
             np.minimum(
                 500,
                 197
-                + (500 - 197) * (cdist[w].astype(np.float32) - 8000) / (20000 - 8000),
+                + (500 - 197)
+                * (cdist[w_mask].astype(np.float32) - 8000)
+                / (20000 - 8000),
             ),
         )
 
@@ -275,10 +280,8 @@ def model_val(ids, model, opts, paths=None, points=None, grid=None):
     Return model values for IDs (vs30, stdv).
     """
     # collect inputs
-    if ids is None:
-        ids = model_id(points, paths, grid=grid)
-    cdist = None
-    slope = None
+    ids = model_id(points, paths, grid=grid) if ids is None else ids
+    cdist, slope = None, None
     # coastline distances and slope rough enough to keep as rasters (for now)
     if opts.mod6 or opts.mod13:
         cdist = interpolate_raster(points, coast_distance_map(paths, grid))
