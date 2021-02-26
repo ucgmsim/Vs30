@@ -89,7 +89,7 @@ for model_setup in [p_geol, p_terr]:
     ) = model_module.model_val(
         sites[f"{model_setup.letter}id"].values,
         model_table,
-        s,
+        model_setup,
         paths=p_paths,
         points=sites_points,
         grid=p_grid,
@@ -106,7 +106,7 @@ for model_setup in [p_geol, p_terr]:
         ) = model_module.model_val(
             table[f"{model_setup.letter}id"].values,
             model_table,
-            s,
+            model_setup,
             paths=p_paths,
             points=table_points,
             grid=p_grid,
@@ -124,7 +124,7 @@ for model_setup in [p_geol, p_terr]:
         )
     else:
         print("    model map...")
-        tiffs.append(model_module.model_val_map(p_paths, p_grid, m, s))
+        tiffs.append(model_module.model_val_map(p_paths, p_grid, model_table, model_setup))
         print("    measured mvn...")
         tiffs_mvn.append(mvn.mvn_tiff(p_paths, p_grid, model_setup.name, sites))
 
