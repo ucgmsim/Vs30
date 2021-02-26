@@ -27,7 +27,7 @@ def corr_func(distances, model):
 
 def tcrossprod(x):
     """
-    Cross product from a 1d numpy array.
+    Cross product from a 1d numpy array assumed to be both single column and single row.
     """
     return x[:, np.newaxis] * x
 
@@ -71,6 +71,8 @@ def mvn(
     Modify model with observed locations.
     noisy: noisy measurements
     """
+    # cut not-applicable sites to prevent nan propagation
+    sites = sites[~np.isnan(sites[f"{model}_vs30"])]
 
     obs_locs = np.column_stack((sites.easting.values, sites.northing.values))
     obs_model_stdv = sites[f"{model}_stdv"].values
@@ -175,11 +177,11 @@ def mvn_tiff(paths, grid, model, sites):
             locs = np.vstack(
                 np.mgrid[
                     trans[0]
-                    + xoff * trans[1] : trans[0]
-                    + (xoff + block[0]) * trans[1] : trans[1],
+                    + (xoff + 0.5) * trans[1] : trans[0]
+                    + (xoff + 0.5 + block[0]) * trans[1] : trans[1],
                     trans[3]
-                    + yoff * trans[5] : trans[3]
-                    + (yoff + block_y) * trans[5] : trans[5],
+                    + (yoff + 0.5) * trans[5] : trans[3]
+                    + (yoff + 0.5 + block_y) * trans[5] : trans[5],
                 ].T
             ).astype(np.float32)
             vs30v, stdvv = mvn(locs, vs30v.flatten(), stdvv.flatten(), sites, model)

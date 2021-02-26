@@ -50,7 +50,7 @@ class GridParams:
 @dataclass
 class LLFileParams:
     """
-    Long/Lat file for locations of interest.
+    Parameters for loading long/lat locations of interest file.
     """
 
     ll_path: str
@@ -244,12 +244,4 @@ def load_args():
     p_terr = TerrainParams(update=args.tupdate)
     p_comb = CombinationParams(stdv_weight=args.stdv_weight, k=args.k)
 
-    return {
-        "paths": p_paths,
-        "sites": p_sites,
-        "grid": p_grid,
-        "ll": p_ll,
-        "geol": p_geol,
-        "terr": p_terr,
-        "comb": p_comb,
-    }
+    return p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb
