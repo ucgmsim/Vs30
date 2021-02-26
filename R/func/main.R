@@ -13,8 +13,8 @@ source("func/vspr.R")
 # working files (slp in NZMG)
 slp_nzsi_9c = as(raster(paste0(PREFIX, "slp_nzsi_9c.nc")), "SpatialGridDataFrame")
 slp_nzni_9c = as(raster(paste0(PREFIX, "slp_nzni_9c.nc")), "SpatialGridDataFrame")
-variogram_aak = read.csv(paste0("../data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
-variogram_yca = read.csv(paste0("../data/variogram_", TERRAIN, "_v7.csv"))[2:10]
+variogram_aak = read.csv(paste0("data/variogram_", GEOLOGY, "_v6.csv"))[2:10]
+variogram_yca = read.csv(paste0("data/variogram_", TERRAIN, "_v7.csv"))[2:10]
 class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
 
 # lowest LINZ resolution 1:500k

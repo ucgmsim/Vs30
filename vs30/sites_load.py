@@ -1,14 +1,17 @@
 from math import sqrt
+import os
 
 import numpy as np
 import pandas as pd
 from pyproj import Transformer
 from scipy.spatial import distance_matrix
 
-DATA_CPT = "data/cptvs30.ssv"
-DATA_KAISERETAL = "data/20170817_vs_allNZ_duplicatesCulled.ll"
-DATA_MCGANN = "data/McGann_cptVs30data.csv"
-DATA_WOTHERSPOON = "data/Characterised Vs30 Canterbury_June2017_KFed.csv"
+data = os.path.join(os.path.dirname(__file__), "data")
+
+DATA_CPT = os.path.join(data, "cptvs30.ssv")
+DATA_KAISERETAL = os.path.join(data, "20170817_vs_allNZ_duplicatesCulled.ll")
+DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")
+DATA_WOTHERSPOON = os.path.join(data, "Characterised Vs30 Canterbury_June2017_KFed.csv")
 
 wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 nzmg2nztm = Transformer.from_crs(27200, 2193, always_xy=True)
