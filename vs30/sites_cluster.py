@@ -3,20 +3,24 @@ from sklearn.cluster import DBSCAN
 
 ID_NODATA = 255
 
-def cluster(sites, letter, min_group=5, eps=15000, plots=False):
+
+def cluster(sites, letter, min_group=5, eps=15000):
     """
-    plots: make figures, not expected to be used very often
+    Sort sites into clusters spatially.
+    letter: which id? "t"(id) for terrain or "g"(id) for geology
+    min_group: the minimum group size
+    eps: (metres) how far points are to be considered a different cluster
     """
 
     features = np.column_stack((sites.easting.values, sites.northing.values))
     # default not a member of any cluster (-1)
     sites[f"{letter}cluster"] = -1
-    mids = sites[f"{letter}id"].values
-    ids = np.array(sorted(set(mids)))
+    model_ids = sites[f"{letter}id"].values
+    ids = np.array(sorted(set(model_ids)))
     ids = ids[ids != ID_NODATA].astype(np.int)
 
     for i in ids:
-        subset = features[mids == i]
+        subset = features[model_ids == i]
         if subset.shape[0] < min_group:
             # can't form any groups
             continue
@@ -25,6 +29,6 @@ def cluster(sites, letter, min_group=5, eps=15000, plots=False):
         dbscan.fit(subset)
 
         # save labels
-        sites.loc[mids == i, f"{letter}cluster"] = dbscan.labels_
+        sites.loc[model_ids == i, f"{letter}cluster"] = dbscan.labels_
 
     return sites

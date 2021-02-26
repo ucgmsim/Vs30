@@ -1,8 +1,8 @@
 library(rgdal)
 library(sp)
 
-source("R/const.R")
-source("R/downsample_McGann.R")
+source("func/const.R")
+source("func/downsample_McGann.R")
 
 
 load_vs = function(cpt=F, downsample_McGann=TRUE){

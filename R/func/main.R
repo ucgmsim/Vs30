@@ -6,8 +6,8 @@ library(rgdal) # shapefiles
 library(rgeos) # gDistance
 
 source("config.R")
-source("R/const.R")
-source("R/vspr.R")
+source("func/const.R")
+source("func/vspr.R")
 
 
 # working files (slp in NZMG)
@@ -19,7 +19,7 @@ class(variogram_aak) = class(variogram_yca) = c("variogramModel", "data.frame")
 
 # lowest LINZ resolution 1:500k
 # coast_poly to determine if on land or water, coast_line for distances
-coast_poly = readOGR(dsn=paste0(PLOTRES, "Paths/lds-nz-coastlines-and-islands/EPSG_2193"), layer="nz-coastlines-and-islands-polygons-topo-1500k")
+coast_poly = readOGR(dsn=paste0(PREFIX, "/coast"), layer="nz-coastlines-and-islands-polygons-topo-1500k")
 crs(coast_poly) = NZTM
 coast_line = as(coast_poly, "SpatialLinesDataFrame")
 coast_distance = function(xy, km=T) {
@@ -44,7 +44,7 @@ geology_model_run = function(model, only_id=F) {
     library(raster) # raster
     library(rgeos) # gDistance
 
-    source(paste0("R/model_", GEOLOGY, ".R"))
+    source(paste0("func/model_", GEOLOGY, ".R"))
 
     # find group IDs
     xy00 = SpatialPoints(model[, c("x", "y")], proj4string=crs(NZTM))
@@ -107,27 +107,27 @@ names(vspr_yca)[names(vspr_yca) == "yca_vs30"] = "model_vs30"
 names(vspr_yca)[names(vspr_yca) == "yca_stdev"] = "model_stdv"
 
 
-mvn_run = function(model, vspr, variogram, model_type, overwrite=T) {
+mvn_run = function(model, vspr, variogram, model_type) {
     # TODO: keep_original flag to not overwrite pre-mvn data
     library(gstat)
     library(Matrix)
     library(raster) # crs
 
-    source("R/mvn.R")
+    source("func/mvn.R")
 
     m_vs30 = paste0(model_type, "_vs30")
     m_stdev = paste0(model_type, "_stdev")
     m_vs30_out = paste0(model_type, "_mvn_vs30")
     m_stdev_out = paste0(model_type, "_mvn_stdev")
-    if (overwrite) {
+    if (MVN_OVERWRITE) {
         # save memory, overwrite instead of add columns
         names(model)[names(model) == m_vs30] = m_vs30_out
         names(model)[names(model) == m_stdev] = m_stdev_out
         m_vs30 = m_vs30_out
-        m_stdv = m_stdev_out
+        m_stdev = m_stdev_out
     } else {
         model[m_vs30_out] = NA
-        model[m_stdv_out] = NA
+        model[m_stdev_out] = NA
     }
 
     valid_idx = which(!is.na(model[, m_vs30]))
