@@ -42,7 +42,7 @@ cluster_model = function(vspr, model="aak", prior) {
 }
 
 
-vspr_run = function(outfile="../data/vspr.csv", posterior_update=F, clusters=F, cpt=F) {
+vspr_run = function(outfile="data/vspr.csv", posterior_update=F, clusters=F, cpt=F) {
     # source coordinates with metadata
     vspr = load_vs(cpt=cpt, downsample_McGann=TRUE)
 
@@ -57,7 +57,7 @@ vspr_run = function(outfile="../data/vspr.csv", posterior_update=F, clusters=F, 
     write.csv(vspr, file=outfile, row.names=F)
     if (clusters) {
         system("./func/cluster.py")
-        vspr = read.csv("../data/vspr.csv")
+        vspr = read.csv("data/vspr.csv")
     }
     # create posterior models
     if (posterior_update) {
