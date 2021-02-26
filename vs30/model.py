@@ -9,18 +9,7 @@ gdal.UseExceptions()
 ID_NODATA = 255
 
 
-def model_val(mid, model, nodata=ID_NODATA):
-    """
-    Convert IDs returned by the <model>.mid function into model values.
-    """
-    vals = np.full((len(mid), 2), np.nan, dtype=np.float32)
-    valid_idx = mid != nodata
-    vals[valid_idx] = model[mid[valid_idx]]
-
-    return vals
-
-
-def interpolate(points, raster, band=1, nodata=ID_NODATA):
+def interpolate_raster(points, raster, band=1):
     """
     Returns values of raster at points (nearneighbour).
     points: 2D numpy array of coords in raster srs.
@@ -33,18 +22,20 @@ def interpolate(points, raster, band=1, nodata=ID_NODATA):
     x = np.floor((points[:, 0] - t[0]) / t[1]).astype(np.int32)
     y = np.floor((points[:, 1] - t[3]) / t[5]).astype(np.int32)
     valid = np.where((x >= 0) & (x < r.RasterXSize) & (y >= 0) & (y < r.RasterYSize))
-    v = np.full(len(points), nodata, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype)
+    v = np.full(
+        len(points), ID_NODATA, dtype=b.ReadAsArray(win_xsize=1, win_ysize=1).dtype
+    )
     v[valid] = b.ReadAsArray()[y[valid], x[valid]]
     # defined nodata in case nodata in tif is different, so model_val() understands
-    # minus 1 because ids in rasters start at 1
-    v = np.where(v == n, nodata, v - 1)
+    if n != ID_NODATA:
+        v = np.where(v == n, ID_NODATA, v)
 
     b = None
     r = None
     return v
 
 
-def resample(
+def resample_raster(
     src, dst, xmin, xmax, ymin, ymax, xd, yd, alg=gdalconst.GRIORA_NearestNeighbour
 ):
     gdal.Warp(
@@ -58,9 +49,31 @@ def resample(
     )
 
 
-def combine(args, a, b):
+def combine_models(opts, vs30a, stdva, vs30b, stdvb):
     """
-    Combine geology and terrain models (path to geotiff files).
+    Combine 2 models.
+    """
+    if opts.stdv_weight:
+        m_a = (stdva ** 2) ** -opts.k
+        m_b = (stdvb ** 2) ** -opts.k
+        w_a = m_a / (m_a + m_b)
+        w_b = m_b / (m_a + m_b)
+    else:
+        w_a = 0.5
+        w_b = 0.5
+
+    log_ab = np.log(vs30a) * w_a + np.log(vs30b) * w_b
+    stdv = np.sqrt(
+        w_a * ((np.log(vs30a) - log_ab) ** 2 + stdva ** 2)
+        + w_b * ((np.log(vs30b) - log_ab) ** 2 + stdvb ** 2)
+    )
+
+    return np.exp(log_ab), stdv
+
+
+def combine_tiff(out_dir, filename, grid, opts, a, b):
+    """
+    Combine geology and terrain models (given path to geotiff files).
     """
     # model a
     ads = gdal.Open(a, gdal.GA_ReadOnly)
@@ -73,9 +86,9 @@ def combine(args, a, b):
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
-        os.path.join(args.out, "combined.tif"),
-        xsize=args.nx,
-        ysize=args.ny,
+        os.path.join(out_dir, filename),
+        xsize=grid.nx,
+        ysize=grid.ny,
         bands=2,
         eType=gdal.GDT_Float32,
         options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
@@ -93,14 +106,14 @@ def combine(args, a, b):
 
     # processing chunk/block sizing
     block = o_vs30.GetBlockSize()
-    nxb = (int)((args.nx + block[0] - 1) / block[0])
-    nyb = (int)((args.ny + block[1] - 1) / block[1])
+    nxb = (int)((grid.nx + block[0] - 1) / block[0])
+    nyb = (int)((grid.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = args.nx - x * block[0]
+            block[0] = grid.nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -108,7 +121,7 @@ def combine(args, a, b):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = args.ny - y * block[1]
+                block_y = grid.ny - y * block[1]
 
             # determine results on block
             avv = a_vs30.ReadAsArray(
@@ -127,27 +140,11 @@ def combine(args, a, b):
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
             bsv[bsv == snd] = np.nan
-
-            if args.stdv_weight:
-                m_a = (asv ** 2) ** -args.k
-                m_b = (bsv ** 2) ** -args.k
-                w_a = m_g / (m_g + m_t)
-                w_b = m_t / (m_g + m_t)
-            else:
-                w_a = 0.5
-                w_b = 0.5
-
-            log_ab = np.log(avv) * w_a + np.log(bvv) * w_b
+            vs30, stdv = combine_models(opts, avv, asv, bvv, bsv)
 
             # write results
-            o_vs30.WriteArray(np.exp(log_ab), xoff=xoff, yoff=yoff)
-            o_stdv.WriteArray(
-                (
-                    w_a * ((np.log(asv) - log_ab) ** 2 + asv ** 2)
-                    + w_b * ((np.log(bsv) - log_ab) ** 2 + bsv ** 2)
-                )
-                ** 0.5
-            )
+            o_vs30.WriteArray(vs30, xoff=xoff, yoff=yoff)
+            o_stdv.WriteArray(stdv, xoff=xoff, yoff=yoff)
     # close
     o_vs30 = None
     o_stdv = None
@@ -161,7 +158,8 @@ def cluster_update(prior, sites, letter):
     # looping through model IDs
     for m in range(len(posterior)):
         vs_sum = 0
-        idtable = sites[sites[f"{letter}id"] == m]
+        # add 1 because IDs being used start at 1 in tiffs
+        idtable = sites[sites[f"{letter}id"] == m + 1]
         clusters = idtable[f"{letter}cluster"].value_counts()
         # overall N is one per cluster, clusters labeled -1 are individual clusters
         n = len(clusters)
@@ -181,7 +179,9 @@ def cluster_update(prior, sites, letter):
                 vs_sum += sum(np.log(ctable.vs30)) / len(ctable)
                 w[cidx] /= len(ctable)
         posterior[m, 0] = exp(vs_sum / n)
-        posterior[m, 1] = np.sqrt(sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2))
+        posterior[m, 1] = np.sqrt(
+            sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2)
+        )
 
     return posterior
 

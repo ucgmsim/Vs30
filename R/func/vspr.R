@@ -4,9 +4,9 @@
 #                         QualityFlag/StationID for subsetting
 
 source("config.R")
-source("R/load_vs.R")
-source("R/model_ahdiak.R")
-source("R/model_yongca.R")
+source("func/load_vs.R")
+source("func/model_ahdiak.R")
+source("func/model_yongca.R")
 
 
 cluster_model = function(vspr, model="aak", prior) {
@@ -56,14 +56,14 @@ vspr_run = function(outfile="data/vspr.csv", posterior_update=F, clusters=F, cpt
     # save for Python clustering code to read and update
     write.csv(vspr, file=outfile, row.names=F)
     if (clusters) {
-        system("./python/cluster.py")
+        system("./func/cluster.py")
         vspr = read.csv("data/vspr.csv")
     }
     # create posterior models
     if (posterior_update) {
-        source("R/bayes.R")
-        source("R/model_ahdiak_prior.R")
-        source("R/model_yongca_prior.R")
+        source("func/bayes.R")
+        source("func/model_ahdiak_prior.R")
+        source("func/model_yongca_prior.R")
         # average clusters for posterior update
         if (clusters) {
             model_ahdiak = cluster_model(vspr, model="aak", model_ahdiak)
@@ -73,8 +73,8 @@ vspr_run = function(outfile="data/vspr.csv", posterior_update=F, clusters=F, cpt
             model_yongca <<- bayes_posterior(vspr, vspr$gid_yca, model_yongca)
         }
     } else {
-        source("R/model_ahdiak_posterior.R")
-        source("R/model_yongca_posterior.R")
+        source("func/model_ahdiak_posterior.R")
+        source("func/model_yongca_posterior.R")
     }
 
     return(vspr)

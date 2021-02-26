@@ -4,7 +4,7 @@ from subprocess import call
 import numpy as np
 from osgeo import gdal
 
-from vs30.model import interpolate, resample
+from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
 gdal.UseExceptions()
 
@@ -16,7 +16,7 @@ MODEL_NODATA = -32767
 
 def model_prior():
     """
-    names of levels
+    ID in datasource, name of level
     01 - Well dissected alpine summits, mountains, etc.
     02 - Large volcano, high block plateaus, etc.
     03 - Well dissected, low mountains, etc.
@@ -55,14 +55,6 @@ def model_prior():
     # fmt: on
 
 
-def model_posterior():
-    """
-    Update prior model based on observations.
-    """
-    prior = model_prior
-    return []
-
-
 def model_posterior_paper():
     """
     Posterior model from the paper.
@@ -87,23 +79,25 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, args):
+def model_id(points, paths, grid=None):
     """
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    return interpolate(points, os.path.join(args.mapdata, MODEL_RASTER))
+    return interpolate_raster(points, os.path.join(paths.mapdata, MODEL_RASTER))
 
 
-def model_id_map(args):
+def model_id_map(paths, grid):
     """
     Calculate id at map points by resampling / resizing origin id map.
     """
-    dst = os.path.join(args.out, "tid.tif")
+    dst = os.path.join(paths.out, "tid.tif")
     if os.path.isfile(dst):
         return dst
-    src = os.path.join(args.mapdata, MODEL_RASTER)
-    resample(src, dst, args.xmin, args.xmax, args.ymin, args.ymax, args.xd, args.yd)
+    src = os.path.join(paths.mapdata, MODEL_RASTER)
+    resample_raster(
+        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+    )
     r = gdal.Open(dst)
     b = r.GetRasterBand(1)
     b.SetDescription("Terrain ID Index")
@@ -112,13 +106,27 @@ def model_id_map(args):
     return dst
 
 
-def model_map(args, model):
+def model_val(ids, model, opts, paths=None, points=None, grid=None):
+    """
+    Return model values for IDs (vs30, stdv).
+    """
+    # allow just giving locations if ids not wanted
+    if ids is None:
+        ids = model_id(points, paths)
+
+    idx = ids != ID_NODATA
+    result = np.full((len(ids), 2), np.nan, dtype=np.float32)
+    result[idx] = model[ids[idx] - 1]
+    return result
+
+
+def model_val_map(paths, grid, model, opts):
     """
     Make a tif map of model values.
     """
-    path = os.path.join(args.out, "terrain.tif")
+    path = os.path.join(paths.out, "terrain.tif")
     # terrain IDs for given map spec
-    tid_tif = model_id_map(args)
+    tid_tif = model_id_map(paths, grid)
     raster = gdal.Open(tid_tif, gdal.GA_ReadOnly)
     band = raster.GetRasterBand(1)
     nodata = band.GetNoDataValue()

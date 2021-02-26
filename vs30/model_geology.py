@@ -1,9 +1,10 @@
+from copy import deepcopy
 import os
 
 import numpy as np
 from osgeo import gdal, ogr, osr
 
-from vs30.model import interpolate, resample
+from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
 gdal.UseExceptions()
 
@@ -11,7 +12,7 @@ gdal.UseExceptions()
 QMAP = "qmap/qmap.shp"
 COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
 SLOPE = "slope.tif"
-ID_NODATA = 255
+SLOPE_NODATA = -9999
 MODEL_NODATA = -32767
 # hybrid model vs30 based on interpolation of slope
 # group ID, log10(slope) array, vs30 array
@@ -27,7 +28,7 @@ HYBRID_SRF = np.array([2, 3, 4, 6]), np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 def model_prior():
     """
-    names of levels
+    ID NAME (id in datasource)
     0  00_water (not used)
     1  01_peat
     2  04_fill
@@ -64,14 +65,6 @@ def model_prior():
     # fmt: on
 
 
-def model_posterior():
-    """
-    Update prior model based on observations.
-    """
-    prior = model_prior
-    return []
-
-
 def model_posterior_paper():
     """
     Posterior model from the paper.
@@ -95,30 +88,25 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, args):
-    """
-    Faster method for model ID that uses rasterization.
-    """
-    gid_tif = model_id_map(args)
-    return interpolate(points, gid_tif)
-
-
-def model_id_polygon(points, modeldata):
+def model_id(points, paths, grid=None, polygon=True):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
     """
-    shp = ogr.Open(os.path.join(modeldata, QMAP), gdal.GA_ReadOnly)
+    if not polygon:
+        # faster method for model ID that uses rasterization
+        gid_tif = model_id_map(paths, grid)
+        return interpolate_raster(points, gid_tif)
+
+    shp = ogr.Open(os.path.join(paths.mapdata, QMAP), gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
-    values = np.empty(len(points), dtype=np.float32)
     # ocean is NaN while water polygons are 0
-    values[...] = ID_NODATA
+    values = np.full(len(points), ID_NODATA, dtype=np.uint8)
     pt = ogr.Geometry(ogr.wkbPoint)
     for i, p in enumerate(points):
-        # why not decimal values??
-        pt.AddPoint_2D(round(p[0]), round(p[1]))
+        pt.AddPoint_2D(p[0], p[1])
         lay.SetSpatialFilter(pt)
         f = lay.GetNextFeature()
         if f is not None:
@@ -127,11 +115,11 @@ def model_id_polygon(points, modeldata):
     return values
 
 
-def model_id_map(args):
+def model_id_map(paths, grid):
     """
     Optimised polygon search using geotiff rasterisation.
     """
-    path = os.path.join(args.out, "gid.tif")
+    path = os.path.join(paths.out, "gid.tif")
     if os.path.isfile(path):
         return path
     # make sure output raster has a nicely defined projection
@@ -140,12 +128,12 @@ def model_id_map(args):
     # calling Rasterize without saving result to variable will fail
     ds = gdal.Rasterize(
         path,
-        os.path.join(args.mapdata, QMAP),
+        os.path.join(paths.mapdata, QMAP),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputSRS=srs,
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
+        outputBounds=[grid.xmin, grid.ymin, grid.xmax, grid.ymax],
+        xRes=grid.dx,
+        yRes=grid.dy,
         noData=ID_NODATA,
         attribute="gid",
         outputType=gdal.GDT_Byte,
@@ -157,19 +145,46 @@ def model_id_map(args):
     return path
 
 
-def coast_distance_map(args):
+def _full_land_grid(grid):
+    """
+    Extends grid for full land coverage.
+    """
+    landgrid = deepcopy(grid)
+    gridmod = False
+    if grid.xmin > 1060050:
+        landgrid.xmin -= np.ceil((grid.xmin - 1060050) / grid.dx) * grid.dx
+        gridmod = True
+    if grid.xmax < 2120050:
+        landgrid.xmax += np.ceil((2120050 - grid.xmax) / grid.dx) * grid.dx
+        gridmod = True
+    if grid.ymin > 4730050:
+        landgrid.ymin -= np.ceil((grid.ymin - 4730050) / grid.dy) * grid.dy
+        gridmod = True
+    if grid.ymax < 6250050:
+        landgrid.ymax += np.ceil((6250050 - grid.ymax) / grid.dy) * grid.dy
+        gridmod = True
+
+    return landgrid, gridmod
+
+
+def coast_distance_map(paths, grid):
     """
     Calculate coast distance needed for G06 and G13 mods.
     """
-    path = os.path.join(args.out, "coast.tif")
+    path = os.path.join(paths.out, "coast.tif")
+    if os.path.isfile(path):
+        return path
+
+    # algorithm requires full land coverage
+    landgrid, gridmod = _full_land_grid(grid)
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
-        os.path.join(args.mapdata, COAST),
+        os.path.join(paths.mapdata, COAST),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-        outputBounds=[args.xmin, args.ymin, args.xmax, args.ymax],
-        xRes=args.xd,
-        yRes=args.yd,
+        outputBounds=[landgrid.xmin, landgrid.ymin, landgrid.xmax, landgrid.ymax],
+        xRes=landgrid.dx,
+        yRes=landgrid.dy,
         noData=0,
         burnValues=1,
         outputType=gdal.GetDataTypeByName("UInt16"),
@@ -181,47 +196,127 @@ def coast_distance_map(args):
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
     band = None
     ds = None
+
+    if gridmod:
+        # had to extend for land coverage, cut down to wanted size
+        resample_raster(
+            path, path, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+        )
+
     return path
 
 
-def slope_map(args):
+def slope_map(paths, grid):
     """
     Calculate slope at map points by resampling / resizing origin slope map.
     """
-    dst = os.path.join(args.out, "slope.tif")
+    dst = os.path.join(paths.out, "slope.tif")
     if os.path.isfile(dst):
         return dst
-    src = os.path.join(args.mapdata, SLOPE)
-    resample(src, dst, args.xmin, args.xmax, args.ymin, args.ymax, args.xd, args.yd)
+    src = os.path.join(paths.mapdata, SLOPE)
+    resample_raster(
+        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+    )
     return dst
 
 
-def model_map(args, model):
+def _hyb_calc(
+    geol, model, gid, slope=None, cdist=None, nan=np.nan, s_nodata=SLOPE_NODATA
+):
+    """
+    Return model values given inputs.
+    """
+    # sigma reduction factors
+    if geol.hybrid:
+        model = np.copy(model)
+        # still updating g06 even if using coast function instead of hybrid
+        model[HYBRID_SRF[0] - 1, 1] *= HYBRID_SRF[1]
+    # output
+    vs30 = np.full(gid.shape, nan, dtype=np.float32)
+    stdv = np.copy(vs30)
+    # water points are NaN
+    w_mask = (gid != ID_NODATA) & (gid != 0)
+    vs30[w_mask], stdv[w_mask] = model[gid[w_mask] - 1].T
+    if geol.hybrid:
+        # prevent -Inf warnings
+        slope[np.where((slope == 0) | (slope == s_nodata))] = 1e-9
+        for spec in HYBRID_VS30:
+            if spec[0] == 4 and geol.mod6:
+                continue
+            w_mask = np.where(gid == spec[0])
+            vs30[w_mask] = 10 ** np.interp(np.log10(slope[w_mask]), spec[1], spec[2])
+    if geol.mod6:
+        w_mask = np.where(gid == 4)
+        # explicitly set cdist as float32 which can propagate through
+        # keeping it as uint16 causes overflows with integer multiplication
+        vs30[w_mask] = np.maximum(
+            240,
+            np.minimum(
+                500,
+                240
+                + (500 - 240)
+                * (cdist[w_mask].astype(np.float32) - 8000)
+                / (20000 - 8000),
+            ),
+        )
+    if geol.mod13:
+        w_mask = np.where(gid == 10)
+        vs30[w_mask] = np.maximum(
+            197,
+            np.minimum(
+                500,
+                197
+                + (500 - 197)
+                * (cdist[w_mask].astype(np.float32) - 8000)
+                / (20000 - 8000),
+            ),
+        )
+
+    return vs30, stdv
+
+
+def model_val(ids, model, opts, paths=None, points=None, grid=None):
+    """
+    Return model values for IDs (vs30, stdv).
+    """
+    # collect inputs
+    ids = model_id(points, paths, grid=grid) if ids is None else ids
+    cdist, slope = None, None
+    # coastline distances and slope rough enough to keep as rasters (for now)
+    if opts.mod6 or opts.mod13:
+        cdist = interpolate_raster(points, coast_distance_map(paths, grid))
+    if opts.hybrid:
+        slope = interpolate_raster(points, slope_map(paths, grid))
+    # run
+    return np.column_stack(_hyb_calc(opts, model, ids, slope=slope, cdist=cdist))
+
+
+def model_val_map(paths, grid, model, opts):
     """
     Make a tif map of model values.
     """
-    path = os.path.join(args.out, "geology.tif")
+    path = os.path.join(paths.out, "geology.tif")
     # geology grid
-    gid_tif = model_id_map(args)
+    gid_tif = model_id_map(paths, grid)
     gds = gdal.Open(gid_tif, gdal.GA_ReadOnly)
     g_band = gds.GetRasterBand(1)
-    g_nodata = g_band.GetNoDataValue()
     # coastline distances
-    if args.g6mod or args.g13mod:
-        cdist_tif = coast_distance_map(args)
+    c_val = None
+    if opts.mod6 or opts.mod13:
+        cdist_tif = coast_distance_map(paths, grid)
         cds = gdal.Open(cdist_tif, gdal.GA_ReadOnly)
         c_band = cds.GetRasterBand(1)
-    if args.ghybrid:
-        slope_tif = slope_map(args)
+    s_val = None
+    if opts.hybrid:
+        slope_tif = slope_map(paths, grid)
         sds = gdal.Open(slope_tif, gdal.GA_ReadOnly)
         s_band = sds.GetRasterBand(1)
-        s_nodata = s_band.GetNoDataValue()
     # output
     driver = gdal.GetDriverByName("GTiff")
     ods = driver.Create(
         path,
-        xsize=args.nx,
-        ysize=args.ny,
+        xsize=grid.nx,
+        ysize=grid.ny,
         bands=2,
         eType=gdal.GDT_Float32,
         options=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
@@ -235,23 +330,16 @@ def model_map(args, model):
     band_vs30.SetNoDataValue(MODEL_NODATA)
     band_stdv.SetNoDataValue(MODEL_NODATA)
 
-    # model version for indexing (water id 0 and source NODATA -> NODATA)
-    vs30 = np.append(MODEL_NODATA, model[:, 0]).astype(np.float32)
-    stdv = np.append(MODEL_NODATA, model[:, 1]).astype(np.float32)
-    if args.ghybrid:
-        # sigma reduction factors
-        stdv[HYBRID_SRF[0]] *= HYBRID_SRF[1]
-
     # processing chunk/block sizing
     block = band_vs30.GetBlockSize()
-    nxb = (int)((args.nx + block[0] - 1) / block[0])
-    nyb = (int)((args.ny + block[1] - 1) / block[1])
+    nxb = (int)((grid.nx + block[0] - 1) / block[0])
+    nyb = (int)((grid.ny + block[1] - 1) / block[1])
 
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = args.nx - x * block[0]
+            block[0] = grid.nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -259,56 +347,23 @@ def model_map(args, model):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = args.ny - y * block[1]
+                block_y = grid.ny - y * block[1]
 
             # determine results on block
             g_val = g_band.ReadAsArray(
                 xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
             )
-            # treat ocean (out of polygon) as water (id 0)
-            idx = np.where(g_val != g_nodata, g_val, 0)
-            result_vs30 = vs30[idx]
-            result_stdv = stdv[idx]
-            if args.ghybrid:
+            if opts.hybrid:
                 s_val = s_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 )
-                for spec in HYBRID_VS30:
-                    if spec[0] == 4 and args.g6mod:
-                        continue
-                    w = np.where(g_val == spec[0])
-                    # prevent -Inf warnings
-                    s_val[np.where((s_val == 0) | (s_val == s_nodata))] = 1e-9
-                    result_vs30[w] = 10 ** np.interp(
-                        np.log10(s_val[w]), spec[1], spec[2]
-                    )
-            if args.g6mod or args.g13mod:
+            if opts.mod6 or opts.mod13:
                 c_val = c_band.ReadAsArray(
                     xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
                 ).astype(np.float32)
-                if args.g6mod:
-                    result_vs30 = np.where(
-                        g_val == 4,
-                        np.maximum(
-                            240,
-                            np.minimum(
-                                500, 240 + (500 - 240) * (c_val - 8000) / (20000 - 8000)
-                            ),
-                        ),
-                        result_vs30,
-                    )
-                if args.g13mod:
-                    result_vs30 = np.where(
-                        g_val == 10,
-                        np.maximum(
-                            197,
-                            np.minimum(
-                                500, 197 + (500 - 197) * (c_val - 8000) / (20000 - 8000)
-                            ),
-                        ),
-                        result_vs30,
-                    )
-
+            result_vs30, result_stdv = _hyb_calc(
+                opts, model, g_val, slope=s_val, cdist=c_val, nan=MODEL_NODATA
+            )
             # write results
             band_vs30.WriteArray(result_vs30, xoff=xoff, yoff=yoff)
             band_stdv.WriteArray(result_stdv, xoff=xoff, yoff=yoff)

@@ -1,14 +1,17 @@
 from math import sqrt
+import os
 
 import numpy as np
 import pandas as pd
 from pyproj import Transformer
 from scipy.spatial import distance_matrix
 
-DATA_CPT = "data/cptvs30.ssv"
-DATA_KAISERETAL = "data/20170817_vs_allNZ_duplicatesCulled.ll"
-DATA_MCGANN = "data/McGann_cptVs30data.csv"
-DATA_WOTHERSPOON = "data/Characterised Vs30 Canterbury_June2017_KFed.csv"
+data = os.path.join(os.path.dirname(__file__), "data")
+
+DATA_CPT = os.path.join(data, "cptvs30.ssv")
+DATA_KAISERETAL = os.path.join(data, "20170817_vs_allNZ_duplicatesCulled.ll")
+DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")
+DATA_WOTHERSPOON = os.path.join(data, "Characterised Vs30 Canterbury_June2017_KFed.csv")
 
 wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 nzmg2nztm = Transformer.from_crs(27200, 2193, always_xy=True)
@@ -60,23 +63,26 @@ def downsample_mcg(df, res=1000):
     return mcg[~mcg.duplicated()]
 
 
-def load_vs(cpt=False, downsample_mcgann=True):
+def load_vs(source="original"):
     """
     Load measured sites. Either newer CPT based or paper version using 3 sources.
     """
 
-    if cpt:
+    if source == "original":
+        # load each Vs data source
+        mcgann = load_mcgann_vs()
+        wotherspoon = load_wotherspoon_vs()
+        kaiseretal = load_kaiseretal_vs()
+
+        # remove Kaiser Q3 unless station name is 3 chars long (broadband seismometers)
+        kaiseretal = kaiseretal[
+            (kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)
+        ]
+
+        return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
+
+    if source == "cpt":
         return load_cpt_vs()
-
-    # load each Vs data source
-    mcgann = load_mcgann_vs(downsample=downsample_mcgann)
-    wotherspoon = load_wotherspoon_vs()
-    kaiseretal = load_kaiseretal_vs()
-
-    # remove Kaiser Q3 unless station name is 3 chars long (broadband seismometers)
-    kaiseretal = kaiseretal[(kaiseretal.q != 3) | (kaiseretal.station.str.len() == 3)]
-
-    return pd.concat([mcgann, wotherspoon, kaiseretal], ignore_index=True)
 
 
 def load_cpt_vs():
@@ -84,20 +90,21 @@ def load_cpt_vs():
     Newer collection of Vs30 from CPT data.
     """
     cpt = pd.read_csv(
-            DATA_CPT,
-            sep=" ",
-            usecols=[0, 1, 2],
-            names=["easting", "northing", "vs30"],
-            skiprows=1,
-            engine="c",
-            dtype=np.float32,
-        )
+        DATA_CPT,
+        sep=" ",
+        usecols=[0, 1, 2],
+        names=["easting", "northing", "vs30"],
+        skiprows=1,
+        engine="c",
+        dtype=np.float32,
+    )
     # remove rows with no vs30 value
     cpt = cpt[~np.isnan(cpt.vs30)].reset_index()
 
     cpt["uncertainty"] = np.float32(0.5)
 
     return cpt
+
 
 def load_mcgann_vs(downsample=True):
     """
