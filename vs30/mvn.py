@@ -27,7 +27,7 @@ def corr_func(distances, model):
 
 def tcrossprod(x):
     """
-    Cross product from a 1d numpy array assumed to be both single column and single row.
+    Matrix cross product (or outer product) from a 1d numpy array.
     Same functionality as the R function tcrossprod(x) with y = NULL.
     https://stat.ethz.ch/R-manual/R-devel/library/base/html/crossprod.html
     """
