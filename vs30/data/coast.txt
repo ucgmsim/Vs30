@@ -1,2 +1,0 @@
-coastlines are downloaded polygons in epsg:2193 from
-https://data.linz.govt.nz/layer/51560-nz-coastlines-and-islands-polygons-topo-1500k/

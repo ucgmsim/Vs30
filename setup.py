@@ -6,8 +6,8 @@ setup(
     packages=["vs30"],
     url="https://github.com/ucgmsim/Vs30",
     description="NZ Vs30 Calculation",
-    package_data={"vs30": ["data/*.csv", "data/*.ll", "data/*.ssv"]},
+    package_data={"vs30": ["data/*.csv", "data/*.ll", "data/*.ssv", "data/*.qgz", "data/coast/*", "data/qmap/*"]},
     include_package_data=True,
-    install_requires=["numpy", "osgeo", "pandas", "pyproj", "scipy", "sklearn"],
+    install_requires=["numpy", "pandas", "pyproj", "scipy"],
     scripts=["vs30calc.py"],
 )

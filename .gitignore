@@ -5,7 +5,6 @@ vspr.csv
 *vs30out*
 *.geojson
 *.mbtiles
-*.tif
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
