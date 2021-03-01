@@ -15,8 +15,6 @@ You can either install the packages via the system package manager or using pip.
  * scikit-learn (for measured site clustering)
  * scipy (for downsampling the McGann dataset)
 
-Extract the compressed shapefiles (`vs30/data/shapefiles.tar.xz`) such that the folders `vs30/data/coast` and `vs30/data/qmap` exist.
-
 Install the package (optional):
 ```shell
 pip install --user .
@@ -25,6 +23,8 @@ You may have to add the installed script location to `PATH` if you cannot run `v
 ```shell
 export PATH=$PATH:$HOME/.local/bin
 ```
+
+If you aren't using the installed package, you will need to extract the compressed shapefiles (`vs30/data/shapefiles.tar.xz`) such that the folders `vs30/data/coast` and `vs30/data/qmap` exist.
 
 ## Workflow
 Everything is run from the `vs30calc.py` script which can be run directly or installed.
