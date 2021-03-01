@@ -7,7 +7,6 @@ from pyproj import Transformer
 from scipy.spatial import distance_matrix
 
 data = os.path.join(os.path.dirname(__file__), "data")
-
 DATA_CPT = os.path.join(data, "cptvs30.ssv")
 DATA_KAISERETAL = os.path.join(data, "20170817_vs_allNZ_duplicatesCulled.ll")
 DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")

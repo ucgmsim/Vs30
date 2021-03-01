@@ -5,25 +5,30 @@ Run for specific locations or over a grid.
 
 ## Setup
 Make sure you have Python 3 on your system.
-There are a few Python packages that the code requires. Packages that require system libraries such as `gdal` require to be re-compiled with parent library ABI change. This is especially important when using `pip` because it doesn't manage binary dependencies.
+There are a few Python packages that the code requires. Packages that require system libraries such as `gdal` require to be re-compiled with parent library ABI change. This is especially important when using `pip` because it doesn't manage binary dependencies. `gdal` should be installed using the system package manager.
 
 You can either install the packages via the system package manager or using pip. The list of packages is:
+ * GDAL (requires gdal system libraries, should be installed as system package, import is osgeo)
  * pandas
  * numpy
  * pyproj (requires proj system library)
- * pygdal (requires gdal system library, may be included as part of gdal, import is osgeo)
- * sklearn (for measured site clustering)
+ * scikit-learn (for measured site clustering)
  * scipy (for downsampling the McGann dataset)
 
-Make sure you have the large data files available in the `mapdata` argument, to prevent specifying on every run, change the default (`PREFIX` in `vs30/params.py`).
+Extract the compressed shapefiles (`vs30/data/shapefiles.tar.xz`) such that the folders `vs30/data/coast` and `vs30/data/qmap` exist.
 
-## Workflow
-Everything is run from the `vs30calc.py` script which can be run directly or installed.
-If you have installed the library outside an environment under your user account, you may have to add the location to the `PATH`:
+Install the package (optional):
+```shell
+pip install --user .
+```
+You may have to add the installed script location to `PATH` if you cannot run `vs30calc.py` from other locations:
 ```shell
 export PATH=$PATH:$HOME/.local/bin
 ```
-The 2 main modes of operation are grid based (which creates TIF files) and point based (where wanted locations are passed in).
+
+## Workflow
+Everything is run from the `vs30calc.py` script which can be run directly or installed.
+The 2 main modes of operation are grid based (which creates TIF files) and point based (where wanted locations are passed in as rows in a file, output is a CSV file).
 
 ## Grid based calculation
 This mode is good for viewing the entire model, making sure everything appears good. TIF files can be viewed with QGIS. This is the default mode of operation if no locations file is specified.

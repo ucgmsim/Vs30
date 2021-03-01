@@ -67,9 +67,7 @@ for model_setup in [p_geol, p_terr]:
     model_module = MODEL_MAPPING[model_setup.name]
 
     print("    model measured update...")
-    sites[f"{model_setup.letter}id"] = model_module.model_id(
-        sites_points, p_paths, grid=p_grid
-    )
+    sites[f"{model_setup.letter}id"] = model_module.model_id(sites_points)
     if model_setup.update == "prior":
         model_table = model_module.model_prior()
     elif model_setup.update == "posterior_paper":
@@ -97,9 +95,7 @@ for model_setup in [p_geol, p_terr]:
 
     if p_ll is not None:
         print("    model points...")
-        table[f"{model_setup.letter}id"] = model_module.model_id(
-            table_points, p_paths, p_grid
-        )
+        table[f"{model_setup.letter}id"] = model_module.model_id(table_points)
         (
             table[f"{model_setup.name}_vs30"],
             table[f"{model_setup.name}_stdv"],
@@ -124,7 +120,9 @@ for model_setup in [p_geol, p_terr]:
         )
     else:
         print("    model map...")
-        tiffs.append(model_module.model_val_map(p_paths, p_grid, model_table, model_setup))
+        tiffs.append(
+            model_module.model_val_map(p_paths, p_grid, model_table, model_setup)
+        )
         print("    measured mvn...")
         tiffs_mvn.append(mvn.mvn_tiff(p_paths, p_grid, model_setup.name, sites))
 

@@ -1,8 +1,6 @@
 from argparse import ArgumentParser
 from dataclasses import dataclass
 
-PREFIX = "/mnt/nvme/work/plotting_data/Vs30/"
-
 
 @dataclass
 class PathsParams:
@@ -12,7 +10,6 @@ class PathsParams:
 
     out: str = "./vs30map"
     overwrite: bool = False
-    mapdata: str = PREFIX
 
 
 @dataclass
@@ -109,12 +106,6 @@ def load_args():
         default=PathsParams.out,
     )
     arg("--overwrite", help="overwrite output location", action="store_true")
-    arg(
-        "--mapdata",
-        help="location to map sources",
-        type=type(PathsParams.mapdata),
-        default=PathsParams.mapdata,
-    )
     # point options
     arg(
         "--ll-path",
@@ -218,7 +209,7 @@ def load_args():
     # process arguments
     args = parser.parse_args()
     # argument sets
-    p_paths = PathsParams(out=args.out, overwrite=args.overwrite, mapdata=args.mapdata)
+    p_paths = PathsParams(out=args.out, overwrite=args.overwrite)
     p_sites = SitesParams(source=args.source)
     p_grid = GridParams(
         xmin=args.xmin,
