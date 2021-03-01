@@ -1,3 +1,6 @@
+"""
+Loads measured sites.
+"""
 from math import sqrt
 import os
 
@@ -7,7 +10,6 @@ from pyproj import Transformer
 from scipy.spatial import distance_matrix
 
 data = os.path.join(os.path.dirname(__file__), "data")
-
 DATA_CPT = os.path.join(data, "cptvs30.ssv")
 DATA_KAISERETAL = os.path.join(data, "20170817_vs_allNZ_duplicatesCulled.ll")
 DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")
@@ -17,15 +19,15 @@ wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 nzmg2nztm = Transformer.from_crs(27200, 2193, always_xy=True)
 
 
-def downsample_mcg(df, res=1000):
+def downsample_mcg(sites_df, res=1000):
     """
     Resample McGann points on 1km grid.
     res: grid resolution (m)
     """
 
     max_dist = sqrt(res ** 2 * 2) / 2
-    x = df["easting"].values
-    y = df["northing"].values
+    x = sites_df["easting"].values
+    y = sites_df["northing"].values
 
     # trying to copy R logic - extents
     # works for this dataset
@@ -48,9 +50,9 @@ def downsample_mcg(df, res=1000):
         ymin = ymax - (ny - 1) * res
 
     # coarse grid
-    xx = np.linspace(xmin, xmax, nx)
-    yy = np.linspace(ymin, ymax, ny)[::-1]
-    grid = np.dstack(np.meshgrid(xx, yy)).reshape(-1, 2)
+    grid_x = np.linspace(xmin, xmax, nx)
+    grid_y = np.linspace(ymin, ymax, ny)[::-1]
+    grid = np.dstack(np.meshgrid(grid_x, grid_y)).reshape(-1, 2)
 
     # distances from coarse grid, nearest neighbor
     dist = distance_matrix(grid, np.dstack((x, y))[0])
@@ -59,7 +61,7 @@ def downsample_mcg(df, res=1000):
     nn = nn[dist[np.arange(nn.size), nn] <= max_dist]
 
     # remove duplicate points from downsample algorithm
-    mcg = df.iloc[nn]
+    mcg = sites_df.iloc[nn]
     return mcg[~mcg.duplicated()]
 
 

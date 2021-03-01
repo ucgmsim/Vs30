@@ -1,3 +1,6 @@
+"""
+Terrain model functions based on IwahashiPike terrain categories and YongCA values.
+"""
 import os
 from subprocess import call
 
@@ -9,7 +12,7 @@ from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 gdal.UseExceptions()
 
 # input location
-MODEL_RASTER = "IwahashiPike.tif"
+MODEL_RASTER = os.path.join(os.path.dirname(__file__), "data", "IwahashiPike.tif")
 # for output model
 MODEL_NODATA = -32767
 
@@ -79,12 +82,12 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, paths, grid=None):
+def model_id(points):
     """
     Returns the category ID index for given locations.
     points: 2D numpy array of NZTM coords
     """
-    return interpolate_raster(points, os.path.join(paths.mapdata, MODEL_RASTER))
+    return interpolate_raster(points, MODEL_RASTER)
 
 
 def model_id_map(paths, grid):
@@ -94,9 +97,8 @@ def model_id_map(paths, grid):
     dst = os.path.join(paths.out, "tid.tif")
     if os.path.isfile(dst):
         return dst
-    src = os.path.join(paths.mapdata, MODEL_RASTER)
     resample_raster(
-        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+        MODEL_RASTER, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
     )
     r = gdal.Open(dst)
     b = r.GetRasterBand(1)
@@ -112,7 +114,7 @@ def model_val(ids, model, opts, paths=None, points=None, grid=None):
     """
     # allow just giving locations if ids not wanted
     if ids is None:
-        ids = model_id(points, paths)
+        ids = model_id(points)
 
     idx = ids != ID_NODATA
     result = np.full((len(ids), 2), np.nan, dtype=np.float32)
