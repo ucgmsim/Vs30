@@ -19,15 +19,15 @@ wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
 nzmg2nztm = Transformer.from_crs(27200, 2193, always_xy=True)
 
 
-def downsample_mcg(dataframe, res=1000):
+def downsample_mcg(sites, res=1000):
     """
     Resample McGann points on 1km grid.
     res: grid resolution (m)
     """
 
     max_dist = sqrt(res ** 2 * 2) / 2
-    x = dataframe["easting"].values
-    y = dataframe["northing"].values
+    x = sites["easting"].values
+    y = sites["northing"].values
 
     # trying to copy R logic - extents
     # works for this dataset
@@ -61,7 +61,7 @@ def downsample_mcg(dataframe, res=1000):
     nn = nn[dist[np.arange(nn.size), nn] <= max_dist]
 
     # remove duplicate points from downsample algorithm
-    mcg = dataframe.iloc[nn]
+    mcg = sites.iloc[nn]
     return mcg[~mcg.duplicated()]
 
 
