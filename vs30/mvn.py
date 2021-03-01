@@ -1,3 +1,7 @@
+"""
+MVN (multivariate normal distribution)
+for modifying vs30 values based on proximity to measured values.
+"""
 import math
 import os
 from shutil import copyfile

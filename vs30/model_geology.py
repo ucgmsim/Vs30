@@ -1,3 +1,6 @@
+"""
+Geology model functions based on GNS QMAP geology categories and AhdiAk values.
+"""
 from copy import deepcopy
 import os
 
@@ -8,10 +11,10 @@ from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
 gdal.UseExceptions()
 
-
-QMAP = "qmap/qmap.shp"
-COAST = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
-SLOPE = "slope.tif"
+data = os.path.join(os.path.dirname(__file__), "data")
+QMAP = os.path.join(data, "qmap", "qmap.shp")
+COAST = os.path.join(data, "coast", "nz-coastlines-and-islands-polygons-topo-1500k.shp")
+SLOPE = os.path.join(data, "slope.tif")
 SLOPE_NODATA = -9999
 MODEL_NODATA = -32767
 # hybrid model vs30 based on interpolation of slope
@@ -88,24 +91,20 @@ def model_posterior_paper():
     # fmt: on
 
 
-def model_id(points, paths, grid=None, polygon=True):
+def model_id(points):
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
     """
-    if not polygon:
-        # faster method for model ID that uses rasterization
-        gid_tif = model_id_map(paths, grid)
-        return interpolate_raster(points, gid_tif)
-
-    shp = ogr.Open(os.path.join(paths.mapdata, QMAP), gdal.GA_ReadOnly)
+    shp = ogr.Open(QMAP, gdal.GA_ReadOnly)
     lay = shp.GetLayer(0)
     col = lay.GetLayerDefn().GetFieldIndex("gid")
 
     # ocean is NaN while water polygons are 0
     values = np.full(len(points), ID_NODATA, dtype=np.uint8)
     pt = ogr.Geometry(ogr.wkbPoint)
-    for i, p in enumerate(points):
+    # pt.AddPoint_2D will not work with float32, float64 is fine
+    for i, p in enumerate(points.astype(np.float64)):
         pt.AddPoint_2D(p[0], p[1])
         lay.SetSpatialFilter(pt)
         f = lay.GetNextFeature()
@@ -113,6 +112,15 @@ def model_id(points, paths, grid=None, polygon=True):
             values[i] = f.GetField(col)
 
     return values
+
+
+def model_id_fast(points, paths, grid):
+    """
+    Faster version of model_id that uses rasterisation instead of polygons.
+    points: 2D numpy array of NZTM coords
+    """
+    gid_tif = model_id_map(paths, grid)
+    return interpolate_raster(points, gid_tif)
 
 
 def model_id_map(paths, grid):
@@ -128,7 +136,7 @@ def model_id_map(paths, grid):
     # calling Rasterize without saving result to variable will fail
     ds = gdal.Rasterize(
         path,
-        os.path.join(paths.mapdata, QMAP),
+        QMAP,
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputSRS=srs,
         outputBounds=[grid.xmin, grid.ymin, grid.xmax, grid.ymax],
@@ -180,7 +188,7 @@ def coast_distance_map(paths, grid):
     # only need UInt16 (~65k max val) because coast only used 8->20k
     ds = gdal.Rasterize(
         path,
-        os.path.join(paths.mapdata, COAST),
+        COAST,
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputBounds=[landgrid.xmin, landgrid.ymin, landgrid.xmax, landgrid.ymax],
         xRes=landgrid.dx,
@@ -213,9 +221,8 @@ def slope_map(paths, grid):
     dst = os.path.join(paths.out, "slope.tif")
     if os.path.isfile(dst):
         return dst
-    src = os.path.join(paths.mapdata, SLOPE)
     resample_raster(
-        src, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
+        SLOPE, dst, grid.xmin, grid.xmax, grid.ymin, grid.ymax, grid.dx, grid.dy
     )
     return dst
 
