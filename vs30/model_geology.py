@@ -103,7 +103,8 @@ def model_id(points):
     # ocean is NaN while water polygons are 0
     values = np.full(len(points), ID_NODATA, dtype=np.uint8)
     pt = ogr.Geometry(ogr.wkbPoint)
-    for i, p in enumerate(points):
+    # pt.AddPoint_2D will not work with float32, float64 is fine
+    for i, p in enumerate(points.astype(np.float64)):
         pt.AddPoint_2D(p[0], p[1])
         lay.SetSpatialFilter(pt)
         f = lay.GetNextFeature()
