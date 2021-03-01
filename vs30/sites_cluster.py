@@ -1,3 +1,7 @@
+"""
+Handles distance based clustering of measured site locations.
+Reduces influence of locations with more measured sites than those more sparse.
+"""
 import numpy as np
 from sklearn.cluster import DBSCAN
 

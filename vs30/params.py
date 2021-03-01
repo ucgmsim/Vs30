@@ -1,3 +1,7 @@
+"""
+Parameters used throughout the vs30 package.
+Also parses command line arguments for vs30calc.py.
+"""
 from argparse import ArgumentParser
 from dataclasses import dataclass
 

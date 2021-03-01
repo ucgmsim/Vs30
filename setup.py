@@ -1,7 +1,13 @@
+"""
+Install script for the vs30 package.
+recommended install method:
+pip install --user .
+"""
 import os
-from setuptools import setup
 from shutil import rmtree
 import tarfile
+
+from setuptools import setup
 
 repo_data = os.path.join(os.path.dirname(__file__), "vs30", "data")
 # remove old versions of shapefiles

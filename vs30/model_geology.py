@@ -1,3 +1,6 @@
+"""
+Geology model functions based on GNS QMAP geology categories and AhdiAk values.
+"""
 from copy import deepcopy
 import os
 
