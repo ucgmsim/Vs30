@@ -1,3 +1,6 @@
+"""
+Shared model functions for processing GIS data and processing/combining models.
+"""
 from math import exp, log, sqrt
 import os
 
