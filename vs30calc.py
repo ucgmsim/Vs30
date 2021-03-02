@@ -3,8 +3,11 @@
 Calculate Vs30 over a region (default) or specify points at which to output for instead.
 """
 
-from shutil import rmtree
+from functools import partial
+import math
+from multiprocessing import Pool
 import os
+from shutil import rmtree
 import sys
 from time import time
 
@@ -22,9 +25,12 @@ from vs30 import (
     sites_load,
 )
 
+# work on ~50 points per process
+SPLIT_SIZE = 50
 MODEL_MAPPING = {"geology": model_geology, "terrain": model_terrain}
 wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
-p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb = params.load_args()
+p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, nproc = params.load_args()
+pool = Pool(nproc)
 
 # working directory/output setup
 if os.path.exists(p_paths.out):
@@ -33,6 +39,14 @@ if os.path.exists(p_paths.out):
     else:
         sys.exit("output exists")
 os.makedirs(p_paths.out)
+
+
+def array_split(array):
+    """
+    Split dataframes and numpy arrays for multiprocessing.Pool.map
+    """
+    return np.array_split(array, math.ceil(len(array) / SPLIT_SIZE))
+
 
 # input locations
 if p_ll is not None:
@@ -67,7 +81,9 @@ for model_setup in [p_geol, p_terr]:
     model_module = MODEL_MAPPING[model_setup.name]
 
     print("    model measured update...")
-    sites[f"{model_setup.letter}id"] = model_module.model_id(sites_points)
+    sites[f"{model_setup.letter}id"] = np.concatenate(
+        pool.map(model_module.model_id, array_split(sites_points))
+    )
     if model_setup.update == "prior":
         model_table = model_module.model_prior()
     elif model_setup.update == "posterior_paper":
@@ -75,7 +91,7 @@ for model_setup in [p_geol, p_terr]:
     elif model_setup.update == "posterior":
         model_table = model_module.model_prior()
         if p_sites.source == "cpt":
-            sites = sites_cluster.cluster(sites, model_setup.letter)
+            sites = sites_cluster.cluster(sites, model_setup.letter, nproc=nproc)
             model_table = model.cluster_update(model_table, sites, model_setup.letter)
         else:
             model_table = model.posterior(model_table, sites, f"{model_setup.letter}id")
@@ -95,7 +111,9 @@ for model_setup in [p_geol, p_terr]:
 
     if p_ll is not None:
         print("    model points...")
-        table[f"{model_setup.letter}id"] = model_module.model_id(table_points)
+        table[f"{model_setup.letter}id"] = np.concatenate(
+            pool.map(model_module.model_id, array_split(table_points))
+        )
         (
             table[f"{model_setup.name}_vs30"],
             table[f"{model_setup.name}_stdv"],
@@ -111,13 +129,12 @@ for model_setup in [p_geol, p_terr]:
         (
             table[f"{model_setup.name}_mvn_vs30"],
             table[f"{model_setup.name}_mvn_stdv"],
-        ) = mvn.mvn(
-            table_points,
-            table[f"{model_setup.name}_vs30"],
-            table[f"{model_setup.name}_stdv"],
-            sites,
-            model_setup.name,
-        )
+        ) = np.concatenate(
+            pool.map(
+                partial(mvn.mvn_table, sites=sites, model_name=model_setup.name),
+                array_split(table),
+            )
+        ).T
     else:
         print("    model map...")
         tiffs.append(

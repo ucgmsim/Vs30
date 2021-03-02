@@ -68,7 +68,7 @@ def mvn(
     model_vs30,
     model_stdv,
     sites,
-    model,
+    model_name,
     cov_reduc=1.5,
     noisy=True,
     max_dist=10000,
@@ -78,11 +78,11 @@ def mvn(
     noisy: noisy measurements
     """
     # cut not-applicable sites to prevent nan propagation
-    sites = sites[~np.isnan(sites[f"{model}_vs30"])]
+    sites = sites[~np.isnan(sites[f"{model_name}_vs30"])]
 
     obs_locs = np.column_stack((sites.easting.values, sites.northing.values))
-    obs_model_stdv = sites[f"{model}_stdv"].values
-    obs_residuals = np.log(sites.vs30.values / sites[f"{model}_vs30"].values)
+    obs_model_stdv = sites[f"{model_name}_stdv"].values
+    obs_residuals = np.log(sites.vs30.values / sites[f"{model_name}_vs30"].values)
 
     # Wea equation 33, 40, 41
     if noisy:
@@ -93,7 +93,7 @@ def mvn(
 
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
-    var = model_stdv ** 2 * corr_func(0, model)
+    var = model_stdv ** 2 * corr_func(0, model_name)
 
     # model point to observations
     for i, model_loc in enumerate(model_locs):
@@ -108,7 +108,7 @@ def mvn(
         # distances between interesting points
         cov_matrix = dist_mat(xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
         # correlation
-        cov_matrix = corr_func(cov_matrix, model)
+        cov_matrix = corr_func(cov_matrix, model_name)
         # uncertainties
         cov_matrix *= tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
 
@@ -123,7 +123,9 @@ def mvn(
                 -cov_reduc
                 * dist_mat(
                     np.insert(
-                        np.log(sites.loc[wanted, f"{model}_vs30"].values), 0, pred[i]
+                        np.log(sites.loc[wanted, f"{model_name}_vs30"].values),
+                        0,
+                        pred[i],
                     )
                 )
             )
@@ -135,6 +137,22 @@ def mvn(
         )
 
     return model_vs30 * np.exp(pred - np.log(model_vs30)), np.sqrt(var)
+
+
+def mvn_table(table, sites, model_name):
+    """
+    Run MVN over DataFrame. multiprocessing.Pool.map friendly.
+    """
+    print(table[["easting", "northing"]].values.shape, len(table[f"{model_name}_vs30"]))
+    return np.column_stack(
+        mvn(
+            table[["easting", "northing"]].values,
+            table[f"{model_name}_vs30"],
+            table[f"{model_name}_stdv"],
+            sites,
+            model_name,
+        )
+    )
 
 
 def mvn_tiff(paths, grid, model, sites):
