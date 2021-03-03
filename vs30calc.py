@@ -143,7 +143,7 @@ for model_setup in [p_geol, p_terr]:
             model_module.model_val_map(p_paths, p_grid, model_table, model_setup)
         )
         print("    measured mvn...")
-        tiffs_mvn.append(mvn.mvn_tiff(p_paths, p_grid, model_setup.name, sites))
+        tiffs_mvn.append(mvn.mvn_tiff(p_paths.out, model_setup.name, sites, nproc))
 
     print(f"{time()-t:.2f}s")
 
