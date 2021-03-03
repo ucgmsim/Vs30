@@ -143,12 +143,13 @@ def mvn_table(table, sites, model_name):
     """
     Run MVN over DataFrame. multiprocessing.Pool.map friendly.
     """
-    print(table[["easting", "northing"]].values.shape, len(table[f"{model_name}_vs30"]))
+    # reset indexes for this instance to prevent index errors with split table
+    ix0_table = table.reset_index(drop=True)
     return np.column_stack(
         mvn(
-            table[["easting", "northing"]].values,
-            table[f"{model_name}_vs30"],
-            table[f"{model_name}_stdv"],
+            ix0_table[["easting", "northing"]].values,
+            ix0_table[f"{model_name}_vs30"],
+            ix0_table[f"{model_name}_stdv"],
             sites,
             model_name,
         )
