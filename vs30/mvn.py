@@ -2,7 +2,8 @@
 MVN (multivariate normal distribution)
 for modifying vs30 values based on proximity to measured values.
 """
-import math
+from functools import partial
+from multiprocessing import Pool
 import os
 from shutil import copyfile
 
@@ -10,7 +11,7 @@ import numpy as np
 from osgeo import gdal
 
 
-def corr_func(distances, model):
+def _corr_func(distances, model):
     """
     Correlation function by distance.
     phi is 993 for terrain model, 1407 for geology
@@ -29,7 +30,7 @@ def corr_func(distances, model):
     return 1 / np.e ** (np.maximum(0.1, distances) / phi)
 
 
-def tcrossprod(x):
+def _tcrossprod(x):
     """
     Matrix cross product (or outer product) from a 1d numpy array.
     Same functionality as the R function tcrossprod(x) with y = NULL.
@@ -38,7 +39,7 @@ def tcrossprod(x):
     return x[:, np.newaxis] * x
 
 
-def dists(x):
+def _dists(x):
     """
     Euclidean distance from 2d diff array.
     """
@@ -47,7 +48,7 @@ def dists(x):
     return np.sqrt(np.einsum("ij,ij->i", x, x))
 
 
-def xy2complex(x):
+def _xy2complex(x):
     """
     Convert array of 2D coordinates to array of 1D complex numbers.
     """
@@ -56,14 +57,14 @@ def xy2complex(x):
     return c
 
 
-def dist_mat(x):
+def _dist_mat(x):
     """
     Distance matrix between coordinates (complex numbers) or simple values.
     """
     return np.abs(x[:, np.newaxis] - x)
 
 
-def mvn(
+def _mvn(
     model_locs,
     model_vs30,
     model_stdv,
@@ -93,27 +94,27 @@ def mvn(
 
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
-    var = model_stdv ** 2 * corr_func(0, model_name)
+    var = model_stdv ** 2 * _corr_func(0, model_name)
 
     # model point to observations
     for i, model_loc in enumerate(model_locs):
         if np.isnan(model_vs30[i]):
             continue
-        distances = dists(obs_locs - model_loc)
+        distances = _dists(obs_locs - model_loc)
         wanted = distances < max_dist
         if max(wanted) is False:
             # not close enough to any observed locations
             continue
 
         # distances between interesting points
-        cov_matrix = dist_mat(xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
+        cov_matrix = _dist_mat(_xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
         # correlation
-        cov_matrix = corr_func(cov_matrix, model_name)
+        cov_matrix = _corr_func(cov_matrix, model_name)
         # uncertainties
-        cov_matrix *= tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
+        cov_matrix *= _tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
 
         if noisy:
-            omega = tcrossprod(np.insert(omega_obs[wanted], 0, 1))
+            omega = _tcrossprod(np.insert(omega_obs[wanted], 0, 1))
             np.fill_diagonal(omega, 1)
             cov_matrix *= omega
 
@@ -121,7 +122,7 @@ def mvn(
         if cov_reduc > 0:
             cov_matrix *= np.exp(
                 -cov_reduc
-                * dist_mat(
+                * _dist_mat(
                     np.insert(
                         np.log(sites.loc[wanted, f"{model_name}_vs30"].values),
                         0,
@@ -146,7 +147,7 @@ def mvn_table(table, sites, model_name):
     # reset indexes for this instance to prevent index errors with split table
     ix0_table = table.reset_index(drop=True)
     return np.column_stack(
-        mvn(
+        _mvn(
             ix0_table[["easting", "northing"]].values,
             ix0_table[f"{model_name}_vs30"],
             ix0_table[f"{model_name}_stdv"],
@@ -156,30 +157,82 @@ def mvn_table(table, sites, model_name):
     )
 
 
-def mvn_tiff(paths, grid, model, sites):
+def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_name):
+    """
+    Works on single tif block as split by mvn_tiff.
+    """
+    # load tif
+    tif_ds = gdal.Open(tif_path, gdal.GA_ReadOnly)
+    tif_trans = tif_ds.GetGeoTransform()
+    vs30_band = tif_ds.GetRasterBand(1)
+    stdv_band = tif_ds.GetRasterBand(2)
+    vs30_nd = vs30_band.GetNoDataValue()
+    stdv_nd = stdv_band.GetNoDataValue()
+
+    # read pre-mvn data from tif
+    vs30_val = vs30_band.ReadAsArray(
+        xoff=x_offset, yoff=y_offset, win_xsize=x_size, win_ysize=y_size
+    ).flatten()
+    vs30_val[vs30_val == vs30_nd] = np.nan
+    stdv_val = stdv_band.ReadAsArray(
+        xoff=x_offset, yoff=y_offset, win_xsize=x_size, win_ysize=y_size
+    ).flatten()
+    stdv_val[stdv_val == stdv_nd] = np.nan
+    # coordinates for tif data
+    locs = np.vstack(
+        np.mgrid[
+            tif_trans[0]
+            + (x_offset + 0.5) * tif_trans[1] : tif_trans[0]
+            + (x_offset + 0.5 + x_size) * tif_trans[1] : tif_trans[1],
+            tif_trans[3]
+            + (y_offset + 0.5) * tif_trans[5] : tif_trans[3]
+            + (y_offset + 0.5 + y_size) * tif_trans[5] : tif_trans[5],
+        ].T
+    ).astype(np.float32)
+
+    # close tif
+    vs30_band = None
+    stdv_band = None
+    tif_ds = None
+
+    # calculate mvn
+    vs30_mvn, stdv_mvn = _mvn(locs, vs30_val, stdv_val, sites, model_name)
+    return (
+        x_offset,
+        y_offset,
+        vs30_mvn.reshape(y_size, x_size),
+        stdv_mvn.reshape(y_size, x_size),
+    )
+
+
+def mvn_tiff(out_dir, model_name, sites, nproc=1):
     """
     Run MVN over GeoTIFF.
     """
     # mvn based on original model, modified if in proximity to measured sites
-    out_tiff = os.path.join(paths.out, f"{model}_mvn.tif")
-    copyfile(os.path.join(paths.out, f"{model}.tif"), out_tiff)
-    ds = gdal.Open(out_tiff, gdal.GA_Update)
-    trans = ds.GetGeoTransform()
-    vs30b = ds.GetRasterBand(1)
-    stdvb = ds.GetRasterBand(2)
-    vnd = vs30b.GetNoDataValue()
-    snd = stdvb.GetNoDataValue()
+    in_tiff = os.path.join(out_dir, f"{model_name}.tif")
+    out_tiff = os.path.join(out_dir, f"{model_name}_mvn.tif")
+    copyfile(in_tiff, out_tiff)
+    tif_ds = gdal.Open(out_tiff, gdal.GA_Update)
+    nx = tif_ds.RasterXSize
+    ny = tif_ds.RasterYSize
+    vs30_band = tif_ds.GetRasterBand(1)
+    stdv_band = tif_ds.GetRasterBand(2)
 
     # processing chunk/block sizing
-    block = vs30b.GetBlockSize()
-    nxb = (int)((grid.nx + block[0] - 1) / block[0])
-    nyb = (int)((grid.ny + block[1] - 1) / block[1])
+    # usually just lines of nx=nx, ny=1 which is a good size for multiprocessing
+    block = vs30_band.GetBlockSize()
+    nxb = (int)((nx + block[0] - 1) / block[0])
+    nyb = (int)((ny + block[1] - 1) / block[1])
 
+    # asynchronously append jobs to queue
+    pool = Pool(nproc)
+    jobs = []
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
         if x == nxb - 1:
-            block[0] = grid.nx - x * block[0]
+            block[0] = nx - x * block[0]
         # reset y block size
         block_y = block[1]
 
@@ -187,35 +240,32 @@ def mvn_tiff(paths, grid, model, sites):
             yoff = y * block[1]
             # last block may be smaller
             if y == nyb - 1:
-                block_y = grid.ny - y * block[1]
+                block_y = ny - y * block[1]
 
-            # determine results on block
-            vs30v = vs30b.ReadAsArray(
-                xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
+            jobs.append(
+                pool.apply_async(
+                    partial(
+                        _mvn_tiff_worker,
+                        in_tiff,
+                        xoff,
+                        yoff,
+                        block[0],
+                        block_y,
+                        sites,
+                        model_name,
+                    ),
+                    (),
+                )
             )
-            vs30v[vs30v == vnd] = np.nan
-            stdvv = stdvb.ReadAsArray(
-                xoff=xoff, yoff=yoff, win_xsize=block[0], win_ysize=block_y
-            )
-            stdvv[stdvv == snd] = np.nan
 
-            locs = np.vstack(
-                np.mgrid[
-                    trans[0]
-                    + (xoff + 0.5) * trans[1] : trans[0]
-                    + (xoff + 0.5 + block[0]) * trans[1] : trans[1],
-                    trans[3]
-                    + (yoff + 0.5) * trans[5] : trans[3]
-                    + (yoff + 0.5 + block_y) * trans[5] : trans[5],
-                ].T
-            ).astype(np.float32)
-            vs30v, stdvv = mvn(locs, vs30v.flatten(), stdvv.flatten(), sites, model)
-
-            # write results
-            vs30b.WriteArray(vs30v.reshape(block_y, block[0]), xoff=xoff, yoff=yoff)
-            stdvb.WriteArray(stdvv.reshape(block_y, block[0]), xoff=xoff, yoff=yoff)
+    # collect jobs
+    for job in jobs:
+        xoff, yoff, vs30_mvn, stdv_mvn = job.get()
+        # write results
+        vs30_band.WriteArray(vs30_mvn, xoff=xoff, yoff=yoff)
+        stdv_band.WriteArray(stdv_mvn, xoff=xoff, yoff=yoff)
     # close
-    vs30b = None
-    stdvb = None
-    ds = None
+    vs30_band = None
+    stdv_band = None
+    tif_ds = None
     return out_tiff
