@@ -45,7 +45,9 @@ def array_split(array):
     """
     Split dataframes and numpy arrays for multiprocessing.Pool.map
     """
-    return np.array_split(array, math.ceil(len(array) / SPLIT_SIZE))
+    n_chunks = math.ceil(max(len(array) / nproc, len(array) / SPLIT_SIZE))
+
+    return np.array_split(array, n_chunks)
 
 
 # input locations
