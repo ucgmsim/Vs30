@@ -30,8 +30,10 @@ If you aren't using the installed package, you will need to extract the compress
 Everything is run from the `vs30calc.py` script which can be run directly or installed.
 The 2 main modes of operation are grid based (which creates TIF files) and point based (where wanted locations are passed in as rows in a file, output is a CSV file). Everything is NZTM2000 (EPSG:2193, easting/northing) internally, WGS84 (EPSG:4326, longitude/latitude) is only used as input to the point based calculation.
 
+Both modes produce `.qgz` files which can be opened in `QGIS` to view outputs.
+
 ## Grid based calculation
-This mode is good for viewing the entire model, making sure everything appears good. TIF files can be viewed with QGIS. This is the default mode of operation if no locations file is specified.
+This mode is good for viewing the entire model, making sure everything appears good. This is the default mode of operation if no locations file is specified.
 The grid has parameters which control the extent and spacing.
 `vs30calc.py --help`
 A sample command for creating a smaller grid (~5 mins depending on machine):
@@ -41,5 +43,5 @@ vs30calc.py --xmin 1470050 --xmax 1580050 --ymin 5150050 --ymax 5250050
 
 ## Point based calculation
 This mode is much faster because it only calculates the model values at given locations, not at millions of points around the country.
-Specify a file containing locations with `--ll-path`. The default is no header to skip (`--skip-rows 0`), longitude in the first column (`--lon-col-ix 0`), latitude in the second (`--lat-col-ix 1`) and space as the column separator (`--col-sep ","`). There are options for this as well.
+Specify a file containing locations with `--ll-path`. The default is no header to skip (`--skip-rows 0`), longitude in the first column (`--lon-col-ix 0`), latitude in the second (`--lat-col-ix 1`) and space as the column separator (`--col-sep " "`). There are options for this as well.
 Note that grids are used for some intermediate parts of the calculation in this mode so the parameters are still applicable.
