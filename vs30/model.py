@@ -41,6 +41,9 @@ def interpolate_raster(points, raster, band=1):
 def resample_raster(
     src, dst, xmin, xmax, ymin, ymax, xd, yd, alg=gdalconst.GRIORA_NearestNeighbour
 ):
+    """
+    Resample Tif File.
+    """
     gdal.Warp(
         dst,
         src,
@@ -157,7 +160,7 @@ def combine_tiff(out_dir, filename, grid, opts, a, b):
 def cluster_update(prior, sites, letter):
     # creates a model from the distribution of measured sites as clustered
     # prior: prior model, values only taken if no measurements available for ID
-    posterior = prior
+    posterior = np.copy(prior)
     # looping through model IDs
     for m in range(len(posterior)):
         vs_sum = 0
@@ -212,7 +215,7 @@ def posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
 
     # loop through observed
     n0 = np.repeat(n_prior, len(model))
-    for i, r in sites.iterrows():
+    for _, r in sites.iterrows():
         m = r[idcol]
         if m == ID_NODATA:
             continue
