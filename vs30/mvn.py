@@ -99,8 +99,19 @@ def _mvn(
     # model point to observations
     for i, model_loc in enumerate(model_locs):
         if np.isnan(model_vs30[i]):
+            # input of nan is always output of nan
             continue
+        # don't recalculate distances if delta distance is too small anyway
+        # useful when calculating accross grids or close points
+        try:
+            movement = _dists(np.atleast_2d(model_loc - prev_model_loc))[0]
+            if prev_min_dist - movement > max_dist:
+                continue
+        except NameError:
+            pass
         distances = _dists(obs_locs - model_loc)
+        prev_model_loc = model_loc
+        prev_min_dist = min(distances)
         wanted = distances < max_dist
         if max(wanted) is np.bool_(False):
             # not close enough to any observed locations
