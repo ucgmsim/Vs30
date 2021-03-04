@@ -102,7 +102,7 @@ def _mvn(
             continue
         distances = _dists(obs_locs - model_loc)
         wanted = distances < max_dist
-        if max(wanted) is False:
+        if max(wanted) is np.bool_(False):
             # not close enough to any observed locations
             continue
 
