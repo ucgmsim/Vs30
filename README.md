@@ -36,7 +36,7 @@ Both modes produce `.qgz` files which can be opened in `QGIS` to view outputs.
 This mode is good for viewing the entire model, making sure everything appears good. This is the default mode of operation if no locations file is specified.
 The grid has parameters which control the extent and spacing.
 `vs30calc.py --help`
-A sample command for creating a smaller grid (~5 mins depending on machine):
+A sample command for creating a smaller grid (~2 mins depending on machine):
 ```shell
 vs30calc.py --xmin 1470050 --xmax 1580050 --ymin 5150050 --ymax 5250050
 ```
