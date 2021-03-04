@@ -45,6 +45,9 @@ class GridParams:
         self.update()
 
     def update(self):
+        """
+        Updates number of columns and rows given other parameters.
+        """
         self.nx = round((self.xmax - self.xmin) / self.dx)
         self.ny = round((self.ymax - self.ymin) / self.dy)
 
@@ -102,6 +105,9 @@ class CombinationParams:
 
 
 def load_args():
+    """
+    Load arguments from command line.
+    """
     parser = ArgumentParser()
     arg = parser.add_argument
     arg("--nproc", help="number of processes to use", type=int, default=cpu_count())

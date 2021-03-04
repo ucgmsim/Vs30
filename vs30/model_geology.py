@@ -287,7 +287,7 @@ def model_val(ids, model, opts, paths=None, points=None, grid=None):
     Return model values for IDs (vs30, stdv).
     """
     # collect inputs
-    ids = model_id(points, paths, grid=grid) if ids is None else ids
+    ids = model_id(points) if ids is None else ids
     cdist, slope = None, None
     # coastline distances and slope rough enough to keep as rasters (for now)
     if opts.mod6 or opts.mod13:
