@@ -164,6 +164,8 @@ if p_geol.update != "off" and p_terr.update != "off":
         model.combine_tiff(p_paths.out, "combined.tif", p_grid, p_comb, *tiffs)
         model.combine_tiff(p_paths.out, "combined_mvn.tif", p_grid, p_comb, *tiffs_mvn)
     print(f"{time()-t:.2f}s")
+pool.close()
+pool.join()
 
 # save point based data and copy qgis project files
 sites.to_csv(os.path.join(p_paths.out, "measured_sites.csv"), na_rep="NA", index=False)
