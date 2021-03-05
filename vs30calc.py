@@ -3,8 +3,11 @@
 Calculate Vs30 over a region (default) or specify points at which to output for instead.
 """
 
-from shutil import rmtree
+from functools import partial
+import math
+from multiprocessing import Pool
 import os
+from shutil import copyfile, rmtree
 import sys
 from time import time
 
@@ -22,9 +25,12 @@ from vs30 import (
     sites_load,
 )
 
+# work on ~50 points per process
+SPLIT_SIZE = 50
 MODEL_MAPPING = {"geology": model_geology, "terrain": model_terrain}
 wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
-p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb = params.load_args()
+p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, nproc = params.load_args()
+pool = Pool(nproc)
 
 # working directory/output setup
 if os.path.exists(p_paths.out):
@@ -33,6 +39,16 @@ if os.path.exists(p_paths.out):
     else:
         sys.exit("output exists")
 os.makedirs(p_paths.out)
+
+
+def array_split(array):
+    """
+    Split dataframes and numpy arrays for multiprocessing.Pool.map
+    """
+    n_chunks = math.ceil(max(len(array) / nproc, len(array) / SPLIT_SIZE))
+
+    return np.array_split(array, n_chunks)
+
 
 # input locations
 if p_ll is not None:
@@ -67,7 +83,9 @@ for model_setup in [p_geol, p_terr]:
     model_module = MODEL_MAPPING[model_setup.name]
 
     print("    model measured update...")
-    sites[f"{model_setup.letter}id"] = model_module.model_id(sites_points)
+    sites[f"{model_setup.letter}id"] = np.concatenate(
+        pool.map(model_module.model_id, array_split(sites_points))
+    )
     if model_setup.update == "prior":
         model_table = model_module.model_prior()
     elif model_setup.update == "posterior_paper":
@@ -75,7 +93,7 @@ for model_setup in [p_geol, p_terr]:
     elif model_setup.update == "posterior":
         model_table = model_module.model_prior()
         if p_sites.source == "cpt":
-            sites = sites_cluster.cluster(sites, model_setup.letter)
+            sites = sites_cluster.cluster(sites, model_setup.letter, nproc=nproc)
             model_table = model.cluster_update(model_table, sites, model_setup.letter)
         else:
             model_table = model.posterior(model_table, sites, f"{model_setup.letter}id")
@@ -95,7 +113,9 @@ for model_setup in [p_geol, p_terr]:
 
     if p_ll is not None:
         print("    model points...")
-        table[f"{model_setup.letter}id"] = model_module.model_id(table_points)
+        table[f"{model_setup.letter}id"] = np.concatenate(
+            pool.map(model_module.model_id, array_split(table_points))
+        )
         (
             table[f"{model_setup.name}_vs30"],
             table[f"{model_setup.name}_stdv"],
@@ -111,20 +131,19 @@ for model_setup in [p_geol, p_terr]:
         (
             table[f"{model_setup.name}_mvn_vs30"],
             table[f"{model_setup.name}_mvn_stdv"],
-        ) = mvn.mvn(
-            table_points,
-            table[f"{model_setup.name}_vs30"],
-            table[f"{model_setup.name}_stdv"],
-            sites,
-            model_setup.name,
-        )
+        ) = np.concatenate(
+            pool.map(
+                partial(mvn.mvn_table, sites=sites, model_name=model_setup.name),
+                array_split(table),
+            )
+        ).T
     else:
         print("    model map...")
         tiffs.append(
             model_module.model_val_map(p_paths, p_grid, model_table, model_setup)
         )
         print("    measured mvn...")
-        tiffs_mvn.append(mvn.mvn_tiff(p_paths, p_grid, model_setup.name, sites))
+        tiffs_mvn.append(mvn.mvn_tiff(p_paths.out, model_setup.name, sites, nproc))
 
     print(f"{time()-t:.2f}s")
 
@@ -145,10 +164,21 @@ if p_geol.update != "off" and p_terr.update != "off":
         model.combine_tiff(p_paths.out, "combined.tif", p_grid, p_comb, *tiffs)
         model.combine_tiff(p_paths.out, "combined_mvn.tif", p_grid, p_comb, *tiffs_mvn)
     print(f"{time()-t:.2f}s")
+pool.close()
+pool.join()
 
-# save point based data
+# save point based data and copy qgis project files
 sites.to_csv(os.path.join(p_paths.out, "measured_sites.csv"), na_rep="NA", index=False)
 if p_ll is not None:
     table.to_csv(os.path.join(p_paths.out, "vs30points.csv"), na_rep="NA", index=False)
+    copyfile(
+        os.path.join(sites_load.data, "qgis_points.qgz"),
+        os.path.join(p_paths.out, "qgis.qgz"),
+    )
+else:
+    copyfile(
+        os.path.join(sites_load.data, "qgis_rasters.qgz"),
+        os.path.join(p_paths.out, "qgis.qgz"),
+    )
 
 print("complete.")
