@@ -276,6 +276,8 @@ def mvn_tiff(out_dir, model_name, sites, nproc=1):
         vs30_band.WriteArray(vs30_mvn, xoff=xoff, yoff=yoff)
         stdv_band.WriteArray(stdv_mvn, xoff=xoff, yoff=yoff)
     # close
+    pool.close()
+    pool.join()
     vs30_band = None
     stdv_band = None
     tif_ds = None
