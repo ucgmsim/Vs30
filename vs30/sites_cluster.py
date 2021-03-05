@@ -8,12 +8,13 @@ from sklearn.cluster import DBSCAN
 from vs30.model import ID_NODATA
 
 
-def cluster(sites, letter, min_group=5, eps=15000):
+def cluster(sites, letter, min_group=5, eps=15000, nproc=-1):
     """
     Sort sites into clusters spatially.
     letter: which id? "t"(id) for terrain or "g"(id) for geology
     min_group: the minimum group size
     eps: (metres) how far points are to be considered a different cluster
+    nproc: -1 to detect available cores
     """
 
     features = np.column_stack((sites.easting.values, sites.northing.values))
@@ -29,7 +30,7 @@ def cluster(sites, letter, min_group=5, eps=15000):
             # can't form any groups
             continue
 
-        dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=-1)
+        dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc)
         dbscan.fit(subset)
 
         # save labels

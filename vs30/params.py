@@ -4,6 +4,7 @@ Also parses command line arguments for vs30calc.py.
 """
 from argparse import ArgumentParser
 from dataclasses import dataclass
+from multiprocessing import cpu_count
 
 
 @dataclass
@@ -44,6 +45,9 @@ class GridParams:
         self.update()
 
     def update(self):
+        """
+        Updates number of columns and rows given other parameters.
+        """
         self.nx = round((self.xmax - self.xmin) / self.dx)
         self.ny = round((self.ymax - self.ymin) / self.dy)
 
@@ -101,8 +105,12 @@ class CombinationParams:
 
 
 def load_args():
+    """
+    Load arguments from command line.
+    """
     parser = ArgumentParser()
     arg = parser.add_argument
+    arg("--nproc", help="number of processes to use", type=int, default=cpu_count())
     arg(
         "--out",
         help="output location",
@@ -239,4 +247,4 @@ def load_args():
     p_terr = TerrainParams(update=args.tupdate)
     p_comb = CombinationParams(stdv_weight=args.stdv_weight, k=args.k)
 
-    return p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb
+    return p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, args.nproc
