@@ -73,6 +73,7 @@ def _mvn(
     cov_reduc=1.5,
     noisy=True,
     max_dist=10000,
+    max_points=50,
 ):
     """
     Modify model with observed locations.
@@ -105,17 +106,20 @@ def _mvn(
         # useful when calculating accross grids or close points
         try:
             movement = _dists(np.atleast_2d(model_loc - prev_model_loc))[0]
-            if prev_min_dist - movement > max_dist:
+            if min_dist - movement > max_dist:
                 continue
         except NameError:
             pass
         distances = _dists(obs_locs - model_loc)
+        max_points_i = min(max_points, len(distances))
+        min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
+            [0, max_points_i]
+        ]
         prev_model_loc = model_loc
-        prev_min_dist = min(distances)
-        wanted = distances < max_dist
-        if max(wanted) is np.bool_(False):
+        if min_dist > max_dist:
             # not close enough to any observed locations
             continue
+        wanted = distances <= min(max_dist, cutoff_dist)
 
         # distances between interesting points
         cov_matrix = _dist_mat(_xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
