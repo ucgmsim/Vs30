@@ -73,7 +73,7 @@ def _mvn(
     cov_reduc=1.5,
     noisy=True,
     max_dist=10000,
-    max_points=50,
+    max_points=500,
 ):
     """
     Modify model with observed locations.
@@ -111,7 +111,7 @@ def _mvn(
         except NameError:
             pass
         distances = _dists(obs_locs - model_loc)
-        max_points_i = min(max_points, len(distances))
+        max_points_i = min(max_points, len(distances)) - 1
         min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
             [0, max_points_i]
         ]
