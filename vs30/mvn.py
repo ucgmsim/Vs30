@@ -77,7 +77,7 @@ def _mvn(
 ):
     """
     Modify model with observed locations.
-    noisy: noisy measurements
+    noisy: whether measurements are noisy True/False
     max_dist: only consider observed locations within this many metres
     max_points: limit observed locations to closest N points within max_dist
     """
