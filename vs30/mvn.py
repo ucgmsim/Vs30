@@ -78,6 +78,8 @@ def _mvn(
     """
     Modify model with observed locations.
     noisy: noisy measurements
+    max_dist: only consider observed locations within this many metres
+    max_points: limit observed locations to closest N points within max_dist
     """
     # cut not-applicable sites to prevent nan propagation
     sites = sites[~np.isnan(sites[f"{model_name}_vs30"])]
@@ -119,6 +121,7 @@ def _mvn(
         if min_dist > max_dist:
             # not close enough to any observed locations
             continue
+        # boolean array mask for observed locations
         wanted = distances <= min(max_dist, cutoff_dist)
 
         # distances between interesting points
