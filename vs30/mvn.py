@@ -73,10 +73,13 @@ def _mvn(
     cov_reduc=1.5,
     noisy=True,
     max_dist=10000,
+    max_points=500,
 ):
     """
     Modify model with observed locations.
-    noisy: noisy measurements
+    noisy: whether measurements are noisy True/False
+    max_dist: only consider observed locations within this many metres
+    max_points: limit observed locations to closest N points within max_dist
     """
     # cut not-applicable sites to prevent nan propagation
     sites = sites[~np.isnan(sites[f"{model_name}_vs30"])]
@@ -105,27 +108,30 @@ def _mvn(
         # useful when calculating accross grids or close points
         try:
             movement = _dists(np.atleast_2d(model_loc - prev_model_loc))[0]
-            if prev_min_dist - movement > max_dist:
+            if min_dist - movement > max_dist:
                 continue
         except NameError:
             pass
         distances = _dists(obs_locs - model_loc)
+        max_points_i = min(max_points, len(distances)) - 1
+        min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
+            [0, max_points_i]
+        ]
         prev_model_loc = model_loc
-        prev_min_dist = min(distances)
-        wanted = distances < max_dist
-        if max(wanted) is np.bool_(False):
+        if min_dist > max_dist:
             # not close enough to any observed locations
             continue
+        loc_mask = distances <= min(max_dist, cutoff_dist)
 
         # distances between interesting points
-        cov_matrix = _dist_mat(_xy2complex(np.vstack((model_loc, obs_locs[wanted]))))
+        cov_matrix = _dist_mat(_xy2complex(np.vstack((model_loc, obs_locs[loc_mask]))))
         # correlation
         cov_matrix = _corr_func(cov_matrix, model_name)
         # uncertainties
-        cov_matrix *= _tcrossprod(np.insert(obs_model_stdv[wanted], 0, model_stdv[i]))
+        cov_matrix *= _tcrossprod(np.insert(obs_model_stdv[loc_mask], 0, model_stdv[i]))
 
         if noisy:
-            omega = _tcrossprod(np.insert(omega_obs[wanted], 0, 1))
+            omega = _tcrossprod(np.insert(omega_obs[loc_mask], 0, 1))
             np.fill_diagonal(omega, 1)
             cov_matrix *= omega
 
@@ -135,7 +141,7 @@ def _mvn(
                 -cov_reduc
                 * _dist_mat(
                     np.insert(
-                        np.log(sites.loc[wanted, f"{model_name}_vs30"].values),
+                        np.log(sites.loc[loc_mask, f"{model_name}_vs30"].values),
                         0,
                         pred[i],
                     )
@@ -143,7 +149,9 @@ def _mvn(
             )
 
         inv_matrix = np.linalg.inv(cov_matrix[1:, 1:])
-        pred[i] += np.dot(np.dot(cov_matrix[0, 1:], inv_matrix), obs_residuals[wanted])
+        pred[i] += np.dot(
+            np.dot(cov_matrix[0, 1:], inv_matrix), obs_residuals[loc_mask]
+        )
         var[i] = cov_matrix[0, 0] - np.dot(
             np.dot(cov_matrix[0, 1:], inv_matrix), cov_matrix[1:, 0]
         )
