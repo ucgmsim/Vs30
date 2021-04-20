@@ -1,10 +1,6 @@
 # extras added
-vspr.csv
 *.swp
-.Rhistory
 *vs30out*
-*.geojson
-*.mbtiles
 vs30/data/coast
 vs30/data/qmap
 vs30map
