@@ -87,14 +87,14 @@ def load_vs(source="original"):
         return load_cpt_vs()
 
 
-def load_cpt_vs():
+def load_cpt_vs(data_cpt=DATA_CPT, usecols=[0,1,2], uncertainty=0.5,sep=" "):
     """
     Newer collection of Vs30 from CPT data.
     """
     cpt = pd.read_csv(
-        DATA_CPT,
-        sep=" ",
-        usecols=[0, 1, 2],
+        data_cpt,
+        sep=sep,
+        usecols=usecols,
         names=["easting", "northing", "vs30"],
         skiprows=1,
         engine="c",
@@ -103,7 +103,7 @@ def load_cpt_vs():
     # remove rows with no vs30 value
     cpt = cpt[~np.isnan(cpt.vs30)].reset_index()
 
-    cpt["uncertainty"] = np.float32(0.5)
+    cpt["uncertainty"] = np.float32(uncertainty)
 
     return cpt
 

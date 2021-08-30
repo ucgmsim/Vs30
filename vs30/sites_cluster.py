@@ -16,7 +16,6 @@ def cluster(sites, letter, min_group=5, eps=15000, nproc=-1):
     eps: (metres) how far points are to be considered a different cluster
     nproc: -1 to detect available cores
     """
-
     features = np.column_stack((sites.easting.values, sites.northing.values))
     # default not a member of any cluster (-1)
     sites[f"{letter}cluster"] = -1
@@ -32,7 +31,6 @@ def cluster(sites, letter, min_group=5, eps=15000, nproc=-1):
 
         dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc)
         dbscan.fit(subset)
-
         # save labels
         sites.loc[model_ids == i, f"{letter}cluster"] = dbscan.labels_
 
