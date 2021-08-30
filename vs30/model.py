@@ -208,7 +208,7 @@ def posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
     n_prior: assume prior model made up of n_prior measurements
     min_sigma: minimum model_stdv allowed
     """
-
+    
     # new model
     vs30 = model[:, 0]
     stdv = np.maximum(model[:, 1], min_sigma)
@@ -216,7 +216,7 @@ def posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
     # loop through observed
     n0 = np.repeat(n_prior, len(model))
     for _, r in sites.iterrows():
-        m = r[idcol]
+        m = int(r[idcol])
         if m == ID_NODATA:
             continue
         var = _new_var(stdv[m], n0[m], r.uncertainty)

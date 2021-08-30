@@ -55,13 +55,16 @@ if p_ll is not None:
     print("loading locations...")
     table = pd.read_csv(
         p_ll.ll_path,
-        usecols=(p_ll.lon_col_ix, p_ll.lat_col_ix),
+        usecols=[p_ll.lon_col_ix, p_ll.lat_col_ix],
         names=["longitude", "latitude"],
         engine="c",
         skiprows=p_ll.skip_rows,
         dtype=np.float64,
         sep=p_ll.col_sep,
     )
+    #print(table)
+    #print("lon: {} ".format(p_ll.lon_col_ix))
+    #print("lat: {} ".format(p_ll.lat_col_ix))
     table["easting"], table["northing"] = wgs2nztm.transform(
         table.longitude.values, table.latitude.values
     )
