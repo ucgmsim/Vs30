@@ -11,7 +11,7 @@ from scipy.spatial import distance_matrix
 
 data = os.path.join(os.path.dirname(__file__), "data")
 DATA_CPT = os.path.join(data, "cptvs30.ssv")
-DATA_KAISERETAL = os.path.join(data, "20170817_vs_allNZ_duplicatesCulled.ll")
+DATA_KAISERETAL = os.path.join(data, "Geonet Site Metadata Summary v1.3.csv")
 DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")
 DATA_WOTHERSPOON = os.path.join(data, "Characterised Vs30 Canterbury_June2017_KFed.csv")
 
@@ -160,18 +160,18 @@ def load_wotherspoon_vs():
 
 def load_kaiseretal_vs():
     """
-    Values from Kaiser et al. (2017)
+    Values from NSHM site database (Wotherspoon et al. (2021))
     """
 
     # with removed duplicate points
     kaiseretal = pd.read_csv(
         DATA_KAISERETAL,
-        usecols=[0, 1, 2, 3, 4],
+        usecols=[0, 2, 1, 5, 7],
         names=["station", "easting", "northing", "vs30", "q"],
-        skiprows=5,
+        skiprows=1,
         engine="c",
         dtype={"easting": np.float32, "northing": np.float32, "vs30": np.float32},
-        converters={"q": lambda text: int(text.strip()[2]), "station": str.strip},
+        converters={"q": lambda text: int(text.split('Q')[1]), "station": str.strip},
     )
     kaiseretal["easting"], kaiseretal["northing"] = wgs2nztm.transform(
         kaiseretal["easting"].values, kaiseretal["northing"].values
