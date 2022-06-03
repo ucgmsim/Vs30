@@ -42,6 +42,9 @@ def array_split(array):
     return np.array_split(array, n_chunks)
 
 if __name__ == '__main__':
+# main function was added to fix fork-related run time error
+# https://stackoverflow.com/questions/65834254/multiprocessing-runtime-error-freeze-support-in-mac-64-bit
+# appears to be happening with MacOS or Windows
 
     # working directory/output setup
     if os.path.exists(p_paths.out):
