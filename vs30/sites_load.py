@@ -166,13 +166,14 @@ def load_kaiseretal_vs():
     # with removed duplicate points
     kaiseretal = pd.read_csv(
         DATA_KAISERETAL,
-        usecols=[0, 2, 1, 5, 7],
-        names=["station", "easting", "northing", "vs30", "q"],
+        usecols=[0, 1, 2, 5, 7],
+        names=["station", "northing", "easting", "vs30", "q"],
         skiprows=1,
         engine="c",
         dtype={"easting": np.float32, "northing": np.float32, "vs30": np.float32},
         converters={"q": lambda text: int(text.split('Q')[1]), "station": str.strip},
     )
+
     kaiseretal["easting"], kaiseretal["northing"] = wgs2nztm.transform(
         kaiseretal["easting"].values, kaiseretal["northing"].values
     )
