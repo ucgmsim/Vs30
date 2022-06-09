@@ -14,7 +14,6 @@ class PathsParams:
     """
 
     out: str = "./vs30map"
-    overwrite: bool = False
 
 
 @dataclass
@@ -117,7 +116,7 @@ def load_args():
         type=type(PathsParams.out),
         default=PathsParams.out,
     )
-    arg("--overwrite", help="overwrite output location", action="store_true")
+
     # point options
     arg(
         "--ll-path",
@@ -221,7 +220,7 @@ def load_args():
     # process arguments
     args = parser.parse_args()
     # argument sets
-    p_paths = PathsParams(out=args.out, overwrite=args.overwrite)
+    p_paths = PathsParams(out=args.out)
     p_sites = SitesParams(source=args.source)
     p_grid = GridParams(
         xmin=args.xmin,

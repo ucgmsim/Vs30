@@ -2,13 +2,12 @@
 """
 Calculate Vs30 over a region (default) or specify points at which to output for instead.
 """
-
 from functools import partial
 import math
 from multiprocessing import Pool
 import os
-from shutil import copyfile, rmtree
-import sys
+from pathlib import Path
+from shutil import copyfile
 from time import time
 
 import numpy as np
@@ -28,9 +27,6 @@ from vs30 import (
 # work on ~50 points per process
 SPLIT_SIZE = 50
 MODEL_MAPPING = {"geology": model_geology, "terrain": model_terrain}
-wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
-p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, nproc = params.load_args()
-print(p_paths)
 
 
 def array_split(array):
@@ -46,14 +42,16 @@ if __name__ == '__main__':
 # https://stackoverflow.com/questions/65834254/multiprocessing-runtime-error-freeze-support-in-mac-64-bit
 # appears to be happening with MacOS or Windows
 
-    # working directory/output setup
-    if os.path.exists(p_paths.out):
-        if p_paths.overwrite:
-            rmtree(p_paths.out)
-        else:
-            sys.exit("output exists")
-    os.makedirs(p_paths.out)
+    wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
+    p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, nproc = params.load_args()
 
+    print(f"Geology categories update: {p_geol.update}")
+    print(f"Terrain categories update: {p_geol.update}")
+
+    print(p_paths)
+
+    # working directory/output setup
+    Path(p_paths.out).mkdir(exist_ok=True)
 
     pool = Pool(nproc)
 
