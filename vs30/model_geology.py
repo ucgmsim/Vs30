@@ -50,7 +50,7 @@ def model_prior():
     15 18_crystalline
     """
     # fmt: off
-    return np.array([[161, 0.522],
+    return np.array([[161, 0.522], # peat
                      [198, 0.314],
                      [239, 0.867],
                      [323, 0.365],

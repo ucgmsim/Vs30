@@ -216,9 +216,10 @@ def posterior(model, sites, idcol, n_prior=3, min_sigma=0.5):
     # loop through observed
     n0 = np.repeat(n_prior, len(model))
     for _, r in sites.iterrows():
-        m = r[idcol]
-        if m == ID_NODATA:
+        m = r[idcol] # m 0...15
+        if m == ID_NODATA or m == 0:
             continue
+        m-=1 # stdv, n0, vs30 are of size 15 (max index 14)
         var = _new_var(stdv[m], n0[m], r.uncertainty)
         vs30[m] = _new_mean(vs30[m], n0[m], var, r.vs30)
         stdv[m] = sqrt(var)
