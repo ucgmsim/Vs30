@@ -6,8 +6,8 @@ from functools import partial
 import math
 from multiprocessing import Pool
 import os
-from pathlib import Path
-from shutil import copyfile
+from shutil import copyfile, rmtree
+import sys
 from time import time
 
 import numpy as np
@@ -51,7 +51,12 @@ if __name__ == '__main__':
     print(p_paths)
 
     # working directory/output setup
-    Path(p_paths.out).mkdir(exist_ok=True)
+    if os.path.exists(p_paths.out):
+        if p_paths.overwrite:
+            rmtree(p_paths.out)
+        else:
+            sys.exit("output exists")
+    os.makedirs(p_paths.out)
 
     pool = Pool(nproc)
 
