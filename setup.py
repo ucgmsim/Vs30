@@ -37,6 +37,6 @@ setup(
             "data/qmap/*",
         ]
     },
-    install_requires=["GDAL", "numpy", "pandas", "pyproj", "scikit-learn", "scipy"],
+    install_requires=["GDAL", "numpy", "pandas", "pyproj", "scikit-learn", "scipy", "matplotlib"],
     scripts=["vs30calc.py"],
 )
