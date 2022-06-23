@@ -7,6 +7,7 @@ from matplotlib import pyplot
 from CPT import CPT
 from VsProfile import VsProfile
 import constants as const
+import utils
 
 
 def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
@@ -18,26 +19,27 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
     default_colours = pyplot.rcParams["axes.prop_cycle"].by_key()["color"]
 
     for ix, vs_profile in enumerate(vs_profiles):
-        ax1.set_xlabel(f"Vs", size=20)
+        ax1.set_xlabel(f"Vs (m/s)", size=20)
         ax1.set_ylabel("Depth (m)", size=20)
         pyplot.plot(
-            vs_profile.vs,
-            vs_profile.depth,
+            *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
             linewidth=2.5,
             color=default_colours[ix],
             label=f"{vs_profile.cpt.cpt_ffp.stem}_{vs_profile.correlation.name}",
         )
         # Standard Deviations
         pyplot.plot(
-            vs_profile.vs * np.exp(vs_profile.vs_sd),
-            vs_profile.depth,
+            *utils.convert_to_midpoint(
+                vs_profile.vs * np.exp(vs_profile.vs_sd), vs_profile.depth
+            ),
             linewidth=2.5,
             linestyle="dashed",
             color=default_colours[ix],
         )
         pyplot.plot(
-            vs_profile.vs * np.exp(-vs_profile.vs_sd),
-            vs_profile.depth,
+            *utils.convert_to_midpoint(
+                vs_profile.vs * np.exp(-vs_profile.vs_sd), vs_profile.depth
+            ),
             linewidth=2.5,
             linestyle="dashed",
             color=default_colours[ix],

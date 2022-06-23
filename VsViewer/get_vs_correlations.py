@@ -2,8 +2,10 @@ import numpy as np
 
 
 def mcgann(z, qc, fs):
-    """CPT-Vs correlaion developed by McGann et al. (2015b).
-    qc, fs in kPa"""
+    """
+    CPT-Vs correlaion developed by McGann et al. (2015b).
+    qc, fs in kPa
+    """
     VsMcGann = np.array(
         [18.4 * (qc * 1000) ** 0.144 * (fs * 1000) ** 0.083 * z**0.278]
     ).T
@@ -20,7 +22,9 @@ def mcgann(z, qc, fs):
 
 
 def mcgann2(z, qc, fs):
-    """CPT-Vs correlation developed for Loess soil by McGann et al. (2018)"""
+    """
+    CPT-Vs correlation developed for Loess soil by McGann et al. (2018)
+    """
     VsMcGann2 = np.array(
         [103.6 * (qc * 1000) ** 0.0074 * (fs * 1000) ** 0.130 * z**0.253]
     ).T
@@ -30,8 +34,10 @@ def mcgann2(z, qc, fs):
 
 
 def andrus(Ic, z, qt):
-    """CPT-Vs correlaion developed by Andrus et al. (2007).
-    qt in kPa"""
+    """
+    CPT-Vs correlaion developed by Andrus et al. (2007).
+    qt in kPa
+    """
     # Holocene-Age Soils, where ASF = 1
     qt[qt <= 0] = 0.0001  # adjust for possible negative qt
     VsAnd = np.array([2.27 * ((qt * 1000) ** 0.412) * (Ic**0.989) * (z**0.033)]).T
@@ -41,7 +47,9 @@ def andrus(Ic, z, qt):
 
 
 def robertson(z, Ic, Qtn, effStress):
-    """CPT-Vs correlaion developed by Robertson (2009)."""
+    """
+    CPT-Vs correlaion developed by Robertson (2009).
+    """
     Qtn[Qtn <= 0] = 0.0001  # adjust for possible negative Qtn
     pa = 0.1
     alpha = 10 ** (0.55 * Ic + 1.68)
@@ -52,7 +60,9 @@ def robertson(z, Ic, Qtn, effStress):
 
 
 def hegazy(z, Ic, qc1n, effStress):
-    """CPT-Vs correlaion developed by Hegazy & Mayne(2006)."""
+    """
+    CPT-Vs correlaion developed by Hegazy & Mayne(2006).
+    """
     qc1n[qc1n <= 0] = 0.0001  # adjust for possible negative qc1n
     pa = 0.1
     VsHegazy = np.array(
