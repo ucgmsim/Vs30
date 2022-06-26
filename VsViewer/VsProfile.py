@@ -1,6 +1,6 @@
-from CPT import CPT
-import constants as const
-import get_vs_correlations
+from VsViewer.CPT import CPT
+import VsViewer.constants as const
+import VsViewer.get_vs_correlations as get_vs_correlations
 
 
 class VsProfile:
