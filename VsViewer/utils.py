@@ -1,5 +1,7 @@
 import numpy as np
 
+from VsViewer.VsProfile import VsProfile
+
 
 def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray):
     """
@@ -21,3 +23,14 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray):
         prev_depth = depth
         prev_measure = measure
     return new_measures, new_depths
+
+
+def calc_vsz(vs_profile: VsProfile):
+    """
+    Calculates the average Vs at the max Z depth for the given VsProfile
+    """
+    vs_midpoint, depth_midpoint = convert_to_midpoint(vs_profile.vs, vs_profile.depth)
+    time = 0
+    for ix in range(1, len(vs_midpoint), 2):
+        print(vs_midpoint[ix])
+    return time
