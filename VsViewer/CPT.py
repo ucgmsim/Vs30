@@ -32,13 +32,14 @@ class CPT:
             data[:, [1, 2]] > 0
         )
         data = data[np.all(data[:, [1, 2]] > 0, axis=1)]  # delete rows with zero qc, fs
+
+        if len(data) == 0:
+            raise Exception("CPT File has no valid lines")
+
         z_raw = data[:, 0]  # m
         qc_raw = data[:, 1]  # MPa
         fs_raw = data[:, 2]  # MPa
         u_raw = data[:, 3]  # Mpa
-
-        if len(data) == 0:
-            raise Exception("CPT File has no valid lines")
 
         downsize = np.arange(z_raw[0], 30, 0.02)
         z = np.array([])
