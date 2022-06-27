@@ -20,6 +20,10 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray):
                 new_measures.append(prev_measure)
                 new_depths.append((depth + prev_depth) / 2)
                 new_measures.append(measure)
+        if ix == len(depths) - 1:
+            # Add extra depth for last value in array
+            new_depths.append(depth)
+            new_measures.append(measure)
         prev_depth = depth
         prev_measure = measure
     return new_measures, new_depths
@@ -32,5 +36,7 @@ def calc_vsz(vs_profile: VsProfile):
     vs_midpoint, depth_midpoint = convert_to_midpoint(vs_profile.vs, vs_profile.depth)
     time = 0
     for ix in range(1, len(vs_midpoint), 2):
-        print(vs_midpoint[ix])
-    return time
+        change_in_z = depth_midpoint[ix] - depth_midpoint[ix - 1]
+        time += change_in_z / vs_midpoint[ix]
+    vsz = vs_profile.depth[-1] / time
+    return vsz
