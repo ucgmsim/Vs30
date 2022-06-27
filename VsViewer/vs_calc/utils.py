@@ -1,6 +1,6 @@
 import numpy as np
 
-from VsViewer.VsProfile import VsProfile
+from .VsProfile import VsProfile
 
 
 def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray):

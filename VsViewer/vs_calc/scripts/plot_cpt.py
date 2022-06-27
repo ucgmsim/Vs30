@@ -4,8 +4,7 @@ from typing import List
 
 from matplotlib import colors, pyplot
 
-from CPT import CPT
-import utils
+from VsViewer import vs_calc
 
 
 def scale_saturation(color: str, scale: float):
@@ -18,7 +17,7 @@ def scale_saturation(color: str, scale: float):
     return colorsys.hls_to_rgb(*hls_scaled)
 
 
-def plot_cpt(cpts: List[CPT], output_ffp: str):
+def plot_cpt(cpts: List[vs_calc.CPT], output_ffp: str):
     """
     Plots the CPT values Qc, Fs and u at their depth values
     and saves to a given output file
@@ -35,7 +34,7 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
         ax1.set_ylabel("Depth (m)", size=16)
         for cpt_ix, cpt in enumerate(cpts):
             pyplot.plot(
-                *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
+                *vs_calc.utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
                 color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
                 label=cpt.cpt_ffp.stem,
@@ -69,7 +68,7 @@ def main():
     args = parser.parse_args()
 
     # Get CPT
-    cpts = [CPT(cpt) for cpt in args.cpt_ffps]
+    cpts = [vs_calc.CPT(cpt) for cpt in args.cpt_ffps]
 
     # Plot cpt
     plot_cpt(cpts, args.output_ffp)

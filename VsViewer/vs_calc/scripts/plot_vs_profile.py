@@ -4,12 +4,10 @@ from typing import List
 import numpy as np
 from matplotlib import pyplot
 
-from CPT import CPT
-from VsProfile import VsProfile
-import utils
+from VsViewer import vs_calc
 
 
-def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
+def plot_vs_profiles(vs_profiles: List[vs_calc.VsProfile], output_ffp: str):
     """
     Plots the Vs Profiles with a mean and standard deviation
     and saves to a given output file
@@ -21,14 +19,14 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
         ax1.set_xlabel(f"Vs (m/s)", size=20)
         ax1.set_ylabel("Depth (m)", size=20)
         pyplot.plot(
-            *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
+            *vs_calc.utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
             linewidth=2.5,
             color=default_colours[ix],
             label=f"{vs_profile.cpt.cpt_ffp.stem}_{vs_profile.correlation}",
         )
         # Standard Deviations
         pyplot.plot(
-            *utils.convert_to_midpoint(
+            *vs_calc.utils.convert_to_midpoint(
                 vs_profile.vs * np.exp(vs_profile.vs_sd), vs_profile.depth
             ),
             linewidth=2.5,
@@ -36,7 +34,7 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
             color=default_colours[ix],
         )
         pyplot.plot(
-            *utils.convert_to_midpoint(
+            *vs_calc.utils.convert_to_midpoint(
                 vs_profile.vs * np.exp(-vs_profile.vs_sd), vs_profile.depth
             ),
             linewidth=2.5,
@@ -71,9 +69,9 @@ def main():
     args = parser.parse_args()
 
     # Get CPTs Vs Profiles
-    cpts = [CPT(cpt) for cpt in args.cpt_ffps]
+    cpts = [vs_calc.CPT(cpt) for cpt in args.cpt_ffps]
     vs_profiles = [
-        VsProfile(cpt, correlation) for cpt in cpts for correlation in args.correlations
+        vs_calc.VsProfile(cpt, correlation) for cpt in cpts for correlation in args.correlations
     ]
 
     # Plot Vs Profiles
