@@ -1,9 +1,9 @@
-from enum import Enum
+import get_vs_correlations
 
-
-class Correlation(Enum):
-    andrus = "andrus"
-    robertson = "robertson"
-    hegazy = "hegazy"
-    mcgann = "mcgann"
-    mcgann2 = "mcgann2"
+CORRELATIONS = {
+    "andrus": get_vs_correlations.andrus,
+    "robertson": get_vs_correlations.robertson,
+    "hegazy": get_vs_correlations.hegazy,
+    "mcgann": get_vs_correlations.mcgann,
+    "mcgann2": get_vs_correlations.mcgann2,
+}

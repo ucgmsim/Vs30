@@ -9,15 +9,11 @@ class CPT:
 
     def __init__(self, cpt_ffp: str):
         self.cpt_ffp = Path(cpt_ffp)
-        depth, qc, fs, u, info = self.get_cpt_data()
-        self.depth = depth
-        self.Qc = qc
-        self.Fs = fs
-        self.u = u
-        self.info = info
+        self.process_cpt()
+        self.set_cpt_params()
 
-    def get_cpt_data(self):
-        """Get CPT data and return [z; qc; fs; u2; info]"""
+    def process_cpt(self):
+        """Process CPT data and sets depth, Qc, Fs, u, info"""
         data = np.loadtxt(self.cpt_ffp, dtype=float, delimiter=",", skiprows=1)
 
         # Get CPT info
@@ -69,10 +65,15 @@ class CPT:
         else:
             fs = fs
 
-        return z, qc, fs, u, info
+        # Setting the CPT values
+        self.depth = z
+        self.Qc = qc
+        self.Fs = fs
+        self.u = u
+        self.info = info
 
-    def get_cpt_params(self):
-        """Compute basic CPT parameters"""
+    def set_cpt_params(self):
+        """Compute and save basic CPT parameters"""
         # compute pore pressure corrected tip resistance
         a = 0.8
         qt = self.Qc - self.u * (1 - a)
@@ -105,6 +106,8 @@ class CPT:
 
         # note in Chris's code, Qtn is used instead of qc1n or qt1n
         # does not make that much of difference
-        qc1n = Qtn
-        qt1n = Qtn
-        return qt, Ic, Qtn, qc1n, qt1n, effStress
+        # Setting CPT values
+        self.qt = qt
+        self.Ic = Ic
+        self.Qtn = Qtn
+        self.effStress = effStress
