@@ -6,7 +6,6 @@ from matplotlib import pyplot
 
 from CPT import CPT
 from VsProfile import VsProfile
-import constants as const
 import utils
 
 
@@ -25,7 +24,7 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
             *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
             linewidth=2.5,
             color=default_colours[ix],
-            label=f"{vs_profile.cpt.cpt_ffp.stem}_{vs_profile.correlation.name}",
+            label=f"{vs_profile.cpt.cpt_ffp.stem}_{vs_profile.correlation}",
         )
         # Standard Deviations
         pyplot.plot(
@@ -71,13 +70,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Get CPT and Correlation data
+    # Get CPTs Vs Profiles
     cpts = [CPT(cpt) for cpt in args.cpt_ffps]
-    correlations = [const.Correlation[name] for name in args.correlations]
-
-    # Get Vs Profiles
     vs_profiles = [
-        VsProfile(cpt, correlation) for cpt in cpts for correlation in correlations
+        VsProfile(cpt, correlation) for cpt in cpts for correlation in args.correlations
     ]
 
     # Plot Vs Profiles
