@@ -1,9 +1,9 @@
 import get_vs_correlations
 
 CORRELATIONS = {
-    "andrus": get_vs_correlations.andrus,
-    "robertson": get_vs_correlations.robertson,
-    "hegazy": get_vs_correlations.hegazy,
-    "mcgann": get_vs_correlations.mcgann,
-    "mcgann2": get_vs_correlations.mcgann2,
+    "andrus_2007": get_vs_correlations.andrus_2007,
+    "robertson_2009": get_vs_correlations.robertson_2009,
+    "hegazy_2006": get_vs_correlations.hegazy_2006,
+    "mcgann_2015": get_vs_correlations.mcgann_2015,
+    "mcgann_2018": get_vs_correlations.mcgann_2018,
 }
