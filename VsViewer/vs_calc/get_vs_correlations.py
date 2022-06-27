@@ -3,7 +3,7 @@ import numpy as np
 from .CPT import CPT
 
 
-def mcgann(cpt: CPT):
+def mcgann_2015(cpt: CPT):
     """
     CPT-Vs correlation developed by McGann et al. (2015b).
     qc, fs in kPa
@@ -28,7 +28,7 @@ def mcgann(cpt: CPT):
     return VsMcGann, Vs_SD
 
 
-def mcgann2(cpt: CPT):
+def mcgann_2018(cpt: CPT):
     """
     CPT-Vs correlation developed for Loess soil by McGann et al. (2018)
     """
@@ -45,7 +45,7 @@ def mcgann2(cpt: CPT):
     return VsMcGann2, Vs_SD
 
 
-def andrus(cpt: CPT):
+def andrus_2007(cpt: CPT):
     """
     CPT-Vs correlation developed by Andrus et al. (2007).
     qt in kPa
@@ -60,7 +60,7 @@ def andrus(cpt: CPT):
     return VsAnd, Vs_SD
 
 
-def robertson(cpt: CPT):
+def robertson_2009(cpt: CPT):
     """
     CPT-Vs correlation developed by Robertson (2009).
     """
@@ -73,7 +73,7 @@ def robertson(cpt: CPT):
     return VsRob, Vs_SD
 
 
-def hegazy(cpt: CPT):
+def hegazy_2006(cpt: CPT):
     """
     CPT-Vs correlation developed by Hegazy & Mayne(2006).
     """
