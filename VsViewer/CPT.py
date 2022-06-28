@@ -9,15 +9,11 @@ class CPT:
 
     def __init__(self, cpt_ffp: str):
         self.cpt_ffp = Path(cpt_ffp)
-        depth, qc, fs, u, info = self.get_cpt_data()
-        self.depth = depth
-        self.Qc = qc
-        self.Fs = fs
-        self.u = u
-        self.info = info
+        self.process_cpt()
+        self.set_cpt_params()
 
-    def get_cpt_data(self):
-        """Get CPT data and return [z; qc; fs; u2; info]"""
+    def process_cpt(self):
+        """Process CPT data and sets depth, Qc, Fs, u, info"""
         data = np.loadtxt(self.cpt_ffp, dtype=float, delimiter=",", skiprows=1)
 
         # Get CPT info
@@ -69,4 +65,49 @@ class CPT:
         else:
             fs = fs
 
-        return z, qc, fs, u, info
+        # Setting the CPT values
+        self.depth = z
+        self.Qc = qc
+        self.Fs = fs
+        self.u = u
+        self.info = info
+
+    def set_cpt_params(self):
+        """Compute and save basic CPT parameters"""
+        # compute pore pressure corrected tip resistance
+        a = 0.8
+        qt = self.Qc - self.u * (1 - a)
+        # assume soil unit weight (MN/m3)
+        gamma = 0.00981 * 1.9
+        # atmospheric pressure (MPa)
+        pa = 0.1
+        # groundwater table depth(m)
+        gwt = 1.0
+        # compute vertical stress profile
+        totalStress = np.zeros(len(self.depth))
+        u0 = np.zeros(len(self.depth))
+        for i in range(1, len(self.depth)):
+            totalStress[i] = (
+                gamma * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
+            )
+            if self.depth[i] >= gwt:
+                u0[i] = 0.00981 * (self.depth[i] - self.depth[i - 1]) + u0[i - 1]
+        effStress = totalStress - u0
+        effStress[0] = effStress[1]  # fix error caused by dividing 0
+
+        # compute non-normalised Ic based on the correlation by Robertson (2010).
+        Rf = (self.Fs / self.Qc) * 100
+        Ic = ((3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2) ** 0.5
+        n = 0.381 * Ic + 0.05 * (effStress / pa) - 0.15
+        for i in range(0, len(n)):
+            if n[i] > 1:
+                n[i] = 1
+        Qtn = ((qt - totalStress) / pa) * (pa / effStress) ** n
+
+        # note in Chris's code, Qtn is used instead of qc1n or qt1n
+        # does not make that much of difference
+        # Setting CPT values
+        self.qt = qt
+        self.Ic = Ic
+        self.Qtn = Qtn
+        self.effStress = effStress

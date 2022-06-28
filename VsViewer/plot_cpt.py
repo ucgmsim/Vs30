@@ -2,10 +2,10 @@ import argparse
 import colorsys
 from typing import List
 
-import numpy as np
 from matplotlib import colors, pyplot
 
 from CPT import CPT
+import utils
 
 
 def scale_saturation(color: str, scale: float):
@@ -16,27 +16,6 @@ def scale_saturation(color: str, scale: float):
     hls = colorsys.rgb_to_hls(*rgb)
     hls_scaled = (hls[0], hls[1], hls[2] * ((100 - scale) / 100))
     return colorsys.hls_to_rgb(*hls_scaled)
-
-
-def convert_to_plot(measures: np.ndarray, depths: np.ndarray):
-    """
-    Converts the given values to a staggered line plot to produce the CPT plot look
-    """
-    new_depths, new_measures, prev_depth, prev_measure = [], [], None, None
-    for ix, depth in enumerate(depths):
-        measure = measures[ix]
-        if ix == 0 and depth != 0:
-            new_depths.append(0)
-            new_measures.append(measure)
-        else:
-            if prev_depth is not None:
-                new_depths.append((depth + prev_depth)/2)
-                new_measures.append(prev_measure)
-                new_depths.append((depth + prev_depth)/2)
-                new_measures.append(measure)
-        prev_depth = depth
-        prev_measure = measure
-    return new_measures, new_depths
 
 
 def plot_cpt(cpts: List[CPT], output_ffp: str):
@@ -56,7 +35,7 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
         ax1.set_ylabel("Depth (m)", size=16)
         for cpt_ix, cpt in enumerate(cpts):
             pyplot.plot(
-                *convert_to_plot(getattr(cpt, measure), cpt.depth),
+                *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
                 color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
                 label=cpt.cpt_ffp.stem,
