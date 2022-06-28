@@ -23,7 +23,7 @@ with tarfile.open(os.path.join(repo_data, "shapefiles.tar.xz")) as xz:
 setup(
     name="Vs30",
     version="2.0",
-    packages=["vs30"],
+    packages=["vs30", "VsViewer"],
     url="https://github.com/ucgmsim/Vs30",
     description="NZ Vs30 Calculation",
     package_data={
