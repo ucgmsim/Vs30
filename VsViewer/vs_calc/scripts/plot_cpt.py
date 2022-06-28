@@ -2,7 +2,8 @@ import argparse
 import colorsys
 from typing import List
 
-from matplotlib import colors, pyplot
+import matplotlib.pyplot as plt
+from matplotlib import colors
 
 from VsViewer.vs_calc import CPT, utils
 
@@ -22,7 +23,7 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
     Plots the CPT values Qc, Fs and u at their depth values
     and saves to a given output file
     """
-    fig = pyplot.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(16, 10))
     measurements = ["Qc", "Fs", "u"]
     colours = ["Blue", "Green", "Red"]
     plot_legend = len(cpts) != 1
@@ -33,7 +34,7 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
         ax1.set_xlabel(f"{measure} (MPa)", size=16)
         ax1.set_ylabel("Depth (m)", size=16)
         for cpt_ix, cpt in enumerate(cpts):
-            pyplot.plot(
+            plt.plot(
                 *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
                 color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
@@ -41,14 +42,14 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
             )
         if plot_legend:
             ax1.legend(loc="upper right")
-        pyplot.gca().invert_yaxis()
-        pyplot.xticks(fontsize=13)
-        pyplot.yticks(fontsize=13)
+        plt.gca().invert_yaxis()
+        plt.xticks(fontsize=13)
+        plt.yticks(fontsize=13)
 
-    pyplot.subplots_adjust(
+    plt.subplots_adjust(
         left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.3, hspace=0.3
     )
-    pyplot.savefig(f"{output_ffp}.png")
+    plt.savefig(f"{output_ffp}.png")
 
 
 def main():
