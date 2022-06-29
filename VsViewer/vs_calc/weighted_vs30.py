@@ -13,7 +13,7 @@ def calculate_weighted_vs30(
     average_vs30, average_vs30_sd = 0, 0
     for vs_profile in vs_profiles:
         weight = (
-            cpt_weights[vs_profile.cpt.cpt_ffp.stem]
+            cpt_weights[vs_profile.cpt_name]
             * correlation_weights[vs_profile.correlation]
         )
         average_vs30 += vs_profile.vs30 * weight

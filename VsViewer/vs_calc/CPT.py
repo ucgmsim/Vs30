@@ -28,7 +28,7 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        data = data[(np.all(data[:, [0]] < 30, axis=1)).T]  # z is less then 30 m
+        data = data[(np.all(data[:, [0]] <= 30, axis=1)).T]  # z is less then 30 m
         info["Removed rows containing 0 or below Fs or Qc values"] = not np.alltrue(
             data[:, [1, 2]] > 0
         )
@@ -42,7 +42,7 @@ class CPT:
         fs_raw = data[:, 2]  # MPa
         u_raw = data[:, 3]  # Mpa
 
-        downsize = np.arange(z_raw[0], 30, 0.02)
+        downsize = np.arange(z_raw[0], 30.02, 0.02)
         z = np.array([])
         qc = np.array([])
         fs = np.array([])
@@ -98,7 +98,9 @@ class CPT:
             pa = 0.1
             # compute non-normalised Ic based on the correlation by Robertson (2010).
             Rf = (self.Fs / self.Qc) * 100
-            self._Ic = ((3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2) ** 0.5
+            self._Ic = (
+                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
+            ) ** 0.5
         return self._Ic
 
     @property

@@ -30,21 +30,20 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
     scales = [i * (100 / len(cpts)) for i in range(len(cpts))]
 
     for ix, measure in enumerate(measurements):
-        ax1 = fig.add_subplot(1, 3, ix + 1)
-        ax1.set_xlabel(f"{measure} (MPa)", size=16)
-        ax1.set_ylabel("Depth (m)", size=16)
+        ax = fig.add_subplot(1, 3, ix + 1)
+        ax.set_xlabel(f"{measure} (MPa)", size=16)
+        ax.set_ylabel("Depth (m)", size=16)
         for cpt_ix, cpt in enumerate(cpts):
-            plt.plot(
+            ax.plot(
                 *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
                 color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
                 label=cpt.cpt_ffp.stem,
             )
         if plot_legend:
-            ax1.legend(loc="upper right")
-        plt.gca().invert_yaxis()
-        plt.xticks(fontsize=13)
-        plt.yticks(fontsize=13)
+            ax.legend(loc="upper right")
+        ax.invert_yaxis()
+        ax.tick_params(labelsize=15)
 
     plt.subplots_adjust(
         left=0.1, bottom=0.075, right=0.9, top=0.925, wspace=0.3, hspace=0.3
