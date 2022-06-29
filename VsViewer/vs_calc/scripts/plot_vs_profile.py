@@ -56,14 +56,15 @@ def main():
     # Get args
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-cpt_ffps", type=str, nargs="+", help="The full file path to the cpt files"
+        "--cpt_ffps", type=str, nargs="+", required=True, help="The full file path to the cpt files"
     )
     parser.add_argument(
-        "-correlations", type=str, nargs="+", help="The correlation names"
+        "--correlations", type=str, nargs="+", required=True, help="The correlation names"
     )
     parser.add_argument(
-        "-output_ffp",
+        "--output_ffp",
         type=str,
+        required=True,
         help="The full file path to the output file (without extension)",
     )
     args = parser.parse_args()

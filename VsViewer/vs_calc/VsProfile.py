@@ -5,6 +5,7 @@ from .utils import convert_to_midpoint
 from .constants import CORRELATIONS
 
 
+# Coefficients from the Boore et al. (2011) paper for conversion from VsZ to Vs30
 VS30_COEFFS = np.array(
     [
         [0.2046, 1.318, -0.1174, 0.119],
