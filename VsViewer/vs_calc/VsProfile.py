@@ -42,26 +42,40 @@ class VsProfile:
     Contains the data for a Vs Profile
     """
 
-    def __init__(self, cpt: CPT, correlation: str):
-        self.cpt = cpt
+    def __init__(
+        self,
+        cpt_name: str,
+        correlation: str,
+        vs: np.ndarray,
+        vs_sd: np.ndarray,
+        depth: np.ndarray,
+    ):
+        self.cpt_name = cpt_name
         self.correlation = correlation
-        self.depth = cpt.depth
-        self.max_depth = cpt.depth[-1]
-
-        # Check Correlation string
-        if correlation not in CORRELATIONS.keys():
-            raise KeyError(
-                f"{correlation} not found in set of correlations {CORRELATIONS.keys()}"
-            )
-
-        vs, vs_sd = CORRELATIONS[correlation](cpt)
-        self.vs = vs.squeeze()
-        self.vs_sd = vs_sd.squeeze()
+        self.vs = vs
+        self.vs_sd = vs_sd
+        self.depth = depth
+        self.max_depth = depth[-1]
 
         # VsZ and Vs30 info init for lazy loading
         self._vsz = None
         self._vs30 = None
         self._vs30_sd = None
+
+    @staticmethod
+    def from_cpt(cpt: CPT, correlation: str):
+        """
+        Creates a VsProfile from a CPT and correlation
+        """
+        # Check Correlation string
+        if correlation not in CORRELATIONS.keys():
+            raise KeyError(
+                f"{correlation} not found in set of correlations {CORRELATIONS.keys()}"
+            )
+        vs, vs_sd = CORRELATIONS[correlation](cpt)
+        return VsProfile(
+            cpt.cpt_ffp.stem, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
+        )
 
     @property
     def vsz(self):
@@ -76,18 +90,30 @@ class VsProfile:
     def vs30(self):
         """
         Gets the Vs30 value and computes the value if not set
+        Will grab value from VsZ if max depth is 30m already
+        then no conversion is needed
         """
         if self._vs30 is None:
-            self._vs30, self._vs30_sd = self.calc_vs30()
+            if self.max_depth == 30:
+                # Set Vs30 to VsZ as Z is 30
+                self._vs30, self._vs30_sd = self.vsz, 0
+            else:
+                self._vs30, self._vs30_sd = self.calc_vs30()
         return self._vs30
 
     @property
     def vs30_sd(self):
         """
         Gets the Vs30 Standard Deviation value and computes the value if not set
+        Will grab value from VsZ if max depth is 30m already
+        then no conversion is needed
         """
         if self._vs30_sd is None:
-            self._vs30, self._vs30_sd = self.calc_vs30()
+            if self.max_depth == 30:
+                # Set Vs30 to VsZ as Z is 30
+                self._vs30, self._vs30_sd = self.vsz, 0
+            else:
+                self._vs30, self._vs30_sd = self.calc_vs30()
         return self._vs30_sd
 
     def calc_vsz(self):
