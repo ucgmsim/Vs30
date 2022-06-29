@@ -94,11 +94,7 @@ class VsProfile:
         then no conversion is needed
         """
         if self._vs30 is None:
-            if self.max_depth == 30:
-                # Set Vs30 to VsZ as Z is 30
-                self._vs30, self._vs30_sd = self.vsz, 0
-            else:
-                self._vs30, self._vs30_sd = self.calc_vs30()
+            self._vs30, self._vs30_sd = self.calc_vs30()
         return self._vs30
 
     @property
@@ -109,11 +105,7 @@ class VsProfile:
         then no conversion is needed
         """
         if self._vs30_sd is None:
-            if self.max_depth == 30:
-                # Set Vs30 to VsZ as Z is 30
-                self._vs30, self._vs30_sd = self.vsz, 0
-            else:
-                self._vs30, self._vs30_sd = self.calc_vs30()
+            self._vs30, self._vs30_sd = self.calc_vs30()
         return self._vs30_sd
 
     def calc_vsz(self):
@@ -132,20 +124,24 @@ class VsProfile:
         Calculates Vs30 and Vs30_sd for the given VsProfile based on VsZ and max depth
         By Boore et al. (2011)
         """
-        # Get Coeffs from max depth
-        max_depth = int(self.max_depth)
-        index = max_depth - 5
-        if index < 0:
-            raise IndexError("CPT is not deep enough")
-        C0, C1, C2, SD = VS30_COEFFS[index]
+        if self.max_depth == 30:
+            # Set Vs30 to VsZ as Z is 30
+            vs30, vs30_sd = self.vsz, 0
+        else:
+            # Get Coeffs from max depth
+            max_depth = int(self.max_depth)
+            index = max_depth - 5
+            if index < 0:
+                raise IndexError("CPT is not deep enough")
+            C0, C1, C2, SD = VS30_COEFFS[index]
 
-        # Compute Vs30 and Vs30_sd
-        vs30 = 10 ** (C0 + C1 * np.log10(self.vsz) + C2 * (np.log10(self.vsz)) ** 2)
-        log_vsz = np.log(self.vsz)
-        d_vs30 = (
-            C1 * 10 ** (C1 * np.log10(log_vsz))
-            + 2 * C2 * np.log10(log_vsz) * 10 ** (C2 * np.log10(log_vsz) ** 2)
-        ) / log_vsz
-        vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
+            # Compute Vs30 and Vs30_sd
+            vs30 = 10 ** (C0 + C1 * np.log10(self.vsz) + C2 * (np.log10(self.vsz)) ** 2)
+            log_vsz = np.log(self.vsz)
+            d_vs30 = (
+                C1 * 10 ** (C1 * np.log10(log_vsz))
+                + 2 * C2 * np.log10(log_vsz) * 10 ** (C2 * np.log10(log_vsz) ** 2)
+            ) / log_vsz
+            vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
 
         return vs30, vs30_sd
