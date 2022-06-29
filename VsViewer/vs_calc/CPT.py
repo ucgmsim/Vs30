@@ -10,7 +10,12 @@ class CPT:
     def __init__(self, cpt_ffp: str):
         self.cpt_ffp = Path(cpt_ffp)
         self.process_cpt()
-        self.set_cpt_params()
+
+        # cpt parameter info init for lazy loading
+        self._qt = None
+        self._Ic = None
+        self._Qtn = None
+        self._effStress = None
 
     def process_cpt(self):
         """Process CPT data and sets depth, Qc, Fs, u, info"""
@@ -72,11 +77,50 @@ class CPT:
         self.u = u
         self.info = info
 
-    def set_cpt_params(self):
-        """Compute and save basic CPT parameters"""
-        # compute pore pressure corrected tip resistance
-        a = 0.8
-        qt = self.Qc - self.u * (1 - a)
+    @property
+    def qt(self):
+        """
+        Gets the qt value and computes the value if not set
+        """
+        if self._qt is None:
+            # compute pore pressure corrected tip resistance
+            a = 0.8
+            self._qt = self.Qc - self.u * (1 - a)
+        return self._qt
+
+    @property
+    def Ic(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._Ic is None:
+            # atmospheric pressure (MPa)
+            pa = 0.1
+            # compute non-normalised Ic based on the correlation by Robertson (2010).
+            Rf = (self.Fs / self.Qc) * 100
+            self._Ic = ((3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2) ** 0.5
+        return self._Ic
+
+    @property
+    def Qtn(self):
+        """
+        Gets the Qtn value and computes the value if not set
+        """
+        if self._Qtn is None:
+            self._Qtn, self._effStress = self.calc_cpt_params()
+        return self._Qtn
+
+    @property
+    def effStress(self):
+        """
+        Gets the effStress value and computes the value if not set
+        """
+        if self._effStress is None:
+            self._Qtn, self._effStress = self.calc_cpt_params()
+        return self._effStress
+
+    def calc_cpt_params(self):
+        """Compute and save Qtn and effStress CPT parameters"""
         # assume soil unit weight (MN/m3)
         gamma = 0.00981 * 1.9
         # atmospheric pressure (MPa)
@@ -95,19 +139,10 @@ class CPT:
         effStress = totalStress - u0
         effStress[0] = effStress[1]  # fix error caused by dividing 0
 
-        # compute non-normalised Ic based on the correlation by Robertson (2010).
-        Rf = (self.Fs / self.Qc) * 100
-        Ic = ((3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2) ** 0.5
-        n = 0.381 * Ic + 0.05 * (effStress / pa) - 0.15
+        n = 0.381 * self.Ic + 0.05 * (effStress / pa) - 0.15
         for i in range(0, len(n)):
             if n[i] > 1:
                 n[i] = 1
-        Qtn = ((qt - totalStress) / pa) * (pa / effStress) ** n
+        Qtn = ((self.qt - totalStress) / pa) * (pa / effStress) ** n
 
-        # note in Chris's code, Qtn is used instead of qc1n or qt1n
-        # does not make that much of difference
-        # Setting CPT values
-        self.qt = qt
-        self.Ic = Ic
-        self.Qtn = Qtn
-        self.effStress = effStress
+        return Qtn, effStress
