@@ -3,7 +3,7 @@ from pathlib import Path
 
 import yaml
 
-from api.server import app
+from vs_api.server import app
 
 if __name__ == "__main__":
     with open(Path(__file__).resolve().parent / "api_config.yaml") as f:
