@@ -5,6 +5,7 @@ from .utils import convert_to_midpoint
 from .constants import CORRELATIONS
 
 
+# Coefficients from the Boore et al. (2011) paper for conversion from VsZ to Vs30
 VS30_COEFFS = np.array(
     [
         [0.2046, 1.318, -0.1174, 0.119],
@@ -41,26 +42,40 @@ class VsProfile:
     Contains the data for a Vs Profile
     """
 
-    def __init__(self, cpt: CPT, correlation: str):
-        self.cpt = cpt
+    def __init__(
+        self,
+        cpt_name: str,
+        correlation: str,
+        vs: np.ndarray,
+        vs_sd: np.ndarray,
+        depth: np.ndarray,
+    ):
+        self.cpt_name = cpt_name
         self.correlation = correlation
-        self.depth = cpt.depth
-        self.max_depth = cpt.depth[-1]
-
-        # Check Correlation string
-        if correlation not in CORRELATIONS.keys():
-            raise KeyError(
-                f"{correlation} not found in set of correlations {CORRELATIONS.keys()}"
-            )
-
-        vs, vs_sd = CORRELATIONS[correlation](cpt)
-        self.vs = vs.squeeze()
-        self.vs_sd = vs_sd.squeeze()
+        self.vs = vs
+        self.vs_sd = vs_sd
+        self.depth = depth
+        self.max_depth = depth[-1]
 
         # VsZ and Vs30 info init for lazy loading
         self._vsz = None
         self._vs30 = None
         self._vs30_sd = None
+
+    @staticmethod
+    def from_cpt(cpt: CPT, correlation: str):
+        """
+        Creates a VsProfile from a CPT and correlation
+        """
+        # Check Correlation string
+        if correlation not in CORRELATIONS.keys():
+            raise KeyError(
+                f"{correlation} not found in set of correlations {CORRELATIONS.keys()}"
+            )
+        vs, vs_sd = CORRELATIONS[correlation](cpt)
+        return VsProfile(
+            cpt.cpt_ffp.stem, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
+        )
 
     @property
     def vsz(self):
@@ -75,6 +90,8 @@ class VsProfile:
     def vs30(self):
         """
         Gets the Vs30 value and computes the value if not set
+        Will grab value from VsZ if max depth is 30m already
+        then no conversion is needed
         """
         if self._vs30 is None:
             self._vs30, self._vs30_sd = self.calc_vs30()
@@ -84,6 +101,8 @@ class VsProfile:
     def vs30_sd(self):
         """
         Gets the Vs30 Standard Deviation value and computes the value if not set
+        Will grab value from VsZ if max depth is 30m already
+        then no conversion is needed
         """
         if self._vs30_sd is None:
             self._vs30, self._vs30_sd = self.calc_vs30()
@@ -105,20 +124,24 @@ class VsProfile:
         Calculates Vs30 and Vs30_sd for the given VsProfile based on VsZ and max depth
         By Boore et al. (2011)
         """
-        # Get Coeffs from max depth
-        max_depth = int(self.max_depth)
-        index = max_depth - 5
-        if index < 0:
-            raise IndexError("CPT is not deep enough")
-        C0, C1, C2, SD = VS30_COEFFS[index]
+        if self.max_depth == 30:
+            # Set Vs30 to VsZ as Z is 30
+            vs30, vs30_sd = self.vsz, 0
+        else:
+            # Get Coeffs from max depth
+            max_depth = int(self.max_depth)
+            index = max_depth - 5
+            if index < 0:
+                raise IndexError("CPT is not deep enough")
+            C0, C1, C2, SD = VS30_COEFFS[index]
 
-        # Compute Vs30 and Vs30_sd
-        vs30 = 10 ** (C0 + C1 * np.log10(self.vsz) + C2 * (np.log10(self.vsz)) ** 2)
-        log_vsz = np.log(self.vsz)
-        d_vs30 = (
-            C1 * 10 ** (C1 * np.log10(log_vsz))
-            + 2 * C2 * np.log10(log_vsz) * 10 ** (C2 * np.log10(log_vsz) ** 2)
-        ) / log_vsz
-        vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
+            # Compute Vs30 and Vs30_sd
+            vs30 = 10 ** (C0 + C1 * np.log10(self.vsz) + C2 * (np.log10(self.vsz)) ** 2)
+            log_vsz = np.log(self.vsz)
+            d_vs30 = (
+                C1 * 10 ** (C1 * np.log10(log_vsz))
+                + 2 * C2 * np.log10(log_vsz) * 10 ** (C2 * np.log10(log_vsz) ** 2)
+            ) / log_vsz
+            vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
 
         return vs30, vs30_sd
