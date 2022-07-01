@@ -3,11 +3,12 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
+from VsViewer.vs_calc import CPT
 
 
-@server.app.route(const.CPT_CREATE_ENDPOINT, methods=["GET"])
+@server.app.route(const.CPT_CREATE_ENDPOINT, methods=["POST"])
 @cross_origin(expose_headers=["Content-Type", "Authorization"])
-@utils.api.endpoint_exception_handling(server.app)
+@utils.endpoint_exception_handling(server.app)
 def create_cpt():
     """
     Creates a cpt and returns the result
@@ -15,20 +16,21 @@ def create_cpt():
     server.app.logger.info(f"Received request at {const.CPT_CREATE_ENDPOINT}")
 
     (
-        (cpts),
+        (cpt_json),
         optional_params_dict,
-    ) = utils.api.get_check_keys(
+    ) = utils.get_check_keys(
         flask.request.args,
-        ("cpts"),
+        ("cpts",),
         (),
     )
 
+    cpt = CPT.from_json(cpt_json)
+
+
     server.app.logger.debug(
-        f"Request parameters {cpts}"
+        f"Request parameters {cpt_json}"
     )
 
     return flask.jsonify(
-                {
-                    "Worked": True
-                },
+                cpt.to_json(),
             )

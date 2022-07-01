@@ -1,15 +1,14 @@
+import os
 import flask
 import logging
-
-from pathlib import Path
 
 from custom_log_handler import MultiProcessSafeTimedRotatingFileHandler
 
 
 app = flask.Flask("vs_api")
 
-logfile = Path(Path(__file__).parent / "logs/logfile.log")
-logfile.mkdir(parents=True, exist_ok=True)
+logfile = os.path.join(os.path.dirname(__file__), "logs/logfile.log")
+os.makedirs(os.path.dirname(logfile), exist_ok=True)
 
 TRFhandler = MultiProcessSafeTimedRotatingFileHandler(filename=logfile, when="midnight")
 
