@@ -1,4 +1,6 @@
 import numpy as np
+import pandas as pd
+from io import BytesIO
 from pathlib import Path
 from typing import Dict
 
@@ -121,6 +123,16 @@ class CPT:
         data = np.loadtxt(cpt_ffp, dtype=float, delimiter=",", skiprows=1)
         depth, qc, fs, u, info = CPT.process_cpt(data)
         return CPT(cpt_ffp.stem, depth, qc, fs, u, info)
+
+    @staticmethod
+    def from_byte_stream(file_name: str, stream: bytes):
+        """
+        Creates a CPT from a file stream
+        """
+        csv_data = pd.read_csv(BytesIO(stream))
+        data = np.asarray(csv_data)
+        depth, qc, fs, u, info = CPT.process_cpt(data)
+        return CPT(Path(file_name).stem, depth, qc, fs, u, info)
 
     @staticmethod
     def from_json(json: Dict):
