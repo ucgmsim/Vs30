@@ -17,7 +17,7 @@ const CPT = () => {
   }
 
   return (
-    <div className="box">
+    <div className="process-cpt">
       <div>
         <div className="form form-section-title">Upload CPT files</div>
         <input className="form" type="file" multiple={true} onChange={(e) => setFilenames(e.target.files)}/>
