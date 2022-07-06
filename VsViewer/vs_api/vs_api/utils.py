@@ -1,6 +1,7 @@
-import flask
 from functools import wraps
 from typing import Iterable, Tuple, Dict, Union, Optional, Type, List
+
+import flask
 
 
 class MissingKeyError(Exception):

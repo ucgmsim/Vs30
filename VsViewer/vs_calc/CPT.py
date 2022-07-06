@@ -1,8 +1,9 @@
+from io import BytesIO
+from typing import Dict
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from io import BytesIO
-from pathlib import Path
-from typing import Dict
 
 
 class CPT:
