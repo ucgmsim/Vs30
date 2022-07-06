@@ -1,0 +1,23 @@
+.box {
+    margin-left: 10px;
+    margin-top: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 400px;
+    border: 1px solid silver;
+}
+
+.form {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    padding: 15px;
+}
+
+div.form-section-title {
+    font-size: calc(12px + 0.4vw);
+    margin-top: 10px;
+    font-weight: 700;
+    margin-top: 10px;
+    border-bottom: 1px solid silver;
+}

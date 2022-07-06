@@ -4,7 +4,7 @@ import { Tabs, Tab } from "react-bootstrap";
 import { CPT, SPT, VsProfile } from "./components";
 
 import './App.css';
-// import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/css/bootstrap.min.css";
 
 function App() {
   return (
