@@ -10,7 +10,15 @@ class CPT:
     Contains the data from a CPT file
     """
 
-    def __init__(self, name: str, depth: np.ndarray, qc: np.ndarray, fs: np.ndarray, u: np.ndarray, info: Dict = None):
+    def __init__(
+        self,
+        name: str,
+        depth: np.ndarray,
+        qc: np.ndarray,
+        fs: np.ndarray,
+        u: np.ndarray,
+        info: Dict = None,
+    ):
         self.name = name
         self.depth = depth
         self.Qc = qc
@@ -133,16 +141,6 @@ class CPT:
         data = np.asarray(csv_data)
         depth, qc, fs, u, info = CPT.process_cpt(data)
         return CPT(Path(file_name).stem, depth, qc, fs, u, info)
-
-    @staticmethod
-    def from_json(json: Dict):
-        """
-        Creates a CPT from a json dictionary string
-        """
-        name, depth, qc, fs, u = json["name"], json["depth"], json["Qc"], json["Fs"], json["u"]
-        data = np.asarray([depth, qc, fs, u]).T
-        depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(name, depth, qc, fs, u, info)
 
     @staticmethod
     def process_cpt(data: np.ndarray):

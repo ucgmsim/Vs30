@@ -1,47 +1,28 @@
-import React, { useState } from "react";
-import { useFilePicker } from "use-file-picker";
+import React, { Fragment, useState } from "react";
 
 import * as CONSTANTS from "../Constants";
+import "../assets/cpt.css";
 
 const CPT = () => {
-  const [filename, setFilename] = useState("");
+  const [filenames, setFilenames] = useState("");
 
   const sendRequest = async () => {
     const formData = new FormData();
-    // filesContent.forEach(e => console.log(e));
-    // console.log(filename);
-    formData.append("file", filename);
-    // formData.append("fileName", filename.name);
-    // filesContent.forEach(e => formData.append(e));
-    // const formData2 = {"file": filename};
-    
+    for (const file of filenames) {formData.append(file.name, file)};
     const requestOptions = {
       method: "POST",
-      body: JSON.stringify({"file": 123}),
-      // headers: {
-      //   "content-type": "multipart/form-data"
-      // },
+      body: formData,
     }
-    console.log(requestOptions);
     return await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, requestOptions)
   }
 
-  const [openFileSelector, { filesContent }] = useFilePicker({
-    accept: ".csv"
-  });
-
   return (
-    <div className="container-fluid max-width">
-      <button onClick={() => openFileSelector()}>Upload CPT files</button>
-      <input type="file" onChange={(e) => setFilename(e.target.files[0])}/>
-      <br />
-      {filesContent.map((file, index) => (
-        <div key={index}>
-          {file.name}
-        </div>
-      ))}
-      <br />
-      <button onClick={() => sendRequest()}>Process CPT's</button>
+    <div className="box">
+      <div>
+        <div className="form form-section-title">Upload CPT files</div>
+        <input className="form" type="file" multiple={true} onChange={(e) => setFilenames(e.target.files)}/>
+        <button className="form btn btn-primary" onClick={() => sendRequest()}>Process CPT's</button>
+      </div>
     </div>
   );
 };
