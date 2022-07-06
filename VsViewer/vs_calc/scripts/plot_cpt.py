@@ -1,21 +1,9 @@
 import argparse
-import colorsys
 from typing import List
 
 import matplotlib.pyplot as plt
-from matplotlib import colors
 
 from VsViewer.vs_calc import CPT, utils
-
-
-def scale_saturation(color: str, scale: float):
-    """
-    Scales the saturation down of the color by a given percentage
-    """
-    rgb = colors.colorConverter.to_rgb(color)
-    hls = colorsys.rgb_to_hls(*rgb)
-    hls_scaled = (hls[0], hls[1], hls[2] * ((100 - scale) / 100))
-    return colorsys.hls_to_rgb(*hls_scaled)
 
 
 def plot_cpt(cpts: List[CPT], output_ffp: str):
