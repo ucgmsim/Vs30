@@ -24,20 +24,5 @@ app.logger.propagate = False
 app.logger.addHandler(TRFhandler)
 logging.getLogger("matplotlib").setLevel(logging.ERROR)
 
-
-# Error handler
-class AuthError(Exception):
-    def __init__(self, error, status_code):
-        self.error = error
-        self.status_code = status_code
-
-
-@app.errorhandler(AuthError)
-def handle_auth_error(ex):
-    response = flask.jsonify(ex.error)
-    response.status_code = ex.status_code
-    return response
-
-
 # Add the endpoints
 from api import cpt
