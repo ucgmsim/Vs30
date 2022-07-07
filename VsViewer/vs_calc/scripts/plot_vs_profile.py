@@ -78,7 +78,7 @@ def main():
     args = parser.parse_args()
 
     # Get CPTs Vs Profiles
-    cpts = [CPT(cpt) for cpt in args.cpt_ffps]
+    cpts = [CPT.from_file(cpt) for cpt in args.cpt_ffps]
     vs_profiles = [
         VsProfile.from_cpt(cpt, correlation)
         for cpt in cpts

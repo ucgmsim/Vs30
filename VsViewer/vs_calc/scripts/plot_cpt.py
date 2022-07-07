@@ -68,7 +68,7 @@ def main():
     args = parser.parse_args()
 
     # Get CPT
-    cpts = [CPT(cpt) for cpt in args.cpt_ffps]
+    cpts = [CPT.from_file(cpt) for cpt in args.cpt_ffps]
 
     # Plot cpt
     plot_cpt(cpts, args.output_ffp)
