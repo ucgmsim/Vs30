@@ -2,14 +2,14 @@ import React from "react";
 import { Tabs, Tab } from "react-bootstrap";
 
 import { CPT, SPT, VsProfile } from "components";
-import { GlobalContext } from "context";
+import { GlobalContextProvider } from "context";
 
 import 'assets/App.css';
 import "bootstrap/dist/css/bootstrap.min.css";
 
 function App() {
   return (
-    <GlobalContext>
+    <GlobalContextProvider>
       <div className="App d-flex flex-column h-100">
         <Tabs defaultActiveKey="cpt" className="vs-tabs">
           <Tab
@@ -37,7 +37,7 @@ function App() {
           </Tab>
         </Tabs>
       </div>
-    </GlobalContext>
+    </GlobalContextProvider>
   );
 }
 
