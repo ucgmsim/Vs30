@@ -52,10 +52,15 @@ class VsProfile:
     ):
         self.cpt_name = cpt_name
         self.correlation = correlation
-        self.vs = vs
-        self.vs_sd = vs_sd
-        self.depth = depth
-        self.max_depth = depth[-1]
+        # Ensures the max depth does not go below 30m
+        # Also cut to the highest int depth
+        self.max_depth = int(depth[-1]) if int(depth[-1]) < 30 else 30
+        # Ensures that the VsZ calculation will be done using the highest int depth
+        # for correlations to Vs30
+        int_depth_mask = depth <= self.max_depth
+        self.vs = vs[int_depth_mask]
+        self.vs_sd = vs_sd[int_depth_mask]
+        self.depth = depth[int_depth_mask]
 
         # VsZ and Vs30 info init for lazy loading
         self._vsz = None
@@ -74,7 +79,7 @@ class VsProfile:
             )
         vs, vs_sd = CORRELATIONS[correlation](cpt)
         return VsProfile(
-            cpt.cpt_ffp.stem, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
+            cpt.name, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
         )
 
     @property
