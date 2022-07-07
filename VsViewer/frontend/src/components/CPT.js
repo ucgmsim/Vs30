@@ -1,13 +1,20 @@
-import React, { useState, memo } from "react";
+import React, { useState, useContext, memo } from "react";
 import Select from "react-select";
 
+import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 import "assets/cpt.css";
 
 const CPT = () => {
+  const {
+    cptData,
+    setCPTData,
+  } = useContext(GlobalContext);
+
   const [filenames, setFilenames] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cptData, setCptData] = useState([]);
+  const [cptOptions, setCPTOptions] = useState([]);
+  const [cptNames, setCPTNames] = useState([]);
 
   const sendRequest = async () => {
     setLoading(true);
@@ -17,7 +24,12 @@ const CPT = () => {
       method: "POST",
       body: formData,
     }
-    setCptData(await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, requestOptions));
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, requestOptions)
+      .then(async (response) => {
+        const responseData = await response.json();
+        console.log(responseData);
+        setCPTData(responseData);
+    });
     setLoading(false);
   }
 
@@ -31,8 +43,8 @@ const CPT = () => {
       <div className="hr"></div>
       <div>
         <Select
-          placeholder={cptData[0]}
-          options={cptData.keys()}
+          placeholder="Select your CPT's"
+          options={cptOptions}
           isDisabled={cptData.length === 0}
         ></Select>
       </div>
