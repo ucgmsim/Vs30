@@ -1,23 +1,31 @@
 .process-cpt {
-    margin-left: 10px;
-    margin-top: 30px;
+    margin-left: 37.5%;
+    margin-top: 5px;
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
-    width: 400px;
-    border: 1px solid silver;
+    align-items: center;
+    width: 25%;
+}
+
+.hr {
+    border-top: 1px solid silver;
+    margin-top: 10px;
+    margin-bottom: 15px;
 }
 
 .form {
-    margin-top: 10px;
-    margin-bottom: 10px;
-    padding: 15px;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 
-div.form-section-title {
+.form-file-input {
+    margin-top: 5px;
+    margin-bottom: 5px;
+    width: 55%;
+}
+
+.form-section-title {
     font-size: calc(12px + 0.4vw);
     margin-top: 10px;
     font-weight: 700;
-    margin-top: 10px;
-    border-bottom: 1px solid silver;
 }
