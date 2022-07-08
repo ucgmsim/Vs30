@@ -13,7 +13,6 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
     """
     fig = plt.figure(figsize=(16, 10))
     measurements = ["Qc", "Fs", "u"]
-    # colours = ["Blue", "Green", "Red"]
     plot_legend = len(cpts) != 1
 
     for ix, measure in enumerate(measurements):
@@ -23,7 +22,6 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
         for cpt_ix, cpt in enumerate(cpts):
             ax.plot(
                 *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
-                # color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
                 label=cpt.name,
             )
