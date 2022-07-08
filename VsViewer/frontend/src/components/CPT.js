@@ -44,7 +44,7 @@ const CPT = () => {
       <div>
         <Select
           placeholder="Select your CPT's"
-          options={cptOptions}
+          options={cptData.map((option, index) => {option.name})}
           isDisabled={cptData.length === 0}
         ></Select>
       </div>
