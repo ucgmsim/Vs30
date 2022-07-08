@@ -21,11 +21,59 @@
 .form-file-input {
     margin-top: 5px;
     margin-bottom: 5px;
-    padding-left: 15%;
+    margin-left: 15%;
 }
 
 .form-section-title {
     font-size: calc(12px + 0.4vw);
     margin-top: 10px;
     font-weight: 700;
+}
+
+.select-cpt {
+    padding-top: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.temp {
+    border: 1px solid silver;
+}
+
+.cpt-data {
+    padding-top: 15px;
+    padding-bottom: 15px;
+    padding-left: 4%;
+    height: 25vw;
+}
+
+.cpt-table {
+    margin-right: 1vw;
+}
+
+.cpt-plot {
+    margin-left: 1vw;
+    margin-right: 1vw;
+}
+
+.vs-preview-plot {
+    margin-left: 1vw;
+}
+
+.weights {
+    padding-top: 15px;
+    padding-bottom: 15px;
+    padding-left: 30%;
+    height: 10vw;
+}
+
+.cpt-weights {
+    margin-left: 1vw;
+    margin-right: 1vw;
+}
+
+.cor-weights {
+    margin-left: 1vw;
+    margin-right: 1vw;
 }
