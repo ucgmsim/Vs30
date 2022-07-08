@@ -3,6 +3,7 @@ import Select from "react-select";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+
 import "assets/cpt.css";
 
 const CPT = () => {
@@ -27,8 +28,14 @@ const CPT = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, requestOptions)
       .then(async (response) => {
         const responseData = await response.json();
-        console.log(responseData);
         setCPTData(responseData);
+        // Set CPT Select Dropdown
+        let tempOptionArray = [];
+        for (const key of Object.keys(responseData)) {
+          tempOptionArray.push({value:responseData[key], label:responseData[key]["name"]});
+        }
+
+        setCPTOptions(tempOptionArray);
     });
     setLoading(false);
   }
@@ -41,12 +48,27 @@ const CPT = () => {
         <button disabled={loading} className="form btn btn-primary" onClick={() => sendRequest()}>Process CPT's</button>
       </div>
       <div className="hr"></div>
-      <div>
-        <Select
-          placeholder="Select your CPT's"
-          options={cptData.map((option, index) => {option.name})}
-          isDisabled={cptData.length === 0}
-        ></Select>
+      <Select
+        className="select-cpt"
+        placeholder="Select your CPT's"
+        options={cptOptions}
+        isDisabled={cptOptions.length === 0}
+      ></Select>
+      <div className="row three-column-row cpt-data">
+        <div className="temp col-3 cpt-table">Table</div>
+        <div className="temp col-5 cpt-plot">CPT Plot</div>
+        <div className="temp col-3 vs-preview-plot">Vs Profile Preview</div>
+      </div>
+      <div className="hr"></div>
+      <Select
+        className="select-cpt"
+        placeholder="Select Correlations"
+        options={cptOptions}
+        isDisabled={cptOptions.length === 0}
+      ></Select>
+      <div className="row two-column-row weights">
+        <div className="temp col-3 cpt-weights">CPT Weights</div>
+        <div className="temp col-3 cor-weights">Correlation Weights</div>
       </div>
     </div>
     
