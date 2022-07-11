@@ -11,7 +11,7 @@ from scipy.spatial import distance_matrix
 
 data = os.path.join(os.path.dirname(__file__), "data")
 DATA_CPT = os.path.join(data, "cptvs30.ssv")
-DATA_KAISERETAL = os.path.join(data, "Geonet Site Metadata Summary v1.3.csv")
+DATA_KAISERETAL = os.path.join(data, "geonet_site_metadata_summary_v1.4_working.csv")
 DATA_MCGANN = os.path.join(data, "McGann_cptVs30data.csv")
 DATA_WOTHERSPOON = os.path.join(data, "Characterised Vs30 Canterbury_June2017_KFed.csv")
 
