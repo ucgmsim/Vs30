@@ -5,18 +5,19 @@ import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/cpt.css";
+import CPTPlot from "components/CptPlot";
 
 const CPT = () => {
   const {
-    cptData,
     setCPTData,
+    cptPlotData,
+    cptMidpointData,
   } = useContext(GlobalContext);
 
   const [filenames, setFilenames] = useState("");
   const [loading, setLoading] = useState(false);
   const [cptOptions, setCPTOptions] = useState([]);
   const [cptNames, setCPTNames] = useState([]);
-  const cptPlotData = null;
 
   const sendProcessRequest = async () => {
     setLoading(true);
@@ -50,9 +51,9 @@ const CPT = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.MIDPOINT_ENDPOINT, requestOptions)
       .then(async (response) => {
         const responseData = await response.json();
-        // Add to cptPlotData
+        // Add to cptMidpointData
         for (const key of Object.keys(responseData)) {
-          cptPlotData[key] = responseData[key];
+          cptMidpointData[key] = responseData[key];
         }
     });
   }
@@ -60,18 +61,24 @@ const CPT = () => {
   useEffect(() => {
     if (cptNames.length !== 0) {
       let cptsToSend = [];
-      if (cptPlotData === null) {
+      if (Object.keys(cptMidpointData).length === 0) {
         cptsToSend = cptNames;
       } else {
         cptNames.forEach((cptName) => {
-           if (!cptPlotData.hasOwnProperty(cptName["label"])) {
+           if (!cptMidpointData.hasOwnProperty(cptName["label"])) {
             cptsToSend.push(cptName);
           }
         });
       }
       if (cptsToSend.length !== 0) {
+        console.log("CPT - sending Requst");
+        console.log(cptsToSend);
         sendMidpointRequest(cptsToSend);
       }
+      console.log("CPT - cptNames");
+      console.log(cptNames);
+      console.log("CPT - cptPlotData");
+      console.log(cptPlotData);
     }
   }, [cptNames]);
 
@@ -95,7 +102,9 @@ const CPT = () => {
       </div>
       <div className="row three-column-row cpt-data">
         <div className="temp col-3 cpt-table">Table</div>
-        <div className="temp col-5 cpt-plot">CPT Plot</div>
+        <div className="temp col-5 cpt-plot">
+          {cptNames.length !== 0 && (<CPTPlot cptNames={cptNames}></CPTPlot>)}
+        </div>
         <div className="temp col-3 vs-preview-plot">Vs Profile Preview</div>
       </div>
       <div className="hr"></div>
