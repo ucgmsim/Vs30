@@ -7,8 +7,7 @@ export const Provider = (props) => {
   
     // CPT Data
     const [cptData, setCPTData] = useState([]);
-    const cptMidpointData = {};
-    const cptPlotData = {};
+    const [cptMidpointData, setCptMidpointData] = useState({});
 
     // Make the context object:
     const globalContext = {
@@ -18,7 +17,7 @@ export const Provider = (props) => {
 
          // Plotting
          cptMidpointData,
-         cptPlotData,
+         setCptMidpointData,
     };
 
     // pass the value in provider and return

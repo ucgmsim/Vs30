@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, memo } from "react";
+import React, { useState, useContext, memo } from "react";
 import Select from "react-select";
 
 import { GlobalContext } from "context";
@@ -10,14 +10,14 @@ import CPTPlot from "components/CptPlot";
 const CPT = () => {
   const {
     setCPTData,
-    cptPlotData,
     cptMidpointData,
+    setCptMidpointData,
   } = useContext(GlobalContext);
 
   const [filenames, setFilenames] = useState("");
   const [loading, setLoading] = useState(false);
   const [cptOptions, setCPTOptions] = useState([]);
-  const [cptNames, setCPTNames] = useState([]);
+  const [cptPlotData, setCptPlotData] = useState({});
 
   const sendProcessRequest = async () => {
     setLoading(true);
@@ -51,36 +51,36 @@ const CPT = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.MIDPOINT_ENDPOINT, requestOptions)
       .then(async (response) => {
         const responseData = await response.json();
-        // Add to cptMidpointData
+        // Add to MidpointData
+        let tempMidpointData = cptMidpointData;
         for (const key of Object.keys(responseData)) {
-          cptMidpointData[key] = responseData[key];
+          tempMidpointData[key] = responseData[key];
         }
+        setCptMidpointData(tempMidpointData);
     });
   }
 
-  useEffect(() => {
-    if (cptNames.length !== 0) {
-      let cptsToSend = [];
-      if (Object.keys(cptMidpointData).length === 0) {
-        cptsToSend = cptNames;
-      } else {
-        cptNames.forEach((cptName) => {
-           if (!cptMidpointData.hasOwnProperty(cptName["label"])) {
-            cptsToSend.push(cptName);
-          }
-        });
+  const changeCPTSelection = async (entries) => {
+    // Gather Midpoint data
+    let cptsToSend = [];
+    let cptLabels = [];
+    entries.forEach((entry) => {
+      cptLabels.push(entry["label"]);
+      if (!cptMidpointData.hasOwnProperty(entry["label"])) {
+        cptsToSend.push(entry);
       }
-      if (cptsToSend.length !== 0) {
-        console.log("CPT - sending Requst");
-        console.log(cptsToSend);
-        sendMidpointRequest(cptsToSend);
-      }
-      console.log("CPT - cptNames");
-      console.log(cptNames);
-      console.log("CPT - cptPlotData");
-      console.log(cptPlotData);
+    })
+    if (cptsToSend.length !== 0) {
+      await sendMidpointRequest(cptsToSend);
     }
-  }, [cptNames]);
+
+    let tempPlotData = {};
+    // Create CPT Plot Data
+    cptLabels.forEach((name) => {
+      tempPlotData[name] = cptMidpointData[name]
+    });
+    setCptPlotData(tempPlotData);
+  }
 
   return (
     <div>
@@ -97,13 +97,13 @@ const CPT = () => {
           isMulti={true}
           options={cptOptions}
           isDisabled={cptOptions.length === 0}
-          onChange={(e) => setCPTNames(e)}
+          onChange={(e) => changeCPTSelection(e)}
         ></Select>
       </div>
       <div className="row three-column-row cpt-data">
         <div className="temp col-3 cpt-table">Table</div>
         <div className="temp col-5 cpt-plot">
-          {cptNames.length !== 0 && (<CPTPlot cptNames={cptNames}></CPTPlot>)}
+          {Object.keys(cptPlotData).length > 0 && (<CPTPlot cptPlotData={cptPlotData}></CPTPlot>)}
         </div>
         <div className="temp col-3 vs-preview-plot">Vs Profile Preview</div>
       </div>
