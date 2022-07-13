@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 
 import Plot from "react-plotly.js";
 
@@ -171,4 +171,4 @@ const CPTPlot = ({cptPlotData}) => {
   }
 };
 
-export default CPTPlot;
+export default memo(CPTPlot);
