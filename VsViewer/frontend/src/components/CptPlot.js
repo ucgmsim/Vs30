@@ -1,74 +1,45 @@
-import React, { useContext, useEffect } from "react";
+import React from "react";
 
 import Plot from "react-plotly.js";
 
-import { GlobalContext } from "context";
 import "assets/cptPlot.css";
 
-const CPTPlot = (cptNames) => {
-  const {
-    cptPlotData,
-  } = useContext(GlobalContext);
-
-  let QcArr = [];
-  let FsArr = [];
-  let uArr = [];
-
-  useEffect(() => {
-    if (cptNames.length !== 0) {
-
-      QcArr = [];
-      for (const key of Object.keys(cptPlotData)) {
+const CPTPlot = ({cptPlotData}) => {
+  if (Object.keys(cptPlotData).length > 0) {
+    let QcArr = [];
+    let FsArr = [];
+    let uArr = [];
+    for (const name of Object.keys(cptPlotData)) {
         QcArr.push({
-          x: cptPlotData[key]["Qc"],
-          y: cptPlotData[key]["Depth"],
-          type: "scatter",
-          mode: "lines",
-          name: key,
-          hoverinfo: "none",
+            x: cptPlotData[name]["Qc"],
+            y: cptPlotData[name]["Depth"],
+            type: "scatter",
+            mode: "lines",
+            name: name,
+            hoverinfo: "none",
         });
-      }
-  
-      FsArr = [];
-      for (const key of Object.keys(cptPlotData)) {
         FsArr.push({
-          x: cptPlotData[key]["Fs"],
-          y: cptPlotData[key]["Depth"],
-          type: "scatter",
-          mode: "lines",
-          name: key,
-          hoverinfo: "none",
+            x: cptPlotData[name]["Fs"],
+            y: cptPlotData[name]["Depth"],
+            type: "scatter",
+            mode: "lines",
+            name: name,
+            hoverinfo: "none",
         });
-      }
-  
-      uArr = [];
-      for (const key of Object.keys(cptPlotData)) {
         uArr.push({
-          x: cptPlotData[key]["u"],
-          y: cptPlotData[key]["Depth"],
-          type: "scatter",
-          mode: "lines",
-          name: key,
-          hoverinfo: "none",
+            x: cptPlotData[name]["u"],
+            y: cptPlotData[name]["Depth"],
+            type: "scatter",
+            mode: "lines",
+            name: name,
+            hoverinfo: "none",
         });
-      }
-
-      console.log("PLOT - cptNames");
-      console.log(cptNames);
-      console.log("PLOT - cptPlotData");
-      console.log(cptPlotData);
-      console.log(QcArr);
-    }
-  }, [cptNames]);
-
-  if (cptNames.length !== 0) {
-    console.log("Plot names");
-    console.log(cptNames);
+    };
 
     return (
       <div className="row three-column-row cpt-plots">
         <Plot
-          className={"col-3 cpt-plot"}
+          className={"col-4"}
           data={QcArr}
           config={
             {displayModeBar: false}
@@ -97,13 +68,11 @@ const CPTPlot = (cptNames) => {
             titlefont: {
               size: 22,
             },
-            autosize: false,
-            width: 300,
-            height: 600,
+            autosize: true,
             margin: {
               l: 40,
               r: 40,
-              b: 40,
+              b: 60,
               t: 40,
               pad: 1
             },
@@ -112,7 +81,7 @@ const CPTPlot = (cptNames) => {
           useResizeHandler={true}
         />
         <Plot
-          className={"col-3 cpt-plot"}
+          className={"col-4"}
           data={FsArr}
           config={
             {displayModeBar: false}
@@ -141,13 +110,11 @@ const CPTPlot = (cptNames) => {
             titlefont: {
               size: 22,
             },
-            autosize: false,
-            width: 300,
-            height: 600,
+            autosize: true,
             margin: {
               l: 40,
               r: 40,
-              b: 40,
+              b: 60,
               t: 40,
               pad: 1
             },
@@ -156,7 +123,7 @@ const CPTPlot = (cptNames) => {
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4 cpt-plot"}
+          className={"col-4"}
           data={uArr}
           config={
             {displayModeBar: false}
@@ -185,16 +152,16 @@ const CPTPlot = (cptNames) => {
             titlefont: {
               size: 22,
             },
-            autosize: false,
-            width: 300,
-            height: 600,
+            autosize: true,
             margin: {
               l: 40,
               r: 0,
-              b: 40,
+              b: 60,
               t: 40,
               pad: 1
             },
+            showlegend: true,
+            legend: {x: 0.7, y: 1.1}
           }}
           useResizeHandler={true}
         />
