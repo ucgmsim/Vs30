@@ -54,7 +54,7 @@ class VsProfile:
         self.correlation = correlation
         # Ensures the max depth does not go below 30m
         # Also cut to the highest int depth
-        self.max_depth = int(depth[-1]) if int(depth[-1]) < 30 else 30
+        self.max_depth = min(int(depth[-1]), 30)
         # Ensures that the VsZ calculation will be done using the highest int depth
         # for correlations to Vs30
         int_depth_mask = depth <= self.max_depth
