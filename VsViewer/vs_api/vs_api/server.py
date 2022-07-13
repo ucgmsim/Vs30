@@ -1,6 +1,7 @@
 import os
-import flask
 import logging
+
+import flask
 
 from custom_log_handler import MultiProcessSafeTimedRotatingFileHandler
 
