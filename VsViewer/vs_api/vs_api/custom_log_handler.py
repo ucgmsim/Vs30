@@ -34,13 +34,14 @@ class MultiProcessSafeTimedRotatingFileHandler(
         )
         filename = self.baseFilename
         if os.path.exists(filename):
-            line = open(filename, "r").readline()
-            if line == "":
-                t = int(time.time())
-            else:
-                n = line.find(",")
-                line = line[:n]
-                t = int(time.mktime(time.strptime(line, "[%Y-%m-%d %H:%M:%S")))
+            with open(filename) as file:
+                line = file.readline()
+                if line == "":
+                    t = int(time.time())
+                else:
+                    n = line.find(",")
+                    line = line[:n]
+                    t = int(time.mktime(time.strptime(line, "[%Y-%m-%d %H:%M:%S")))
 
         else:
             t = int(time.time())
