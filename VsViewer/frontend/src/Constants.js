@@ -5,6 +5,7 @@ export const VS_API_URL = process.env.REACT_APP_VS_API_URL;
 
 // CPT Endpoints
 export const CREATE_CPTS_ENDPOINT = "/api/cpt/create";
+export const GET_CORRELATIONS_ENDPOINT = "/api/cpt/correlations";
 
 // Plot Endpoints
 export const MIDPOINT_ENDPOINT = "/api/plot/midpoint";

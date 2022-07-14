@@ -2,6 +2,7 @@ import argparse
 from typing import List
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from VsViewer.vs_calc import CPT, utils
 
@@ -62,7 +63,10 @@ def main():
     for cpt in cpts:
         print(f"{cpt.name} Info")
         for k, v in cpt.info.items():
-            print(f"{k}: {v}")
+            if isinstance(v, list):
+                print(f"{k}: {len(v) > 0}")
+            else:
+                print(f"{k}: {v}")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ import CptTable from "./CptTable";
 
 const CPT = () => {
   const {
+    cptData,
     setCPTData,
     cptMidpointData,
     setCptMidpointData,
@@ -22,7 +23,25 @@ const CPT = () => {
   const [cptPlotData, setCptPlotData] = useState({});
   const [cptTableData, setCptTableData] = useState({});
   const [selectedCptTable, setSelectedCptTable] = useState(null);
+  const [cptInfo, setCptInfo] = useState(null);
+  const [correlations, setCorrelations] = useState([]);
   const [canCompute, setCanCompute] = useState(false);
+
+  if (correlations.length == 0) {
+    const requestOptions = {
+      method: "GET",
+    }
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CORRELATIONS_ENDPOINT, requestOptions)
+      .then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({value:value, label:value});
+        }
+        setCorrelations(tempOptionArray);
+    });
+  }
 
   const sendProcessRequest = async () => {
     setLoading(true);
@@ -118,10 +137,14 @@ const CPT = () => {
               placeholder="Select your CPT's"
               options={cptOptions}
               isDisabled={cptOptions.length === 0}
-              onChange={(e) => setSelectedCptTable(cptTableData[e["label"]])}
+              onChange={(e) => {
+                setSelectedCptTable(cptTableData[e["label"]]);
+                setCptInfo(cptData[e["label"]]["info"]);
+              }
+              }
             ></Select>
             <div className="temp center-elm cpt-table">
-              {Object.keys(cptTableData).length > 0 && (<CptTable cptTableData={selectedCptTable}></CptTable>)}
+              {Object.keys(cptTableData).length > 0 && (<CptTable cptTableData={selectedCptTable} cptInfo={cptInfo}></CptTable>)}
             </div>
           </div>
         </div>
@@ -149,17 +172,17 @@ const CPT = () => {
           className="select-cor"
           placeholder="Select Correlations"
           isMulti={true}
-          options={cptOptions}
-          isDisabled={cptOptions.length === 0}
+          options={correlations}
+          isDisabled={correlations.length === 0}
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
         <div className="temp col-3 weights">
           <div className="temp cpt-weights">CPT Weights</div>
           <div className="temp cor-weights">Correlation Weights</div>
-          <button disabled={canCompute} className="preview-btn btn btn-primary" onClick={() => sendProcessRequest()}>Compute Preview</button>
+          <button disabled={canCompute} className="preview-btn btn btn-primary" onClick={() => sendProcessRequest()}>Compute VsProfile</button>
         </div>
-        <div className="temp col-4 vs-preview-plot">Vs Profile Preview</div>
+        <div className="temp col-4 vs-preview-plot">Vs Profile</div>
       </div>
     </div>
     
