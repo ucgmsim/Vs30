@@ -39,7 +39,7 @@ const CPTPlot = ({cptPlotData}) => {
     return (
       <div className="row three-column-row cpt-plots">
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={QcArr}
           config={
             {displayModeBar: false}
@@ -81,7 +81,7 @@ const CPTPlot = ({cptPlotData}) => {
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={FsArr}
           config={
             {displayModeBar: false}
@@ -123,7 +123,7 @@ const CPTPlot = ({cptPlotData}) => {
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={uArr}
           config={
             {displayModeBar: false}
