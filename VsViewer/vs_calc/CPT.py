@@ -12,13 +12,13 @@ class CPT:
     """
 
     def __init__(
-        self,
-        name: str,
-        depth: np.ndarray,
-        qc: np.ndarray,
-        fs: np.ndarray,
-        u: np.ndarray,
-        info: Dict = None,
+            self,
+            name: str,
+            depth: np.ndarray,
+            qc: np.ndarray,
+            fs: np.ndarray,
+            u: np.ndarray,
+            info: Dict = None,
     ):
         self.name = name
         self.depth = depth
@@ -55,8 +55,8 @@ class CPT:
             # compute non-normalised Ic based on the correlation by Robertson (2010).
             Rf = (self.Fs / self.Qc) * 100
             self._Ic = (
-                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
-            ) ** 0.5
+                               (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
+                       ) ** 0.5
         return self._Ic
 
     @property
@@ -90,7 +90,7 @@ class CPT:
         u0 = np.zeros(len(self.depth))
         for i in range(1, len(self.depth)):
             totalStress[i] = (
-                gamma * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
+                    gamma * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
             )
             if self.depth[i] >= gwt:
                 u0[i] = 0.00981 * (self.depth[i] - self.depth[i - 1]) + u0[i - 1]
@@ -154,9 +154,7 @@ class CPT:
 
         # Filtering
         data = data[(np.all(data[:, [0]] <= 30, axis=1)).T]  # z is less then 30 m
-        info["Removed rows containing 0 or below Fs or Qc values"] = not np.alltrue(
-            data[:, [1, 2]] > 0
-        )
+        info["Removed rows"] = np.where(np.all(data[:, [1, 2]] > 0, axis=1) == False)[0].tolist()
         data = data[np.all(data[:, [1, 2]] > 0, axis=1)]  # delete rows with zero qc, fs
 
         if len(data) == 0:
