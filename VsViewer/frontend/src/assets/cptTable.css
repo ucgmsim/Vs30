@@ -1,0 +1,12 @@
+.scroll-tbl {
+    max-height: 26.3vw;
+    overflow: scroll;
+}
+
+.col-size {
+    width: 7vw;
+}
+
+.tbl-width {
+    width: 28vw;
+}

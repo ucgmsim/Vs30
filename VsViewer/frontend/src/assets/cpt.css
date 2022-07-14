@@ -26,15 +26,15 @@
 
 .form-section-title {
     font-size: calc(12px + 0.4vw);
-    margin-top: 10px;
     font-weight: 700;
 }
 
 .select-cpt {
-    width: 35%;
+    width: 50%;
+    padding-bottom: 0.5vw;
 }
 
-.center-btn {
+.center-elm {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -45,39 +45,56 @@
 }
 
 .cpt-data {
-    padding-top: 15px;
     padding-bottom: 15px;
     padding-left: 1%;
     margin-right: -5%;
-    height: 30vw;
+    height: 40vw;
 }
 
 .cpt-table {
-    margin-right: 1vw;
+    height: 35.5vw;
+    width: 100%;
 }
 
 .cpt-plot {
-    margin-left: 1vw;
-    margin-right: 1vw;
+    padding-left: 0.5vw;
+    height: 35.5vw;
+}
+
+.cor-section {
+    height: 35vw;
+}
+
+.select-cor {
+    width: 35%;
+    margin-bottom: 1vw;
 }
 
 .vs-preview-plot {
-    margin-left: 1vw;
+    margin-top: 1vw;
+    margin-right: 18vw;
+    padding-top: 1vw;
+    padding-bottom: 1vw;
+    height: 34vw;
 }
 
 .weights {
-    padding-top: 15px;
-    padding-bottom: 15px;
-    padding-left: 30%;
-    height: 10vw;
+    padding-top: 1vw;
+    padding-bottom: 1vw;
+    margin-left: 18vw;
+    height: 34vw;
 }
 
 .cpt-weights {
-    margin-left: 1vw;
-    margin-right: 1vw;
+    margin-bottom: 1vw;
+    height: 14vw;
 }
 
 .cor-weights {
-    margin-left: 1vw;
-    margin-right: 1vw;
+    height: 14vw;
+}
+
+.preview-btn {
+    margin-top: 1vw;
+    margin-bottom: 1vw;
 }
