@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 
 const SPT = () => {
   return (
@@ -8,4 +8,4 @@ const SPT = () => {
   );
 };
 
-export default SPT;
+export default memo(SPT);

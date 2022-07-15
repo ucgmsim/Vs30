@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 
 const VsProfile = () => {
   return (
@@ -8,4 +8,4 @@ const VsProfile = () => {
   );
 };
 
-export default VsProfile;
+export default memo(VsProfile);

@@ -1,21 +1,9 @@
 import argparse
-import colorsys
 from typing import List
 
 import matplotlib.pyplot as plt
-from matplotlib import colors
 
 from VsViewer.vs_calc import CPT, utils
-
-
-def scale_saturation(color: str, scale: float):
-    """
-    Scales the saturation down of the color by a given percentage
-    """
-    rgb = colors.colorConverter.to_rgb(color)
-    hls = colorsys.rgb_to_hls(*rgb)
-    hls_scaled = (hls[0], hls[1], hls[2] * ((100 - scale) / 100))
-    return colorsys.hls_to_rgb(*hls_scaled)
 
 
 def plot_cpt(cpts: List[CPT], output_ffp: str):
@@ -25,9 +13,7 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
     """
     fig = plt.figure(figsize=(16, 10))
     measurements = ["Qc", "Fs", "u"]
-    colours = ["Blue", "Green", "Red"]
     plot_legend = len(cpts) != 1
-    scales = [i * (100 / len(cpts)) for i in range(len(cpts))]
 
     for ix, measure in enumerate(measurements):
         ax = fig.add_subplot(1, 3, ix + 1)
@@ -36,11 +22,10 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
         for cpt_ix, cpt in enumerate(cpts):
             ax.plot(
                 *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
-                color=scale_saturation(colours[ix], scales[cpt_ix]),
                 linewidth=2.5,
-                label=cpt.cpt_ffp.stem,
+                label=cpt.name,
             )
-        if plot_legend:
+        if plot_legend and ix == 2:
             ax.legend(loc="upper right")
         ax.invert_yaxis()
         ax.tick_params(labelsize=15)
@@ -75,7 +60,7 @@ def main():
 
     # Print CPT info
     for cpt in cpts:
-        print(f"{cpt.cpt_ffp.stem} Info")
+        print(f"{cpt.name} Info")
         for k, v in cpt.info.items():
             print(f"{k}: {v}")
 
