@@ -14,7 +14,7 @@ correlation_weights = {"andrus_2007": 0.6, "mcgann_2018": 0.4}
 cpt_weights = {"CPT_6457": 0.8, "CPT_6458": 0.2}
 
 vs_profiles = [
-    VsProfile(cpt, correlation) for cpt in cpts for correlation in correlations
+    VsProfile.from_cpt(cpt, correlation) for cpt in cpts for correlation in correlations
 ]
 vs30, vs30_sd = calculate_weighted_vs30(
     vs_profiles, cpt_weights, correlation_weights
@@ -22,4 +22,4 @@ vs30, vs30_sd = calculate_weighted_vs30(
 print(f"The weighted average Vs30 is {vs30} and the Standard Deviation is {vs30_sd}")
 
 # Expected output
-# The weighted average Vs30 is 336.0160592289904 and the Standard Deviation is 5.039958394795399
+# The weighted average Vs30 is 330.75434852800674 and the Standard Deviation is 67.40592850352557
