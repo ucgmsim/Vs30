@@ -40,7 +40,7 @@
     align-items: center;
 }
 
-.temp {
+.outline {
     border: 1px solid silver;
 }
 
@@ -62,7 +62,8 @@
 }
 
 .cor-section {
-    height: 35vw;
+    height: 36vw;
+    margin-bottom: 1vw;
 }
 
 .select-cor {
@@ -70,28 +71,31 @@
     margin-bottom: 1vw;
 }
 
-.vs-preview-plot {
-    margin-top: 1vw;
+.vs-preview-section {
     margin-right: 18vw;
-    padding-top: 1vw;
     padding-bottom: 1vw;
-    height: 34vw;
+    height: 35vw;
+}
+
+.vs-preview-plot {
+    height: 35vw;
+    width: 33vw;
 }
 
 .weights {
     padding-top: 1vw;
     padding-bottom: 1vw;
     margin-left: 18vw;
-    height: 34vw;
+    height: 36vw;
 }
 
 .cpt-weights {
     margin-bottom: 1vw;
-    height: 14vw;
+    height: 13vw;
 }
 
 .cor-weights {
-    height: 14vw;
+    height: 13vw;
 }
 
 .preview-btn {
