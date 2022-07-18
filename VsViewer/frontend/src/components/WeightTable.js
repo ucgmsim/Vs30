@@ -36,8 +36,8 @@ const WeightTable = ({weights, setFunction, refresh}) => {
 
     if (weights !== undefined) {
         return (
-            <div className="scroll-weights">
-                <table className="table thead-dark table-striped table-bordered mt-2 w-auto">
+            <div className="scroll-weights table-padding">
+                <table className="table thead-dark table-striped table-bordered weight-table">
                     <tbody>
                         {weightRows}
                     </tbody>
