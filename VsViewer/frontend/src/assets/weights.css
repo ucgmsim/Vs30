@@ -13,8 +13,17 @@
 }
 
 .scroll-weights {
-    max-height: 12vw;
+    max-height: 12.7vw;
     overflow: scroll;
+}
+
+.weight-table {
+    margin-bottom: 0 !important;
+}
+
+.table-padding {
+    padding-top: 0.3vw;
+    padding-bottom: 0.2vw;
 }
 
 ::-webkit-scrollbar {
