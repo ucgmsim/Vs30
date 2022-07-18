@@ -1,9 +1,9 @@
-import React, { Fragment, memo } from "react";
+import React, { memo } from "react";
 
 import "assets/cptTable.css";
 
 const CPTTable = ({cptTableData, cptInfo}) => {
-    if (cptTableData !== undefined) {
+    if (cptTableData !== undefined && cptTableData !== null) {
         const cptTableRows = [];
         cptTableData.forEach((row, rowIdx) => {
             const rowClassName = "col-size"
@@ -32,7 +32,11 @@ const CPTTable = ({cptTableData, cptInfo}) => {
                         <tr>
                             <td className="tbl-width" colSpan="4">
                                 <div className="scroll-tbl">
-                                    <table className="tbl-width">{cptTableRows}</table>
+                                    <table className="tbl-width">
+                                        <tbody>
+                                            {cptTableRows}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </td>
                         </tr>

@@ -82,6 +82,23 @@ class VsProfile:
             cpt.name, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
         )
 
+    def to_json(self):
+        """
+        Creates a json response dictionary from the VsProfile
+        """
+        json_dict = {
+            "cpt_name": self.cpt_name,
+            "correlation": self.correlation,
+            "max_depth": self.max_depth,
+            "vs": self.vs.tolist(),
+            "vs_sd": self.vs_sd.tolist(),
+            "depth": self.depth.tolist(),
+            "vsz": self._vsz,
+            "vs30": self._vs30,
+            "vs30_sd": self._vs30_sd,
+        }
+        return json_dict
+
     @property
     def vsz(self):
         """
