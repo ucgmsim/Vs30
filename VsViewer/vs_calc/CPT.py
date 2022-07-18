@@ -168,15 +168,17 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        info["Removed rows"] = np.where(np.all(data[:, [0]] <= 30, axis=1) == False)[0]
-        data = data[(np.all(data[:, [0]] <= 30, axis=1)).T]  # z is less then 30 m
+        below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
+        info["Removed rows"] = np.where(below_30_filter == False)[0]
+        data = data[below_30_filter.T]  # z is less then 30 m
+        zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
         info["Removed rows"] = np.concatenate(
             (
-                (np.where(np.all(data[:, [1, 2]] > 0, axis=1) == False)[0]),
+                (np.where(zero_filter == False)[0]),
                 info["Removed rows"],
             )
         ).tolist()
-        data = data[np.all(data[:, [1, 2]] > 0, axis=1)]  # delete rows with zero qc, fs
+        data = data[zero_filter]  # delete rows with zero qc, fs
 
         if len(data) == 0:
             raise Exception("CPT File has no valid lines")
