@@ -5,6 +5,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from VsViewer.vs_calc.constants import HammerType, SoilType
+
 
 class SPT:
     """
@@ -16,10 +18,10 @@ class SPT:
         name: str,
         depth: np.ndarray,
         n: np.ndarray,
-        hammer_type: str,
-        borehole_diameter: float,
-        energy_ratio: float,
-        soil_type: str,
+        hammer_type: HammerType = HammerType.Auto,
+        borehole_diameter: float = 150,
+        energy_ratio: float = None,
+        soil_type: SoilType = SoilType.Clay,
     ):
         self.name = name
         self.depth = depth
@@ -39,126 +41,117 @@ class SPT:
         """
         if self._n60 is None:
             N60_list = []
-            NValues = spt_data_at_this_location["NValue"]
-            hammer_type = spt_location["HammerType"]
-            borehole_dia = spt_location["BoreholeDiameter"]
-            energy_ratio = spt_location["EnergyRatio"]
-            rod_length = spt_data_at_this_location["Depth"]
-            for j in range(NValues.count()):
-                N = NValues[j]
-                Ce, Cb, Cr, Cs = variables.all_variables(energy_ratio, hammer_type, borehole_dia, rod_length[j])
-                N60 = N * Ce * Cb * Cr * Cs
+            for idx, N in enumerate(self.N):
+                Ce, Cb, Cr = self.calc_n60_variables(
+                    self.energy_ratio,
+                    self.hammer_type,
+                    self.borehole_diameter,
+                    self.depth[idx],
+                )
+                N60 = N * Ce * Cb * Cr
                 N60_list.append(N60)
-            self._n60 = N60_list
+            self._n60 = np.asarray(N60_list)
         return self._n60
 
     def to_json(self):
         """
-        Creates a json response dictionary from the CPT
+        Creates a json response dictionary from the SPT
         """
         json_dict = {
             "name": self.name,
             "depth": self.depth.tolist(),
-            "Qc": self.Qc.tolist(),
-            "Fs": self.Fs.tolist(),
-            "u": self.u.tolist(),
-            "info": self.info,
-            "qt": self._qt,
-            "Ic": self._Ic,
-            "Qtn": self._Qtn,
-            "effStress": self._effStress,
+            "N": self.N.tolist(),
+            "hammer_type": self.hammer_type.name,
+            "borehole_diameter": self.borehole_diameter,
+            "energy_ratio": self.energy_ratio,
+            "soil_type": self.soil_type.name,
+            "N60": None if self._n60 is None else self._n60.tolist(),
         }
         return json_dict
 
     @staticmethod
     def from_json(json: Dict):
         """
-        Creates a CPT from a json dictionary string
+        Creates a SPT from a json dictionary string
         """
-        name, depth, qc, fs, u, info = (
+        name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type, n60 = (
             json["name"],
             np.asarray(json["depth"]),
-            np.asarray(json["Qc"]),
-            np.asarray(json["Fs"]),
-            np.asarray(json["u"]),
-            json["info"],
+            np.asarray(json["N"]),
+            HammerType[json["hammer_type"]],
+            float(json["borehole_diameter"]),
+            float(json["energy_ratio"]),
+            SoilType[json["soil_type"]],
+            None if json["N60"] is None else np.asarray(json["N60"]),
         )
-        return CPT(name, depth, qc, fs, u, info)
+        spt = SPT(name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type)
+        if n60 is not None:
+            spt._n60 = n60
+        return spt
 
     @staticmethod
-    def from_file(cpt_ffp: str):
+    def from_file(spt_ffp: str):
         """
-        Creates a CPT from a CPT file
+        Creates an SPT from an SPT file
         """
-        cpt_ffp = Path(cpt_ffp)
-        data = np.loadtxt(cpt_ffp, dtype=float, delimiter=",", skiprows=1)
-        depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(cpt_ffp.stem, depth, qc, fs, u, info)
+        spt_ffp = Path(spt_ffp)
+        data = np.loadtxt(spt_ffp, dtype=float, delimiter=",", skiprows=1)
+        return SPT(spt_ffp.stem, data[:, 0], data[:, 1])
 
     @staticmethod
     def from_byte_stream(file_name: str, stream: bytes):
         """
-        Creates a CPT from a file stream
+        Creates an SPT from a file stream
         """
         csv_data = pd.read_csv(BytesIO(stream))
-        data = np.asarray(csv_data)
-        depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(Path(file_name).stem, depth, qc, fs, u, info)
+        return SPT(Path(file_name).stem, csv_data["Depth"], csv_data["NValue"])
 
     @staticmethod
-    def process_cpt(data: np.ndarray):
-        """Process CPT data and returns depth, Qc, Fs, u, info"""
-        # Get CPT info
-        info = dict()
-        info["z_min"] = np.round(data[0, 0], 2)
-        info["z_max"] = np.round(data[-1, 0], 2)
-        info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
-
-        # Filtering
-        info["Removed rows"] = np.where(np.all(data[:, [0]] <= 30, axis=1) == False)[0]
-        data = data[(np.all(data[:, [0]] <= 30, axis=1)).T]  # z is less then 30 m
-        info["Removed rows"] = np.concatenate(
-            (
-                (np.where(np.all(data[:, [1, 2]] > 0, axis=1) == False)[0]),
-                info["Removed rows"],
-            )
-        ).tolist()
-        data = data[np.all(data[:, [1, 2]] > 0, axis=1)]  # delete rows with zero qc, fs
-
-        if len(data) == 0:
-            raise Exception("CPT File has no valid lines")
-
-        z_raw = data[:, 0]  # m
-        qc_raw = data[:, 1]  # MPa
-        fs_raw = data[:, 2]  # MPa
-        u_raw = data[:, 3]  # Mpa
-
-        downsize = np.arange(z_raw[0], 30.02, 0.02)
-        z = np.array([])
-        qc = np.array([])
-        fs = np.array([])
-        u = np.array([])
-        for j in range(len(downsize)):
-            for i in range(len(z_raw)):
-                if abs(z_raw[i] - downsize[j]) < 0.001:
-                    z = np.append(z, z_raw[i])
-                    qc = np.append(qc, qc_raw[i])
-                    fs = np.append(fs, fs_raw[i])
-                    u = np.append(u, u_raw[i])
-
-        if len(u) > 50:
-            while u[50] >= 10:
-                u = u / 1000  # account for differing units
-
-        # some units are off - so need to see if conversion is needed
-        if len(fs) > 100:
-            # Account for differing units
-            if fs[100] > 1.0:
-                fs = fs / 1000
-        elif len(fs) > 5:
-            if fs[5] > 1.0:
-                fs = fs / 1000
+    def calc_n60_variables(
+        energy_ratio: float,
+        hammer_type: HammerType,
+        borehole_diameter: float,
+        rod_length: float,
+    ):
+        """
+        Calculates the variables needed to get N60 from N
+        Returns the variables Ce, Cr, Cb
+        """
+        # Calc Ce
+        # In case the data is messed up and none of the following condition can be meet
+        # assume a relative average Ce value of 0.8
+        Ce = 0.8
+        if energy_ratio is not None:
+            Ce = energy_ratio / 60
         else:
-            fs = fs
+            if hammer_type == HammerType.Auto:
+                # range 0.8 to 1.3
+                Ce = 0.8
+            elif hammer_type == HammerType.Safety:
+                # safety hammer, it has range of 0.7 to 1.2
+                Ce = 0.7
+            elif hammer_type == HammerType.Standard:
+                # for doughnut hammer range 0.5 to 1.0
+                Ce = 0.5
 
-        return z, qc, fs, u, info
+        # Calc Cr
+        if rod_length < 3:
+            Cr = 0.75
+        elif 3 <= rod_length < 4:
+            Cr = 0.8
+        elif 4 <= rod_length < 6:
+            Cr = 0.85
+        elif 6 <= rod_length < 10:
+            Cr = 0.95
+        else:
+            Cr = 1
+
+        # Calc Cb
+        if 65 <= borehole_diameter <= 115:
+            Cb = 1
+        elif borehole_diameter == 200:
+            Cb = 1.15
+        else:
+            Cb = 1.05
+
+        return Ce, Cr, Cb

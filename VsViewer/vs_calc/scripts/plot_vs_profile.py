@@ -49,9 +49,6 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
 
 
 def main():
-    """
-    Gather metadata from each realisation and outputs to a csv
-    """
     # Get args
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -3,29 +3,29 @@ from typing import List
 
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import CPT, utils
+from VsViewer.vs_calc import SPT, utils
 
 
-def plot_cpt(cpts: List[CPT], output_ffp: str):
+def plot_spt(spts: List[SPT], output_ffp: str):
     """
     Plots the CPT values Qc, Fs and u at their depth values
     and saves to a given output file
     """
     fig = plt.figure(figsize=(16, 10))
-    measurements = ["Qc", "Fs", "u"]
-    plot_legend = len(cpts) != 1
+    measurements = ["N", "N60"]
+    plot_legend = len(spts) != 1
 
     for ix, measure in enumerate(measurements):
-        ax = fig.add_subplot(1, 3, ix + 1)
-        ax.set_xlabel(f"{measure} (MPa)", size=16)
+        ax = fig.add_subplot(1, 2, ix + 1)
+        ax.set_xlabel(f"{measure}", size=16)
         ax.set_ylabel("Depth (m)", size=16)
-        for cpt_ix, cpt in enumerate(cpts):
+        for spt_ix, spt in enumerate(spts):
             ax.plot(
-                *utils.convert_to_midpoint(getattr(cpt, measure), cpt.depth),
+                *utils.convert_to_midpoint(getattr(spt, measure), spt.depth),
                 linewidth=2.5,
-                label=cpt.name,
+                label=spt.name,
             )
-        if plot_legend and ix == 2:
+        if plot_legend and ix == 1:
             ax.legend(loc="upper right")
         ax.invert_yaxis()
         ax.tick_params(labelsize=15)
@@ -40,7 +40,7 @@ def main():
     # Get args
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "cpt_ffps", type=str, nargs="+", help="The full file path to the cpt files"
+        "spt_ffps", type=str, nargs="+", help="The full file path to the spt files"
     )
     parser.add_argument(
         "output_ffp",
@@ -49,20 +49,11 @@ def main():
     )
     args = parser.parse_args()
 
-    # Get CPT
-    cpts = [CPT.from_file(cpt) for cpt in args.cpt_ffps]
+    # Get SPT
+    spts = [SPT.from_file(spt) for spt in args.spt_ffps]
 
-    # Plot cpt
-    plot_cpt(cpts, args.output_ffp)
-
-    # Print CPT info
-    for cpt in cpts:
-        print(f"{cpt.name} Info")
-        for k, v in cpt.info.items():
-            if isinstance(v, list):
-                print(f"{k}: {len(v) > 0}")
-            else:
-                print(f"{k}: {v}")
+    # Plot spt
+    plot_spt(spts, args.output_ffp)
 
 
 if __name__ == "__main__":
