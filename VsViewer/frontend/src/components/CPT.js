@@ -6,10 +6,12 @@ import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/cpt.css";
-import CPTPlot from "components/CptPlot";
-import CptTable from "components/CptTable";
-import WeightTable from "components/WeightTable";
-import VsProfilePreviewPlot from "components/VsProfilePreview";
+import {
+  CPTPlot,
+  CptTable,
+  WeightTable,
+  VsProfilePreviewPlot,
+} from "components";
 
 const CPT = () => {
   const {
@@ -42,15 +44,42 @@ const CPT = () => {
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
 
+  // Set the CPT Weights
+  useEffect(() => {
+    if (cptOptions.length > 0) {
+      let tempCptWeights = {};
+      cptOptions.forEach((entry) => {
+        tempCptWeights[entry["label"]] = 1 / cptOptions.length;
+      });
+      setCptWeights(tempCptWeights);
+    }
+  }, [cptOptions]);
+
+  // Set the Correlation Weights
+  useEffect(() => {
+    if (selectedCorrelations.length > 0) {
+      let tempCorWeights = {};
+      selectedCorrelations.forEach((entry) => {
+        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      });
+      setCorrelationWeights(tempCorWeights);
+    }
+  }, [selectedCorrelations]);
+
+  // Check the user can set Weights
+  useEffect(() => {
+    if (selectedCorrelations.length > 0 && cptOptions.length > 0) {
+      setCanSet(true);
+    } else {
+      setCanSet(false);
+    }
+  }, [selectedCorrelations, cptOptions]);
+
   // Get Correlations on page load
   if (correlationsOptions.length == 0) {
-    const requestOptions = {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CORRELATIONS_ENDPOINT, {
       method: "GET",
-    };
-    fetch(
-      CONSTANTS.VS_API_URL + CONSTANTS.GET_CORRELATIONS_ENDPOINT,
-      requestOptions
-    ).then(async (response) => {
+    }).then(async (response) => {
       const responseData = await response.json();
       // Set Correlation Select Dropdown
       let tempOptionArray = [];
@@ -67,14 +96,10 @@ const CPT = () => {
     for (const file of filenames) {
       formData.append(file.name, file);
     }
-    const requestOptions = {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
       method: "POST",
       body: formData,
-    };
-    await fetch(
-      CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT,
-      requestOptions
-    ).then(async (response) => {
+    }).then(async (response) => {
       const responseData = await response.json();
       setCPTData(responseData);
       // Set CPT Select Dropdown
@@ -109,15 +134,11 @@ const CPT = () => {
   };
 
   const sendCPTMidpointRequest = async (cptsToSend) => {
-    const requestOptions = {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CPT_MIDPOINT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(cptsToSend),
-    };
-    await fetch(
-      CONSTANTS.VS_API_URL + CONSTANTS.CPT_MIDPOINT_ENDPOINT,
-      requestOptions
-    ).then(async (response) => {
+    }).then(async (response) => {
       const responseData = await response.json();
       // Add to MidpointData
       let tempMidpointData = cptMidpointData;
@@ -129,15 +150,11 @@ const CPT = () => {
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
-    const requestOptions = {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_MIDPOINT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(vsProfileToSend),
-    };
-    await fetch(
-      CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_MIDPOINT_ENDPOINT,
-      requestOptions
-    ).then(async (response) => {
+    }).then(async (response) => {
       const responseData = await response.json();
       // Add to MidpointData
       let tempMidpointData = vsProfileMidpointData;
@@ -153,15 +170,11 @@ const CPT = () => {
       cpts: cptData,
       correlations: correlationsToSend,
     };
-    const requestOptions = {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VSPROFILE_FROM_CPT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(jsonBody),
-    };
-    await fetch(
-      CONSTANTS.VS_API_URL + CONSTANTS.VSPROFILE_FROM_CPT_ENDPOINT,
-      requestOptions
-    ).then(async (response) => {
+    }).then(async (response) => {
       const responseData = await response.json();
       // Add to vsProfileData
       let tempVsProfileData = vsProfileData;
@@ -235,37 +248,6 @@ const CPT = () => {
     // Will add functionality when Results page is started
   };
 
-  // Set the CPT Weights
-  useEffect(() => {
-    if (cptOptions.length > 0) {
-      let tempCptWeights = {};
-      cptOptions.forEach((entry) => {
-        tempCptWeights[entry["label"]] = 1 / cptOptions.length;
-      });
-      setCptWeights(tempCptWeights);
-    }
-  }, [cptOptions]);
-
-  // Set the Correlation Weights
-  useEffect(() => {
-    if (selectedCorrelations.length > 0) {
-      let tempCorWeights = {};
-      selectedCorrelations.forEach((entry) => {
-        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
-      });
-      setCorrelationWeights(tempCorWeights);
-    }
-  }, [selectedCorrelations]);
-
-  // Check the user can set Weights
-  useEffect(() => {
-    if (selectedCorrelations.length > 0 && cptOptions.length > 0) {
-      setCanSet(true);
-    } else {
-      setCanSet(false);
-    }
-  }, [selectedCorrelations, cptOptions]);
-
   // Change the CPT Weights
   const changeCPTWeights = (newWeights) => {
     setCptWeights(newWeights);
@@ -274,6 +256,17 @@ const CPT = () => {
   // Change the Correlation Weights
   const changeCorrelationWeights = (newWeights) => {
     setCorrelationWeights(newWeights);
+  };
+
+  const onSelectCPT = (e) => {
+    setSelectedCptTable(e);
+    setSelectedCptTableData(cptTableData[e["label"]]);
+    setCptInfo(cptData[e["label"]]["info"]);
+  };
+
+  const onSelectCorrelations = (e) => {
+    setSelectedCorrelations(e);
+    addToVsProfilePlot(e);
   };
 
   return (
@@ -305,11 +298,7 @@ const CPT = () => {
               options={cptOptions}
               isDisabled={cptOptions.length === 0}
               value={selectedCptTable}
-              onChange={(e) => {
-                setSelectedCptTable(e);
-                setSelectedCptTableData(cptTableData[e["label"]]);
-                setCptInfo(cptData[e["label"]]["info"]);
-              }}
+              onChange={(e) => onSelectCPT(e)}
             ></Select>
             <div className="outline center-elm cpt-table">
               {Object.keys(cptTableData).length > 0 &&
@@ -350,10 +339,7 @@ const CPT = () => {
           isMulti={true}
           options={correlationsOptions}
           isDisabled={correlationsOptions.length === 0}
-          onChange={(e) => {
-            setSelectedCorrelations(e);
-            addToVsProfilePlot(e);
-          }}
+          onChange={(e) => onSelectCorrelations()}
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
