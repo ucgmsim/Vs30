@@ -9,7 +9,7 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray):
     new_depths, new_measures, prev_depth, prev_measure = [], [], None, None
     for ix, depth in enumerate(depths):
         measure = measures[ix]
-        if ix == 0 and depth != 0:
+        if ix == 0:
             new_depths.append(0)
             new_measures.append(measure)
         else:

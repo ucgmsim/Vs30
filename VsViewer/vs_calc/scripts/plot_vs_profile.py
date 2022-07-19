@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import CPT, VsProfile, utils, CORRELATIONS
+from VsViewer.vs_calc import CPT, VsProfile, utils, CPT_CORRELATIONS
 
 
 def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
@@ -63,7 +63,7 @@ def main():
         type=str,
         nargs="+",
         required=True,
-        choices=CORRELATIONS.keys(),
+        choices=CPT_CORRELATIONS.keys(),
         help="The correlation names",
     )
     parser.add_argument(

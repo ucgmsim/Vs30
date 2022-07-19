@@ -4,7 +4,7 @@ from flask_cors import cross_origin
 from vs_api import server, utils
 from vs_api import constants as const
 from VsViewer.vs_calc import CPT
-from VsViewer.vs_calc.constants import CORRELATIONS
+from VsViewer.vs_calc.cpt_vs_correlations import CPT_CORRELATIONS
 
 
 @server.app.route(const.CPT_CREATE_ENDPOINT, methods=["POST"])
@@ -33,4 +33,4 @@ def get_correlations():
     Gets the currently supported correlations for CPT to Vs
     """
     server.app.logger.info(f"Received request at {const.GET_CORRELATIONS_ENDPOINT}")
-    return flask.jsonify(list(CORRELATIONS.keys()))
+    return flask.jsonify(list(CPT_CORRELATIONS.keys()))
