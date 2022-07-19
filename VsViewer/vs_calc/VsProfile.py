@@ -46,13 +46,13 @@ class VsProfile:
 
     def __init__(
         self,
-        cpt_name: str,
+        name: str,
         correlation: str,
         vs: np.ndarray,
         vs_sd: np.ndarray,
         depth: np.ndarray,
     ):
-        self.cpt_name = cpt_name
+        self.name = name
         self.correlation = correlation
         # Ensures the max depth does not go below 30m
         # Also cut to the highest int depth
@@ -104,7 +104,7 @@ class VsProfile:
         Creates a json response dictionary from the VsProfile
         """
         return {
-            "cpt_name": self.cpt_name,
+            "name": self.name,
             "correlation": self.correlation,
             "max_depth": self.max_depth,
             "vs": self.vs.tolist(),

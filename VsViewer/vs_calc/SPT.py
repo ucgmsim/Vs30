@@ -57,7 +57,7 @@ class SPT:
         """
         Creates a json response dictionary from the SPT
         """
-        json_dict = {
+        return {
             "name": self.name,
             "depth": self.depth.tolist(),
             "N": self.N.tolist(),
@@ -67,7 +67,6 @@ class SPT:
             "soil_type": self.soil_type.name,
             "N60": None if self._n60 is None else self._n60.tolist(),
         }
-        return json_dict
 
     @staticmethod
     def from_json(json: Dict):
