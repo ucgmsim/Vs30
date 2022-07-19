@@ -109,7 +109,7 @@ class CPT:
         """
         Creates a json response dictionary from the CPT
         """
-        json_dict = {
+        return {
             "name": self.name,
             "depth": self.depth.tolist(),
             "Qc": self.Qc.tolist(),
@@ -121,14 +121,13 @@ class CPT:
             "Qtn": self._Qtn,
             "effStress": self._effStress,
         }
-        return json_dict
 
     @staticmethod
     def from_json(json: Dict):
         """
         Creates a CPT from a json dictionary string
         """
-        name, depth, qc, fs, u, info = (
+        return CPT(
             json["name"],
             np.asarray(json["depth"]),
             np.asarray(json["Qc"]),
@@ -136,7 +135,6 @@ class CPT:
             np.asarray(json["u"]),
             json["info"],
         )
-        return CPT(name, depth, qc, fs, u, info)
 
     @staticmethod
     def from_file(cpt_ffp: str):

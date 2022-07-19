@@ -103,7 +103,7 @@ class VsProfile:
         """
         Creates a json response dictionary from the VsProfile
         """
-        json_dict = {
+        return {
             "cpt_name": self.cpt_name,
             "correlation": self.correlation,
             "max_depth": self.max_depth,
@@ -114,7 +114,6 @@ class VsProfile:
             "vs30": self._vs30,
             "vs30_sd": self._vs30_sd,
         }
-        return json_dict
 
     @property
     def vsz(self):

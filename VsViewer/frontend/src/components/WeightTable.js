@@ -2,7 +2,7 @@ import React, { memo, useState, useEffect } from "react";
 
 import "assets/weights.css";
 
-const WeightTable = ({weights, setFunction, refresh}) => {
+const WeightTable = ({weights, setFunction}) => {
 
     const changeWeightRows = (displayWeights) => {
         let weightRows = [];
