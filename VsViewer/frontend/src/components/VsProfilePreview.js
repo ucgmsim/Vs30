@@ -29,8 +29,8 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
           color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
           dash: "dash",
         },
-        name: name,
         hoverinfo: "none",
+        showlegend: false,
       });
       VsArr.push({
         x: vsProfilePlotData[name]["VsSDBelow"],
@@ -41,8 +41,8 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
           color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
           dash: "dash",
         },
-        name: name,
         hoverinfo: "none",
+        showlegend: false,
       });
       colourCounter += 1;
     }
@@ -80,7 +80,8 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
             t: 10,
             pad: 1,
           },
-          showlegend: false,
+          showlegend: true,
+          legend: { x: 0.7, y: 0.9 },
         }}
         useResizeHandler={true}
       />

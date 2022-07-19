@@ -22,7 +22,7 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
             *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
             linewidth=2.5,
             color=default_colours[ix],
-            label=f"{vs_profile.cpt_name}_{vs_profile.correlation}",
+            label=f"{vs_profile.name}_{vs_profile.correlation}",
         )
         # Standard Deviations
         ax.plot(

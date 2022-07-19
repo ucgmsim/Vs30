@@ -13,7 +13,7 @@ def calculate_weighted_vs30(
     with set weights for the CPT's and the Correlations
     """
     average_vs30 = sum(
-        cpt_weights[vs_profile.cpt_name]
+        cpt_weights[vs_profile.name]
         * correlation_weights[vs_profile.correlation]
         * vs_profile.vs30
         for vs_profile in vs_profiles
@@ -23,7 +23,7 @@ def calculate_weighted_vs30(
     average_vs30_variance = 0
     for vs_profile in vs_profiles:
         weight = (
-            cpt_weights[vs_profile.cpt_name]
+            cpt_weights[vs_profile.name]
             * correlation_weights[vs_profile.correlation]
         )
         average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
