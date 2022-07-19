@@ -339,7 +339,7 @@ const CPT = () => {
           isMulti={true}
           options={correlationsOptions}
           isDisabled={correlationsOptions.length === 0}
-          onChange={(e) => onSelectCorrelations()}
+          onChange={(e) => onSelectCorrelations(e)}
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
