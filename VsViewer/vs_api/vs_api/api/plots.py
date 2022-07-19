@@ -1,7 +1,6 @@
 import flask
-from flask_cors import cross_origin
-
 import numpy as np
+from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
