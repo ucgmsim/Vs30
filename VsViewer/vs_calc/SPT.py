@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from VsViewer.vs_calc.constants import HammerType, SoilType
+from .constants import HammerType, SoilType
 
 
 class SPT:
@@ -84,7 +84,9 @@ class SPT:
             SoilType[json["soil_type"]],
             None if json["N60"] is None else np.asarray(json["N60"]),
         )
-        spt = SPT(name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type)
+        spt = SPT(
+            name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type
+        )
         if n60 is not None:
             spt._n60 = n60
         return spt

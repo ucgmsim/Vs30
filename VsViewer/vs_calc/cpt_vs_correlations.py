@@ -85,3 +85,12 @@ def hegazy_2006(cpt: CPT):
     # standard deviation(not available), set to 0.2
     Vs_SD = np.full((len(VsHegazy), 1), 0.2)
     return VsHegazy, Vs_SD
+
+
+CPT_CORRELATIONS = {
+    "andrus_2007": andrus_2007,
+    "robertson_2009": robertson_2009,
+    "hegazy_2006": hegazy_2006,
+    "mcgann_2015": mcgann_2015,
+    "mcgann_2018": mcgann_2018,
+}

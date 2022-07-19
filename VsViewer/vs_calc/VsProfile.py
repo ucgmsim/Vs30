@@ -1,8 +1,10 @@
 import numpy as np
 
 from .CPT import CPT
+from .SPT import SPT
 from .utils import convert_to_midpoint
-from .constants import CORRELATIONS
+from .spt_vs_correlations import SPT_CORRELATIONS
+from .cpt_vs_correlations import CPT_CORRELATIONS
 
 
 # Coefficients from the Boore et al. (2011) paper for conversion from VsZ to Vs30
@@ -73,13 +75,28 @@ class VsProfile:
         Creates a VsProfile from a CPT and correlation
         """
         # Check Correlation string
-        if correlation not in CORRELATIONS.keys():
+        if correlation not in CPT_CORRELATIONS.keys():
             raise KeyError(
-                f"{correlation} not found in set of correlations {CORRELATIONS.keys()}"
+                f"{correlation} not found in set of correlations {CPT_CORRELATIONS.keys()}"
             )
-        vs, vs_sd = CORRELATIONS[correlation](cpt)
+        vs, vs_sd = CPT_CORRELATIONS[correlation](cpt)
         return VsProfile(
             cpt.name, correlation, vs.squeeze(), vs_sd.squeeze(), cpt.depth
+        )
+
+    @staticmethod
+    def from_spt(spt: SPT, correlation: str):
+        """
+        Creates a VsProfile from an SPT and correlation
+        """
+        # Check Correlation string
+        if correlation not in SPT_CORRELATIONS.keys():
+            raise KeyError(
+                f"{correlation} not found in set of correlations {SPT_CORRELATIONS.keys()}"
+            )
+        vs, vs_sd = SPT_CORRELATIONS[correlation](spt)
+        return VsProfile(
+            spt.name, correlation, vs.squeeze(), vs_sd.squeeze(), spt.depth
         )
 
     def to_json(self):
