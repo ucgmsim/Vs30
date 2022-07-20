@@ -1,0 +1,55 @@
+.add-spt {
+    height: 40vw;
+}
+
+.spt-plot-section {
+    height: 40vw;
+}
+
+.spt-plot {
+    height: 36vw;
+    width: 50vw;
+}
+
+.center-elm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.spt-top {
+    height: 40vw;
+    margin-top: 1vw;
+}
+
+.spt-bot {
+    height: 40vw;
+    margin-top: 1vw;
+}
+
+.vs-preview-section-spt {
+    /* margin-right: 17vw; */
+    padding-bottom: 1vw;
+    height: 37vw;
+}
+
+.vs-preview-plot-spt {
+    height: 37vw;
+    width: 36vw;
+}
+
+.weights-spt {
+    padding-top: 1vw;
+    padding-bottom: 1vw;
+    /* margin-left: -2.5vw; */
+    height: 36vw;
+}
+
+.spt-weights {
+    margin-bottom: 1vw;
+    height: 13vw;
+}
+
+.cor-weights-spt {
+    height: 13vw;
+}
