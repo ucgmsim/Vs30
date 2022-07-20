@@ -8,7 +8,7 @@ from VsViewer.vs_calc import SPT, utils
 
 def plot_spt(spts: List[SPT], output_ffp: str):
     """
-    Plots the CPT values Qc, Fs and u at their depth values
+    Plots the SPT values N and N60 at their depth values
     and saves to a given output file
     """
     fig = plt.figure(figsize=(16, 10))
