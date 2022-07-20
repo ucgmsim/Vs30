@@ -4,49 +4,47 @@ import Plot from "react-plotly.js";
 
 import "assets/cptPlot.css";
 
-const CPTPlot = ({cptPlotData}) => {
+const CPTPlot = ({ cptPlotData }) => {
   if (Object.keys(cptPlotData).length > 0) {
     let QcArr = [];
     let FsArr = [];
     let uArr = [];
     for (const name of Object.keys(cptPlotData)) {
-        QcArr.push({
-            x: cptPlotData[name]["Qc"],
-            y: cptPlotData[name]["Depth"],
-            type: "scatter",
-            mode: "lines",
-            name: name,
-            hoverinfo: "none",
-        });
-        FsArr.push({
-            x: cptPlotData[name]["Fs"],
-            y: cptPlotData[name]["Depth"],
-            type: "scatter",
-            mode: "lines",
-            name: name,
-            hoverinfo: "none",
-        });
-        uArr.push({
-            x: cptPlotData[name]["u"],
-            y: cptPlotData[name]["Depth"],
-            type: "scatter",
-            mode: "lines",
-            name: name,
-            hoverinfo: "none",
-        });
-    };
+      QcArr.push({
+        x: cptPlotData[name]["Qc"],
+        y: cptPlotData[name]["Depth"],
+        type: "scatter",
+        mode: "lines",
+        name: name,
+        hoverinfo: "none",
+      });
+      FsArr.push({
+        x: cptPlotData[name]["Fs"],
+        y: cptPlotData[name]["Depth"],
+        type: "scatter",
+        mode: "lines",
+        name: name,
+        hoverinfo: "none",
+      });
+      uArr.push({
+        x: cptPlotData[name]["u"],
+        y: cptPlotData[name]["Depth"],
+        type: "scatter",
+        mode: "lines",
+        name: name,
+        hoverinfo: "none",
+      });
+    }
 
     return (
       <div className="row three-column-row cpt-plots">
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={QcArr}
-          config={
-            {displayModeBar: false}
-          }
+          config={{ displayModeBar: false }}
           layout={{
             xaxis: {
-              title: 'Qc (MPa)',
+              title: "Qc (MPa)",
               titlefont: {
                 size: 16,
               },
@@ -55,8 +53,8 @@ const CPTPlot = ({cptPlotData}) => {
               },
             },
             yaxis: {
-              autorange: 'reversed',
-              title: 'Depth (m)',
+              autorange: "reversed",
+              title: "Depth (m)",
               titlefont: {
                 size: 16,
               },
@@ -74,21 +72,19 @@ const CPTPlot = ({cptPlotData}) => {
               r: 40,
               b: 60,
               t: 40,
-              pad: 1
+              pad: 1,
             },
             showlegend: false,
           }}
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={FsArr}
-          config={
-            {displayModeBar: false}
-          }
+          config={{ displayModeBar: false }}
           layout={{
             xaxis: {
-              title: 'Fs (MPa)',
+              title: "Fs (MPa)",
               titlefont: {
                 size: 16,
               },
@@ -97,8 +93,8 @@ const CPTPlot = ({cptPlotData}) => {
               },
             },
             yaxis: {
-              autorange: 'reversed',
-              title: 'Depth (m)',
+              autorange: "reversed",
+              title: "Depth (m)",
               titlefont: {
                 size: 16,
               },
@@ -116,21 +112,19 @@ const CPTPlot = ({cptPlotData}) => {
               r: 40,
               b: 60,
               t: 40,
-              pad: 1
+              pad: 1,
             },
             showlegend: false,
           }}
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4"}
+          className={"col-4 single-plot"}
           data={uArr}
-          config={
-            {displayModeBar: false}
-          }
+          config={{ displayModeBar: false }}
           layout={{
             xaxis: {
-              title: 'u (MPa)',
+              title: "u (MPa)",
               titlefont: {
                 size: 16,
               },
@@ -139,8 +133,8 @@ const CPTPlot = ({cptPlotData}) => {
               },
             },
             yaxis: {
-              autorange: 'reversed',
-              title: 'Depth (m)',
+              autorange: "reversed",
+              title: "Depth (m)",
               titlefont: {
                 size: 16,
               },
@@ -158,15 +152,14 @@ const CPTPlot = ({cptPlotData}) => {
               r: 0,
               b: 60,
               t: 40,
-              pad: 1
+              pad: 1,
             },
             showlegend: true,
-            legend: {x: 0.7, y: 1.1}
+            legend: { x: 0.7, y: 1.1 },
           }}
           useResizeHandler={true}
         />
       </div>
-      
     );
   }
 };

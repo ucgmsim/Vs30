@@ -109,7 +109,7 @@ class CPT:
         """
         Creates a json response dictionary from the CPT
         """
-        json_dict = {
+        return {
             "name": self.name,
             "depth": self.depth.tolist(),
             "Qc": self.Qc.tolist(),
@@ -121,7 +121,20 @@ class CPT:
             "Qtn": self._Qtn,
             "effStress": self._effStress,
         }
-        return json_dict
+
+    @staticmethod
+    def from_json(json: Dict):
+        """
+        Creates a CPT from a json dictionary string
+        """
+        return CPT(
+            json["name"],
+            np.asarray(json["depth"]),
+            np.asarray(json["Qc"]),
+            np.asarray(json["Fs"]),
+            np.asarray(json["u"]),
+            json["info"],
+        )
 
     @staticmethod
     def from_file(cpt_ffp: str):
@@ -153,11 +166,17 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        data = data[(np.all(data[:, [0]] <= 30, axis=1)).T]  # z is less then 30 m
-        info["Removed rows containing 0 or below Fs or Qc values"] = not np.alltrue(
-            data[:, [1, 2]] > 0
-        )
-        data = data[np.all(data[:, [1, 2]] > 0, axis=1)]  # delete rows with zero qc, fs
+        below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
+        info["Removed rows"] = np.where(below_30_filter == False)[0]
+        data = data[below_30_filter.T]  # z is less then 30 m
+        zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
+        info["Removed rows"] = np.concatenate(
+            (
+                (np.where(zero_filter == False)[0]),
+                info["Removed rows"],
+            )
+        ).tolist()
+        data = data[zero_filter]  # delete rows with zero qc, fs
 
         if len(data) == 0:
             raise Exception("CPT File has no valid lines")

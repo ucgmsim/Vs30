@@ -1,0 +1,37 @@
+.scroll-tbl {
+    max-height: 26.3vw;
+    overflow-y: scroll;
+}
+
+::-webkit-scrollbar {
+    display: none;
+}
+
+.col-size {
+    width: 7vw;
+}
+
+.cpt-raw {
+    margin-bottom: 0.1vw !important;
+}
+
+.tbl-width {
+    width: 28vw;
+    border-left-width: 0 !important;
+    border-right-width: 0 !important;
+    padding: 0 !important;
+}
+
+.bold {
+    font-weight: bold;
+}
+
+.highlight {
+    background-color: rgba(255, 0, 0, 0.2) !important;
+    border: 3px solid rgba(255, 0, 0, 0.719) !important;
+}
+
+.info {
+    margin-top: 0 !important; 
+    height: 5vw;
+}
