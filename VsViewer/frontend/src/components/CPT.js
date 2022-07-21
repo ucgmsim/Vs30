@@ -77,7 +77,7 @@ const CPT = () => {
 
   // Get Correlations on page load
   if (correlationsOptions.length == 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CORRELATIONS_ENDPOINT, {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
       const responseData = await response.json();

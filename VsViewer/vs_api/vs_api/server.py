@@ -27,5 +27,6 @@ logging.getLogger("matplotlib").setLevel(logging.ERROR)
 
 # Add the endpoints
 from api import cpt
+from api import spt
 from api import plots
 from api import vs_profile

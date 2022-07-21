@@ -1,13 +1,39 @@
 .add-spt {
-    height: 40vw;
+    margin-top: 1.5vw !important;
+    height: 38vw;
+}
+
+.spt-file-input {
+    margin-top: 1vw;
+    margin-left: 5vw;
+}
+
+.form-label {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    margin-top: 1.5vw;
+}
+
+.text-input {
+    margin-top: -0.3vw;
+    width: 10vw;
+}
+
+.spt-select {
+    width: 15vw;
+}
+
+.add-spt-btn {
+    margin-top: 2vw;
 }
 
 .spt-plot-section {
-    height: 40vw;
+    margin-top: 1.5vw !important;
+    height: 38vw;
 }
 
 .spt-plot {
-    height: 36vw;
+    height: 38vw;
     width: 50vw;
 }
 
@@ -19,7 +45,6 @@
 
 .spt-top {
     height: 40vw;
-    margin-top: 1vw;
 }
 
 .spt-bot {
@@ -28,7 +53,7 @@
 }
 
 .vs-preview-section-spt {
-    /* margin-right: 17vw; */
+    margin-right: 17vw;
     padding-bottom: 1vw;
     height: 37vw;
 }
@@ -39,9 +64,9 @@
 }
 
 .weights-spt {
+    margin-left: 18vw;
     padding-top: 1vw;
     padding-bottom: 1vw;
-    /* margin-left: -2.5vw; */
     height: 36vw;
 }
 

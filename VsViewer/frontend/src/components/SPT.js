@@ -1,4 +1,8 @@
-import React, { memo, useState, Select } from "react";
+import React, { memo, useState, useContext } from "react";
+import Select from "react-select";
+
+import { GlobalContext } from "context";
+import * as CONSTANTS from "Constants";
 
 import "assets/spt.css";
 import {
@@ -7,16 +11,144 @@ import {
 } from "components";
 
 const SPT = () => {
+  const {
+    sptData,
+    setSPTData,
+    sptMidpointData,
+    setSptMidpointData,
+    vsProfileMidpointData,
+    setVsProfileMidpointData,
+  } = useContext(GlobalContext);
 
+  // SPT Plot
+  const [selectedSptPlot, setSelectedSptPlot] = useState(null);
+  const [sptPlotData, setSptPlotData] = useState({});
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
   // Form variables
+  const [file, setFile] = useState("");
+  const [boreholeDiameter, setBoreholeDiameter] = useState(150);
+  const [energyRatio, setEnergyRatio] = useState("");
+  const [sptOptions, setSPTOptions] = useState([]);
   const [sptWeights, setSptWeights] = useState({});
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
+  const [hammerTypeOptions, setHammerTypeOptions] = useState([]);
+  const [hammerType, setHammerType] = useState(null);
+  const [soilTypeOptions, setSoilTypeOptions] = useState([]);
+  const [soilType, setSoilType] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+
+  // Get HammerTypes on page load
+  if (correlationsOptions.length == 0) {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_HAMMER_TYPES_ENDPOINT, {
+      method: "GET",
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set HammerType Select Dropdown
+      let tempOptionArray = [];
+      for (const value of Object.values(responseData)) {
+        tempOptionArray.push({ value: value, label: value });
+      }
+      setHammerTypeOptions(tempOptionArray);
+    });
+  }
+
+  // Get SoilTypes on page load
+  if (correlationsOptions.length == 0) {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SOIL_TYPES_ENDPOINT, {
+      method: "GET",
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set SoilTypes Select Dropdown
+      let tempOptionArray = [];
+      for (const value of Object.values(responseData)) {
+        tempOptionArray.push({ value: value, label: value });
+      }
+      setSoilTypeOptions(tempOptionArray);
+    });
+  }
+
+  // Get Correlations on page load
+  if (correlationsOptions.length == 0) {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SPT_CORRELATIONS_ENDPOINT, {
+      method: "GET",
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set Correlation Select Dropdown
+      let tempOptionArray = [];
+      for (const value of Object.values(responseData)) {
+        tempOptionArray.push({ value: value, label: value });
+      }
+      setCorrelationsOptions(tempOptionArray);
+    });
+  }
+
+  const sendProcessRequest = async () => {
+    setLoading(true);
+    const formData = new FormData();
+    formData.append(file.name, file);
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
+      method: "POST",
+      body: formData,
+    }).then(async (response) => {
+      const responseData = await response.json();
+      setSPTData(responseData);
+      // Set SPT Select Dropdown
+      let tempOptionArray = [];
+      for (const key of Object.keys(responseData)) {
+        tempOptionArray.push({
+          value: responseData[key],
+          label: responseData[key]["name"],
+        });
+      }
+      setSPTOptions(tempOptionArray);
+    });
+    // Reset SPT Plot
+    setSelectedSptPlot(null);
+    setSptPlotData({});
+    setVsProfilePlotData({});
+    setLoading(false);
+  };
+
+  const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_MIDPOINT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(vsProfileToSend),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Add to MidpointData
+      let tempMidpointData = vsProfileMidpointData;
+      for (const key of Object.keys(responseData)) {
+        tempMidpointData[key] = responseData[key];
+      }
+      setVsProfileMidpointData(tempMidpointData);
+    });
+  };
+
+  const sendVsProfileRequest = async (correlationsToSend) => {
+    const jsonBody = {
+      spts: sptData,
+      correlations: correlationsToSend,
+    };
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VSPROFILE_FROM_SPT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(jsonBody),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Add to vsProfileData
+      let tempVsProfileData = vsProfileData;
+      for (const key of Object.keys(responseData)) {
+        tempVsProfileData[key] = responseData[key];
+      }
+      setVsProfileData(tempVsProfileData);
+    });
+  };
 
   const addToVsProfilePlot = async (selectedCorrelations) => {
     let correlationsToSend = [];
@@ -31,11 +163,11 @@ const SPT = () => {
     // Check if new midpoint requests are needed
     let vsProfileToSend = [];
     selectedCorrelations.forEach((entry) => {
-      for (const cptKey of Object.keys(cptData)) {
+      for (const sptKey of Object.keys(sptData)) {
         if (
-          !vsProfileMidpointData.hasOwnProperty(cptKey + "_" + entry["label"])
+          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
-          vsProfileToSend.push(vsProfileData[cptKey + "_" + entry["label"]]);
+          vsProfileToSend.push(vsProfileData[sptKey + "_" + entry["label"]]);
         }
       }
     });
@@ -45,9 +177,9 @@ const SPT = () => {
     // Adds to Plot data from midpoint data
     let tempPlotData = {};
     selectedCorrelations.forEach((entry) => {
-      for (const cptKey of Object.keys(cptData)) {
-        tempPlotData[cptKey + "_" + entry["label"]] =
-          vsProfileMidpointData[cptKey + "_" + entry["label"]];
+      for (const sptKey of Object.keys(sptData)) {
+        tempPlotData[sptKey + "_" + entry["label"]] =
+          vsProfileMidpointData[sptKey + "_" + entry["label"]];
       }
     });
     setVsProfilePlotData(tempPlotData);
@@ -73,10 +205,49 @@ const SPT = () => {
     setCorrelationWeights(newWeights);
   };
 
-  return <div>
+  return (
+  <div>
     <div className="row two-column-row center-elm spt-top">
-      <div className="outline col-3 add-spt">
-        Add SPT
+      <div className="outline col-3 add-spt center-elm">
+        <div className="form-section-title">Upload SPT file</div>
+        <input
+          className="spt-file-input"
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+        />
+        <div className="form-label">Borehole Diameter</div>
+        <input
+          className="text-input"
+          value={boreholeDiameter}
+        />
+        <div className="form-label">Energy Ratio</div>
+        <input
+          className="text-input"
+          value={energyRatio}
+        />
+        <div className="form-label">Hammer Type</div>
+        <Select
+          className="spt-select"
+          placeholder="Select Hammer Type"
+          options={hammerTypeOptions}
+          isDisabled={hammerTypeOptions.length === 0}
+          onChange={(e) => setHammerType(e)}
+        />
+        <div className="form-label">Soil Type</div>
+        <Select
+          className="spt-select"
+          placeholder="Select Soil Type"
+          options={soilTypeOptions}
+          isDisabled={soilTypeOptions.length === 0}
+          onChange={(e) => setSoilType(e)}
+        />
+        <button
+          disabled={loading}
+          className="form btn btn-primary add-spt-btn"
+          onClick={() => sendProcessRequest()}
+        >
+          Add SPT
+        </button>
       </div>
       <div className="col-7 center-elm spt-plot-section">
         <div className="outline spt-plot">
@@ -123,7 +294,7 @@ const SPT = () => {
             Set Weights
           </button>
         </div>
-        <div className="col-7 vs-preview-section-spt center-elm">
+        <div className="col-4 vs-preview-section-spt center-elm">
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot-spt">
             {Object.keys(vsProfilePlotData).length > 0 && (
@@ -132,7 +303,8 @@ const SPT = () => {
           </div>
         </div>
       </div>
-  </div>;
+  </div>
+  );
 };
 
 export default memo(SPT);
