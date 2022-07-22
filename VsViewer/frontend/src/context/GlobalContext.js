@@ -12,6 +12,9 @@ export const Provider = (props) => {
   // VsProfile
   const [vsProfileMidpointData, setVsProfileMidpointData] = useState({});
 
+  // SPT Data
+  const [sptData, setSPTData] = useState([]);
+
   // Make the context object:
   const globalContext = {
     // CPT Data
@@ -23,6 +26,10 @@ export const Provider = (props) => {
     setCptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+
+    // SPT Data
+    sptData,
+    setSPTData,
   };
 
   // pass the value in provider and return

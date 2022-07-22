@@ -4,6 +4,7 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
+from VsViewer.vs_calc.SPT import SPT
 from VsViewer.vs_calc.utils import convert_to_midpoint
 
 
@@ -65,3 +66,30 @@ def vs_profile_to_midpoint():
             "VsSDAbove": vs_sd_above,
         }
     return flask.jsonify(vs_profile_dict)
+
+
+@server.app.route(const.SPT_MIDPOINT_ENDPOINT, methods=["POST"])
+@cross_origin(expose_headers=["Content-Type", "Authorization"])
+@utils.endpoint_exception_handling(server.app)
+def spt_to_midpoint():
+    """
+    Converts SPT data to midpoint data for plotting
+    """
+    server.app.logger.info(f"Received request at {const.SPT_MIDPOINT_ENDPOINT}")
+
+    json_array = flask.request.json
+    spt_dict = dict()
+    for spt_data in json_array:
+        spt = SPT.from_json(spt_data["value"])
+        n, depth = convert_to_midpoint(
+            spt.N, spt.depth
+        )
+        n60, _ = convert_to_midpoint(
+            spt.N60, spt.depth
+        )
+        spt_dict[spt_data["label"]] = {
+            "Depth": depth,
+            "N": n,
+            "N60": n60,
+        }
+    return flask.jsonify(spt_dict)

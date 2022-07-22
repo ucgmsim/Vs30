@@ -100,12 +100,20 @@ class SPT:
         return SPT(spt_ffp.stem, data[:, 0], data[:, 1])
 
     @staticmethod
-    def from_byte_stream(file_name: str, stream: bytes):
+    def from_byte_stream_form(file_name: str, stream: bytes, form: dict):
         """
-        Creates an SPT from a file stream
+        Creates an SPT from a file stream and form data
         """
         csv_data = pd.read_csv(BytesIO(stream))
-        return SPT(Path(file_name).stem, csv_data["Depth"], csv_data["NValue"])
+        return SPT(
+            Path(file_name).stem,
+            csv_data["Depth"],
+            csv_data["NValue"],
+            None if form["hammerType"] == "" else HammerType[form["hammerType"]],
+            form["boreholeDiameter"],
+            None if form["energyRatio"] == "" else form["energyRatio"],
+            None if form["soilType"] == "" else SoilType[form["soilType"]],
+        )
 
     @staticmethod
     def calc_n60_variables(
