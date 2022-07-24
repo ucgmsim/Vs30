@@ -73,7 +73,7 @@ class SPT:
         """
         Creates a SPT from a json dictionary string
         """
-        name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type, n60 = (
+        spt = SPT(
             json["name"],
             np.asarray(json["depth"]),
             np.asarray(json["N"]),
@@ -81,13 +81,8 @@ class SPT:
             float(json["borehole_diameter"]),
             float(json["energy_ratio"]),
             SoilType[json["soil_type"]],
-            None if json["N60"] is None else np.asarray(json["N60"]),
         )
-        spt = SPT(
-            name, depth, N, hammer_type, borehole_diameter, energy_ratio, soil_type
-        )
-        if n60 is not None:
-            spt._n60 = n60
+        spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
         return spt
 
     @staticmethod
