@@ -370,7 +370,6 @@ const SPT = () => {
           <div className="center-elm">
             <div className="spt-plot-title">SPT Plot</div>
             <Select
-              className="select-box"
               placeholder="Select your SPT's"
               isMulti={true}
               options={sptOptions}
@@ -389,7 +388,7 @@ const SPT = () => {
       <div className="hr" />
       <div className="center-elm">
         <Select
-          className="select-cor select-box"
+          className="select-cor"
           placeholder="Select Correlations"
           isMulti={true}
           options={correlationsOptions}
