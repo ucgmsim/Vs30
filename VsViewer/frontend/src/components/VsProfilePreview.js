@@ -18,6 +18,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
         line: { color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10] },
         name: name,
         hoverinfo: "none",
+        legendgroup: name,
       });
       // Standard Deviations
       VsArr.push({
@@ -31,6 +32,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
         },
         hoverinfo: "none",
         showlegend: false,
+        legendgroup: name,
       });
       VsArr.push({
         x: vsProfilePlotData[name]["VsSDBelow"],
@@ -43,6 +45,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
         },
         hoverinfo: "none",
         showlegend: false,
+        legendgroup: name,
       });
       colourCounter += 1;
     }

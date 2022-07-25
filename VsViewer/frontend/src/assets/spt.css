@@ -1,5 +1,6 @@
 .add-spt {
     margin-top: 1.5vw !important;
+    margin-left: -3vw;
     height: 38vw;
 }
 
@@ -28,18 +29,40 @@
     margin-top: 2vw;
 }
 
+.spt-table-section {
+    margin-top: 0.5vw !important;
+    margin-right: 3.5vw;
+    height: 39vw;
+}
+
+.spt-table {
+    margin-top: 1vw;
+    height: 34vw;
+    width: 30vw;
+}
+
 .spt-plot-section {
     margin-top: 0.5vw !important;
-    height: 38vw;
+    margin-right: 0.2vw;
+    height: 39vw;
 }
 
 .spt-plot {
-    height: 38vw;
-    width: 50vw;
+    margin-top: 1vw;
+    height: 39vw;
+    width: 39vw;
+}
+
+.select-box {
+    width: 20vw;
 }
 
 .spt-plot-title {
-    /* margin-top: 0.5vw; */
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.spt-table-title {
     font-size: calc(12px + 0.4vw);
     font-weight: 700;
 }

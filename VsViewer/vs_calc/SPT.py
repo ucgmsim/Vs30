@@ -30,6 +30,12 @@ class SPT:
         self.borehole_diameter = borehole_diameter
         self.energy_ratio = energy_ratio
         self.soil_type = soil_type
+        self.info = {
+            "z_min": depth[0],
+            "z_max": depth[-1],
+            "z_spread": depth[-1] - depth[0],
+            "Removed rows": [],
+        }
 
         # spt parameter info init for lazy loading
         self._n60 = None
@@ -65,7 +71,8 @@ class SPT:
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
             "soil_type": self.soil_type.name,
-            "N60": None if self._n60 is None else self._n60.tolist(),
+            "info": self.info,
+            "N60": self.N60.tolist(),
         }
 
     @staticmethod
@@ -79,7 +86,7 @@ class SPT:
             np.asarray(json["N"]),
             HammerType[json["hammer_type"]],
             float(json["borehole_diameter"]),
-            float(json["energy_ratio"]),
+            None if json["energy_ratio"] is None else float(json["energy_ratio"]),
             SoilType[json["soil_type"]],
         )
         spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
@@ -102,12 +109,14 @@ class SPT:
         csv_data = pd.read_csv(BytesIO(stream))
         return SPT(
             Path(file_name).stem,
-            csv_data["Depth"],
-            csv_data["NValue"],
-            None if form["hammerType"] == "" else HammerType[form["hammerType"]],
+            np.asarray(csv_data["Depth"]),
+            np.asarray(csv_data["NValue"]),
+            HammerType.Auto
+            if form["hammerType"] == ""
+            else HammerType[form["hammerType"]],
             form["boreholeDiameter"],
             None if form["energyRatio"] == "" else form["energyRatio"],
-            None if form["soilType"] == "" else SoilType[form["soilType"]],
+            SoilType.Clay if form["soilType"] == "" else SoilType[form["soilType"]],
         )
 
     @staticmethod

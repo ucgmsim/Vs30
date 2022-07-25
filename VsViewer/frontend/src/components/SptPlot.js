@@ -30,7 +30,7 @@ const SPTPlot = ({ sptPlotData }) => {
     return (
       <div className="row two-column-row spt-plots">
         <Plot
-          className={"col-4 single-plot"}
+          className={"col-6 single-plot"}
           data={NArr}
           config={{ displayModeBar: false }}
           layout={{
@@ -53,7 +53,7 @@ const SPTPlot = ({ sptPlotData }) => {
                 size: 14,
               },
             },
-            title: "Qc",
+            title: "N",
             titlefont: {
               size: 22,
             },
@@ -70,7 +70,7 @@ const SPTPlot = ({ sptPlotData }) => {
           useResizeHandler={true}
         />
         <Plot
-          className={"col-4 single-plot"}
+          className={"col-6 single-plot"}
           data={N60Arr}
           config={{ displayModeBar: false }}
           layout={{
@@ -93,7 +93,7 @@ const SPTPlot = ({ sptPlotData }) => {
                 size: 14,
               },
             },
-            title: "Fs",
+            title: "N60",
             titlefont: {
               size: 22,
             },
@@ -105,7 +105,8 @@ const SPTPlot = ({ sptPlotData }) => {
               t: 40,
               pad: 1,
             },
-            showlegend: false,
+            showlegend: true,
+            legend: { x: 0.7, y: 1.06 },
           }}
           useResizeHandler={true}
         />

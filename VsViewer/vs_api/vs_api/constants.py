@@ -5,6 +5,7 @@ CPT_MIDPOINT_ENDPOINT = "/api/plot/cpt/midpoint"
 
 # VsProfile endpoints
 VSPROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create"
+VSPROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create"
 VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint"
 
 # SPT endpoints

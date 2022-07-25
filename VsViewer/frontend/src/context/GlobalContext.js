@@ -13,7 +13,8 @@ export const Provider = (props) => {
   const [vsProfileMidpointData, setVsProfileMidpointData] = useState({});
 
   // SPT Data
-  const [sptData, setSPTData] = useState([]);
+  const [sptData, setSPTData] = useState({});
+  const [sptMidpointData, setSptMidpointData] = useState({});
 
   // Make the context object:
   const globalContext = {
@@ -24,6 +25,8 @@ export const Provider = (props) => {
     // Plotting
     cptMidpointData,
     setCptMidpointData,
+    sptMidpointData,
+    setSptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
 
