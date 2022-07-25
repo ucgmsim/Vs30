@@ -2,7 +2,6 @@ import argparse
 from typing import List
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 from VsViewer.vs_calc import CPT, utils
 
@@ -38,9 +37,6 @@ def plot_cpt(cpts: List[CPT], output_ffp: str):
 
 
 def main():
-    """
-    Gather metadata from each realisation and outputs to a csv
-    """
     # Get args
     parser = argparse.ArgumentParser()
     parser.add_argument(

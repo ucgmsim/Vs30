@@ -23,6 +23,6 @@ def create_vsprofile_from_cpt():
         for correlation in json["correlations"]:
             vs_profile = VsProfile.from_cpt(cpt, correlation)
             response_dict[
-                f"{vs_profile.cpt_name}_{vs_profile.correlation}"
+                f"{vs_profile.name}_{vs_profile.correlation}"
             ] = vs_profile.to_json()
     return flask.jsonify(response_dict)
