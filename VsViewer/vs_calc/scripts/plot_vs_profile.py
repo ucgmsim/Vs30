@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import CPT, VsProfile, utils, CORRELATIONS
+from VsViewer.vs_calc import CPT, VsProfile, utils, CPT_CORRELATIONS
 
 
 def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
@@ -22,7 +22,7 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
             *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),
             linewidth=2.5,
             color=default_colours[ix],
-            label=f"{vs_profile.cpt_name}_{vs_profile.correlation}",
+            label=f"{vs_profile.name}_{vs_profile.correlation}",
         )
         # Standard Deviations
         ax.plot(
@@ -49,9 +49,6 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
 
 
 def main():
-    """
-    Gather metadata from each realisation and outputs to a csv
-    """
     # Get args
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -66,7 +63,7 @@ def main():
         type=str,
         nargs="+",
         required=True,
-        choices=CORRELATIONS.keys(),
+        choices=CPT_CORRELATIONS.keys(),
         help="The correlation names",
     )
     parser.add_argument(
