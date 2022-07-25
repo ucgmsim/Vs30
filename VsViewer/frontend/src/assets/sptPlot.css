@@ -1,6 +1,7 @@
 .spt-plots {
     padding-top: 0.5vw;
-    padding-left: 1vw;
+    padding-left: 0.5vw;
+    margin-right: 2vw !important;
     display: flex;
     flex-direction: row;
     align-items: center;
