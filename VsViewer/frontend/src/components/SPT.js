@@ -1,11 +1,16 @@
-import React, { memo, useState, useContext } from "react";
+import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/spt.css";
-import { WeightTable, VsProfilePreviewPlot, SPTPlot } from "components";
+import {
+  WeightTable,
+  VsProfilePreviewPlot,
+  SPTPlot,
+  SptTable,
+} from "components";
 
 const SPT = () => {
   const {
@@ -20,6 +25,9 @@ const SPT = () => {
   // SPT Plot
   const [selectedSptPlot, setSelectedSptPlot] = useState(null);
   const [sptPlotData, setSptPlotData] = useState({});
+  // SPT Table
+  const [selectedSptTable, setSelectedSptTable] = useState(null);
+  const [selectedSptTableData, setSelectedSptTableData] = useState(null);
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
@@ -38,6 +46,37 @@ const SPT = () => {
   const [soilType, setSoilType] = useState(null);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+
+  // Set the SPT Weights
+  useEffect(() => {
+    if (sptOptions.length > 0) {
+      let tempSptWeights = {};
+      sptOptions.forEach((entry) => {
+        tempSptWeights[entry["label"]] = 1 / sptOptions.length;
+      });
+      setSptWeights(tempSptWeights);
+    }
+  }, [sptOptions]);
+
+  // Set the Correlation Weights
+  useEffect(() => {
+    if (selectedCorrelations.length > 0) {
+      let tempCorWeights = {};
+      selectedCorrelations.forEach((entry) => {
+        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      });
+      setCorrelationWeights(tempCorWeights);
+    }
+  }, [selectedCorrelations]);
+
+  // Check the user can set Weights
+  useEffect(() => {
+    if (selectedCorrelations.length > 0 && sptOptions.length > 0) {
+      setCanSet(true);
+    } else {
+      setCanSet(false);
+    }
+  }, [selectedCorrelations, sptOptions]);
 
   // Get HammerTypes on page load
   if (hammerTypeOptions.length == 0) {
@@ -93,8 +132,8 @@ const SPT = () => {
       JSON.stringify({
         boreholeDiameter: boreholeDiameter,
         energyRatio: energyRatio,
-        hammerType: hammerType === null ? null : hammerType["value"],
-        soilType: soilType === null ? null : soilType["value"],
+        hammerType: hammerType === null ? "" : hammerType["value"],
+        soilType: soilType === null ? "" : soilType["value"],
       })
     );
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
@@ -102,20 +141,27 @@ const SPT = () => {
       body: formData,
     }).then(async (response) => {
       const responseData = await response.json();
-      setSPTData(responseData);
-      // Set SPT Select Dropdown
-      let tempOptionArray = [];
-      debugger
+      // Add to SPT Select Dropdown and SPT Data
+      let tempOptions = [];
+      let tempSPTData = sptData;
+      for (const sptOption of sptOptions) {
+        tempOptions.push({
+          value: sptOption["value"],
+          label: sptOption["label"],
+        });
+      }
       for (const key of Object.keys(responseData)) {
-        tempOptionArray.push({
+        tempOptions.push({
           value: responseData[key],
           label: responseData[key]["name"],
         });
+        tempSPTData[key] = responseData[key];
       }
-      setSPTOptions(tempOptionArray);
+      setSPTOptions(tempOptions);
+      setSPTData(tempSPTData);
     });
-    debugger
     setLoading(false);
+    addToVsProfilePlot(selectedCorrelations);
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -157,8 +203,12 @@ const SPT = () => {
   const addToVsProfilePlot = async (selectedCorrelations) => {
     let correlationsToSend = [];
     selectedCorrelations.forEach((entry) => {
-      if (!vsProfileData.hasOwnProperty(entry["label"])) {
-        correlationsToSend.push(entry["label"]);
+      for (const sptKey of Object.keys(sptData)) {
+        if (
+          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
+        ) {
+          correlationsToSend.push(entry["label"]);
+        }
       }
     });
     if (correlationsToSend.length > 0) {
@@ -232,6 +282,11 @@ const SPT = () => {
     addToVsProfilePlot(e);
   };
 
+  const onSelectSptTable = (e) => {
+    setSelectedSptTable(e);
+    setSelectedSptTableData(sptData[e["label"]]);
+  };
+
   const checkWeights = () => {
     console.log("Checking Weights");
     // Will add functionality when Results page is started
@@ -249,7 +304,7 @@ const SPT = () => {
 
   return (
     <div>
-      <div className="row two-column-row center-elm spt-top">
+      <div className="row three-column-row center-elm spt-top">
         <div className="outline col-3 add-spt center-elm">
           <div className="form-section-title">Upload SPT file</div>
           <input
@@ -258,9 +313,17 @@ const SPT = () => {
             onChange={(e) => setFile(e.target.files[0])}
           />
           <div className="form-label">Borehole Diameter</div>
-          <input className="text-input" value={boreholeDiameter} onChange={(e) => setBoreholeDiameter(e.target.value)} />
+          <input
+            className="text-input"
+            value={boreholeDiameter}
+            onChange={(e) => setBoreholeDiameter(e.target.value)}
+          />
           <div className="form-label">Energy Ratio</div>
-          <input className="text-input" value={energyRatio} onChange={(e) => setEnergyRatio(e.target.value)}/>
+          <input
+            className="text-input"
+            value={energyRatio}
+            onChange={(e) => setEnergyRatio(e.target.value)}
+          />
           <div className="form-label">Hammer Type</div>
           <Select
             className="spt-select"
@@ -285,11 +348,29 @@ const SPT = () => {
             Add SPT
           </button>
         </div>
-        <div className="col-7 center-elm spt-plot-section">
+        <div className="col-2 center-elm spt-table-section">
+          <div className="center-elm">
+            <div className="spt-table-title">SPT Table</div>
+            <Select
+              className="select-box"
+              placeholder="Select your SPT's"
+              options={sptOptions}
+              isDisabled={sptOptions.length === 0}
+              value={selectedSptTable}
+              onChange={(e) => onSelectSptTable(e)}
+            ></Select>
+          </div>
+          <div className="outline spt-table">
+            {Object.keys(sptData).length > 0 && selectedSptTable !== null && (
+              <SptTable sptTableData={selectedSptTableData} />
+            )}
+          </div>
+        </div>
+        <div className="col-4 center-elm spt-plot-section">
           <div className="center-elm">
             <div className="spt-plot-title">SPT Plot</div>
             <Select
-              className="select-spt"
+              className="select-box"
               placeholder="Select your SPT's"
               isMulti={true}
               options={sptOptions}
@@ -300,7 +381,7 @@ const SPT = () => {
           </div>
           <div className="outline spt-plot">
             {Object.keys(sptPlotData).length > 0 && (
-              <SPTPlot sptPlotData={sptPlotData}/>
+              <SPTPlot sptPlotData={sptPlotData} />
             )}
           </div>
         </div>
@@ -308,7 +389,7 @@ const SPT = () => {
       <div className="hr" />
       <div className="center-elm">
         <Select
-          className="select-cor"
+          className="select-cor select-box"
           placeholder="Select Correlations"
           isMulti={true}
           options={correlationsOptions}

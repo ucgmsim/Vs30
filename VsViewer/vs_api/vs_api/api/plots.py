@@ -58,7 +58,7 @@ def vs_profile_to_midpoint():
             vs_profile_data["depth"],
         )
         vs_profile_dict[
-            f"{vs_profile_data['cpt_name']}_{vs_profile_data['correlation']}"
+            f"{vs_profile_data['name']}_{vs_profile_data['correlation']}"
         ] = {
             "Depth": depth,
             "Vs": vs,
@@ -81,12 +81,8 @@ def spt_to_midpoint():
     spt_dict = dict()
     for spt_data in json_array:
         spt = SPT.from_json(spt_data["value"])
-        n, depth = convert_to_midpoint(
-            spt.N, spt.depth
-        )
-        n60, _ = convert_to_midpoint(
-            spt.N60, spt.depth
-        )
+        n, depth = convert_to_midpoint(spt.N, spt.depth)
+        n60, _ = convert_to_midpoint(spt.N60, spt.depth)
         spt_dict[spt_data["label"]] = {
             "Depth": depth,
             "N": n,

@@ -1,0 +1,32 @@
+.spt-raw {
+  height: 18vw;
+}
+
+.spt-scroll-tbl {
+  max-height: 23.3vw;
+  overflow-y: scroll;
+}
+
+.spt-info {
+  margin-top: 0 !important; 
+  height: 5vw;
+}
+
+.spt-tbl-width {
+  width: 28vw;
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  padding: 0 !important;
+}
+
+.spt-min-max{
+  margin-left: -3.7vw;
+  width: 14vw !important;
+  height: 3vw;
+}
+
+.spt-removed{
+  margin-left: -1vw;
+  width: 13vw !important;
+  height: 3vw;
+}

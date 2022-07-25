@@ -14,10 +14,16 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           }
           key={rowIdx}
         >
-          <td className={rowClassName}>{row["Depth"]}</td>
-          <td className={rowClassName}>{row["Qc"]}</td>
-          <td className={rowClassName}>{row["Fs"]}</td>
-          <td className={rowClassName}>{row["u"]}</td>
+          <td className={rowClassName}>
+            {Math.round(row["Depth"] * 1000) / 1000}
+          </td>
+          <td className={rowClassName}>
+            {Math.round(row["Qc"] * 1000) / 1000}
+          </td>
+          <td className={rowClassName}>
+            {Math.round(row["Fs"] * 1000) / 1000}
+          </td>
+          <td className={rowClassName}>{Math.round(row["u"] * 1000) / 1000}</td>
         </tr>
       );
     });
@@ -59,11 +65,11 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth</td>
-                  <td>{cptInfo["z_min"]}m</td>
+                  <td>{Math.round(cptInfo["z_min"] * 1000) / 1000}m</td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth</td>
-                  <td>{cptInfo["z_max"]}m</td>
+                  <td>{Math.round(cptInfo["z_max"] * 1000) / 1000}m</td>
                 </tr>
               </tbody>
             </table>
@@ -73,7 +79,7 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Depth Spread</td>
-                  <td>{cptInfo["z_spread"]}m</td>
+                  <td>{Math.round(cptInfo["z_spread"] * 1000) / 1000}m</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold">Removed Rows</td>
