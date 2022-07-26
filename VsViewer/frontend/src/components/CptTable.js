@@ -1,5 +1,7 @@
 import React, { memo } from "react";
 
+import * as Utils from "Utils";
+
 import "assets/cptTable.css";
 
 const CPTTable = ({ cptTableData, cptInfo }) => {
@@ -15,15 +17,15 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           key={rowIdx}
         >
           <td className={rowClassName}>
-            {Math.round(row["Depth"] * 1000) / 1000}
+            {Utils.roundValue(row["Depth"])}
           </td>
           <td className={rowClassName}>
-            {Math.round(row["Qc"] * 1000) / 1000}
+            {Utils.roundValue(row["Qc"])}
           </td>
           <td className={rowClassName}>
-            {Math.round(row["Fs"] * 1000) / 1000}
+            {Utils.roundValue(row["Fs"])}
           </td>
-          <td className={rowClassName}>{Math.round(row["u"] * 1000) / 1000}</td>
+          <td className={rowClassName}>{Utils.roundValue(row["u"])}</td>
         </tr>
       );
     });
@@ -65,11 +67,11 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth</td>
-                  <td>{Math.round(cptInfo["z_min"] * 1000) / 1000}m</td>
+                  <td>{Utils.roundValue(cptInfo["z_min"])}m</td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth</td>
-                  <td>{Math.round(cptInfo["z_max"] * 1000) / 1000}m</td>
+                  <td>{Utils.roundValue(cptInfo["z_max"])}m</td>
                 </tr>
               </tbody>
             </table>
@@ -79,7 +81,7 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Depth Spread</td>
-                  <td>{Math.round(cptInfo["z_spread"] * 1000) / 1000}m</td>
+                  <td>{Utils.roundValue(cptInfo["z_spread"])}m</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold">Removed Rows</td>
