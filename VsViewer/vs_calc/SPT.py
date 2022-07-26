@@ -34,7 +34,7 @@ class SPT:
             "z_min": depth[0],
             "z_max": depth[-1],
             "z_spread": depth[-1] - depth[0],
-            "Removed rows": [],
+            "removed_rows": [],
         }
 
         # spt parameter info init for lazy loading

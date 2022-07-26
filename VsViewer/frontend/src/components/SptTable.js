@@ -1,5 +1,7 @@
 import React, { memo } from "react";
 
+import * as Utils from "Utils";
+
 import "assets/sptTable.css";
 
 const SPTTable = ({ sptTableData }) => {
@@ -9,12 +11,12 @@ const SPTTable = ({ sptTableData }) => {
     sptTableData["depth"].forEach((depth, rowIdx) => {
       sptTableRows.push(
         <tr key={rowIdx}>
-          <td className="col-size">{Math.round(depth * 1000) / 1000}</td>
+          <td className="col-size">{Utils.roundValue(depth)}</td>
           <td className="col-size">
-            {Math.round(sptTableData["N"][rowIdx] * 1000) / 1000}
+            {Utils.roundValue(sptTableData["N"][rowIdx])}
           </td>
           <td className="col-size">
-            {Math.round(sptTableData["N60"][rowIdx] * 1000) / 1000}
+            {Utils.roundValue(sptTableData["N60"][rowIdx])}
           </td>
         </tr>
       );
@@ -54,11 +56,11 @@ const SPTTable = ({ sptTableData }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth</td>
-                  <td>{sptInfo["z_min"]}m</td>
+                  <td>{Utils.roundValue(sptInfo["z_min"])}m</td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth</td>
-                  <td>{sptInfo["z_max"]}m</td>
+                  <td>{Utils.roundValue(sptInfo["z_max"])}m</td>
                 </tr>
               </tbody>
             </table>
@@ -68,11 +70,11 @@ const SPTTable = ({ sptTableData }) => {
               <tbody>
                 <tr>
                   <td className="bold">Depth Spread</td>
-                  <td>{sptInfo["z_spread"]}m</td>
+                  <td>{Utils.roundValue(sptInfo["z_spread"])}m</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold">Removed Rows</td>
-                  <td>{sptInfo["Removed rows"].length}</td>
+                  <td>{sptInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>
             </table>
