@@ -79,7 +79,7 @@ const SPT = () => {
   }, [selectedCorrelations, sptOptions]);
 
   // Get HammerTypes on page load
-  if (hammerTypeOptions.length == 0) {
+  if (hammerTypeOptions.length === 0) {
     fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_HAMMER_TYPES_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
@@ -94,7 +94,7 @@ const SPT = () => {
   }
 
   // Get SoilTypes on page load
-  if (soilTypeOptions.length == 0) {
+  if (soilTypeOptions.length === 0) {
     fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SOIL_TYPES_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
@@ -109,7 +109,7 @@ const SPT = () => {
   }
 
   // Get Correlations on page load
-  if (correlationsOptions.length == 0) {
+  if (correlationsOptions.length === 0) {
     fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SPT_CORRELATIONS_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
@@ -185,7 +185,7 @@ const SPT = () => {
       spts: sptData,
       correlations: correlationsToSend,
     };
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VSPROFILE_FROM_SPT_ENDPOINT, {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_FROM_SPT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(jsonBody),
@@ -370,6 +370,7 @@ const SPT = () => {
           <div className="center-elm">
             <div className="spt-plot-title">SPT Plot</div>
             <Select
+              className="select-box"
               placeholder="Select your SPT's"
               isMulti={true}
               options={sptOptions}

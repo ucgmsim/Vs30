@@ -30,7 +30,7 @@
 }
 
 .select-cpt {
-    width: 50%;
+    min-width: 20vw;
     padding-bottom: 0.5vw;
 }
 
@@ -67,7 +67,7 @@
 }
 
 .select-cor {
-    width: 30vw;
+    min-width: 20vw;
     margin-bottom: 1vw;
 }
 

@@ -54,7 +54,7 @@
 }
 
 .select-box {
-    width: 20vw;
+    min-width: 20vw;
 }
 
 .spt-plot-title {

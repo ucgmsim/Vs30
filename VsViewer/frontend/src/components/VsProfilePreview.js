@@ -84,7 +84,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
             pad: 1,
           },
           showlegend: true,
-          legend: { x: 0.7, y: 0.9 },
+          legend: { x: 0.8, y: 1.01 },
         }}
         useResizeHandler={true}
       />

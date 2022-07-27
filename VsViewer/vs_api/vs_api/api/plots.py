@@ -57,9 +57,12 @@ def vs_profile_to_midpoint():
             * np.exp(np.asarray(vs_profile_data["vs_sd"])),
             vs_profile_data["depth"],
         )
-        vs_profile_dict[
-            f"{vs_profile_data['name']}_{vs_profile_data['correlation']}"
-        ] = {
+        vs_profile_name = (
+            vs_profile_data["name"]
+            if vs_profile_data["correlation"] == ""
+            else f"{vs_profile_data['name']}_{vs_profile_data['correlation']}"
+        )
+        vs_profile_dict[vs_profile_name] = {
             "Depth": depth,
             "Vs": vs,
             "VsSDBelow": vs_sd_below,

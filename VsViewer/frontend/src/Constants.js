@@ -9,8 +9,9 @@ export const GET_CPT_CORRELATIONS_ENDPOINT = "/api/cpt/correlations";
 export const CPT_MIDPOINT_ENDPOINT = "/api/plot/cpt/midpoint";
 
 // VsProfile Endpoints
-export const VSPROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create";
-export const VSPROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create";
+export const VS_PROFILE_CREATE_ENDPOINT = "/api/vsprofile/create";
+export const VS_PROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create";
+export const VS_PROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create";
 export const VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint";
 
 // SPT Endpoints
