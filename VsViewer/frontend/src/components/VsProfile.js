@@ -21,6 +21,7 @@ const VsProfile = () => {
   } = useContext(GlobalContext);
 
   // VsProfile Table
+  const [vsProfileInfo, setVsProfileInfo] = useState(null);
   const [vsProfileTableData, setVsProfileTableData] = useState({});
   const [selectedVsProfileTable, setSelectedVsProfileTable] = useState(null);
   const [selectedVsProfileTableData, setSelectedVsProfileTableData] = useState(null);
@@ -137,6 +138,7 @@ const VsProfile = () => {
   const onSelectVsProfileTable = (e) => {
     setSelectedVsProfileTable(e);
     setSelectedVsProfileTableData(vsProfileTableData[e["label"]]);
+    setVsProfileInfo(vsProfileData[e["label"]]["info"]);
   };
 
   const onSetFile = (e) => {
@@ -214,7 +216,7 @@ const VsProfile = () => {
           </div>
           <div className="outline vs-table">
             {Object.keys(vsProfileData).length > 0 && selectedVsProfileTable !== null && (
-              <VsProfileTable vsProfileData={selectedVsProfileTableData} />
+              <VsProfileTable vsProfileData={selectedVsProfileTableData} vsProfileInfo={vsProfileInfo} />
             )}
           </div>
         </div>
