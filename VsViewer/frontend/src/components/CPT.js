@@ -21,6 +21,11 @@ const CPT = () => {
     setCptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+    cptWeights,
+    setCptWeights,
+    setCptResults,
+    setAllCorrelationWeights,
+    allCorrelationWeights,
   } = useContext(GlobalContext);
 
   // CPT Plot
@@ -39,7 +44,6 @@ const CPT = () => {
   const [cptOptions, setCPTOptions] = useState([]);
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
-  const [cptWeights, setCptWeights] = useState({});
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
@@ -244,8 +248,13 @@ const CPT = () => {
   };
 
   const checkWeights = () => {
-    console.log("Checking Weights");
-    // Will add functionality when Results page is started
+    // TODO error checking
+    setCptResults(vsProfileData);
+    let tempAllWeights = allCorrelationWeights;
+    for (const key of Object.keys(correlationWeights)) {
+      tempAllWeights[key] = correlationWeights[key];
+    }
+    setAllCorrelationWeights(tempAllWeights);
   };
 
   // Change the CPT Weights

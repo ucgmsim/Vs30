@@ -1,7 +1,7 @@
 import React from "react";
 import { Tabs, Tab } from "react-bootstrap";
 
-import { CPT, SPT, VsProfile } from "components";
+import { CPT, SPT, VsProfile, Results } from "components";
 import { GlobalContextProvider } from "context";
 
 import "assets/App.css";
@@ -22,6 +22,10 @@ function App() {
 
           <Tab eventKey="vsprofile" title="Vs Profile" tabClassName="tab-fonts">
             <VsProfile />
+          </Tab>
+
+          <Tab eventKey="results" title="Results" tabClassName="tab-fonts">
+            <Results />
           </Tab>
         </Tabs>
       </div>

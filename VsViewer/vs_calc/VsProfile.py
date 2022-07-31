@@ -1,4 +1,5 @@
 from io import BytesIO
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -8,7 +9,6 @@ from .SPT import SPT
 from .utils import convert_to_midpoint
 from .spt_vs_correlations import SPT_CORRELATIONS
 from .cpt_vs_correlations import CPT_CORRELATIONS
-
 
 # Coefficients from the Boore et al. (2011) paper for conversion from VsZ to Vs30
 VS30_COEFFS = np.array(
@@ -122,6 +122,19 @@ class VsProfile:
             spt.name, correlation, vs.squeeze(), vs_sd.squeeze(), spt.depth
         )
 
+    @staticmethod
+    def from_json(json: Dict):
+        """
+        Creates a VsProfile from a json dictionary string
+        """
+        return VsProfile(
+            json["name"],
+            json["correlation"],
+            np.asarray(json["vs"]),
+            np.asarray(json["vs_sd"]),
+            np.asarray(json["depth"]),
+        )
+
     def to_json(self):
         """
         Creates a json response dictionary from the VsProfile
@@ -194,7 +207,7 @@ class VsProfile:
             max_depth = int(self.max_depth)
             index = max_depth - 5
             if index < 0:
-                raise IndexError("CPT is not deep enough")
+                raise IndexError("VsProfile is not deep enough")
             C0, C1, C2, SD = VS30_COEFFS[index]
 
             # Compute Vs30 and Vs30_sd
@@ -207,3 +220,6 @@ class VsProfile:
             vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
 
         return vs30, vs30_sd
+
+
+VS_PROFILE_CORRELATIONS = {"boore_2011": "boore_2011"}

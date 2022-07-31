@@ -20,6 +20,11 @@ const SPT = () => {
     setSptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+    sptWeights,
+    setSptWeights,
+    setSptResults,
+    setAllCorrelationWeights,
+    allCorrelationWeights,
   } = useContext(GlobalContext);
 
   // SPT Plot
@@ -36,7 +41,6 @@ const SPT = () => {
   const [boreholeDiameter, setBoreholeDiameter] = useState(150);
   const [energyRatio, setEnergyRatio] = useState("");
   const [sptOptions, setSPTOptions] = useState([]);
-  const [sptWeights, setSptWeights] = useState({});
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
@@ -288,8 +292,13 @@ const SPT = () => {
   };
 
   const checkWeights = () => {
-    console.log("Checking Weights");
-    // Will add functionality when Results page is started
+    // TODO error checking
+    setSptResults(vsProfileData);
+    let tempAllWeights = allCorrelationWeights;
+    for (const key of Object.keys(correlationWeights)) {
+      tempAllWeights[key] = correlationWeights[key];
+    }
+    setAllCorrelationWeights(tempAllWeights);
   };
 
   // Change the SPT Weights
