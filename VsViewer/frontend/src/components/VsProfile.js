@@ -18,6 +18,9 @@ const VsProfile = () => {
     setVsProfileData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+    vsProfileWeights,
+    setVsProfileWeights,
+    setVsProfileResults,
   } = useContext(GlobalContext);
 
   // VsProfile Table
@@ -32,7 +35,6 @@ const VsProfile = () => {
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
-  const [VsProfileWeights, setVsProfileWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
 
@@ -147,12 +149,12 @@ const VsProfile = () => {
   };
 
   const checkWeights = () => {
-    console.log("Checking Weights");
-    // Will add functionality when Results page is started
+    // TODO error checking
+    setVsProfileResults(vsProfileData);
   };
 
-  // Change the SPT Weights
-  const changeSPTWeights = (newWeights) => {
+  // Change the vsProfile Weights
+  const changeVsProfileWeights = (newWeights) => {
     setVsProfileWeights(newWeights);
   };
 
@@ -186,10 +188,10 @@ const VsProfile = () => {
           <div className="vs-weight-title">VsProfile Weights</div>
           <div className="outline center-elm vs-weights">
             <div className="vs-weight-area">
-              {Object.keys(VsProfileWeights).length > 0 && (
+              {Object.keys(vsProfileWeights).length > 0 && (
               <WeightTable
-                weights={VsProfileWeights}
-                setFunction={changeSPTWeights}
+                weights={vsProfileWeights}
+                setFunction={changeVsProfileWeights}
               />
               )}
             </div>

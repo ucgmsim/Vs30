@@ -1,0 +1,119 @@
+.add-vs {
+    margin-top: 1.5vw !important;
+    height: 27vw;
+    width: 22vw;
+}
+
+.vs-file-input {
+    margin-top: 1vw;
+    margin-left: 5vw;
+}
+
+.form-label {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    margin-top: 1vw;
+}
+
+.text-input {
+    margin-top: -0.3vw;
+    width: 10vw;
+    text-align:center;
+}
+
+.stretch {
+    width: 100%;
+}
+
+.spt-select {
+    width: 15vw;
+}
+
+.compute-btn {
+    margin-top: 3.5vh;
+}
+
+.weights-section {
+    margin-top: 8vh;
+    margin-left: 11vw;
+}
+
+.vs30-section {
+    margin-top: 10vh !important;
+    height: 30vh;
+    width: 25vw !important;
+}
+
+.vs30-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+    margin-top: 1vh;
+    width: 15vw;
+}
+
+.vs30-value {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 400;
+    margin-bottom: 0.3vh;
+    margin-top: 0.5vh;
+    width: 10vw;
+    height: 3.5vh;
+}
+
+.results-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+    margin-bottom: 0.3vh;
+    width: 30vw;
+}
+
+.result-plot-section {
+    margin-top: 0.5vw !important;
+    margin-left: 2vw;
+    height: 80vh;
+    width: 40vw;
+    margin-left: 15vw;
+}
+
+.vs-plot {
+    margin-top: 1vw;
+    height: 75vh;
+    width: 39vw;
+}
+
+.vs-select {
+    min-width: 20vw;
+}
+
+.select-box {
+    width: 20vw;
+}
+
+.vs-plot-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.center-elm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.results-page {
+    height: 40vw;
+}
+
+.result-weights {
+    margin-bottom: 1vh;
+    margin-top: 1vh;
+    height: 25vh;
+    width: 22vw;
+}
+
+.vs-weight-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+    width: 22vw;
+    margin-top: 1vw;
+}
