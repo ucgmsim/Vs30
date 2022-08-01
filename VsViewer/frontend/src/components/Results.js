@@ -208,7 +208,7 @@ const Results = () => {
               />
             )}
           </div>
-          <div className="vs-weight-title">Correlation Weights</div>
+          <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
           <Select
             className="select-box"
             placeholder="Select your Correlation's"
@@ -259,9 +259,9 @@ const Results = () => {
           Compute Vs30
         </button>
         <div className="vs30-title">Vs30</div>
-        <div className="vs30-value outline">{Utils.roundValue(vs30)}</div>
+        <div className="vs30-value outline">{vs30 === null ? "" : Utils.roundValue(vs30)}</div>
         <div className="vs30-title">Vs30 SD</div>
-        <div className="vs30-value outline">{Utils.roundValue(vs30SD)}</div>
+        <div className="vs30-value outline">{vs30SD === null ? "" : Utils.roundValue(vs30SD)}</div>
       </div>
     </div>
   );

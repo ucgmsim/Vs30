@@ -417,7 +417,7 @@ const SPT = () => {
               />
             )}
           </div>
-          <div className="form-section-title">Correlation Weights</div>
+          <div className="form-section-title">SPT - Vs Correlation Weights</div>
           <div className="outline center-elm cor-weights-spt">
             {Object.keys(correlationWeights).length > 0 && (
               <WeightTable

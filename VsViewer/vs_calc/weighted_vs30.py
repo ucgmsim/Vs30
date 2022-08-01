@@ -30,5 +30,5 @@ def calculate_weighted_vs30(
         )
         average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
         average_vs30_variance += weight * np.square(vs_profile.vs30 - average_vs30)
-    average_vs30_sd = np.sqrt(average_vs30_variance)
+    average_vs30_sd = np.log(np.sqrt(average_vs30_variance))
     return average_vs30, average_vs30_sd

@@ -4,3 +4,12 @@
     margin: 1vw;
     margin-top: 0;
 }
+
+.hide-sd {
+    margin-top: 0.2vh;
+    margin-bottom: 0.3vh;
+}
+
+.hide-sd-check {
+    margin-left: 1vh;
+}
