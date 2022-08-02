@@ -1,4 +1,4 @@
-import React, { memo, useState } from "react";
+import React, { memo, useState, useEffect } from "react";
 
 import Plot from "react-plotly.js";
 
@@ -9,7 +9,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
   const [VsArr, setVsArr] = useState([]);
   const [hideSD, setHideSD] = useState(false);
 
-  const updatePlotData = () => {
+  useEffect(() => {
     let tempVsArr = [];
     let colourCounter = 0;
     for (const name of Object.keys(vsProfilePlotData)) {
@@ -55,26 +55,26 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
       colourCounter += 1;
     }
     setVsArr(tempVsArr);
-  };
+  }, [hideSD]);
 
-  const onCheckChange = () => {
-    // setHideSD(!hideSD);
-    updatePlotData();
+  const onCheckChange = (e) => {
+    console.log("Here");
+    setHideSD(true);
   };
 
   if (Object.keys(vsProfilePlotData).length > 0) {
-    updatePlotData();
     return (
       <div>
         <label className="hide-sd">
-          Hide SD
+          Hide SD {hideSD}
           <input
             className="hide-sd-check"
             type="checkbox"
             value={hideSD}
-            onChange={onCheckChange()}
+            onChange={(e) => onCheckChange(e)}
           />
         </label>
+        <label></label>
         <Plot
           className={"vs-profile-preview-plot"}
           data={VsArr}
