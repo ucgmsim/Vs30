@@ -73,20 +73,22 @@
 
 .vs-preview-section {
     margin-right: 17vw;
-    padding-bottom: 1vw;
-    height: 37vw;
+    padding-bottom: 1vh;
+    height: 40vw;
 }
 
 .vs-preview-plot {
-    height: 37vw;
+    height: 75vh;
     width: 36vw;
+    margin-bottom: 1vh;
 }
 
 .weights {
-    padding-top: 1vw;
+    margin-top: 3vh !important;
+    padding-top: 2vh;
     padding-bottom: 1vw;
+    height: 67vh;
     margin-left: 18vw;
-    height: 36vw;
 }
 
 .cpt-weights {

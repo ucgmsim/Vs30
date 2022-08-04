@@ -84,20 +84,22 @@
 
 .vs-preview-section-spt {
     margin-right: 17vw;
-    padding-bottom: 1vw;
-    height: 37vw;
+    margin-bottom: 1vh;
+    height: 40vw;
 }
 
 .vs-preview-plot-spt {
-    height: 37vw;
+    height: 67vh;
     width: 36vw;
+    margin-bottom: 1vh;
 }
 
 .weights-spt {
     margin-left: 18vw;
-    padding-top: 1vw;
-    padding-bottom: 1vw;
-    height: 36vw;
+    margin-top: 3vh !important;
+    padding-top: 2vh;
+    margin-bottom: 1vh;
+    height: 67vh;
 }
 
 .spt-weights {

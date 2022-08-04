@@ -93,11 +93,8 @@ def calc_average_vs_midpoint(
                 weight = (
                         vs_weights[vs_profile_name]
                         * correlation_weights[vs_sd_data["correlation"]]
-                )
+                ) * (1 / total_weight)
                 average_vs_variance += weight * np.square(vs_sd_data["vs_sd"])
-                average_vs_variance += weight * np.square(
-                    vs_sd_data["vs"] - weighted_value * (1 / total_weight)
-                )
             average_vs_sd = np.sqrt(average_vs_variance)
             # Check if the values are in a zero state
             if cur_zero:

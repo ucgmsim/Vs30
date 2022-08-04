@@ -1,4 +1,4 @@
-import React, { memo, useState } from "react";
+import React, { memo, useState, useEffect } from "react";
 
 import Plot from "react-plotly.js";
 
@@ -115,14 +115,6 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
     }
     return (
       <div className="check-plot-height">
-        <label className="hide-sd">
-          Hide SD
-          <input
-            className="hide-sd-check"
-            type="checkbox"
-            onChange={(e) => onCheckChange(e.target.checked)}
-          />
-        </label>
         <Plot
           className={"vs-profile-preview-plot"}
           data={VsArr}
@@ -161,6 +153,14 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
           }}
           useResizeHandler={true}
         />
+        <label className="hide-sd">
+          Hide Sigma
+          <input
+            className="hide-sd-check"
+            type="checkbox"
+            onChange={(e) => onCheckChange(e.target.checked)}
+          />
+        </label>
       </div>
     );
   }
