@@ -1,15 +1,21 @@
-import React, { memo, useState } from "react";
+import React, { memo, useState, useEffect } from "react";
 
 import Plot from "react-plotly.js";
 
 import * as CONSTANTS from "Constants";
 import "assets/vsProfilePreview.css";
 
-const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
+const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
   const [VsArr, setVsArr] = useState([]);
-  const [hideSD, setHideSD] = useState(false);
+  const [checked, setChecked] = useState(false);
 
-  const updatePlotData = () => {
+  useEffect(() => {
+    if (Object.keys(average).length > 0) {
+      updatePlotData(checked);
+    }
+  }, [average]);
+
+  const updatePlotData = (hideSD) => {
     let tempVsArr = [];
     let colourCounter = 0;
     for (const name of Object.keys(vsProfilePlotData)) {
@@ -54,25 +60,67 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData }) => {
       }
       colourCounter += 1;
     }
+    if (Object.keys(average).length > 0) {
+      tempVsArr.push({
+        x: average["Vs"],
+        y: average["Depth"],
+        type: "scatter",
+        mode: "lines",
+        line: { color: "black" },
+        name: "Average",
+        hoverinfo: "none",
+        legendgroup: "Average",
+      });
+      // Standard Deviations
+      if (!hideSD) {
+        tempVsArr.push({
+          x: average["VsSDAbove"],
+          y: average["Depth"],
+          type: "scatter",
+          mode: "lines",
+          line: {
+            color: "black",
+            dash: "dash",
+          },
+          hoverinfo: "none",
+          showlegend: false,
+          legendgroup: "Average",
+        });
+        tempVsArr.push({
+          x: average["VsSDBelow"],
+          y: average["Depth"],
+          type: "scatter",
+          mode: "lines",
+          line: {
+            color: "black",
+            dash: "dash",
+          },
+          hoverinfo: "none",
+          showlegend: false,
+          legendgroup: "Average",
+        });
+      }
+    }
     setVsArr(tempVsArr);
   };
 
-  const onCheckChange = () => {
-    // setHideSD(!hideSD);
-    updatePlotData();
+  const onCheckChange = (newValue) => {
+    setChecked(newValue);
+    updatePlotData(newValue);
   };
 
   if (Object.keys(vsProfilePlotData).length > 0) {
-    updatePlotData();
+    if (VsArr.length === 0) {
+      updatePlotData(false);
+    }
     return (
-      <div>
+      <div className="check-plot-height">
         <label className="hide-sd">
           Hide SD
           <input
             className="hide-sd-check"
             type="checkbox"
-            value={hideSD}
-            onChange={onCheckChange()}
+            onChange={(e) => onCheckChange(e.target.checked)}
           />
         </label>
         <Plot

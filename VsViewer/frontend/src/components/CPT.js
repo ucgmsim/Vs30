@@ -39,6 +39,7 @@ const CPT = () => {
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [filenames, setFilenames] = useState("");
   const [cptOptions, setCPTOptions] = useState([]);
@@ -189,6 +190,18 @@ const CPT = () => {
     });
   };
 
+  const sendAverageRequest = async (vsProfilesToSend) => {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({vsProfiles: vsProfilesToSend, vsWeights: cptWeights, correlationWeights: correlationWeights}),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set the Plot Average Data
+      setVsProfileAveragePlotData(responseData["average"]);
+    });
+  };
+
   const addToVsProfilePlot = async (selectedCorrelations) => {
     let correlationsToSend = [];
     selectedCorrelations.forEach((entry) => {
@@ -250,6 +263,7 @@ const CPT = () => {
   const checkWeights = () => {
     // TODO error checking
     setCptResults(vsProfileData);
+    sendAverageRequest(vsProfileData);
     let tempAllWeights = allCorrelationWeights;
     for (const key of Object.keys(correlationWeights)) {
       tempAllWeights[key] = correlationWeights[key];
@@ -383,7 +397,7 @@ const CPT = () => {
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} />
+              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} average={vsProfileAveragePlotData} />
             )}
           </div>
         </div>

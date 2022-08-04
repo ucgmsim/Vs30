@@ -5,7 +5,9 @@ from flask_cors import cross_origin
 from vs_api import server, utils
 from vs_api import constants as const
 from VsViewer.vs_calc.SPT import SPT
+from VsViewer.vs_calc.VsProfile import VsProfile
 from VsViewer.vs_calc.utils import convert_to_midpoint
+from VsViewer.vs_calc.calc_weightings import calc_average_vs_midpoint
 
 
 @server.app.route(const.CPT_MIDPOINT_ENDPOINT, methods=["POST"])
@@ -92,3 +94,35 @@ def spt_to_midpoint():
             "N60": n60,
         }
     return flask.jsonify(spt_dict)
+
+
+@server.app.route(const.VS_PROFILE_AVERAGE_ENDPOINT, methods=["POST"])
+@cross_origin(expose_headers=["Content-Type", "Authorization"])
+@utils.endpoint_exception_handling(server.app)
+def calc_average():
+    """
+    Converts VsProfile data into one weighted average plot
+    Ignores values of 0 when averaging
+    """
+    server.app.logger.info(f"Received request at {const.VS_PROFILE_AVERAGE_ENDPOINT}")
+
+    json_array = flask.request.json
+    vs_profiles = [
+        VsProfile.from_json(vs_profile_data)
+        for vs_profile_data in json_array["vsProfiles"].values()
+    ]
+    vs_weights = {k: float(v) for k, v in json_array["vsWeights"].items()}
+    correlation_weights = {k: float(v) for k, v in json_array["correlationWeights"].items()}
+    depth, vs, sd = calc_average_vs_midpoint(vs_profiles, vs_weights, correlation_weights)
+    vs_sd_below = np.asarray(vs) * np.exp(-np.asarray(sd))
+    vs_sd_above = np.asarray(vs) * np.exp(np.asarray(sd))
+    return flask.jsonify(
+        {
+            "average": {
+                "Depth": depth,
+                "Vs": vs,
+                "VsSDBelow": vs_sd_below.tolist(),
+                "VsSDAbove": vs_sd_above.tolist(),
+            }
+        }
+    )

@@ -9,6 +9,7 @@ VS_PROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create"
 VS_PROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create"
 VS_PROFILE_CORRELATIONS_ENDPOINT = "/api/vsprofile/correlations"
 VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint"
+VS_PROFILE_AVERAGE_ENDPOINT = "/api/plot/vsprofile/average"
 VS_PROFILE_VS30_ENDPOINT = "/api/vsprofile/vs30"
 
 # SPT endpoints
