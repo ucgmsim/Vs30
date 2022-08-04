@@ -1,8 +1,16 @@
 # CPT endpoints
 CPT_CREATE_ENDPOINT = "/api/cpt/create"
-GET_CORRELATIONS_ENDPOINT = "/api/cpt/correlations"
+GET_CPT_CORRELATIONS_ENDPOINT = "/api/cpt/correlations"
 CPT_MIDPOINT_ENDPOINT = "/api/plot/cpt/midpoint"
 
 # VsProfile endpoints
 VSPROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create"
+VSPROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create"
 VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint"
+
+# SPT endpoints
+SPT_CREATE_ENDPOINT = "/api/spt/create"
+GET_SPT_CORRELATIONS_ENDPOINT = "/api/spt/correlations"
+SPT_MIDPOINT_ENDPOINT = "/api/plot/spt/midpoint"
+GET_HAMMER_TYPES_ENDPOINT = "/api/spt/hammertypes"
+GET_SOIL_TYPES_ENDPOINT = "/api/spt/soiltypes"

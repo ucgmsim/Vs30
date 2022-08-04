@@ -9,8 +9,8 @@
 
 .hr {
     border-top: 1px solid silver;
-    margin-top: 10px;
-    margin-bottom: 15px;
+    margin-bottom: 0.5vw;
+    margin-top: 1vw;
 }
 
 .form {
@@ -67,18 +67,18 @@
 }
 
 .select-cor {
-    width: 35%;
+    width: 30vw;
     margin-bottom: 1vw;
 }
 
 .vs-preview-section {
     margin-right: 17vw;
     padding-bottom: 1vw;
-    height: 35vw;
+    height: 37vw;
 }
 
 .vs-preview-plot {
-    height: 35vw;
+    height: 37vw;
     width: 36vw;
 }
 
@@ -101,4 +101,8 @@
 .preview-btn {
     margin-top: 1vw;
     margin-bottom: 1vw;
+}
+
+.select-box {
+    width: 20vw;
 }

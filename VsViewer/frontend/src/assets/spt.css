@@ -1,0 +1,110 @@
+.add-spt {
+    margin-top: 1.5vw !important;
+    margin-left: -3vw;
+    height: 38vw;
+}
+
+.spt-file-input {
+    margin-top: 1vw;
+    margin-left: 5vw;
+}
+
+.form-label {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    margin-top: 1.5vw;
+}
+
+.text-input {
+    margin-top: -0.3vw;
+    width: 10vw;
+    text-align:center
+}
+
+.spt-select {
+    width: 15vw;
+}
+
+.add-spt-btn {
+    margin-top: 2vw;
+}
+
+.spt-table-section {
+    margin-top: 0.5vw !important;
+    margin-right: 3.5vw;
+    height: 39vw;
+}
+
+.spt-table {
+    margin-top: 1vw;
+    height: 34vw;
+    width: 30vw;
+}
+
+.spt-plot-section {
+    margin-top: 0.5vw !important;
+    margin-right: 0.2vw;
+    height: 39vw;
+}
+
+.spt-plot {
+    margin-top: 1vw;
+    height: 39vw;
+    width: 39vw;
+}
+
+.select-box {
+    width: 20vw;
+}
+
+.spt-plot-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.spt-table-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.center-elm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.spt-top {
+    height: 40vw;
+}
+
+.spt-bot {
+    height: 40vw;
+    margin-top: 1vw;
+}
+
+.vs-preview-section-spt {
+    margin-right: 17vw;
+    padding-bottom: 1vw;
+    height: 37vw;
+}
+
+.vs-preview-plot-spt {
+    height: 37vw;
+    width: 36vw;
+}
+
+.weights-spt {
+    margin-left: 18vw;
+    padding-top: 1vw;
+    padding-bottom: 1vw;
+    height: 36vw;
+}
+
+.spt-weights {
+    margin-bottom: 1vw;
+    height: 13vw;
+}
+
+.cor-weights-spt {
+    height: 13vw;
+}

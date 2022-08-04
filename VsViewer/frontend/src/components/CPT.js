@@ -77,7 +77,7 @@ const CPT = () => {
 
   // Get Correlations on page load
   if (correlationsOptions.length == 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CORRELATIONS_ENDPOINT, {
+    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
       const responseData = await response.json();
@@ -293,7 +293,7 @@ const CPT = () => {
           <div className="center-elm">
             <div className="form-section-title">CPT Table</div>
             <Select
-              className="select-cpt"
+              className="select-cpt select-box"
               placeholder="Select your CPT's"
               options={cptOptions}
               isDisabled={cptOptions.length === 0}
@@ -315,7 +315,7 @@ const CPT = () => {
           <div className="center-elm">
             <div className="form-section-title">CPT Plot</div>
             <Select
-              className="select-cpt"
+              className="select-cpt select-box"
               placeholder="Select your CPT's"
               isMulti={true}
               options={cptOptions}
@@ -334,7 +334,7 @@ const CPT = () => {
       <div className="hr"></div>
       <div className="center-elm">
         <Select
-          className="select-cor"
+          className="select-cor select-box"
           placeholder="Select Correlations"
           isMulti={true}
           options={correlationsOptions}
