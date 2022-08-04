@@ -1,0 +1,32 @@
+.vs-raw {
+  height: 32vw;
+}
+
+.vs-scroll-tbl {
+  max-height: 30.2vw;
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+.vs-info {
+  margin-top: 0 !important; 
+  height: 5vw;
+}
+
+.vs-tbl-width {
+  width: 28vw;
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  padding: 0 !important;
+}
+
+.vs-min-max{
+  margin-left: -4.7vw;
+  width: 12vw !important;
+  height: 3vw;
+}
+
+.vs-removed{
+  width: 14vw !important;
+  height: 2.3vw;
+}

@@ -76,7 +76,7 @@ const CPT = () => {
   }, [selectedCorrelations, cptOptions]);
 
   // Get Correlations on page load
-  if (correlationsOptions.length == 0) {
+  if (correlationsOptions.length === 0) {
     fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
       method: "GET",
     }).then(async (response) => {
@@ -170,7 +170,7 @@ const CPT = () => {
       cpts: cptData,
       correlations: correlationsToSend,
     };
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VSPROFILE_FROM_CPT_ENDPOINT, {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_FROM_CPT_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(jsonBody),
