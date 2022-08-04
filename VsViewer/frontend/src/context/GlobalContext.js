@@ -10,6 +10,7 @@ export const Provider = (props) => {
   const [cptMidpointData, setCptMidpointData] = useState({});
 
   // VsProfile
+  const [vsProfileData, setVsProfileData] = useState([]);
   const [vsProfileMidpointData, setVsProfileMidpointData] = useState({});
 
   // SPT Data
@@ -21,6 +22,10 @@ export const Provider = (props) => {
     // CPT Data
     cptData,
     setCPTData,
+
+    // VsProfile Data
+    vsProfileData, 
+    setVsProfileData,
 
     // Plotting
     cptMidpointData,

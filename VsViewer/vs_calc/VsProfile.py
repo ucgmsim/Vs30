@@ -1,4 +1,7 @@
+from io import BytesIO
+
 import numpy as np
+import pandas as pd
 
 from .CPT import CPT
 from .SPT import SPT
@@ -63,11 +66,31 @@ class VsProfile:
         self.vs = vs[int_depth_mask]
         self.vs_sd = vs_sd[int_depth_mask]
         self.depth = depth[int_depth_mask]
+        self.info = {
+            "z_min": depth[0],
+            "z_max": depth[-1],
+            "z_spread": depth[-1] - depth[0],
+            "removed_rows": np.where(int_depth_mask == False)[0].tolist(),
+        }
 
         # VsZ and Vs30 info init for lazy loading
         self._vsz = None
         self._vs30 = None
         self._vs30_sd = None
+
+    @staticmethod
+    def from_byte_stream(name: str, stream: bytes):
+        """
+        Creates a VsProfile from a file stream
+        """
+        csv_data = pd.read_csv(BytesIO(stream))
+        return VsProfile(
+            name,
+            "",
+            np.asarray(csv_data["Vs"]),
+            np.asarray(csv_data["Vs_SD"]),
+            np.asarray(csv_data["Depth"]),
+        )
 
     @staticmethod
     def from_cpt(cpt: CPT, correlation: str):
@@ -110,6 +133,7 @@ class VsProfile:
             "vs": self.vs.tolist(),
             "vs_sd": self.vs_sd.tolist(),
             "depth": self.depth.tolist(),
+            "info": self.info,
             "vsz": self._vsz,
             "vs30": self._vs30,
             "vs30_sd": self._vs30_sd,

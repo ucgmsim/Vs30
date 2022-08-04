@@ -1,0 +1,102 @@
+.add-vs {
+    margin-top: 1.5vw !important;
+    height: 27vw;
+    width: 22vw;
+}
+
+.vs-file-input {
+    margin-top: 1vw;
+    margin-left: 5vw;
+}
+
+.form-label {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    margin-top: 1vw;
+}
+
+.text-input {
+    margin-top: -0.3vw;
+    width: 10vw;
+    text-align:center;
+}
+
+.stretch {
+    width: 100%;
+}
+
+.spt-select {
+    width: 15vw;
+}
+
+.add-vs-btn {
+    margin-top: 1.5vw;
+}
+
+.vs-table-section {
+    margin-top: 0.5vw !important;
+    height: 47vw;
+}
+
+.vs-table-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.vs-table {
+    margin-top: 1vw;
+    height:42vw;
+    width: 30vw;
+}
+
+.vs-plot-section {
+    margin-top: 0.5vw !important;
+    margin-right: 0.2vw;
+    height:47vw;
+}
+
+.vs-plot {
+    margin-top: 1vw;
+    height: 42vw;
+    width: 39vw;
+}
+
+.vs-select {
+    min-width: 20vw;
+}
+
+.select-box {
+    width: 20vw;
+}
+
+.vs-plot-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+}
+
+.center-elm {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.vs-top {
+    height: 40vw;
+}
+
+.vs-weights {
+    margin-bottom: 1vw;
+    height: 16vw;
+    width: 22vw;
+}
+
+.vs-weight-area {
+    height: 12vw;
+}
+
+.vs-weight-title {
+    font-size: calc(12px + 0.4vw);
+    font-weight: 700;
+    width: 22vw;
+    margin-top: 1vw;
+}
