@@ -31,6 +31,7 @@ const VsProfile = () => {
   // VsProfile Plot
   const [selectedVsProfilePlot, setSelectedVsProfilePlot] = useState(null);
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
@@ -115,6 +116,22 @@ const VsProfile = () => {
     });
   };
 
+  const sendAverageRequest = async () => {
+    let vsProfilesToSend = {};
+    for (const key of Object.keys(vsProfileData)) {
+      vsProfilesToSend[key] = vsProfileData[key];
+    }
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({vsProfiles: vsProfilesToSend, vsWeights: vsProfileWeights, correlationWeights: {"": 1}}),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set the Plot Average Data
+      setVsProfileAveragePlotData(responseData["average"]);
+    });
+  };
+
   const changeVsProfileSelection = async (entries) => {
     // Gather Midpoint data
     let VsProfilesToSend = [];
@@ -151,6 +168,7 @@ const VsProfile = () => {
   const checkWeights = () => {
     // TODO error checking
     setVsProfileResults(vsProfileData);
+    sendAverageRequest();
   };
 
   // Change the vsProfile Weights
@@ -237,7 +255,7 @@ const VsProfile = () => {
           </div>
           <div className="outline vs-plot">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot className="vs-plot" vsProfilePlotData={vsProfilePlotData} />
+              <VsProfilePreviewPlot className="vs-plot" vsProfilePlotData={vsProfilePlotData} average={vsProfileAveragePlotData} />
             )}
           </div>
         </div>
