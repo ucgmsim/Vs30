@@ -7,7 +7,7 @@ from VsViewer.vs_calc import CPT
 from VsViewer.vs_calc import SPT
 from VsViewer.vs_calc import VsProfile
 from VsViewer.vs_calc import VS_PROFILE_CORRELATIONS
-from VsViewer.vs_calc import weighted_vs30
+from VsViewer.vs_calc.calc_weightings import calculate_weighted_vs30
 
 
 @server.app.route(const.VS_PROFILE_CREATE_ENDPOINT, methods=["POST"])
@@ -95,7 +95,7 @@ def compute_vs30():
     """
     server.app.logger.info(f"Received request at {const.VS_PROFILE_VS30_ENDPOINT}")
     json = flask.request.json
-    vs30, vs30_sd = weighted_vs30.calculate_weighted_vs30(
+    vs30, vs30_sd = calculate_weighted_vs30(
         [VsProfile.from_json(vs_profile["value"]) for vs_profile in json["vsProfiles"]],
         json["vsWeights"],
         json["correlationWeights"],

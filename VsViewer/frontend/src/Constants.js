@@ -14,6 +14,7 @@ export const VS_PROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create";
 export const VS_PROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create";
 export const VS_PROFILE_CORRELATIONS_ENDPOINT = "/api/vsprofile/correlations";
 export const VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint";
+export const VS_PROFILE_AVERAGE_ENDPOINT = "/api/plot/vsprofile/average";
 export const VS_PROFILE_VS30_ENDPOINT = "/api/vsprofile/vs30";
 
 // SPT Endpoints
