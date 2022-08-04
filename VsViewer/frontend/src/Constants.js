@@ -5,12 +5,20 @@ export const VS_API_URL = process.env.REACT_APP_VS_API_URL;
 
 // CPT Endpoints
 export const CREATE_CPTS_ENDPOINT = "/api/cpt/create";
-export const GET_CORRELATIONS_ENDPOINT = "/api/cpt/correlations";
+export const GET_CPT_CORRELATIONS_ENDPOINT = "/api/cpt/correlations";
 export const CPT_MIDPOINT_ENDPOINT = "/api/plot/cpt/midpoint";
 
 // VsProfile Endpoints
 export const VSPROFILE_FROM_CPT_ENDPOINT = "/api/vsprofile/cpt/create";
+export const VSPROFILE_FROM_SPT_ENDPOINT = "/api/vsprofile/spt/create";
 export const VS_PROFILE_MIDPOINT_ENDPOINT = "/api/plot/vsprofile/midpoint";
+
+// SPT Endpoints
+export const SPT_CREATE_ENDPOINT = "/api/spt/create"
+export const GET_SPT_CORRELATIONS_ENDPOINT = "/api/spt/correlations"
+export const SPT_MIDPOINT_ENDPOINT = "/api/plot/spt/midpoint"
+export const GET_HAMMER_TYPES_ENDPOINT = "/api/spt/hammertypes"
+export const GET_SOIL_TYPES_ENDPOINT = "/api/spt/soiltypes"
 
 // Plots
 export const DEFAULTCOLOURS = [

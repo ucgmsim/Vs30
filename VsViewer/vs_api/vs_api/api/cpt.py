@@ -25,12 +25,12 @@ def create_cpts():
     return flask.jsonify(cpt_dict)
 
 
-@server.app.route(const.GET_CORRELATIONS_ENDPOINT, methods=["GET"])
+@server.app.route(const.GET_CPT_CORRELATIONS_ENDPOINT, methods=["GET"])
 @cross_origin(expose_headers=["Content-Type", "Authorization"])
 @utils.endpoint_exception_handling(server.app)
-def get_correlations():
+def get_cpt_correlations():
     """
     Gets the currently supported correlations for CPT to Vs
     """
-    server.app.logger.info(f"Received request at {const.GET_CORRELATIONS_ENDPOINT}")
+    server.app.logger.info(f"Received request at {const.GET_CPT_CORRELATIONS_ENDPOINT}")
     return flask.jsonify(list(CPT_CORRELATIONS.keys()))
