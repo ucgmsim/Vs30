@@ -61,8 +61,8 @@ def vs_profile_to_midpoint():
         )
         vs_profile_name = (
             vs_profile_data["name"]
-            if vs_profile_data["correlation"] == ""
-            else f"{vs_profile_data['name']}_{vs_profile_data['correlation']}"
+            if vs_profile_data["vs_correlation"] is None
+            else f"{vs_profile_data['name']}_{vs_profile_data['vs_correlation']}"
         )
         vs_profile_dict[vs_profile_name] = {
             "Depth": depth,
@@ -112,8 +112,9 @@ def calc_average():
         for vs_profile_data in json_array["vsProfiles"].values()
     ]
     vs_weights = {k: float(v) for k, v in json_array["vsWeights"].items()}
-    correlation_weights = {k: float(v) for k, v in json_array["correlationWeights"].items()}
-    depth, vs, sd = calc_average_vs_midpoint(vs_profiles, vs_weights, correlation_weights)
+    vs_correlation_weights = {k: float(v) for k, v in json_array["vsCorrelationWeights"].items()}
+    vs30_correlation_weights = {k: float(v) for k, v in json_array["vs30CorrelationWeights"].items()}
+    depth, vs, sd = calc_average_vs_midpoint(vs_profiles, vs_weights, vs_correlation_weights, vs30_correlation_weights)
     vs_sd_below = np.asarray(vs) * np.exp(-np.asarray(sd))
     vs_sd_above = np.asarray(vs) * np.exp(np.asarray(sd))
     return flask.jsonify(

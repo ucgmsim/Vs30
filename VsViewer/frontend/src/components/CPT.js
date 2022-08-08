@@ -194,7 +194,12 @@ const CPT = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({vsProfiles: vsProfilesToSend, vsWeights: cptWeights, correlationWeights: correlationWeights}),
+      body: JSON.stringify({
+        vsProfiles: vsProfilesToSend,
+        vsWeights: cptWeights,
+        vsCorrelationWeights: correlationWeights,
+        vs30CorrelationWeights: {},
+      }),
     }).then(async (response) => {
       const responseData = await response.json();
       // Set the Plot Average Data
@@ -397,7 +402,10 @@ const CPT = () => {
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} average={vsProfileAveragePlotData} />
+              <VsProfilePreviewPlot
+                vsProfilePlotData={vsProfilePlotData}
+                average={vsProfileAveragePlotData}
+              />
             )}
           </div>
         </div>

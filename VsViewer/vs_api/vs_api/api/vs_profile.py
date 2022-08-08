@@ -6,7 +6,7 @@ from vs_api import constants as const
 from VsViewer.vs_calc import CPT
 from VsViewer.vs_calc import SPT
 from VsViewer.vs_calc import VsProfile
-from VsViewer.vs_calc import VS_PROFILE_CORRELATIONS
+from VsViewer.vs_calc import VS30_CORRELATIONS
 from VsViewer.vs_calc.calc_weightings import calculate_weighted_vs30
 
 
@@ -47,7 +47,7 @@ def create_vsprofile_from_cpt():
         for correlation in json["correlations"]:
             vs_profile = VsProfile.from_cpt(cpt, correlation)
             response_dict[
-                f"{vs_profile.name}_{vs_profile.correlation}"
+                f"{vs_profile.name}_{vs_profile.vs_correlation}"
             ] = vs_profile.to_json()
     return flask.jsonify(response_dict)
 
@@ -68,7 +68,7 @@ def create_vsprofile_from_spt():
         for correlation in json["correlations"]:
             vs_profile = VsProfile.from_spt(spt, correlation)
             response_dict[
-                f"{vs_profile.name}_{vs_profile.correlation}"
+                f"{vs_profile.name}_{vs_profile.vs_correlation}"
             ] = vs_profile.to_json()
     return flask.jsonify(response_dict)
 
@@ -83,7 +83,7 @@ def get_vs_profile_correlations():
     server.app.logger.info(
         f"Received request at {const.VS_PROFILE_CORRELATIONS_ENDPOINT}"
     )
-    return flask.jsonify(list(VS_PROFILE_CORRELATIONS.keys()))
+    return flask.jsonify(list(VS30_CORRELATIONS.keys()))
 
 
 @server.app.route(const.VS_PROFILE_VS30_ENDPOINT, methods=["POST"])
@@ -95,9 +95,17 @@ def compute_vs30():
     """
     server.app.logger.info(f"Received request at {const.VS_PROFILE_VS30_ENDPOINT}")
     json = flask.request.json
+    # Create the VsProfiles
+    vs_profiles = []
+    for correlation in json["vs30CorrelationWeights"]:
+        for vs_profile in json["vsProfiles"]:
+            json_dict = vs_profile["value"]
+            json_dict["vs30_correlation"] = correlation
+            vs_profiles.append(VsProfile.from_json(json_dict))
     vs30, vs30_sd = calculate_weighted_vs30(
-        [VsProfile.from_json(vs_profile["value"]) for vs_profile in json["vsProfiles"]],
+        vs_profiles,
         json["vsWeights"],
-        json["correlationWeights"],
+        json["vsCorrelationWeights"],
+        json["vs30CorrelationWeights"],
     )
     return flask.jsonify({"Vs30": vs30, "Vs30_SD": vs30_sd})
