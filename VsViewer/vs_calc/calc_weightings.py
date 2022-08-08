@@ -6,18 +6,43 @@ from VsViewer.vs_calc.VsProfile import VsProfile
 from VsViewer.vs_calc.utils import convert_to_midpoint
 
 
+def get_weight(
+    vs_profile: VsProfile,
+    vs_weights: dict,
+    vs_correlations: dict,
+    vs30_correlations: dict,
+):
+    return (
+        vs_weights[vs_profile.name]
+        * (
+            1
+            if vs_profile.vs_correlation is None
+            else vs_correlations[vs_profile.vs_correlation]
+        )
+        * (
+            1
+            if vs_profile.vs30_correlation is None
+            else vs30_correlations[vs_profile.vs30_correlation]
+        )
+    )
+
+
 def calculate_weighted_vs30(
-    vs_profiles: Iterable[VsProfile], vs_weights: dict, correlation_weights: dict
+    vs_profiles: Iterable[VsProfile],
+    vs_weights: dict,
+    vs_correlation_weights: dict,
+    vs30_correlation_weights: dict,
 ):
     """
     Calculates the weighted Vs30 by combining each of the Vs30Profiles
     with set weights for the VsProfile's and the Correlations
     """
-    # To deal with VsProfiles straight that have no correlation
-    correlation_weights[""] = 1
+    tets = [1 if vs_profile.vs30_correlation is None else 2 for vs_profile in vs_profiles]
+    print(tets)
     average_vs30 = sum(
-        vs_weights[vs_profile.name]
-        * correlation_weights[vs_profile.correlation]
+        get_weight(
+            vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
+        )
         * vs_profile.vs30
         for vs_profile in vs_profiles
     )
@@ -25,8 +50,8 @@ def calculate_weighted_vs30(
     # Based on the equation variance = sum(W_i*Sigma_i^2) + sum(W_i*(x - mu)^2)
     average_vs30_variance = 0
     for vs_profile in vs_profiles:
-        weight = (
-            vs_weights[vs_profile.name] * correlation_weights[vs_profile.correlation]
+        weight = get_weight(
+            vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
         )
         average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
         average_vs30_variance += weight * np.square(vs_profile.vs30 - average_vs30)
@@ -35,7 +60,10 @@ def calculate_weighted_vs30(
 
 
 def calc_average_vs_midpoint(
-    vs_profiles: Iterable[VsProfile], vs_weights: dict, correlation_weights: dict
+    vs_profiles: Iterable[VsProfile],
+    vs_weights: dict,
+    vs_correlation_weights: dict,
+    vs30_correlation_weights: dict,
 ):
     """
     Calculates the weighted average midpoint plot for different VsProfiles with different weightings
@@ -71,18 +99,21 @@ def calc_average_vs_midpoint(
                 lower_value_idx = np.flatnonzero(cur_depth >= np.asarray(depth))[-1]
                 value = vs[lower_value_idx]
                 if value != 0:
-                    weighted_value += (
-                        value
-                        * vs_weights[vs_profile.name]
-                        * correlation_weights[vs_profile.correlation]
+                    weighted_value += value * get_weight(
+                        vs_profile,
+                        vs_weights,
+                        vs_correlation_weights,
+                        vs30_correlation_weights,
                     )
-                    total_weight += (
-                        vs_weights[vs_profile.name]
-                        * correlation_weights[vs_profile.correlation]
+                    total_weight += get_weight(
+                        vs_profile,
+                        vs_weights,
+                        vs_correlation_weights,
+                        vs30_correlation_weights,
                     )
                     vs_sds[vs_profile.name] = {
                         "vs_sd": vs_sd[lower_value_idx],
-                        "correlation": vs_profile.correlation,
+                        "vs_profile": vs_profile,
                         "vs": value,
                     }
         if weighted_value != 0:
@@ -90,9 +121,11 @@ def calc_average_vs_midpoint(
             # Based on the equation variance = sum(W_i*Sigma_i^2) + sum(W_i*(x - mu)^2)
             average_vs_variance = 0
             for vs_profile_name, vs_sd_data in vs_sds.items():
-                weight = (
-                        vs_weights[vs_profile_name]
-                        * correlation_weights[vs_sd_data["correlation"]]
+                weight = get_weight(
+                    vs_sd_data["vs_profile"],
+                    vs_weights,
+                    vs_correlation_weights,
+                    vs30_correlation_weights,
                 ) * (1 / total_weight)
                 average_vs_variance += weight * np.square(vs_sd_data["vs_sd"])
             average_vs_sd = np.sqrt(average_vs_variance)

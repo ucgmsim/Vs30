@@ -1,5 +1,6 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
+import Papa from "papaparse";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
@@ -49,6 +50,7 @@ const SPT = () => {
   const [hammerType, setHammerType] = useState(null);
   const [soilTypeOptions, setSoilTypeOptions] = useState([]);
   const [soilType, setSoilType] = useState(null);
+  const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
 
@@ -264,7 +266,12 @@ const SPT = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({vsProfiles: vsProfilesToSend, vsWeights: sptWeights, correlationWeights: correlationWeights}),
+      body: JSON.stringify({
+        vsProfiles: vsProfilesToSend,
+        vsWeights: sptWeights,
+        vsCorrelationWeights: correlationWeights,
+        vs30CorrelationWeights: {},
+      }),
     }).then(async (response) => {
       const responseData = await response.json();
       // Set the Plot Average Data
@@ -325,6 +332,22 @@ const SPT = () => {
     setCorrelationWeights(newWeights);
   };
 
+  // Set the file and check for Soil type
+  const checkFile = (file) => {
+    setFile(file);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function (results) {
+        if (!results.meta.fields.includes("Soil")) {
+          setUserSelectSoil(true);
+        } else {
+          setUserSelectSoil(false);
+        }
+      },
+    });
+};
+
   return (
     <div>
       <div className="row three-column-row center-elm spt-top">
@@ -333,7 +356,7 @@ const SPT = () => {
           <input
             className="spt-file-input"
             type="file"
-            onChange={(e) => setFile(e.target.files[0])}
+            onChange={(e) => checkFile(e.target.files[0])}
           />
           <div className="form-label">Borehole Diameter</div>
           <input
@@ -360,7 +383,7 @@ const SPT = () => {
             className="spt-select"
             placeholder="Select Soil Type"
             options={soilTypeOptions}
-            isDisabled={soilTypeOptions.length === 0}
+            isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
             onChange={(e) => setSoilType(e)}
           />
           <button
@@ -452,7 +475,10 @@ const SPT = () => {
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot-spt">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} average={vsProfileAveragePlotData} />
+              <VsProfilePreviewPlot
+                vsProfilePlotData={vsProfilePlotData}
+                average={vsProfileAveragePlotData}
+              />
             )}
           </div>
         </div>

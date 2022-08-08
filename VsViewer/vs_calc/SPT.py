@@ -21,7 +21,7 @@ class SPT:
         hammer_type: HammerType = HammerType.Auto,
         borehole_diameter: float = 150,
         energy_ratio: float = None,
-        soil_type: SoilType = SoilType.Clay,
+        soil_type: np.ndarray = None,
     ):
         self.name = name
         self.depth = depth
@@ -29,7 +29,9 @@ class SPT:
         self.hammer_type = hammer_type
         self.borehole_diameter = borehole_diameter
         self.energy_ratio = energy_ratio
-        self.soil_type = soil_type
+        self.soil_type = (
+            np.repeat(SoilType.Clay, len(depth)) if soil_type is None else soil_type
+        )
         self.info = {
             "z_min": depth[0],
             "z_max": depth[-1],
@@ -70,7 +72,7 @@ class SPT:
             "hammer_type": self.hammer_type.name,
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
-            "soil_type": self.soil_type.name,
+            "soil_type": [soil_type.name for soil_type in self.soil_type],
             "info": self.info,
             "N60": self.N60.tolist(),
         }
@@ -87,7 +89,7 @@ class SPT:
             HammerType[json["hammer_type"]],
             float(json["borehole_diameter"]),
             None if json["energy_ratio"] is None else float(json["energy_ratio"]),
-            SoilType[json["soil_type"]],
+            [SoilType[soil_type] for soil_type in json["soil_type"]],
         )
         spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
         return spt
@@ -98,8 +100,14 @@ class SPT:
         Creates an SPT from an SPT file
         """
         spt_ffp = Path(spt_ffp)
-        data = np.loadtxt(spt_ffp, dtype=float, delimiter=",", skiprows=1)
-        return SPT(spt_ffp.stem, data[:, 0], data[:, 1])
+        data = pd.read_csv(spt_ffp)
+        soil_type = None if "Soil" in data.columns else data["Soil"]
+        return SPT(
+            spt_ffp.stem,
+            data.iloc[:, 0].values,
+            data.iloc[:, 1].values,
+            soil_type=soil_type,
+        )
 
     @staticmethod
     def from_byte_stream_form(file_name: str, stream: bytes, form: dict):
@@ -107,6 +115,12 @@ class SPT:
         Creates an SPT from a file stream and form data
         """
         csv_data = pd.read_csv(BytesIO(stream))
+        # Manage soil type from file first then form
+        soil_type = (
+            csv_data["Soil"]
+            if "Soil" in csv_data.columns
+            else (None if form["soilType"] == "" else np.repeat(form["soilType"], len(csv_data.values)))
+        )
         return SPT(
             Path(file_name).stem,
             np.asarray(csv_data["Depth"]),
@@ -116,7 +130,7 @@ class SPT:
             else HammerType[form["hammerType"]],
             form["boreholeDiameter"],
             None if form["energyRatio"] == "" else form["energyRatio"],
-            SoilType.Clay if form["soilType"] == "" else SoilType[form["soilType"]],
+            np.asarray([SoilType[soil] for soil in soil_type]),
         )
 
     @staticmethod

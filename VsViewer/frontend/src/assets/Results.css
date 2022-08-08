@@ -111,6 +111,10 @@
     width: 22vw;
 }
 
+.result-weight-area {
+    height: 12vw;
+}
+
 .vs-weight-title {
     font-size: calc(12px + 0.4vw);
     font-weight: 700;
