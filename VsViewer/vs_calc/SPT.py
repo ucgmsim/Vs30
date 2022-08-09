@@ -130,7 +130,7 @@ class SPT:
             else HammerType[form["hammerType"]],
             form["boreholeDiameter"],
             None if form["energyRatio"] == "" else form["energyRatio"],
-            np.asarray([SoilType[soil] for soil in soil_type]),
+            None if soil_type is None else np.asarray([SoilType[soil] for soil in soil_type]),
         )
 
     @staticmethod

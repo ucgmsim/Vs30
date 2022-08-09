@@ -24,19 +24,33 @@ class VsProfile:
         vs_sd: np.ndarray,
         depth: np.ndarray,
         vs_correlation: str = None,
-        vs30_correlation: str = None
+        vs30_correlation: str = None,
     ):
         self.name = name
         self.vs_correlation = vs_correlation
         self.vs30_correlation = vs30_correlation
-        # Ensures the max depth does not go below 30m
-        # Also cut to the highest int depth
-        if depth[-1] < 30:
-            reduce_to = int(depth[-1])
-        self.max_depth = min(int(depth[-1]), 30)
-        # Ensures that the VsZ calculation will be done using the highest int depth
+        # Ensures that the VsZ calculation will be done using the highest int depth below 30m
         # for correlations to Vs30
-        int_depth_mask = depth <= self.max_depth
+        reduce_to = min(int(depth[-1]), 30)
+        int_depth_mask = depth <= reduce_to
+        to_remove = np.where(int_depth_mask == False)[0]
+        to_keep = np.where(int_depth_mask == True)[0]
+        if len(to_remove) != 0:
+            first_remove = to_remove[0]
+            last_to_keep = to_keep[-1]
+            middle = (depth[first_remove] + depth[last_to_keep]) / 2
+            if middle < reduce_to:
+                # Higher value is closer set higher value to the float value
+                int_depth_mask[first_remove] = True
+                depth[first_remove] = reduce_to
+            else:
+                if reduce_to != depth[last_to_keep]:
+                    # Grab lower value but raise it to a non float value as it's closer
+                    int_depth_mask[first_remove] = True
+                    depth[first_remove] = reduce_to
+                    vs[first_remove] = vs[last_to_keep]
+                    vs_sd[first_remove] = vs_sd[last_to_keep]
+        self.max_depth = reduce_to
         self.vs = vs[int_depth_mask]
         self.vs_sd = vs_sd[int_depth_mask]
         self.depth = depth[int_depth_mask]
@@ -64,7 +78,7 @@ class VsProfile:
             np.asarray(csv_data["Vs_SD"]),
             np.asarray(csv_data["Depth"]),
             None,
-            None
+            None,
         )
 
     @staticmethod
