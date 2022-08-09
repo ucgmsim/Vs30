@@ -80,19 +80,21 @@ const CPT = () => {
   }, [selectedCorrelations, cptOptions]);
 
   // Get Correlations on page load
-  if (correlationsOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Correlation Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setCorrelationsOptions(tempOptionArray);
-    });
-  }
+  useEffect(() => {
+    if (correlationsOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setCorrelationsOptions(tempOptionArray);
+      });
+    }
+  }, []);
 
   const sendProcessRequest = async () => {
     setLoading(true);
