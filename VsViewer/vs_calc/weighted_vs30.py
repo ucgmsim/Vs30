@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Dict
 
 import numpy as np
 
@@ -6,7 +6,7 @@ from VsViewer.vs_calc.VsProfile import VsProfile
 
 
 def calculate_weighted_vs30(
-    vs_profiles: Iterable[VsProfile], vs_weights: dict, correlation_weights: dict
+    vs_profiles: Iterable[VsProfile], vs_weights: Dict, correlation_weights: Dict
 ):
     """
     Calculates the weighted Vs30 by combining each of the Vs30Profiles

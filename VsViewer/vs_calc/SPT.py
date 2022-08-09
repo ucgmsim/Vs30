@@ -102,7 +102,7 @@ class SPT:
         return SPT(spt_ffp.stem, data[:, 0], data[:, 1])
 
     @staticmethod
-    def from_byte_stream_form(file_name: str, stream: bytes, form: dict):
+    def from_byte_stream_form(file_name: str, stream: bytes, form: Dict):
         """
         Creates an SPT from a file stream and form data
         """
