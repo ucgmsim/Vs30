@@ -261,7 +261,7 @@ const Results = () => {
             Set Weights
           </button>
           </div>
-          
+
         </div>
       </div>
       <div className="col-5 center-elm result-plot-section">
@@ -299,7 +299,7 @@ const Results = () => {
         <div className="vs30-value outline">
           {vs30 === null ? "" : Utils.roundValue(vs30)}
         </div>
-        <div className="vs30-title">Vs30 SD</div>
+        <div className="vs30-title">Vs30 Sigma</div>
         <div className="vs30-value outline">
           {vs30SD === null ? "" : Utils.roundValue(vs30SD)}
         </div>
