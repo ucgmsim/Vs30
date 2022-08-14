@@ -5,6 +5,7 @@
     flex-direction: column;
     align-items: center;
     width: 25%;
+    margin-left: 26.5vw;
 }
 
 .hr {
@@ -14,12 +15,18 @@
 }
 
 .form {
-    margin-top: 5px;
-    margin-bottom: 5px;
+    margin-top: 1vh;
+    margin-bottom: 1vh;
+}
+
+.form-label {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    margin-top: 0.5vh;
 }
 
 .form-file-input {
-    margin-top: 5px;
+    margin-top: 1vh;
     margin-bottom: 5px;
     margin-left: 15%;
 }
@@ -27,6 +34,11 @@
 .form-section-title {
     font-size: calc(12px + 0.4vw);
     font-weight: 700;
+}
+
+.file-section {
+    height: 20vh;
+    width: 15vw;
 }
 
 .select-cpt {

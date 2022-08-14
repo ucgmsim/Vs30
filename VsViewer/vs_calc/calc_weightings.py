@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Dict
 
 import numpy as np
 
@@ -8,9 +8,9 @@ from VsViewer.vs_calc.utils import convert_to_midpoint
 
 def get_weight(
     vs_profile: VsProfile,
-    vs_weights: dict,
-    vs_correlations: dict,
-    vs30_correlations: dict,
+    vs_weights: Dict,
+    vs_correlations: Dict,
+    vs30_correlations: Dict,
 ):
     return (
         vs_weights[vs_profile.name]

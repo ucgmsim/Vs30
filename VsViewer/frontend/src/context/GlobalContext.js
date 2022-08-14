@@ -6,7 +6,7 @@ export const Provider = (props) => {
   const { children } = props;
 
   // CPT Data
-  const [cptData, setCPTData] = useState([]);
+  const [cptData, setCPTData] = useState({});
   const [cptMidpointData, setCptMidpointData] = useState({});
   const [cptWeights, setCptWeights] = useState({});
   const [cptResults, setCptResults] = useState({});

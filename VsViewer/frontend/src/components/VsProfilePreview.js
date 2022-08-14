@@ -10,10 +10,8 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (Object.keys(average).length > 0) {
-      updatePlotData(checked);
-    }
-  }, [average]);
+    updatePlotData(checked);
+  }, [vsProfilePlotData, average]);
 
   const updatePlotData = (hideSD) => {
     let tempVsArr = [];
