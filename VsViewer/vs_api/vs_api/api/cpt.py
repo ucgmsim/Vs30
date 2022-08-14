@@ -19,7 +19,8 @@ def create_cpts():
     csvs = flask.request.files
     cpt_dict = dict()
     for csv_name, csv_data in csvs.items():
-        cpt = CPT.from_byte_stream(csv_data.filename, csv_data.stream.read())
+        formData = eval(flask.request.form.get(f"{csv_name}_formData"))
+        cpt = CPT.from_byte_stream(formData["cptName"], csv_data.stream.read())
         cpt_dict[cpt.name] = cpt.to_json()
 
     return flask.jsonify(cpt_dict)

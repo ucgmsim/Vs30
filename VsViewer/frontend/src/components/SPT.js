@@ -40,6 +40,7 @@ const SPT = () => {
   const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [file, setFile] = useState("");
+  const [sptName, setSptName] = useState("");
   const [boreholeDiameter, setBoreholeDiameter] = useState(150);
   const [energyRatio, setEnergyRatio] = useState("");
   const [sptOptions, setSPTOptions] = useState([]);
@@ -137,6 +138,7 @@ const SPT = () => {
     formData.append(
       file.name + "_formData",
       JSON.stringify({
+        sptName: sptName,
         boreholeDiameter: boreholeDiameter,
         energyRatio: energyRatio,
         hammerType: hammerType === null ? "" : hammerType["value"],
@@ -236,7 +238,7 @@ const SPT = () => {
       await sendVsProfileMidpointRequest(vsProfileToSend);
     }
     // Adds to Plot data from midpoint data
-    let tempPlotData = {};
+    let tempPlotData = [];
     selectedCorrelations.forEach((entry) => {
       for (const sptKey of Object.keys(sptData)) {
         tempPlotData[sptKey + "_" + entry["label"]] =
@@ -335,6 +337,7 @@ const SPT = () => {
   // Set the file and check for Soil type
   const checkFile = (file) => {
     setFile(file);
+    setSptName(file.name.split(".")[0]);
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
@@ -352,12 +355,20 @@ const SPT = () => {
     <div>
       <div className="row three-column-row center-elm spt-top">
         <div className="outline col-3 add-spt center-elm">
-          <div className="form-section-title">Upload SPT file</div>
+          <div className="form-section-title">Upload SPT</div>
           <input
             className="spt-file-input"
             type="file"
             onChange={(e) => checkFile(e.target.files[0])}
           />
+          <div className="form-label">SPT Name</div>
+            <div className="stretch">
+              <input
+                className="text-input"
+                value={sptName}
+                onChange={(e) => setSptName(e.target.value)}
+              />
+            </div>
           <div className="form-label">Borehole Diameter</div>
           <input
             className="text-input"

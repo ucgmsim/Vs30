@@ -1,0 +1,30 @@
+.file-table {
+  max-height: 15vh;
+  width: 11vw !important;
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  padding: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.file-col-size {
+  width: 12vw;
+  height: 1vh;
+}
+
+.remove-col-size {
+  width: 1vw !important;
+  height: 1vh;
+}
+
+.row-file-table {
+  width: 11vw;
+  height: 1vh;
+}
+
+.scroll-file-tbl {
+  margin-top: 0;
+  max-height: 17.5vh;
+  width: 11vw;
+  overflow-y: scroll;
+}

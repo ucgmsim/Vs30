@@ -108,19 +108,21 @@ const Results = () => {
   }, [vsProfileResults, cptResults, sptResults]);
 
   // Get Correlations on page load
-  if (correlationOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CORRELATIONS_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Correlation Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setCorrelationOptions(tempOptionArray);
-    });
-  }
+  useEffect(() => {
+    if (correlationOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CORRELATIONS_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setCorrelationOptions(tempOptionArray);
+      });
+    }
+  }, []);
 
   const computeVs30 = async () => {
     // Get all weights and reweight based on section weights
@@ -254,14 +256,13 @@ const Results = () => {
               )}
             </div>
             <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+              disabled={!canSet}
+              className="preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
           </div>
-
         </div>
       </div>
       <div className="col-5 center-elm result-plot-section">
