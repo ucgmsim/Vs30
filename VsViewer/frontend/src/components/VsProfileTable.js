@@ -34,7 +34,7 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
                 Vs
               </th>
               <th className="col-size" scope="col">
-                Vs_SD
+                Sigma
               </th>
             </tr>
           </thead>

@@ -3,9 +3,9 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
-from VsViewer.vs_calc import SPT
-from VsViewer.vs_calc import constants as vs_calc_constants
-from VsViewer.vs_calc.spt_vs_correlations import SPT_CORRELATIONS
+from vs_calc import SPT
+from vs_calc import constants as vs_calc_constants
+from vs_calc.spt_vs_correlations import SPT_CORRELATIONS
 
 
 @server.app.route(const.SPT_CREATE_ENDPOINT, methods=["POST"])

@@ -3,7 +3,7 @@ from typing import List
 
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import SPT, utils
+from vs_calc import SPT, utils
 
 
 def plot_spt(spts: List[SPT], output_ffp: str):

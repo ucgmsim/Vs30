@@ -3,11 +3,11 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
-from VsViewer.vs_calc import CPT
-from VsViewer.vs_calc import SPT
-from VsViewer.vs_calc import VsProfile
-from VsViewer.vs_calc import VS30_CORRELATIONS
-from VsViewer.vs_calc.calc_weightings import calculate_weighted_vs30
+from vs_calc import CPT
+from vs_calc import SPT
+from vs_calc import VsProfile
+from vs_calc import VS30_CORRELATIONS
+from vs_calc.calc_weightings import calculate_weighted_vs30
 
 
 @server.app.route(const.VS_PROFILE_CREATE_ENDPOINT, methods=["POST"])
