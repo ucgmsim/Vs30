@@ -3,9 +3,9 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
-from VsViewer.vs_calc import CPT
-from VsViewer.vs_calc import SPT
-from VsViewer.vs_calc import VsProfile
+from vs_calc import CPT
+from vs_calc import SPT
+from vs_calc import VsProfile
 
 
 @server.app.route(const.VS_PROFILE_CREATE_ENDPOINT, methods=["POST"])

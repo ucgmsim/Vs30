@@ -3,7 +3,7 @@ Compute the average weighted Vs30 given CPT files and correlations example
 """
 from pathlib import Path
 
-from VsViewer.vs_calc import CPT, VsProfile, calculate_weighted_vs30
+from vs_calc import CPT, VsProfile, calculate_weighted_vs30
 
 
 examples_dir = Path(__file__).parent.resolve()
