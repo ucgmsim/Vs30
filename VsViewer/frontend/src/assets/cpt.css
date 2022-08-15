@@ -41,6 +41,11 @@
     width: 15vw;
 }
 
+.file-table-section {
+    height: 18vh;
+    width: 15vw;
+}
+
 .select-cpt {
     min-width: 20vw;
     padding-bottom: 0.5vw;
