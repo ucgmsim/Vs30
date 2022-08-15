@@ -365,7 +365,7 @@ const CPT = () => {
         </div>
         <div className="col-2 file-section">
           <div className="form-section-title">CPT Files</div>
-          <div className="outline form center-elm">
+          <div className="file-table-section outline form center-elm">
               {Object.keys(cptOptions).length > 0 && (
                 <FileTable
                   files={cptOptions}
