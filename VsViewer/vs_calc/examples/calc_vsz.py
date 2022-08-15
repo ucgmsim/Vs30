@@ -3,7 +3,7 @@ Compute the vsZ value given a CPT file and correlation example
 """
 from pathlib import Path
 
-from VsViewer.vs_calc import CPT, VsProfile
+from vs_calc import CPT, VsProfile
 
 
 examples_dir = Path(__file__).parent.resolve()

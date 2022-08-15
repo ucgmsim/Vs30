@@ -2,7 +2,7 @@ from typing import Iterable
 
 import numpy as np
 
-from VsViewer.vs_calc.VsProfile import VsProfile
+from vs_calc.VsProfile import VsProfile
 
 
 def calculate_weighted_vs30(

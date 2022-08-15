@@ -4,7 +4,7 @@ from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import CPT, VsProfile, utils, CPT_CORRELATIONS
+from vs_calc import CPT, VsProfile, utils, CPT_CORRELATIONS
 
 
 def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
