@@ -21,6 +21,11 @@ const CPT = () => {
     setCptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+    cptWeights,
+    setCptWeights,
+    setCptResults,
+    setAllCorrelationWeights,
+    allCorrelationWeights,
   } = useContext(GlobalContext);
 
   // CPT Plot
@@ -39,7 +44,6 @@ const CPT = () => {
   const [cptOptions, setCPTOptions] = useState([]);
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
-  const [cptWeights, setCptWeights] = useState({});
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
@@ -76,19 +80,21 @@ const CPT = () => {
   }, [selectedCorrelations, cptOptions]);
 
   // Get Correlations on page load
-  if (correlationsOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Correlation Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setCorrelationsOptions(tempOptionArray);
-    });
-  }
+  useEffect(() => {
+    if (correlationsOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_CPT_CORRELATIONS_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setCorrelationsOptions(tempOptionArray);
+      });
+    }
+  }, []);
 
   const sendProcessRequest = async () => {
     setLoading(true);
@@ -244,8 +250,13 @@ const CPT = () => {
   };
 
   const checkWeights = () => {
-    console.log("Checking Weights");
-    // Will add functionality when Results page is started
+    // TODO error checking
+    setCptResults(vsProfileData);
+    let tempAllWeights = allCorrelationWeights;
+    for (const key of Object.keys(correlationWeights)) {
+      tempAllWeights[key] = correlationWeights[key];
+    }
+    setAllCorrelationWeights(tempAllWeights);
   };
 
   // Change the CPT Weights

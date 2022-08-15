@@ -1,6 +1,7 @@
 import CPT from "./CPT";
 import SPT from "./SPT";
 import VsProfile from "./VsProfile";
+import Results from "./Results";
 import CPTPlot from "./CptPlot";
 import SPTPlot from "./SptPlot";
 import SptTable from "./SptTable";
@@ -13,6 +14,7 @@ export {
   CPT,
   SPT,
   VsProfile,
+  Results,
   CPTPlot,
   CptTable,
   VsProfilePreviewPlot,

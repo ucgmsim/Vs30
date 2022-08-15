@@ -20,6 +20,11 @@ const SPT = () => {
     setSptMidpointData,
     vsProfileMidpointData,
     setVsProfileMidpointData,
+    sptWeights,
+    setSptWeights,
+    setSptResults,
+    setAllCorrelationWeights,
+    allCorrelationWeights,
   } = useContext(GlobalContext);
 
   // SPT Plot
@@ -36,7 +41,6 @@ const SPT = () => {
   const [boreholeDiameter, setBoreholeDiameter] = useState(150);
   const [energyRatio, setEnergyRatio] = useState("");
   const [sptOptions, setSPTOptions] = useState([]);
-  const [sptWeights, setSptWeights] = useState({});
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
@@ -78,50 +82,50 @@ const SPT = () => {
     }
   }, [selectedCorrelations, sptOptions]);
 
-  // Get HammerTypes on page load
-  if (hammerTypeOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_HAMMER_TYPES_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set HammerType Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setHammerTypeOptions(tempOptionArray);
-    });
-  }
-
-  // Get SoilTypes on page load
-  if (soilTypeOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SOIL_TYPES_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set SoilTypes Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setSoilTypeOptions(tempOptionArray);
-    });
-  }
-
-  // Get Correlations on page load
-  if (correlationsOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SPT_CORRELATIONS_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Correlation Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setCorrelationsOptions(tempOptionArray);
-    });
-  }
+  useEffect(() => {
+    // Get HammerTypes on page load
+    if (hammerTypeOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_HAMMER_TYPES_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set HammerType Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setHammerTypeOptions(tempOptionArray);
+      });
+    }
+    // Get SoilTypes on page load
+    if (soilTypeOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SOIL_TYPES_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set SoilTypes Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setSoilTypeOptions(tempOptionArray);
+      });
+    }
+    // Get Correlations on page load
+    if (correlationsOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.GET_SPT_CORRELATIONS_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setCorrelationsOptions(tempOptionArray);
+      });
+    }
+  }, []);
 
   const sendProcessRequest = async () => {
     setLoading(true);
@@ -288,8 +292,13 @@ const SPT = () => {
   };
 
   const checkWeights = () => {
-    console.log("Checking Weights");
-    // Will add functionality when Results page is started
+    // TODO error checking
+    setSptResults(vsProfileData);
+    let tempAllWeights = allCorrelationWeights;
+    for (const key of Object.keys(correlationWeights)) {
+      tempAllWeights[key] = correlationWeights[key];
+    }
+    setAllCorrelationWeights(tempAllWeights);
   };
 
   // Change the SPT Weights
