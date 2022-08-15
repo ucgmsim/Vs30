@@ -2,8 +2,8 @@ from typing import Iterable, Dict
 
 import numpy as np
 
-from VsViewer.vs_calc.VsProfile import VsProfile
-from VsViewer.vs_calc.utils import convert_to_midpoint
+from vs_calc.VsProfile import VsProfile
+from vs_calc.utils import convert_to_midpoint
 
 
 def get_weight(
