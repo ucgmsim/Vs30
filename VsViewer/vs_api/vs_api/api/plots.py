@@ -4,10 +4,12 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
-from VsViewer.vs_calc.SPT import SPT
-from VsViewer.vs_calc.VsProfile import VsProfile
-from VsViewer.vs_calc.utils import convert_to_midpoint
-from VsViewer.vs_calc.calc_weightings import calc_average_vs_midpoint
+from vs_calc.SPT import SPT
+from vs_calc.utils import convert_to_midpoint
+from vs_calc.SPT import SPT
+from vs_calc.VsProfile import VsProfile
+from vs_calc.utils import convert_to_midpoint
+from vs_calc.calc_weightings import calc_average_vs_midpoint
 
 
 @server.app.route(const.CPT_MIDPOINT_ENDPOINT, methods=["POST"])

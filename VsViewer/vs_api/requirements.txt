@@ -1,3 +1,4 @@
 yaml
 flask
 flask_cors
+uwsgi
