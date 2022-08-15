@@ -8,24 +8,41 @@ export const Provider = (props) => {
   // CPT Data
   const [cptData, setCPTData] = useState([]);
   const [cptMidpointData, setCptMidpointData] = useState({});
+  const [cptWeights, setCptWeights] = useState({});
+  const [cptResults, setCptResults] = useState({});
 
   // VsProfile
   const [vsProfileData, setVsProfileData] = useState([]);
   const [vsProfileMidpointData, setVsProfileMidpointData] = useState({});
+  const [vsProfileWeights, setVsProfileWeights] = useState({});
+  const [vsProfileResults, setVsProfileResults] = useState({});
 
   // SPT Data
   const [sptData, setSPTData] = useState({});
   const [sptMidpointData, setSptMidpointData] = useState({});
+  const [sptWeights, setSptWeights] = useState({});
+  const [sptResults, setSptResults] = useState({});
+
+  // Results
+  const [allCorrelationWeights, setAllCorrelationWeights] = useState({});
 
   // Make the context object:
   const globalContext = {
     // CPT Data
     cptData,
     setCPTData,
+    cptWeights,
+    setCptWeights,
+    cptResults,
+    setCptResults,
 
     // VsProfile Data
     vsProfileData, 
     setVsProfileData,
+    vsProfileWeights,
+    setVsProfileWeights,
+    vsProfileResults,
+    setVsProfileResults,
 
     // Plotting
     cptMidpointData,
@@ -38,6 +55,14 @@ export const Provider = (props) => {
     // SPT Data
     sptData,
     setSPTData,
+    sptWeights,
+    setSptWeights,
+    sptResults,
+    setSptResults,
+
+    // Results
+    allCorrelationWeights,
+    setAllCorrelationWeights,
   };
 
   // pass the value in provider and return
