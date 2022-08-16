@@ -5,8 +5,9 @@
 }
 
 .spt-file-input {
-    margin-top: 1vw;
+    margin-top: 0.5vh;
     margin-left: 5vw;
+    height: 10vh;
 }
 
 .form-label {
