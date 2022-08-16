@@ -31,7 +31,7 @@ class VsProfile:
         self.vs30_correlation = vs30_correlation
         # Ensures that the VsZ calculation will be done using the highest int depth below 30m
         # for correlations to Vs30
-        reduce_to = min(int(depth[-1]), 30)
+        reduce_to = min(int(max(depth)), 30)
         int_depth_mask = depth <= reduce_to
         to_remove = np.where(int_depth_mask == False)[0]
         to_keep = np.where(int_depth_mask == True)[0]
@@ -55,9 +55,9 @@ class VsProfile:
         self.vs_sd = vs_sd[int_depth_mask]
         self.depth = depth[int_depth_mask]
         self.info = {
-            "z_min": depth[0],
-            "z_max": depth[-1],
-            "z_spread": depth[-1] - depth[0],
+            "z_min": min(depth),
+            "z_max": max(depth),
+            "z_spread": max(depth) - min(depth),
             "removed_rows": np.where(int_depth_mask == False)[0].tolist(),
         }
 
