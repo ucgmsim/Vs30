@@ -8,6 +8,7 @@ import * as CONSTANTS from "Constants";
 import "assets/spt.css";
 import {
   WeightTable,
+  FileTable,
   VsProfilePreviewPlot,
   SPTPlot,
   SptTable,
@@ -334,6 +335,35 @@ const SPT = () => {
     setCorrelationWeights(newWeights);
   };
 
+  const removeFile = (fileToRemove) => {
+    let newSptOptions = [];
+    let newSptData = [];
+    sptOptions.forEach((object) => {
+      if (object["label"] !== fileToRemove["label"]) {
+        newSptOptions.push(object);
+        newSptData[object["label"]] = sptData[object["label"]];
+      }
+    });
+    setSPTData(newSptData);
+    setSPTOptions(newSptOptions);
+    changeSPTWeights(newSptOptions);
+    let newVsPlotData = {};
+    let newVsProfileData = {};
+    let newVsProfileMidpointData = {};
+    for (const key of Object.keys(vsProfilePlotData)) {
+      selectedCorrelations.forEach((correlation) => {
+        if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
+          newVsPlotData[key] = vsProfilePlotData[key];
+          newVsProfileData[key] = vsProfileData[key];
+          newVsProfileMidpointData[key] = vsProfileMidpointData[key];
+        }
+      });
+    }
+    setVsProfilePlotData(newVsPlotData);
+    setVsProfileData(newVsProfileData);
+    setVsProfileMidpointData(newVsProfileMidpointData);
+  };
+
   // Set the file and check for Soil type
   const checkFile = (file) => {
     setFile(file);
@@ -404,7 +434,19 @@ const SPT = () => {
           >
             Add SPT
           </button>
+          <div className="col-2 file-section">
+            <div className="form-section-title">SPT Files</div>
+            <div className="file-table-section outline form center-elm">
+                {Object.keys(sptOptions).length > 0 && (
+                  <FileTable
+                    files={sptOptions}
+                    removeFunction={removeFile}
+                  ></FileTable>
+                )}
+            </div>
+          </div>
         </div>
+
         <div className="col-2 center-elm spt-table-section">
           <div className="center-elm">
             <div className="spt-table-title">SPT Table</div>
