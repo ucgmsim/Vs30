@@ -153,12 +153,13 @@ const SPT = () => {
       const responseData = await response.json();
       // Add to SPT Select Dropdown and SPT Data
       let tempOptions = [];
-      let tempSPTData = sptData;
+      let tempSPTData = {};
       for (const sptOption of sptOptions) {
         tempOptions.push({
           value: sptOption["value"],
           label: sptOption["label"],
         });
+        tempSPTData[sptOption["label"]] = sptData["label"];
       }
       for (const key of Object.keys(responseData)) {
         tempOptions.push({
@@ -169,6 +170,7 @@ const SPT = () => {
       }
       setSPTOptions(tempOptions);
       setSPTData(tempSPTData);
+      debugger
     });
     setLoading(false);
     addToVsProfilePlot(selectedCorrelations);
@@ -215,7 +217,7 @@ const SPT = () => {
     selectedCorrelations.forEach((entry) => {
       for (const sptKey of Object.keys(sptData)) {
         if (
-          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
+          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"]) && !correlationsToSend.includes(entry["label"])
         ) {
           correlationsToSend.push(entry["label"]);
         }
@@ -337,13 +339,22 @@ const SPT = () => {
 
   const removeFile = (fileToRemove) => {
     let newSptOptions = [];
-    let newSptData = [];
+    let newSptData = {};
+    let newPlotSelected = [];
+    let newPlotData = {};
     sptOptions.forEach((object) => {
       if (object["label"] !== fileToRemove["label"]) {
         newSptOptions.push(object);
         newSptData[object["label"]] = sptData[object["label"]];
+        newPlotSelected.push(object);
+        if (sptPlotData[object["label"]] !== undefined) {
+          newPlotData[object["label"]] = sptPlotData[object["label"]];
+        }
       }
     });
+    debugger
+    setSelectedSptPlot(newPlotSelected);
+    setSptPlotData(newPlotData);
     setSPTData(newSptData);
     setSPTOptions(newSptOptions);
     changeSPTWeights(newSptOptions);
@@ -362,6 +373,10 @@ const SPT = () => {
     setVsProfilePlotData(newVsPlotData);
     setVsProfileData(newVsProfileData);
     setVsProfileMidpointData(newVsProfileMidpointData);
+    if (selectedSptTable === fileToRemove) {
+      setSelectedSptTable(null);
+    };
+    setVsProfileAveragePlotData({});
   };
 
   // Set the file and check for Soil type
@@ -384,57 +399,61 @@ const SPT = () => {
   return (
     <div>
       <div className="row three-column-row center-elm spt-top">
-        <div className="outline col-3 add-spt center-elm">
-          <div className="form-section-title">Upload SPT</div>
-          <input
-            className="spt-file-input"
-            type="file"
-            onChange={(e) => checkFile(e.target.files[0])}
-          />
-          <div className="form-label">SPT Name</div>
-            <div className="stretch">
+        <div className="col-3 upload-section">
+          <div className="center-elm">
+            <div className="form-section-title">Upload SPT</div>
+            <div className="outline add-spt center-elm">
+              <input
+                className="spt-file-input"
+                type="file"
+                onChange={(e) => checkFile(e.target.files[0])}
+              />
+              <div className="form-label">SPT Name</div>
+                <div className="stretch">
+                  <input
+                    className="text-input"
+                    value={sptName}
+                    onChange={(e) => setSptName(e.target.value)}
+                  />
+                </div>
+              <div className="form-label">Borehole Diameter</div>
               <input
                 className="text-input"
-                value={sptName}
-                onChange={(e) => setSptName(e.target.value)}
+                value={boreholeDiameter}
+                onChange={(e) => setBoreholeDiameter(e.target.value)}
               />
+              <div className="form-label">Energy Ratio</div>
+              <input
+                className="text-input"
+                value={energyRatio}
+                onChange={(e) => setEnergyRatio(e.target.value)}
+              />
+              <div className="form-label">Hammer Type</div>
+              <Select
+                className="spt-select"
+                placeholder="Select Hammer Type"
+                options={hammerTypeOptions}
+                isDisabled={hammerTypeOptions.length === 0}
+                onChange={(e) => setHammerType(e)}
+              />
+              <div className="form-label">Soil Type</div>
+              <Select
+                className="spt-select"
+                placeholder="Select Soil Type"
+                options={soilTypeOptions}
+                isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
+                onChange={(e) => setSoilType(e)}
+              />
+              <button
+                disabled={loading}
+                className="form btn btn-primary add-spt-btn"
+                onClick={() => sendProcessRequest()}
+              >
+                Add SPT
+              </button>
             </div>
-          <div className="form-label">Borehole Diameter</div>
-          <input
-            className="text-input"
-            value={boreholeDiameter}
-            onChange={(e) => setBoreholeDiameter(e.target.value)}
-          />
-          <div className="form-label">Energy Ratio</div>
-          <input
-            className="text-input"
-            value={energyRatio}
-            onChange={(e) => setEnergyRatio(e.target.value)}
-          />
-          <div className="form-label">Hammer Type</div>
-          <Select
-            className="spt-select"
-            placeholder="Select Hammer Type"
-            options={hammerTypeOptions}
-            isDisabled={hammerTypeOptions.length === 0}
-            onChange={(e) => setHammerType(e)}
-          />
-          <div className="form-label">Soil Type</div>
-          <Select
-            className="spt-select"
-            placeholder="Select Soil Type"
-            options={soilTypeOptions}
-            isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
-            onChange={(e) => setSoilType(e)}
-          />
-          <button
-            disabled={loading}
-            className="form btn btn-primary add-spt-btn"
-            onClick={() => sendProcessRequest()}
-          >
-            Add SPT
-          </button>
-          <div className="col-2 file-section">
+          </div>
+          <div className="file-section center-elm">
             <div className="form-section-title">SPT Files</div>
             <div className="file-table-section outline form center-elm">
                 {Object.keys(sptOptions).length > 0 && (
