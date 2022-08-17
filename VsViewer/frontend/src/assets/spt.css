@@ -1,13 +1,29 @@
-.add-spt {
+.upload-section {
     margin-top: 1.5vw !important;
     margin-left: -3vw;
-    height: 38vw;
+}
+
+.add-spt {
+    margin-top: 0.5vh;
+    height: 47vh;
 }
 
 .spt-file-input {
-    margin-top: 0.5vh;
+    margin-top: 1vh;
     margin-left: 5vw;
-    height: 10vh;
+    min-height: 30px;
+    margin-bottom: 0.2vh;
+}
+
+.file-section {
+    margin-top: 2vh;
+    width: 100%;
+    min-height: 18vh;
+}
+
+.file-table-section {
+    min-height: 18vh;
+    width: 15vw;
 }
 
 .form-label {
@@ -27,7 +43,7 @@
 }
 
 .add-spt-btn {
-    margin-top: 2vw;
+    margin-top: 2vh;
 }
 
 .spt-table-section {
