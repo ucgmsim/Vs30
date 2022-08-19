@@ -6,7 +6,12 @@ import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/vsProfile.css";
-import { WeightTable, VsProfilePreviewPlot, VsProfileTable } from "components";
+import {
+  WeightTable,
+  FileTable,
+  VsProfilePreviewPlot,
+  VsProfileTable,
+} from "components";
 
 const VsProfile = () => {
   const {
@@ -178,12 +183,43 @@ const VsProfile = () => {
     setVsProfileWeights(newWeights);
   };
 
+  const removeFile = (fileToRemove) => {
+    let newVsOptions = [];
+    let newVsData = {};
+    let newPlotSelected = [];
+    let newPlotData = {};
+    let newVsProfileMidpointData = {};
+    VsProfileOptions.forEach((object) => {
+      if (object["label"] !== fileToRemove["label"]) {
+        newVsOptions.push(object);
+        newVsData[object["label"]] = vsProfileData[object["label"]];
+        newPlotSelected.push(object);
+        if (vsProfilePlotData[object["label"]] !== undefined) {
+          newPlotData[object["label"]] = vsProfilePlotData[object["label"]];
+          newVsProfileMidpointData[object["label"]] =
+            vsProfileMidpointData[object["label"]];
+        }
+      }
+    });
+    debugger;
+    setSelectedVsProfilePlot(newPlotSelected);
+    setVsProfilePlotData(newPlotData);
+    setVsProfileData(newVsData);
+    setVsProfileOptions(newVsOptions);
+    changeVsProfileWeights(newVsOptions);
+    setVsProfileMidpointData(newVsProfileMidpointData);
+    if (selectedVsProfileTable === fileToRemove) {
+      setSelectedVsProfileTable(null);
+    }
+    setVsProfileAveragePlotData({});
+  };
+
   return (
     <div>
       <div className="row three-column-row center-elm vs-top">
         <div className="col-1 center-elm">
+          <div className="form-section-title">Upload VsProfile</div>
           <div className="outline add-vs">
-            <div className="form-section-title">Upload VsProfile</div>
             <input
               className="vs-file-input"
               type="file"
@@ -204,6 +240,17 @@ const VsProfile = () => {
             >
               Add VsProfile
             </button>
+          </div>
+          <div className="file-section center-elm">
+            <div className="form-section-title">VsProfile Files</div>
+            <div className="file-table-section outline form center-elm">
+              {Object.keys(VsProfileOptions).length > 0 && (
+                <FileTable
+                  files={VsProfileOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
+            </div>
           </div>
           <div className="vs-weight-title">VsProfile Weights</div>
           <div className="outline center-elm vs-weights">
