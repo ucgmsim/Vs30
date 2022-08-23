@@ -37,8 +37,6 @@ def calculate_weighted_vs30(
     Calculates the weighted Vs30 by combining each of the Vs30Profiles
     with set weights for the VsProfile's and the Correlations
     """
-    tets = [1 if vs_profile.vs30_correlation is None else 2 for vs_profile in vs_profiles]
-    print(tets)
     average_vs30 = sum(
         get_weight(
             vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
