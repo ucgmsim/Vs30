@@ -73,7 +73,7 @@ const SPTTable = ({ sptTableData }) => {
                   <td>{Utils.roundValue(sptInfo["z_spread"])}m</td>
                 </tr>
                 <tr className="highlight">
-                  <td className="bold">Removed Rows</td>
+                  <td className="bold info-width">Removed Rows</td>
                   <td>{sptInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>

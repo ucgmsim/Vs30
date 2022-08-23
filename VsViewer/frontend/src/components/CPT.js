@@ -11,7 +11,7 @@ import {
   CptTable,
   WeightTable,
   FileTable,
-  Tooltip,
+  InfoTooltip,
   VsProfilePreviewPlot,
 } from "components";
 
@@ -51,7 +51,6 @@ const CPT = () => {
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
-  const [hoveringFile, setHoveringFile] = useState(false);
 
   // Set the Correlation Weights
   useEffect(() => {
@@ -325,7 +324,7 @@ const CPT = () => {
     let newVsProfileMidpointData = {};
     for (const key of Object.keys(vsProfilePlotData)) {
       selectedCorrelations.forEach((correlation) => {
-        if (key !== (fileToRemove["label"] + "_" + correlation["label"])) {
+        if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
           newVsPlotData[key] = vsProfilePlotData[key];
           newVsProfileData[key] = vsProfileData[key];
           newVsProfileMidpointData[key] = vsProfileMidpointData[key];
@@ -337,28 +336,22 @@ const CPT = () => {
     setVsProfileMidpointData(newVsProfileMidpointData);
   };
 
-  const onHoverFile = () => {
-    setHoveringFile(true);
-  };
-
-  const offHoverFile = () => {
-    setHoveringFile(false);
-  };
-
   return (
     <div>
       <div className="row two-colum-row centre-elm">
         <div className="col-3 process-cpt">
           <div className="form-section-title">Upload CPT</div>
-          <div className="outline form">
-            <input
-              className="form-file-input"
-              type="file"
-              onChange={(e) => onSetFile(e.target.files[0])}
-              onMouseOver={onHoverFile}
-              onMouseOut={offHoverFile}
-            />
-            {hoveringFile && <Tooltip text={CONSTANTS.CPT_MIDPOINT_ENDPOINT}></Tooltip>}
+          <div className="outline form-section">
+            <div className="row two-colum-row">
+              <input
+                className="col-8 form-file-input"
+                type="file"
+                onChange={(e) => onSetFile(e.target.files[0])}
+              />
+              <div className="col-1 file-info">
+                <InfoTooltip text={CONSTANTS.CPT_FILE} />
+              </div>
+            </div>
             <div className="form-label">CPT Name</div>
             <div className="stretch">
               <input
@@ -379,12 +372,12 @@ const CPT = () => {
         <div className="col-2 file-section">
           <div className="form-section-title">CPT Files</div>
           <div className="file-table-section outline form center-elm">
-              {Object.keys(cptOptions).length > 0 && (
-                <FileTable
-                  files={cptOptions}
-                  removeFunction={removeFile}
-                ></FileTable>
-              )}
+            {Object.keys(cptOptions).length > 0 && (
+              <FileTable
+                files={cptOptions}
+                removeFunction={removeFile}
+              ></FileTable>
+            )}
           </div>
         </div>
       </div>

@@ -14,6 +14,10 @@
     margin-top: 1vw;
 }
 
+.form-section {
+    width: 15vw;
+}
+
 .form {
     margin-top: 1vh;
     margin-bottom: 1vh;
@@ -26,9 +30,11 @@
 }
 
 .form-file-input {
-    margin-top: 1vh;
+    margin-top: 1vh !important;
     margin-bottom: 5px;
-    margin-left: 15%;
+    margin-left: 8%;
+    padding-right: 0 !important;
+    width: 11vw !important;
 }
 
 .form-section-title {
@@ -44,6 +50,12 @@
 .file-table-section {
     height: 18vh;
     width: 15vw;
+}
+
+.file-info {
+    width: 1vw !important;
+    padding: 0 !important;
+    margin-top: 1.3vh !important;
 }
 
 .select-cpt {

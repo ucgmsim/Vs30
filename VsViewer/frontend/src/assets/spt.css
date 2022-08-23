@@ -6,13 +6,16 @@
 .add-spt {
     margin-top: 0.5vh;
     height: 47vh;
+    width: 18vw !important;
 }
 
 .spt-file-input {
-    margin-top: 1vh;
-    margin-left: 5vw;
+    margin-top: 1vh !important;
+    margin-left: -0.3vw;
     min-height: 30px;
     margin-bottom: 0.2vh;
+    padding-right: 0 !important;
+    width: 11vw !important;
 }
 
 .file-section {
@@ -106,7 +109,7 @@
 }
 
 .vs-preview-plot-spt {
-    height: 67vh;
+    height: 70vh;
     width: 36vw;
     margin-bottom: 1vh;
 }
@@ -116,14 +119,16 @@
     margin-top: 3vh !important;
     padding-top: 2vh;
     margin-bottom: 1vh;
-    height: 67vh;
+    height: 70vh;
 }
 
 .spt-weights {
     margin-bottom: 1vw;
     height: 13vw;
+    width: 20vw;
 }
 
 .cor-weights-spt {
     height: 13vw;
+    width: 20vw;
 }

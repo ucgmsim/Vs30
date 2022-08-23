@@ -1,9 +1,11 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/spt.css";
 import {
@@ -12,6 +14,7 @@ import {
   VsProfilePreviewPlot,
   SPTPlot,
   SptTable,
+  InfoTooltip,
 } from "components";
 
 const SPT = () => {
@@ -55,6 +58,9 @@ const SPT = () => {
   const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [flashSPTWeightError, setFlashSPTWeightError] = useState(false);
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
 
   // Set the SPT Weights
   useEffect(() => {
@@ -170,7 +176,6 @@ const SPT = () => {
       }
       setSPTOptions(tempOptions);
       setSPTData(tempSPTData);
-      debugger
     });
     setLoading(false);
     addToVsProfilePlot(selectedCorrelations);
@@ -217,7 +222,10 @@ const SPT = () => {
     selectedCorrelations.forEach((entry) => {
       for (const sptKey of Object.keys(sptData)) {
         if (
-          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"]) && !correlationsToSend.includes(entry["label"])
+          !vsProfileMidpointData.hasOwnProperty(
+            sptKey + "_" + entry["label"]
+          ) &&
+          !correlationsToSend.includes(entry["label"])
         ) {
           correlationsToSend.push(entry["label"]);
         }
@@ -316,15 +324,31 @@ const SPT = () => {
     setSelectedSptTableData(sptData[e["label"]]);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setSptResults(vsProfileData);
-    sendAverageRequest(vsProfileData);
-    let tempAllWeights = allCorrelationWeights;
-    for (const key of Object.keys(correlationWeights)) {
-      tempAllWeights[key] = correlationWeights[key];
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkSPT = Utils.errorCheckWeights(sptWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
     }
-    setAllCorrelationWeights(tempAllWeights);
+    if (!checkSPT) {
+      setFlashSPTWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkSPT) {
+      setSptResults(vsProfileData);
+      sendAverageRequest(vsProfileData);
+      let tempAllWeights = allCorrelationWeights;
+      for (const key of Object.keys(correlationWeights)) {
+        tempAllWeights[key] = correlationWeights[key];
+      }
+      setAllCorrelationWeights(tempAllWeights);
+      setWeightError(false);
+    } else {
+      await wait(1000);
+      setFlashSPTWeightError(false);
+      setFlashCorWeightError(false);
+    }
   };
 
   // Change the SPT Weights
@@ -352,7 +376,6 @@ const SPT = () => {
         }
       }
     });
-    debugger
     setSelectedSptPlot(newPlotSelected);
     setSptPlotData(newPlotData);
     setSPTData(newSptData);
@@ -375,7 +398,7 @@ const SPT = () => {
     setVsProfileMidpointData(newVsProfileMidpointData);
     if (selectedSptTable === fileToRemove) {
       setSelectedSptTable(null);
-    };
+    }
     setVsProfileAveragePlotData({});
   };
 
@@ -394,28 +417,33 @@ const SPT = () => {
         }
       },
     });
-};
+  };
 
   return (
     <div>
       <div className="row three-column-row center-elm spt-top">
         <div className="col-3 upload-section">
-          <div className="center-elm">
+          <div className="center-elm spt-form-section">
             <div className="form-section-title">Upload SPT</div>
             <div className="outline add-spt center-elm">
-              <input
-                className="spt-file-input"
-                type="file"
-                onChange={(e) => checkFile(e.target.files[0])}
-              />
-              <div className="form-label">SPT Name</div>
-                <div className="stretch">
-                  <input
-                    className="text-input"
-                    value={sptName}
-                    onChange={(e) => setSptName(e.target.value)}
-                  />
+              <div className="row two-colum-row">
+                <input
+                  className="col-8 spt-file-input"
+                  type="file"
+                  onChange={(e) => checkFile(e.target.files[0])}
+                />
+                <div className="col-1 file-info">
+                  <InfoTooltip text={CONSTANTS.SPT_FILE} />
                 </div>
+              </div>
+              <div className="form-label">SPT Name</div>
+              <div className="stretch">
+                <input
+                  className="text-input"
+                  value={sptName}
+                  onChange={(e) => setSptName(e.target.value)}
+                />
+              </div>
               <div className="form-label">Borehole Diameter</div>
               <input
                 className="text-input"
@@ -456,12 +484,12 @@ const SPT = () => {
           <div className="file-section center-elm">
             <div className="form-section-title">SPT Files</div>
             <div className="file-table-section outline form center-elm">
-                {Object.keys(sptOptions).length > 0 && (
-                  <FileTable
-                    files={sptOptions}
-                    removeFunction={removeFile}
-                  ></FileTable>
-                )}
+              {Object.keys(sptOptions).length > 0 && (
+                <FileTable
+                  files={sptOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
             </div>
           </div>
         </div>
@@ -516,13 +544,14 @@ const SPT = () => {
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
-        <div className="outline col-3 weights-spt">
+        <div className="outline col-3 weights-spt center-elm">
           <div className="form-section-title">SPT Weights</div>
           <div className="outline center-elm spt-weights">
             {Object.keys(sptWeights).length > 0 && (
               <WeightTable
                 weights={sptWeights}
                 setFunction={changeSPTWeights}
+                flashError={flashSPTWeightError}
               />
             )}
           </div>
@@ -532,16 +561,22 @@ const SPT = () => {
               <WeightTable
                 weights={correlationWeights}
                 setFunction={changeCorrelationWeights}
+                flashError={flashCorWeightError}
               />
             )}
           </div>
-          <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+          <div className="row two-colum-row set-weights-section">
+              <button
+                disabled={!canSet}
+                className="col-5 set-weights preview-btn btn btn-primary"
+                onClick={() => checkWeights()}
+              >
+                Set Weights
+              </button>
+              <div className="col-1 weight-error">
+                {weightError && <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />}
+              </div> 
+            </div>
         </div>
         <div className="col-4 vs-preview-section-spt center-elm">
           <div className="form-section-title">VsProfile Preview</div>

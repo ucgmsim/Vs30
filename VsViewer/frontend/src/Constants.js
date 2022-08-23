@@ -37,3 +37,13 @@ export const DEFAULTCOLOURS = [
   "#bcbd22", // Curry Yellow-Green
   "#17becf", // Blue-Teal
 ];
+
+// Tooltips
+export const CPT_FILE = "CSV file format with 4 columns labelled in order [Depth, Qc, Fs, u]";
+export const SPT_FILE = "CSV file format with 2-3 columns labelled in order [Depth, NValue, Soil] in which Soil is optional";
+export const VS_FILE = "CSV file format with 3 columns labelled in order [Depth, Vs, Vs_SD]";
+export const CPT_REMOVED_ROWS = "Number of rows removed during processing where Depth is > 30m or Qc or Fs is <= 0";
+export const VS_REMOVED_ROWS = "Number of rows removed during processing where Depth is > 30m or the ending depth value is not a whole number";
+
+// Errors
+export const WEIGHT_ERROR = "Weights sum is not close enough to 1 or are not numbers";
