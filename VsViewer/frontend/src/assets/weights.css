@@ -29,3 +29,20 @@
 ::-webkit-scrollbar {
     display: none;
 }
+
+.weight-error {
+    position: relative;
+    top: 25% !important;
+    width: 1vw !important;
+    height: 2vh !important;
+}
+
+.custom-border-size {
+    transition: border 2s;
+    border: 2px solid #dee2e6 !important;
+}
+
+.flash-warning {
+    transition: border 1s;
+    border: 2px solid #ff0000b7 !important;
+}

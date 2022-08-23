@@ -1,9 +1,11 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/vsProfile.css";
 import {
@@ -11,7 +13,9 @@ import {
   FileTable,
   VsProfilePreviewPlot,
   VsProfileTable,
+  InfoTooltip,
 } from "components";
+
 
 const VsProfile = () => {
   const {
@@ -40,6 +44,8 @@ const VsProfile = () => {
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [flashWeightError, setFlashWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
 
   // Set the VsProfile Weights
   useEffect(() => {
@@ -172,10 +178,18 @@ const VsProfile = () => {
     setVsProfileName(e.name.split(".")[0]);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setVsProfileResults(vsProfileData);
-    sendAverageRequest();
+  const checkWeights = async () => {
+    let check = Utils.errorCheckWeights(vsProfileWeights);
+    if (check) {
+      setVsProfileResults(vsProfileData);
+      sendAverageRequest();
+      setWeightError(false);
+    } else {
+      setFlashWeightError(true);
+      setWeightError(true);
+      await wait(1000);
+      setFlashWeightError(false);
+    }
   };
 
   // Change the vsProfile Weights
@@ -201,7 +215,6 @@ const VsProfile = () => {
         }
       }
     });
-    debugger;
     setSelectedVsProfilePlot(newPlotSelected);
     setVsProfilePlotData(newPlotData);
     setVsProfileData(newVsData);
@@ -217,14 +230,19 @@ const VsProfile = () => {
   return (
     <div>
       <div className="row three-column-row center-elm vs-top">
-        <div className="col-1 center-elm">
+        <div className="col-1 center-elm vs-left-panel">
           <div className="form-section-title">Upload VsProfile</div>
           <div className="outline add-vs">
-            <input
-              className="vs-file-input"
-              type="file"
-              onChange={(e) => onSetFile(e.target.files[0])}
-            />
+            <div className="row two-colum-row">
+              <input
+                className="col-8 vs-file-input"
+                type="file"
+                onChange={(e) => onSetFile(e.target.files[0])}
+              />
+              <div className="col-1 file-info">
+                <InfoTooltip text={CONSTANTS.VS_FILE} />
+              </div>
+            </div>
             <div className="form-label">VsProfile Name</div>
             <div className="stretch">
               <input
@@ -241,7 +259,7 @@ const VsProfile = () => {
               Add VsProfile
             </button>
           </div>
-          <div className="file-section center-elm">
+          <div className="vs-file-section center-elm">
             <div className="form-section-title">VsProfile Files</div>
             <div className="file-table-section outline form center-elm">
               {Object.keys(VsProfileOptions).length > 0 && (
@@ -259,16 +277,22 @@ const VsProfile = () => {
                 <WeightTable
                   weights={vsProfileWeights}
                   setFunction={changeVsProfileWeights}
+                  flashError={flashWeightError}
                 />
               )}
             </div>
-            <button
-              disabled={!canSet}
-              className="preview-btn btn btn-primary"
-              onClick={() => checkWeights()}
-            >
-              Set Weights
-            </button>
+            <div className="row two-colum-row set-weights-section">
+              <button
+                disabled={!canSet}
+                className="col-5 set-weights preview-btn btn btn-primary"
+                onClick={() => checkWeights()}
+              >
+                Set Weights
+              </button>
+              <div className="col-1 weight-error">
+                {weightError && <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />}
+              </div> 
+            </div>
           </div>
         </div>
         <div className="col-2 center-elm vs-table-section">

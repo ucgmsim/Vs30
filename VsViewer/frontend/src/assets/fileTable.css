@@ -28,3 +28,13 @@
   width: 11vw;
   overflow-y: scroll;
 }
+
+.info-width {
+  width: 9.5vw !important;
+  margin-right: -1vw !important;
+}
+
+.file-info-tbl {
+  width: 1vw !important;
+  padding: 0 !important;
+}

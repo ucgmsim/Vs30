@@ -1,12 +1,24 @@
 .add-vs {
     margin-top: 1.5vw !important;
-    height: 15vh;
-    width: 22vw;
+    height: 20vh !important;
+    width: 18vw !important;
 }
 
 .vs-file-input {
-    margin-top: 1vw;
-    margin-left: 5vw;
+    margin-top: 1vh !important;
+    margin-left: 3.5vw !important;
+    padding-right: 0 !important;
+    width: 11vw !important;
+}
+
+.vs-left-panel {
+    height: 89vh;
+}
+
+.vs-file-section {
+    margin-top: 2vh;
+    width: 100%;
+    min-height: 18vh;
 }
 
 .form-label {
@@ -35,7 +47,7 @@
 
 .vs-table-section {
     margin-top: 0.5vw !important;
-    height: 47vw;
+    height: 88vh;
 }
 
 .vs-table-title {
@@ -45,19 +57,19 @@
 
 .vs-table {
     margin-top: 1vw;
-    height:42vw;
+    height: 78vh;
     width: 30vw;
 }
 
 .vs-plot-section {
     margin-top: 0.5vw !important;
     margin-right: 0.2vw;
-    height:47vw;
+    height: 88vh;
 }
 
 .vs-plot {
     margin-top: 1vw;
-    height: 42vw;
+    height: 82vh;
     width: 39vw;
 }
 
@@ -81,7 +93,7 @@
 }
 
 .vs-top {
-    height: 40vw;
+    height: 89vh;
 }
 
 .vs-weights {
@@ -99,4 +111,15 @@
     font-weight: 700;
     width: 22vw;
     margin-top: 1vw;
+}
+
+.set-weights {
+    width: 6vw !important;
+    top: 15% !important;
+    margin-left: 1.5vw !important;
+}
+
+.set-weights-section {
+    margin-top: 1vh !important;
+    height: 6vh;
 }

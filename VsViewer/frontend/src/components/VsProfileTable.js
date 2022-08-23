@@ -1,6 +1,8 @@
 import React, { memo } from "react";
 
 import * as Utils from "Utils";
+import * as CONSTANTS from "Constants";
+import { InfoTooltip } from "components";
 
 import "assets/vsProfileTable.css";
 
@@ -73,7 +75,16 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
                   <td>{Utils.roundValue(vsProfileInfo["z_spread"])}m</td>
                 </tr>
                 <tr className="highlight">
-                  <td className="bold">Removed Rows</td>
+                  <td className="bold info-width">
+                    <div className="row two-colum-row info-width">
+                      <div className="col-9">
+                        Removed Rows
+                      </div>
+                      <div className=" col-1 file-info-tbl">
+                        <InfoTooltip text={CONSTANTS.VS_REMOVED_ROWS} />
+                      </div>
+                    </div>
+                  </td>
                   <td>{vsProfileInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>

@@ -168,7 +168,7 @@ class CPT:
         # Filtering
         below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
         info["Removed rows"] = np.where(below_30_filter == False)[0]
-        data = data[below_30_filter.T]  # z is less then 30 m
+        data = data[below_30_filter.T]  # z is less than 30 m
         zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
         info["Removed rows"] = np.concatenate(
             (
