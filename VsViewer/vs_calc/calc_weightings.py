@@ -3,7 +3,7 @@ from typing import Iterable, Dict
 import numpy as np
 
 from vs_calc.VsProfile import VsProfile
-from vs_calc.utils import convert_to_midpoint
+from vs_calc.utils import convert_to_midpoint, normalise_weights
 
 
 def get_weight(
@@ -37,6 +37,11 @@ def calculate_weighted_vs30(
     Calculates the weighted Vs30 by combining each of the Vs30Profiles
     with set weights for the VsProfile's and the Correlations
     """
+    vs_weights, vs_correlation_weights, vs30_correlation_weights = (
+        normalise_weights(vs_weights),
+        normalise_weights(vs_correlation_weights),
+        normalise_weights(vs30_correlation_weights),
+    )
     average_vs30 = sum(
         get_weight(
             vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
@@ -68,6 +73,11 @@ def calc_average_vs_midpoint(
     Re-Samples at 0.005 as depth may not be consistent with each VsProfile
     Ignores 0 values and starting constants when not starting from depth of 0
     """
+    vs_weights, vs_correlation_weights, vs30_correlation_weights = (
+        normalise_weights(vs_weights),
+        normalise_weights(vs_correlation_weights),
+        normalise_weights(vs30_correlation_weights),
+    )
     depth_values = []
     weighted_vs = []
     weighted_sd = []

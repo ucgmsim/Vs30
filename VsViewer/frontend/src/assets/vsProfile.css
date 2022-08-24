@@ -1,6 +1,6 @@
 .add-vs {
     margin-top: 1.5vw !important;
-    height: 20vh !important;
+    height: 23vh !important;
     width: 18vw !important;
 }
 
@@ -42,7 +42,7 @@
 }
 
 .add-vs-btn {
-    margin-top: 1.5vw;
+    margin-top: 1.5vh;
 }
 
 .vs-table-section {
@@ -122,4 +122,26 @@
 .set-weights-section {
     margin-top: 1vh !important;
     height: 6vh;
+}
+
+.vs-checkbox {
+    margin-top: 0.15vh !important;
+    height: 1.75vh;
+    width: 1.75vw;
+}
+
+.layered-section {
+    margin-left: 1.5vw !important;
+    height: 2vh;
+    margin-top: 1.5vh !important;
+    width: 12vw;
+}
+
+.layered-title {
+    font-size: calc(12px + 0.2vw);
+    font-weight: 500;
+    padding: 0;
+    margin-left: 2vw;
+    height: 2vh;
+    width: 10vw;
 }

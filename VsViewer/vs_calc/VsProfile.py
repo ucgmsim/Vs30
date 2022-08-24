@@ -25,17 +25,19 @@ class VsProfile:
         depth: np.ndarray,
         vs_correlation: str = None,
         vs30_correlation: str = None,
+        layered: bool = False,
     ):
         self.name = name
         self.vs_correlation = vs_correlation
         self.vs30_correlation = vs30_correlation
+        self.layered = layered
         # Ensures that the VsZ calculation will be done using the highest int depth below 30m
         # for correlations to Vs30
         reduce_to = min(int(max(depth)), 30)
         int_depth_mask = depth <= reduce_to
         to_remove = np.where(int_depth_mask == False)[0]
         to_keep = np.where(int_depth_mask == True)[0]
-        if len(to_remove) != 0:
+        if len(to_remove) != 0 and reduce_to != depth[to_keep[-1]]:
             first_remove = to_remove[0]
             last_to_keep = to_keep[-1]
             middle = (depth[first_remove] + depth[last_to_keep]) / 2
@@ -67,7 +69,7 @@ class VsProfile:
         self._vs30_sd = None
 
     @staticmethod
-    def from_byte_stream(name: str, stream: bytes):
+    def from_byte_stream(name: str, layered: bool, stream: bytes):
         """
         Creates a VsProfile from a file stream
         """
@@ -79,6 +81,7 @@ class VsProfile:
             np.asarray(csv_data["Depth"]),
             None,
             None,
+            layered
         )
 
     @staticmethod
@@ -123,6 +126,7 @@ class VsProfile:
             np.asarray(json["depth"]),
             None if json["vs_correlation"] == "" else json["vs_correlation"],
             None if json["vs30_correlation"] == "" else json["vs30_correlation"],
+            True if json["layered"] == "True" else False,
         )
 
     def to_json(self):
@@ -133,6 +137,7 @@ class VsProfile:
             "name": self.name,
             "vs_correlation": self.vs_correlation,
             "vs30_correlation": self.vs30_correlation,
+            "layered": str(self.layered),
             "max_depth": self.max_depth,
             "vs": self.vs.tolist(),
             "vs_sd": self.vs_sd.tolist(),

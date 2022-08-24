@@ -28,7 +28,7 @@ const SPTTable = ({ sptTableData }) => {
           <thead>
             <tr>
               <th className="col-size" scope="col">
-                Depth
+                Depth (m)
               </th>
               <th className="col-size" scope="col">
                 N
@@ -55,12 +55,12 @@ const SPTTable = ({ sptTableData }) => {
             <table className="spt-min-max table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Min Depth</td>
-                  <td>{Utils.roundValue(sptInfo["z_min"])}m</td>
+                  <td className="bold">Min Depth (m)</td>
+                  <td>{Utils.roundValue(sptInfo["z_min"])}</td>
                 </tr>
                 <tr>
-                  <td className="bold">Max Depth</td>
-                  <td>{Utils.roundValue(sptInfo["z_max"])}m</td>
+                  <td className="bold">Max Depth (m)</td>
+                  <td>{Utils.roundValue(sptInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -69,8 +69,8 @@ const SPTTable = ({ sptTableData }) => {
             <table className="spt-removed table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Depth Spread</td>
-                  <td>{Utils.roundValue(sptInfo["z_spread"])}m</td>
+                  <td className="bold">Depth Spread (m)</td>
+                  <td>{Utils.roundValue(sptInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">Removed Rows</td>

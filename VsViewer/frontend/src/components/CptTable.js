@@ -32,16 +32,16 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           <thead>
             <tr>
               <th className="col-size" scope="col">
-                Depth
+                Depth (m)
               </th>
               <th className="col-size" scope="col">
-                Qc
+                Qc (MPa)
               </th>
               <th className="col-size" scope="col">
-                Fs
+                Fs (MPa)
               </th>
               <th className="col-size" scope="col">
-                u
+                u (MPa)
               </th>
             </tr>
           </thead>
@@ -62,12 +62,12 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
             <table className="table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Min Depth</td>
-                  <td>{Utils.roundValue(cptInfo["z_min"])}m</td>
+                  <td className="bold">Min Depth (m)</td>
+                  <td>{Utils.roundValue(cptInfo["z_min"])}</td>
                 </tr>
                 <tr>
-                  <td className="bold">Max Depth</td>
-                  <td>{Utils.roundValue(cptInfo["z_max"])}m</td>
+                  <td className="bold">Max Depth (m)</td>
+                  <td>{Utils.roundValue(cptInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -76,8 +76,8 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
             <table className=" table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold info-width">Depth Spread</td>
-                  <td>{Utils.roundValue(cptInfo["z_spread"])}m</td>
+                  <td className="bold info-width">Depth Spread (m)</td>
+                  <td>{Utils.roundValue(cptInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">

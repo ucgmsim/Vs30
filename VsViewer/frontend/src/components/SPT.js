@@ -444,7 +444,7 @@ const SPT = () => {
                   onChange={(e) => setSptName(e.target.value)}
                 />
               </div>
-              <div className="form-label">Borehole Diameter</div>
+              <div className="form-label">Borehole Diameter (mm)</div>
               <input
                 className="text-input"
                 value={boreholeDiameter}
@@ -566,17 +566,19 @@ const SPT = () => {
             )}
           </div>
           <div className="row two-colum-row set-weights-section">
-              <button
-                disabled={!canSet}
-                className="col-5 set-weights preview-btn btn btn-primary"
-                onClick={() => checkWeights()}
-              >
-                Set Weights
-              </button>
-              <div className="col-1 weight-error">
-                {weightError && <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />}
-              </div> 
+            <button
+              disabled={!canSet}
+              className="col-5 set-weights preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
+            <div className="col-1 weight-error">
+              {weightError && (
+                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+              )}
             </div>
+          </div>
         </div>
         <div className="col-4 vs-preview-section-spt center-elm">
           <div className="form-section-title">VsProfile Preview</div>
