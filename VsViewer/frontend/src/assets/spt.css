@@ -1,12 +1,17 @@
 .upload-section {
     margin-top: 1.5vw !important;
     margin-left: -3vw;
+    height: 76vh;
 }
 
 .add-spt {
     margin-top: 0.5vh;
     height: 47vh;
     width: 18vw !important;
+}
+
+.spt-form-section {
+    margin-top: 1vh;
 }
 
 .spt-file-input {
@@ -52,24 +57,24 @@
 .spt-table-section {
     margin-top: 0.5vw !important;
     margin-right: 3.5vw;
-    height: 39vw;
+    height: 78vh;
 }
 
 .spt-table {
     margin-top: 1vw;
-    height: 34vw;
+    height: 78vh;
     width: 30vw;
 }
 
 .spt-plot-section {
     margin-top: 0.5vw !important;
     margin-right: 0.2vw;
-    height: 39vw;
+    height: 78vh;
 }
 
 .spt-plot {
     margin-top: 1vw;
-    height: 39vw;
+    height: 70vh;
     width: 39vw;
 }
 
@@ -94,18 +99,18 @@
 }
 
 .spt-top {
-    height: 40vw;
+    height: 78vh;
 }
 
 .spt-bot {
-    height: 40vw;
+    height: 40vh;
     margin-top: 1vw;
 }
 
 .vs-preview-section-spt {
     margin-right: 17vw;
     margin-bottom: 1vh;
-    height: 40vw;
+    height: 75vh;
 }
 
 .vs-preview-plot-spt {

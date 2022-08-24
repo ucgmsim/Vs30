@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useContext, memo } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/cpt.css";
 import {
@@ -51,6 +53,13 @@ const CPT = () => {
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  // Errors
+  const [flashCPTWeightError, setFlashCPTWeightError] = useState(false);
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
 
   // Set the Correlation Weights
   useEffect(() => {
@@ -96,47 +105,56 @@ const CPT = () => {
   };
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        cptName: cptName,
-      })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set CPT Select Dropdown
-      let tempOptionArray = cptOptions;
-      let tempCPTData = cptData;
-      for (const key of Object.keys(responseData)) {
-        tempOptionArray.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
-        });
-        tempCPTData[key] = responseData[key];
-      }
-      setCPTData(tempCPTData);
-      setCPTOptions(tempOptionArray);
-      changeCptWeights(tempOptionArray);
-      addToVsProfilePlot(tempCPTData, selectedCorrelations);
-    });
-    // Set Table Data
-    let tempCptTableData = cptTableData;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function (results, file) {
-        tempCptTableData[file.name.split(".")[0]] = results.data;
-      },
-    });
-    // Reset Plots and Tables
-    setCptTableData(tempCptTableData);
-    setLoading(false);
+    if (file.name in cptData) {
+      setUploadError(true);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          cptName: cptName,
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
+        method: "POST",
+        body: formData,
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set CPT Select Dropdown
+        let tempOptionArray = cptOptions;
+        let tempCPTData = cptData;
+        for (const key of Object.keys(responseData)) {
+          tempOptionArray.push({
+            value: responseData[key],
+            label: responseData[key]["name"],
+          });
+          tempCPTData[key] = responseData[key];
+        }
+        setCPTData(tempCPTData);
+        setCPTOptions(tempOptionArray);
+        changeCptWeights(tempOptionArray);
+        addToVsProfilePlot(tempCPTData, selectedCorrelations);
+      });
+      // Set Table Data
+      let tempCptTableData = cptTableData;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function (results, file) {
+          tempCptTableData[file.name.split(".")[0]] = results.data;
+        },
+      });
+      // Reset Plots and Tables
+      setCptTableData(tempCptTableData);
+      setLoading(false);
+    }
+    
   };
 
   const sendCPTMidpointRequest = async (cptsToSend) => {
@@ -270,15 +288,32 @@ const CPT = () => {
     setSelectedCptPlot(entries);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setCptResults(vsProfileData);
-    sendAverageRequest(vsProfileData);
-    let tempAllWeights = allCorrelationWeights;
-    for (const key of Object.keys(correlationWeights)) {
-      tempAllWeights[key] = correlationWeights[key];
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkCPT = Utils.errorCheckWeights(cptWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
     }
-    setAllCorrelationWeights(tempAllWeights);
+    if (!checkCPT) {
+      setFlashCPTWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkCPT) {
+      setCptResults(vsProfileData);
+      sendAverageRequest(vsProfileData);
+      let tempAllWeights = allCorrelationWeights;
+      for (const key of Object.keys(correlationWeights)) {
+        tempAllWeights[key] = correlationWeights[key];
+      }
+      setAllCorrelationWeights(tempAllWeights);
+      setWeightError(false);
+    } else {
+      await wait(1000);
+      setFlashCPTWeightError(false);
+      setFlashCorWeightError(false);
+    }
+
   };
 
   // Change the CPT Weights
@@ -437,13 +472,14 @@ const CPT = () => {
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
-        <div className="outline col-3 weights">
+        <div className="outline col-3 weights center-elm">
           <div className="form-section-title">CPT Weights</div>
           <div className="outline center-elm cpt-weights">
             {Object.keys(cptWeights).length > 0 && (
               <WeightTable
                 weights={cptWeights}
                 setFunction={changeCPTWeights}
+                flashError={flashCPTWeightError}
               />
             )}
           </div>
@@ -453,16 +489,24 @@ const CPT = () => {
               <WeightTable
                 weights={correlationWeights}
                 setFunction={changeCorrelationWeights}
+                flashError={flashCorWeightError}
               />
             )}
           </div>
-          <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+          <div className="row two-colum-row set-weights-section">
+            <button
+              disabled={!canSet}
+              className="col-5 set-weights preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
+            <div className="col-1 weight-error">
+              {weightError && (
+                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+              )}
+            </div>
+          </div>
         </div>
         <div className="col-4 vs-preview-section center-elm">
           <div className="form-section-title">VsProfile Preview</div>

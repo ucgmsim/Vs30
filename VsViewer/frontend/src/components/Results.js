@@ -296,7 +296,7 @@ const Results = () => {
         >
           Compute Vs30
         </button>
-        <div className="vs30-title">Vs30</div>
+        <div className="vs30-title">Vs30 (m/s)</div>
         <div className="vs30-value outline">
           {vs30 === null ? "" : Utils.roundValue(vs30)}
         </div>

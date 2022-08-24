@@ -30,13 +30,13 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
           <thead>
             <tr>
               <th className="col-size" scope="col">
-                Depth
+                Depth (m)
               </th>
               <th className="col-size" scope="col">
-                Vs
+                Vs (m/s)
               </th>
               <th className="col-size" scope="col">
-                Sigma
+              σ
               </th>
             </tr>
           </thead>
@@ -57,12 +57,12 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
             <table className="vs-min-max table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Min Depth</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_min"])}m</td>
+                  <td className="bold">Min Depth (m)</td>
+                  <td>{Utils.roundValue(vsProfileInfo["z_min"])}</td>
                 </tr>
                 <tr>
-                  <td className="bold">Max Depth</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_max"])}m</td>
+                  <td className="bold">Max Depth (m)</td>
+                  <td>{Utils.roundValue(vsProfileInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -71,8 +71,8 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
             <table className="vs-removed table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Depth Spread</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_spread"])}m</td>
+                  <td className="bold">Depth Spread (m)</td>
+                  <td>{Utils.roundValue(vsProfileInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">

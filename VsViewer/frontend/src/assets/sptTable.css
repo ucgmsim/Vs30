@@ -1,15 +1,15 @@
 .spt-raw {
-  height: 18vw;
+  height: 55vh;
 }
 
 .spt-scroll-tbl {
-  max-height: 23.3vw;
+  max-height: 50vh;
   overflow-y: scroll;
 }
 
 .spt-info {
   margin-top: 0 !important; 
-  height: 5vw;
+  height: 9vh;
 }
 
 .spt-tbl-width {

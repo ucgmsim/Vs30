@@ -41,6 +41,7 @@ const VsProfile = () => {
   // Form variables
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
+  const [layered, setLayered] = useState(false);
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
@@ -69,6 +70,7 @@ const VsProfile = () => {
       file.name + "_formData",
       JSON.stringify({
         vsProfileName: vsProfileName,
+        layered: layered ? "True" : "False",
       })
     );
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CREATE_ENDPOINT, {
@@ -249,6 +251,14 @@ const VsProfile = () => {
                 className="text-input"
                 value={vsProfileName}
                 onChange={(e) => setVsProfileName(e.target.value)}
+              />
+            </div>
+            <div className="row two-colum-row layered-section center-elm">
+              <div className="col-8 layered-title">Layered Approach</div>
+              <input
+                className="col-1 vs-checkbox"
+                type="checkbox"
+                onChange={(e) => setLayered(e.target.checked)}
               />
             </div>
             <button

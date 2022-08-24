@@ -50,16 +50,18 @@ def vs_profile_to_midpoint():
     json_array = flask.request.json
     vs_profile_dict = dict()
     for vs_profile_data in json_array:
-        vs, depth = convert_to_midpoint(vs_profile_data["vs"], vs_profile_data["depth"])
+        vs, depth = convert_to_midpoint(vs_profile_data["vs"], vs_profile_data["depth"], True if vs_profile_data["layered"] == "True" else False)
         vs_sd_below, _ = convert_to_midpoint(
             np.asarray(vs_profile_data["vs"])
             * np.exp(-np.asarray(vs_profile_data["vs_sd"])),
             vs_profile_data["depth"],
+            True if vs_profile_data["layered"] == "True" else False,
         )
         vs_sd_above, _ = convert_to_midpoint(
             np.asarray(vs_profile_data["vs"])
             * np.exp(np.asarray(vs_profile_data["vs_sd"])),
             vs_profile_data["depth"],
+            True if vs_profile_data["layered"] == "True" else False,
         )
         vs_profile_name = (
             vs_profile_data["name"]
