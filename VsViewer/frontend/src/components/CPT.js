@@ -105,7 +105,7 @@ const CPT = () => {
   };
 
   const sendProcessRequest = async () => {
-    if (file.name in cptData) {
+    if (cptName in cptData) {
       setUploadError(true);
       setFlashNameUploadError(true);
       await wait(1000);
@@ -126,35 +126,41 @@ const CPT = () => {
         body: formData,
       }).then(async (response) => {
         const responseData = await response.json();
-        // Set CPT Select Dropdown
-        let tempOptionArray = cptOptions;
-        let tempCPTData = cptData;
-        for (const key of Object.keys(responseData)) {
-          tempOptionArray.push({
-            value: responseData[key],
-            label: responseData[key]["name"],
+        if (!("error" in responseData)) {
+          // Set CPT Select Dropdown
+          let tempOptionArray = cptOptions;
+          let tempCPTData = cptData;
+          for (const key of Object.keys(responseData)) {
+            tempOptionArray.push({
+              value: responseData[key],
+              label: responseData[key]["name"],
+            });
+            tempCPTData[key] = responseData[key];
+          }
+          setCPTData(tempCPTData);
+          setCPTOptions(tempOptionArray);
+          changeCptWeights(tempOptionArray);
+          addToVsProfilePlot(tempCPTData, selectedCorrelations);
+          // Set Table Data
+          let tempCptTableData = cptTableData;
+          Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function (results, file) {
+              tempCptTableData[file.name.split(".")[0]] = results.data;
+            },
           });
-          tempCPTData[key] = responseData[key];
+          // Reset Plots and Tables
+          setCptTableData(tempCptTableData);
+        } else {
+          setUploadError(true);
+          setFlashFileUploadError(true);
+          await wait(1000);
+          setFlashFileUploadError(false);
         }
-        setCPTData(tempCPTData);
-        setCPTOptions(tempOptionArray);
-        changeCptWeights(tempOptionArray);
-        addToVsProfilePlot(tempCPTData, selectedCorrelations);
+        setLoading(false);
       });
-      // Set Table Data
-      let tempCptTableData = cptTableData;
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: function (results, file) {
-          tempCptTableData[file.name.split(".")[0]] = results.data;
-        },
-      });
-      // Reset Plots and Tables
-      setCptTableData(tempCptTableData);
-      setLoading(false);
     }
-    
   };
 
   const sendCPTMidpointRequest = async (cptsToSend) => {
@@ -313,7 +319,6 @@ const CPT = () => {
       setFlashCPTWeightError(false);
       setFlashCorWeightError(false);
     }
-
   };
 
   // Change the CPT Weights
@@ -379,7 +384,11 @@ const CPT = () => {
           <div className="outline form-section">
             <div className="row two-colum-row">
               <input
-                className="col-8 form-file-input"
+                className={
+                  flashFileUploadError
+                    ? "flash-warning col-8 form-file-input"
+                    : "col-8 form-file-input"
+                }
                 type="file"
                 onChange={(e) => onSetFile(e.target.files[0])}
               />
@@ -390,7 +399,11 @@ const CPT = () => {
             <div className="form-label">CPT Name</div>
             <div className="stretch">
               <input
-                className="text-input"
+                className={
+                  flashNameUploadError
+                    ? "flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={cptName}
                 onChange={(e) => setCptName(e.target.value)}
               />
