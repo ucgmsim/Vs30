@@ -15,12 +15,20 @@
 }
 
 .spt-file-input {
-    margin-top: 1vh !important;
+    margin-top: 0.5vh !important;
     margin-left: -0.3vw;
     min-height: 30px;
     margin-bottom: 0.2vh;
     padding-right: 0 !important;
     width: 11vw !important;
+}
+
+.add-spt-section {
+    margin-left: -0.25vw !important;
+    width: 9.5vw !important;
+    height: 7vh !important;
+    margin-top: 0.5vh !important;
+    margin-bottom: 1vh !important;
 }
 
 .file-section {
@@ -51,7 +59,9 @@
 }
 
 .add-spt-btn {
-    margin-top: 2vh;
+    margin-top: 1vh !important;
+    margin-left: 1.25vw !important;
+    width: 6vw !important;
 }
 
 .spt-table-section {

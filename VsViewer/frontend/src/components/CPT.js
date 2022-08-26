@@ -59,7 +59,9 @@ const CPT = () => {
   const [weightError, setWeightError] = useState(false);
   const [flashFileUploadError, setFlashFileUploadError] = useState(false);
   const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
   const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the Correlation Weights
   useEffect(() => {
@@ -107,12 +109,14 @@ const CPT = () => {
   const sendProcessRequest = async () => {
     if (cptName in cptData) {
       setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
       setFlashNameUploadError(true);
       await wait(1000);
       setFlashNameUploadError(false);
     } else {
       setUploadError(false);
       setLoading(true);
+      let serverResponse = false;
       const formData = new FormData();
       formData.append(file.name, file);
       formData.append(
@@ -124,42 +128,61 @@ const CPT = () => {
       await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
         method: "POST",
         body: formData,
-      }).then(async (response) => {
-        const responseData = await response.json();
-        if (!("error" in responseData)) {
-          // Set CPT Select Dropdown
-          let tempOptionArray = cptOptions;
-          let tempCPTData = cptData;
-          for (const key of Object.keys(responseData)) {
-            tempOptionArray.push({
-              value: responseData[key],
-              label: responseData[key]["name"],
+      })
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Set CPT Select Dropdown
+            let tempOptionArray = cptOptions;
+            let tempCPTData = cptData;
+            for (const key of Object.keys(responseData)) {
+              tempOptionArray.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempCPTData[key] = responseData[key];
+            }
+            setCPTData(tempCPTData);
+            setCPTOptions(tempOptionArray);
+            changeCptWeights(tempOptionArray);
+            addToVsProfilePlot(tempCPTData, selectedCorrelations);
+            // Set Table Data
+            let tempCptTableData = cptTableData;
+            Papa.parse(file, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function (results, file) {
+                tempCptTableData[file.name.split(".")[0]] = results.data;
+              },
             });
-            tempCPTData[key] = responseData[key];
+            // Reset Plots and Tables
+            setCptTableData(tempCptTableData);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
           }
-          setCPTData(tempCPTData);
-          setCPTOptions(tempOptionArray);
-          changeCptWeights(tempOptionArray);
-          addToVsProfilePlot(tempCPTData, selectedCorrelations);
-          // Set Table Data
-          let tempCptTableData = cptTableData;
-          Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: function (results, file) {
-              tempCptTableData[file.name.split(".")[0]] = results.data;
-            },
-          });
-          // Reset Plots and Tables
-          setCptTableData(tempCptTableData);
-        } else {
-          setUploadError(true);
-          setFlashFileUploadError(true);
-          await wait(1000);
-          setFlashFileUploadError(false);
-        }
-        setLoading(false);
-      });
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
+        });
     }
   };
 
@@ -382,13 +405,15 @@ const CPT = () => {
         <div className="col-3 process-cpt">
           <div className="form-section-title">Upload CPT</div>
           <div className="outline form-section">
-            <div className="row two-colum-row">
+            <div
+              className={
+                flashFileUploadError
+                  ? "cpt-flash-warning row two-colum-row form-file-input-section"
+                  : "row two-colum-row form-file-input-section temp-border"
+              }
+            >
               <input
-                className={
-                  flashFileUploadError
-                    ? "flash-warning col-8 form-file-input"
-                    : "col-8 form-file-input"
-                }
+                className="col-8 form-file-input"
                 type="file"
                 onChange={(e) => onSetFile(e.target.files[0])}
               />
@@ -401,20 +426,34 @@ const CPT = () => {
               <input
                 className={
                   flashNameUploadError
-                    ? "flash-warning text-input"
+                    ? "cpt-flash-warning text-input"
                     : "cpt-input text-input"
                 }
                 value={cptName}
                 onChange={(e) => setCptName(e.target.value)}
               />
             </div>
-            <button
-              disabled={loading}
-              className="form btn btn-primary"
-              onClick={() => sendProcessRequest()}
+
+            <div
+              className={
+                flashServerError
+                  ? "cpt-flash-warning row two-colum-row add-cpt-section"
+                  : "row two-colum-row add-cpt-section temp-border"
+              }
             >
-              Add CPT
-            </button>
+              <button
+                disabled={loading}
+                className="add-cpt-btn form btn btn-primary"
+                onClick={() => sendProcessRequest()}
+              >
+                Add CPT
+              </button>
+              <div className="col-1 weight-error">
+                {uploadError && (
+                  <InfoTooltip text={uploadErrorText} error={true} />
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <div className="col-2 file-section">

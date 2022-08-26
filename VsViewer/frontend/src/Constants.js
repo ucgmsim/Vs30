@@ -47,3 +47,6 @@ export const VS_REMOVED_ROWS = "Number of rows removed during processing where D
 
 // Errors
 export const WEIGHT_ERROR = "Weights sum is not close enough to 1 or are not numbers";
+export const FILE_ERROR = "This file has produced an error while processing";
+export const NAME_ERROR = "This CPT Name is already taken";
+export const REQUEST_ERROR = "Could not reach server. Please contact an administrator";
