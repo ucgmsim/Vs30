@@ -16,6 +16,7 @@
 
 .form-section {
     width: 15vw;
+    height: 18vh;
 }
 
 .form {
@@ -29,11 +30,17 @@
     margin-top: 0.5vh;
 }
 
-.form-file-input {
-    margin-top: 1vh !important;
+.form-file-input-section {
+    width: 12.5vw !important;
+    height: 4.5vh !important;
     margin-bottom: 5px;
-    margin-left: 8%;
+    margin-left: 8% !important;
+    margin-top: 0.5vh !important;
     padding-right: 0 !important;
+}
+
+.form-file-input {
+    margin-top: 0.5vh !important;
     width: 11vw !important;
 }
 
@@ -55,7 +62,19 @@
 .file-info {
     width: 1vw !important;
     padding: 0 !important;
-    margin-top: 1.3vh !important;
+    margin-top: 0.8vh !important;
+}
+
+.add-cpt-section {
+    margin-left: 3vw !important;
+    width: 9.5vw !important;
+    height: 5vh !important;
+    margin-top: 0.5vh !important;
+}
+.add-cpt-btn {
+    margin-left: 1.5vw !important;
+    margin-top: 0.5vh !important;
+    width: 6vw !important;
 }
 
 .cpt-input {
@@ -142,4 +161,14 @@
 
 .select-box {
     width: 20vw;
+}
+
+.cpt-flash-warning {
+    transition: border 1s;
+    border: 2px solid #ff0000b7 !important;
+}
+
+.temp-border {
+    transition: border 2s;
+    border: 2px solid white;
 }

@@ -61,6 +61,11 @@ const SPT = () => {
   const [flashSPTWeightError, setFlashSPTWeightError] = useState(false);
   const [flashCorWeightError, setFlashCorWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the SPT Weights
   useEffect(() => {
@@ -139,46 +144,82 @@ const SPT = () => {
   }, []);
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        sptName: sptName,
-        boreholeDiameter: boreholeDiameter,
-        energyRatio: energyRatio,
-        hammerType: hammerType === null ? "" : hammerType["value"],
-        soilType: soilType === null ? "" : soilType["value"],
+    if (sptName in sptData) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      let serverResponse = false;
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          sptName: sptName,
+          boreholeDiameter: boreholeDiameter,
+          energyRatio: energyRatio,
+          hammerType: hammerType === null ? "" : hammerType["value"],
+          soilType: soilType === null ? "" : soilType["value"],
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
+        method: "POST",
+        body: formData,
       })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Add to SPT Select Dropdown and SPT Data
-      let tempOptions = [];
-      let tempSPTData = {};
-      for (const sptOption of sptOptions) {
-        tempOptions.push({
-          value: sptOption["value"],
-          label: sptOption["label"],
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Add to SPT Select Dropdown and SPT Data
+            let tempOptions = [];
+            let tempSPTData = {};
+            for (const sptOption of sptOptions) {
+              tempOptions.push({
+                value: sptOption["value"],
+                label: sptOption["label"],
+              });
+              tempSPTData[sptOption["label"]] = sptData["label"];
+            }
+            for (const key of Object.keys(responseData)) {
+              tempOptions.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempSPTData[key] = responseData[key];
+            }
+            setSPTOptions(tempOptions);
+            setSPTData(tempSPTData);
+            addToVsProfilePlot(selectedCorrelations);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          }
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
         });
-        tempSPTData[sptOption["label"]] = sptData["label"];
-      }
-      for (const key of Object.keys(responseData)) {
-        tempOptions.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
-        });
-        tempSPTData[key] = responseData[key];
-      }
-      setSPTOptions(tempOptions);
-      setSPTData(tempSPTData);
-    });
-    setLoading(false);
-    addToVsProfilePlot(selectedCorrelations);
+    }
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -426,7 +467,13 @@ const SPT = () => {
           <div className="center-elm spt-form-section">
             <div className="form-section-title">Upload SPT</div>
             <div className="outline add-spt center-elm">
-              <div className="row two-colum-row">
+              <div
+                className={
+                  flashFileUploadError
+                    ? "cpt-flash-warning row two-colum-row form-file-input-section"
+                    : "row two-colum-row form-file-input-section temp-border"
+                }
+              >
                 <input
                   className="col-8 spt-file-input"
                   type="file"
@@ -439,7 +486,11 @@ const SPT = () => {
               <div className="form-label">SPT Name</div>
               <div className="stretch">
                 <input
-                  className="text-input"
+                  className={
+                    flashNameUploadError
+                      ? "cpt-flash-warning text-input"
+                      : "cpt-input text-input"
+                  }
                   value={sptName}
                   onChange={(e) => setSptName(e.target.value)}
                 />
@@ -472,13 +523,27 @@ const SPT = () => {
                 isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
                 onChange={(e) => setSoilType(e)}
               />
-              <button
-                disabled={loading}
-                className="form btn btn-primary add-spt-btn"
-                onClick={() => sendProcessRequest()}
+
+              <div
+                className={
+                  flashServerError
+                    ? "cpt-flash-warning row two-colum-row add-spt-section"
+                    : "row two-colum-row add-spt-section temp-border"
+                }
               >
-                Add SPT
-              </button>
+                <button
+                  disabled={loading}
+                  className="form btn btn-primary add-spt-btn"
+                  onClick={() => sendProcessRequest()}
+                >
+                  Add SPT
+                </button>
+                <div className="col-1 weight-error">
+                  {uploadError && (
+                    <InfoTooltip text={uploadErrorText} error={true} />
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <div className="file-section center-elm">
