@@ -82,9 +82,15 @@ const SPT = () => {
   useEffect(() => {
     if (selectedCorrelations.length > 0) {
       let tempCorWeights = {};
+      let tempNewVsData = {};
       selectedCorrelations.forEach((entry) => {
         tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+        sptOptions.forEach((object) => {
+          let key = object["label"] + "_" + entry["label"];
+          tempNewVsData[key] = vsProfileData[key];
+        });
       });
+      setVsProfileData(tempNewVsData);
       setCorrelationWeights(tempCorWeights);
     }
   }, [selectedCorrelations]);
@@ -378,7 +384,8 @@ const SPT = () => {
     }
     if (checkCor && checkSPT) {
       setSptResults(vsProfileData);
-      sendAverageRequest(vsProfileData);
+      // Remove average for now
+      // sendAverageRequest(vsProfileData);
       let tempAllWeights = allCorrelationWeights;
       for (const key of Object.keys(correlationWeights)) {
         tempAllWeights[key] = correlationWeights[key];

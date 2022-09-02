@@ -23,7 +23,6 @@ def create_spt():
         formData = eval(flask.request.form.get(f"{csv_name}_formData"))
         spt = SPT.from_byte_stream_form(formData["sptName"], csv_data.stream.read(), formData)
         spt_dict[spt.name] = spt.to_json()
-    a = 1 + spt_dict
     return flask.jsonify(spt_dict)
 
 

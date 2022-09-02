@@ -35,10 +35,10 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
                 Depth (m)
               </th>
               <th className="col-size" scope="col">
-                Qc (MPa)
+                qc (MPa)
               </th>
               <th className="col-size" scope="col">
-                Fs (MPa)
+                fs (MPa)
               </th>
               <th className="col-size" scope="col">
                 u (MPa)

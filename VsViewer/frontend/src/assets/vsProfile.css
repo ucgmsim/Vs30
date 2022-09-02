@@ -4,11 +4,20 @@
     width: 18vw !important;
 }
 
+.vs-file-input-section {
+    width: 15.5vw !important;
+    height: 4.5vh !important;
+    margin-bottom: 5px;
+    margin-left: 8% !important;
+    margin-top: 0.5vh !important;
+    padding-right: 0 !important;
+}
+
 .vs-file-input {
     margin-top: 1vh !important;
     margin-left: 3.5vw !important;
     padding-right: 0 !important;
-    width: 11vw !important;
+    width: 8vw !important;
 }
 
 .vs-left-panel {
@@ -41,8 +50,17 @@
     width: 15vw;
 }
 
+.add-vs-btn-section {
+    margin-left: 4.5vw !important;
+    width: 9.5vw !important;
+    height: 5vh !important;
+    margin-top: 0.5vh !important;
+}
+
 .add-vs-btn {
-    margin-top: 1.5vh;
+    margin-left: 1.5vw !important;
+    margin-top: 0.75vh !important;
+    width: 6vw !important;
 }
 
 .vs-table-section {

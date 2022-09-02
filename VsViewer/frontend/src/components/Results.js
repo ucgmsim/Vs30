@@ -1,12 +1,13 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/Results.css";
 import * as Utils from "Utils";
-import { WeightTable, VsProfilePreviewPlot } from "components";
+import { WeightTable, VsProfilePreviewPlot, InfoTooltip, } from "components";
 
 const Results = () => {
   const {
@@ -19,7 +20,6 @@ const Results = () => {
     cptResults,
     sptResults,
     allCorrelationWeights,
-    setAllCorrelationWeights,
   } = useContext(GlobalContext);
 
   // Weights
@@ -39,6 +39,10 @@ const Results = () => {
   const [vs30SD, setVs30SD] = useState(null);
   const [canCompute, setCanCompute] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  // Errors
+  const [flashComputeError, setFlashComputeError] = useState(false);
+  const [computeError, setComputeError] = useState(false);
+  const [computeErrorText, setComputeErrorText] = useState(CONSTANTS.COMPUTE_ERROR);
 
   // Set the Section Weights
   useEffect(() => {
@@ -125,7 +129,10 @@ const Results = () => {
   }, []);
 
   const computeVs30 = async () => {
+    setVs30(null);
+    setVs30SD(null);
     // Get all weights and reweight based on section weights
+    let serverResponse = false;
     let weights = {};
     for (const sectionKey of Object.keys(sectionWeights)) {
       if (sectionKey === "CPT") {
@@ -154,10 +161,30 @@ const Results = () => {
         vs30CorrelationWeights: correlationWeights,
       }),
     }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Vs30 results
-      setVs30(responseData["Vs30"]);
-      setVs30SD(responseData["Vs30_SD"]);
+      if (response.ok) {
+        serverResponse = true;
+        const responseData = await response.json();
+        // Set Vs30 results
+        setVs30(responseData["Vs30"]);
+        setVs30SD(responseData["Vs30_SD"]);
+      } else {
+        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+        setComputeError(true);
+        setFlashComputeError(true);
+        await wait(1000);
+        setFlashComputeError(false);
+      }
+
+    }) .catch(async () => {
+      if (serverResponse) {
+        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+      } else {
+        setComputeErrorText(CONSTANTS.REQUEST_ERROR);
+      }
+      setComputeError(true);
+      setFlashComputeError(true);
+      await wait(1000);
+      setFlashComputeError(false);
     });
   };
 
@@ -289,13 +316,24 @@ const Results = () => {
         </div>
       </div>
       <div className="col-1 center-elm vs30-section outline">
-        <button
-          disabled={!canCompute}
-          className="form btn btn-primary compute-btn"
-          onClick={() => computeVs30()}
+        <div
+          className={
+            flashComputeError
+              ? "cpt-flash-warning row two-colum-row compute-section"
+              : "row two-colum-row compute-section temp-border"
+          }
         >
-          Compute Vs30
-        </button>
+          <button
+            disabled={!canCompute}
+            className="form btn btn-primary compute-btn"
+            onClick={() => computeVs30()}
+          >
+            Compute Vs30
+          </button>
+          <div className="col-1 weight-error">
+            {computeError && <InfoTooltip text={computeErrorText} error={true} />}
+          </div>
+        </div>
         <div className="vs30-title">Vs30 (m/s)</div>
         <div className="vs30-value outline">
           {vs30 === null ? "" : Utils.roundValue(vs30)}
