@@ -16,7 +16,6 @@ import {
   InfoTooltip,
 } from "components";
 
-
 const VsProfile = () => {
   const {
     vsProfileData,
@@ -45,8 +44,14 @@ const VsProfile = () => {
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  // Errors
   const [flashWeightError, setFlashWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the VsProfile Weights
   useEffect(() => {
@@ -63,51 +68,87 @@ const VsProfile = () => {
   }, [VsProfileOptions]);
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        vsProfileName: vsProfileName,
-        layered: layered ? "True" : "False",
+    if (vsProfileName in vsProfileData) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      let serverResponse = false;
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          vsProfileName: vsProfileName,
+          layered: layered ? "True" : "False",
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CREATE_ENDPOINT, {
+        method: "POST",
+        body: formData,
       })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CREATE_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Add to VsProfile Select Dropdown and VsProfile Data
-      let tempOptions = [];
-      let tempVsData = vsProfileData;
-      for (const sptOption of VsProfileOptions) {
-        tempOptions.push({
-          value: sptOption["value"],
-          label: sptOption["label"],
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Add to VsProfile Select Dropdown and VsProfile Data
+            let tempOptions = [];
+            let tempVsData = vsProfileData;
+            for (const sptOption of VsProfileOptions) {
+              tempOptions.push({
+                value: sptOption["value"],
+                label: sptOption["label"],
+              });
+            }
+            for (const key of Object.keys(responseData)) {
+              tempOptions.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempVsData[key] = responseData[key];
+            }
+            setVsProfileOptions(tempOptions);
+            setVsProfileData(tempVsData);
+            // Set Table Data
+            let tempVsTableData = vsProfileTableData;
+            Papa.parse(file, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function (results) {
+                tempVsTableData[vsProfileName] = results.data;
+              },
+            });
+            setVsProfileTableData(tempVsTableData);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          }
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
         });
-      }
-      for (const key of Object.keys(responseData)) {
-        tempOptions.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
-        });
-        tempVsData[key] = responseData[key];
-      }
-      setVsProfileOptions(tempOptions);
-      setVsProfileData(tempVsData);
-    });
-    // Set Table Data
-    let tempVsTableData = vsProfileTableData;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function (results) {
-        tempVsTableData[vsProfileName] = results.data;
-      },
-    });
-    setVsProfileTableData(tempVsTableData);
-    setLoading(false);
+    }
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -184,7 +225,8 @@ const VsProfile = () => {
     let check = Utils.errorCheckWeights(vsProfileWeights);
     if (check) {
       setVsProfileResults(vsProfileData);
-      sendAverageRequest();
+      // Remove average for now
+      // sendAverageRequest();  
       setWeightError(false);
     } else {
       setFlashWeightError(true);
@@ -235,7 +277,13 @@ const VsProfile = () => {
         <div className="col-1 center-elm vs-left-panel">
           <div className="form-section-title">Upload VsProfile</div>
           <div className="outline add-vs">
-            <div className="row two-colum-row">
+            <div
+              className={
+                flashFileUploadError
+                  ? "cpt-flash-warning row two-colum-row vs-file-input-section"
+                  : "row two-colum-row vs-file-input-section temp-border"
+              }
+            >
               <input
                 className="col-8 vs-file-input"
                 type="file"
@@ -248,7 +296,11 @@ const VsProfile = () => {
             <div className="form-label">VsProfile Name</div>
             <div className="stretch">
               <input
-                className="text-input"
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={vsProfileName}
                 onChange={(e) => setVsProfileName(e.target.value)}
               />
@@ -261,13 +313,33 @@ const VsProfile = () => {
                 onChange={(e) => setLayered(e.target.checked)}
               />
             </div>
-            <button
+            {/* <button
               disabled={loading}
               className="form btn btn-primary add-vs-btn"
               onClick={() => sendProcessRequest()}
             >
               Add VsProfile
-            </button>
+            </button> */}
+            <div
+              className={
+                flashServerError
+                  ? "cpt-flash-warning row two-colum-row add-vs-btn-section"
+                  : "row two-colum-row add-vs-btn-section temp-border"
+              }
+            >
+              <button
+                disabled={loading}
+                className="add-cpt-btn add-vs-btn form btn btn-primary"
+                onClick={() => sendProcessRequest()}
+              >
+                Add VsProfile
+              </button>
+              <div className="col-1 weight-error">
+                {uploadError && (
+                  <InfoTooltip text={uploadErrorText} error={true} />
+                )}
+              </div>
+            </div>
           </div>
           <div className="vs-file-section center-elm">
             <div className="form-section-title">VsProfile Files</div>
@@ -300,8 +372,10 @@ const VsProfile = () => {
                 Set Weights
               </button>
               <div className="col-1 weight-error">
-                {weightError && <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />}
-              </div> 
+                {weightError && (
+                  <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+                )}
+              </div>
             </div>
           </div>
         </div>

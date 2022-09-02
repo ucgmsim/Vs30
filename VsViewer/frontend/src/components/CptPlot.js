@@ -44,7 +44,7 @@ const CPTPlot = ({ cptPlotData }) => {
           config={{ displayModeBar: false }}
           layout={{
             xaxis: {
-              title: "Qc (MPa)",
+              title: "qc (MPa)",
               titlefont: {
                 size: 16,
               },
@@ -62,7 +62,7 @@ const CPTPlot = ({ cptPlotData }) => {
                 size: 14,
               },
             },
-            title: "Qc",
+            title: "qc",
             titlefont: {
               size: 22,
             },
@@ -84,7 +84,7 @@ const CPTPlot = ({ cptPlotData }) => {
           config={{ displayModeBar: false }}
           layout={{
             xaxis: {
-              title: "Fs (MPa)",
+              title: "fs (MPa)",
               titlefont: {
                 size: 16,
               },
@@ -102,7 +102,7 @@ const CPTPlot = ({ cptPlotData }) => {
                 size: 14,
               },
             },
-            title: "Fs",
+            title: "fs",
             titlefont: {
               size: 22,
             },

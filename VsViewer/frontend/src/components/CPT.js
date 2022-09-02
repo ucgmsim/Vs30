@@ -66,9 +66,15 @@ const CPT = () => {
   // Set the Correlation Weights
   useEffect(() => {
     let tempCorWeights = {};
+    let tempNewVsData = {};
     selectedCorrelations.forEach((entry) => {
       tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      cptOptions.forEach((object) => {
+        let key = object["label"] + "_" + entry["label"];
+        tempNewVsData[key] = vsProfileData[key];
+      });
     });
+    setVsProfileData(tempNewVsData);
     setCorrelationWeights(tempCorWeights);
   }, [selectedCorrelations]);
 
@@ -330,7 +336,8 @@ const CPT = () => {
     }
     if (checkCor && checkCPT) {
       setCptResults(vsProfileData);
-      sendAverageRequest(vsProfileData);
+      // Remove average for now
+      // sendAverageRequest(vsProfileData);
       let tempAllWeights = allCorrelationWeights;
       for (const key of Object.keys(correlationWeights)) {
         tempAllWeights[key] = correlationWeights[key];
@@ -385,18 +392,39 @@ const CPT = () => {
     let newVsPlotData = {};
     let newVsProfileData = {};
     let newVsProfileMidpointData = {};
-    for (const key of Object.keys(vsProfilePlotData)) {
+    newCptOptions.forEach((cptOption) => {
       selectedCorrelations.forEach((correlation) => {
+        let key = cptOption["label"] + "_" + correlation["label"];
         if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
           newVsPlotData[key] = vsProfilePlotData[key];
           newVsProfileData[key] = vsProfileData[key];
           newVsProfileMidpointData[key] = vsProfileMidpointData[key];
         }
       });
-    }
+    });
     setVsProfilePlotData(newVsPlotData);
     setVsProfileData(newVsProfileData);
     setVsProfileMidpointData(newVsProfileMidpointData);
+    if (fileToRemove["label"] == selectedCptTable["label"]) {
+      setSelectedCptTable(null);
+      setSelectedCptTableData(null);
+    }
+    let cptLabels = [];
+    let newSelected = [];
+    selectedCptPlot.forEach((entry) => {
+      if (entry["label"] !== fileToRemove["label"]) {
+        cptLabels.push(entry["label"]);
+        newSelected.push(entry);
+      }
+    });
+    let tempPlotData = {};
+    // Create CPT Plot Data
+    cptLabels.forEach((name) => {
+      tempPlotData[name] = cptMidpointData[name];
+    });
+    setCptPlotData(tempPlotData);
+    setSelectedCptPlot(newSelected);
+    setCptMidpointData(tempPlotData);
   };
 
   return (

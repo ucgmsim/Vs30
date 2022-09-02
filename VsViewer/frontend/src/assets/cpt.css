@@ -57,6 +57,7 @@
 .file-table-section {
     height: 18vh;
     width: 15vw;
+    margin-top: 0vh;
 }
 
 .file-info {
@@ -130,7 +131,7 @@
 }
 
 .vs-preview-plot {
-    height: 75vh;
+    height: 71vh !important;
     width: 36vw;
     margin-bottom: 1vh;
 }
@@ -138,19 +139,19 @@
 .weights {
     margin-top: 3vh !important;
     padding-top: 2vh;
-    padding-bottom: 1vw;
+    padding-bottom: 2vh;
     height: 67vh;
     margin-left: 18vw;
 }
 
 .cpt-weights {
-    margin-bottom: 1vw;
-    height: 13vw;
+    margin-bottom: 2vh;
+    height: 25vh;
     width: 20vw;
 }
 
 .cor-weights {
-    height: 13vw;
+    height: 25vh;
     width: 20vw;
 }
 
