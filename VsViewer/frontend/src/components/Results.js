@@ -38,8 +38,11 @@ const Results = () => {
   const [vs30, setVs30] = useState(null);
   const [vs30SD, setVs30SD] = useState(null);
   const [canCompute, setCanCompute] = useState(false);
-  const [canSet, setCanSet] = useState(false);
+  const [canSetWeights, setCanSetWeights] = useState(false);
   // Errors
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [flashSecWeightError, setFlashSecWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
   const [flashComputeError, setFlashComputeError] = useState(false);
   const [computeError, setComputeError] = useState(false);
   const [computeErrorText, setComputeErrorText] = useState(CONSTANTS.COMPUTE_ERROR);
@@ -70,13 +73,9 @@ const Results = () => {
   // Check the user can set Weights
   useEffect(() => {
     if (selectedCorrelations.length > 0 && selectedSections.length > 0) {
-      setCanSet(true);
-      if (VsProfileOptions.length > 0) {
-        setCanCompute(true);
-      }
+      setCanSetWeights(true);
     } else {
-      setCanSet(false);
-      setCanCompute(false);
+      setCanSetWeights(false);
     }
   }, [selectedCorrelations, selectedSections]);
 
@@ -104,11 +103,6 @@ const Results = () => {
     }
     setSections(tempOptionArray);
     setVsProfileOptions(tempVsProfileOptions);
-    if (tempOptionArray.length > 0) {
-      setCanCompute(true);
-    } else {
-      setCanCompute(false);
-    }
   }, [vsProfileResults, cptResults, sptResults]);
 
   // Get Correlations on page load
@@ -167,6 +161,7 @@ const Results = () => {
         // Set Vs30 results
         setVs30(responseData["Vs30"]);
         setVs30SD(responseData["Vs30_SD"]);
+        setComputeError(false);
       } else {
         setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
         setComputeError(true);
@@ -236,18 +231,35 @@ const Results = () => {
     setCorrelationWeights(newWeights);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    console.log("Test Weights");
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkSections = Utils.errorCheckWeights(sectionWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
+    }
+    if (!checkSections) {
+      setFlashSecWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkSections) {
+      setCanCompute(true);
+      setWeightError(false);
+    } else {
+      setCanCompute(false);
+      await wait(1000);
+      setFlashSecWeightError(false);
+      setFlashCorWeightError(false);
+    }
   };
 
   return (
     <div className="row three-column-row center-elm results-page">
       <div className="col-1">
-        <div className="weights-section center-elm">
+        <div className="weights-section center-elm outline">
           <div className="results-title">Section Weights</div>
           <Select
-            className="select-box"
+            className="small-select-box"
             placeholder="Select your Section's"
             options={sections}
             isMulti={true}
@@ -260,12 +272,13 @@ const Results = () => {
               <WeightTable
                 weights={sectionWeights}
                 setFunction={changeSectionWeights}
+                flashError={flashSecWeightError}
               />
             )}
           </div>
           <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
           <Select
-            className="select-box"
+            className="small-select-box"
             placeholder="Select your Correlation's"
             options={correlationOptions}
             isMulti={true}
@@ -279,24 +292,32 @@ const Results = () => {
                 <WeightTable
                   weights={correlationWeights}
                   setFunction={changeCorrelationWeights}
+                  flashError={flashCorWeightError}
                 />
               )}
             </div>
-            <button
-              disabled={!canSet}
-              className="preview-btn btn btn-primary"
-              onClick={() => checkWeights()}
-            >
-              Set Weights
-            </button>
           </div>
+          <div className="row two-colum-row set-weights-section">
+              <button
+                disabled={!canSetWeights}
+                className="col-5 set-weights preview-btn btn btn-primary"
+                onClick={() => checkWeights()}
+              >
+                Set Weights
+              </button>
+              <div className="col-1 weight-error">
+                {weightError && (
+                  <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+                )}
+              </div>
+            </div>
         </div>
       </div>
       <div className="col-5 center-elm result-plot-section">
         <div className="center-elm">
           <div className="vs-plot-title">VsProfile Plot</div>
           <Select
-            className="vs-select"
+            className="select-box"
             placeholder="Select your VsProfile's"
             isMulti={true}
             options={VsProfileOptions}
@@ -305,7 +326,7 @@ const Results = () => {
             onChange={(e) => changeVsProfileSelection(e)}
           ></Select>
         </div>
-        <div className="outline vs-plot">
+        <div className="outline results-vs-plot">
           {Object.keys(vsProfilePlotData).length > 0 && (
             <VsProfilePreviewPlot
               className="vs-plot"

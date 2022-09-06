@@ -1,165 +1,134 @@
-import React, { memo } from "react";
+import React, { memo, useState, useEffect } from "react";
 
 import Plot from "react-plotly.js";
 
+import * as CONSTANTS from "Constants";
 import "assets/cptPlot.css";
 
 const CPTPlot = ({ cptPlotData }) => {
-  if (Object.keys(cptPlotData).length > 0) {
-    let QcArr = [];
-    let FsArr = [];
-    let uArr = [];
-    for (const name of Object.keys(cptPlotData)) {
-      QcArr.push({
-        x: cptPlotData[name]["Qc"],
-        y: cptPlotData[name]["Depth"],
-        type: "scatter",
-        mode: "lines",
-        name: name,
-        hoverinfo: "none",
-      });
-      FsArr.push({
-        x: cptPlotData[name]["Fs"],
-        y: cptPlotData[name]["Depth"],
-        type: "scatter",
-        mode: "lines",
-        name: name,
-        hoverinfo: "none",
-      });
-      uArr.push({
-        x: cptPlotData[name]["u"],
-        y: cptPlotData[name]["Depth"],
-        type: "scatter",
-        mode: "lines",
-        name: name,
-        hoverinfo: "none",
-      });
-    }
+  const [data, setData] = useState([]);
 
+  useEffect(() => {
+    updatePlotData();
+  }, [cptPlotData]);
+
+  const updatePlotData = () => {
+    let tempData = [];
+    let colourCounter = 0;
+    if (Object.keys(cptPlotData).length > 0) {
+      for (const name of Object.keys(cptPlotData)) {
+        let QcData = {
+          x: cptPlotData[name]["Qc"],
+          y: cptPlotData[name]["Depth"],
+          xaxis: "x1",
+          yaxis: "y1",
+          legendgroup: name,
+          name: name,
+          mode: "lines",
+          type: "scatter",
+          hoverinfo: "none",
+          line: {
+            color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
+          },
+        };
+        let FsData = {
+          x: cptPlotData[name]["Fs"],
+          y: cptPlotData[name]["Depth"],
+          xaxis: "x2",
+          legendgroup: name,
+          name: name,
+          title: "N",
+          yaxis: "y1",
+          mode: "lines",
+          type: "scatter",
+          hoverinfo: "none",
+          showlegend: false,
+          line: {
+            color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
+          },
+        };
+        let UData = {
+          x: cptPlotData[name]["u"],
+          y: cptPlotData[name]["Depth"],
+          xaxis: "x3",
+          legendgroup: name,
+          name: name,
+          title: "N",
+          yaxis: "y1",
+          mode: "lines",
+          type: "scatter",
+          hoverinfo: "none",
+          showlegend: false,
+          line: {
+            color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
+          },
+        };
+        tempData.push(QcData);
+        tempData.push(FsData);
+        tempData.push(UData);
+        colourCounter += 1;
+      }
+      setData(tempData);
+    }
+  };
+
+  if (Object.keys(cptPlotData).length > 0) {
+    if (data.length === 0) {
+      updatePlotData();
+    }
     return (
-      <div className="row three-column-row cpt-plots">
-        <Plot
-          className={"col-4 single-plot"}
-          data={QcArr}
-          config={{ displayModeBar: false }}
-          layout={{
-            xaxis: {
-              title: "qc (MPa)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
+      <Plot
+        className="cpt-plots"
+        data={data}
+        config={{ displayModeBar: false, responsive: true }}
+        title="N"
+        layout={{
+          rows: 1,
+          columns: 3,
+          pattern: "independent",
+          autosize: true,
+          xaxis: { title: "qc (MPa)", domain: [0, 0.325] },
+          xaxis2: { title: "fs (MPa)", domain: [0.341, 0.658] },
+          xaxis3: { title: "u (MPa)", domain: [0.674, 1] },
+          yaxis: { autorange: "reversed", title: "Depth (m)" },
+          margin: {
+            l: 55,
+            r: 40,
+            b: 60,
+            t: 40,
+            pad: 1,
+          },
+          showlegend: true,
+          legend: { x: 0, y: -0.15, orientation: "h" },
+          annotations: [
+            {
+              text: "qc",
+              showarrow: false,
+              x: 0.5,
+              xref: "x domain",
+              y: 1.03,
+              yref: "y domain",
             },
-            yaxis: {
-              autorange: "reversed",
-              title: "Depth (m)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
+            {
+              text: "fs",
+              showarrow: false,
+              x: 0.5,
+              xref: "x2 domain",
+              y: 1.03,
+              yref: "y domain",
             },
-            title: "qc",
-            titlefont: {
-              size: 22,
+            {
+              text: "u",
+              showarrow: false,
+              x: 0.5,
+              xref: "x3 domain",
+              y: 1.03,
+              yref: "y domain",
             },
-            autosize: true,
-            margin: {
-              l: 40,
-              r: 40,
-              b: 60,
-              t: 40,
-              pad: 1,
-            },
-            showlegend: false,
-          }}
-          useResizeHandler={true}
-        />
-        <Plot
-          className={"col-4 single-plot"}
-          data={FsArr}
-          config={{ displayModeBar: false }}
-          layout={{
-            xaxis: {
-              title: "fs (MPa)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            yaxis: {
-              autorange: "reversed",
-              title: "Depth (m)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            title: "fs",
-            titlefont: {
-              size: 22,
-            },
-            autosize: true,
-            margin: {
-              l: 40,
-              r: 40,
-              b: 60,
-              t: 40,
-              pad: 1,
-            },
-            showlegend: false,
-          }}
-          useResizeHandler={true}
-        />
-        <Plot
-          className={"col-4 single-plot"}
-          data={uArr}
-          config={{ displayModeBar: false }}
-          layout={{
-            xaxis: {
-              title: "u (MPa)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            yaxis: {
-              autorange: "reversed",
-              title: "Depth (m)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            title: "u",
-            titlefont: {
-              size: 22,
-            },
-            autosize: true,
-            margin: {
-              l: 40,
-              r: 0,
-              b: 60,
-              t: 40,
-              pad: 1,
-            },
-            showlegend: true,
-            legend: { x: 0.7, y: 1.1 },
-          }}
-          useResizeHandler={true}
-        />
-      </div>
+          ],
+        }}
+        useResizeHandler={true}
+      ></Plot>
     );
   }
 };

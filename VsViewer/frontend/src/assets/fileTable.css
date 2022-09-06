@@ -8,18 +8,22 @@
 }
 
 .file-col-size {
+  font-size: calc(0.55vh + 0.55vw);
+  text-align: center;
+  padding: 1vh !important;
   width: 12vw;
-  height: 1vh;
+  height: 2vh !important;
 }
 
 .remove-col-size {
-  width: 1vw !important;
-  height: 1vh;
+  width: 2vw !important;
+  height: 2vh !important;
+  padding: 0 !important;
 }
 
 .row-file-table {
   width: 11vw;
-  height: 1vh;
+  height: 2vh !important;
 }
 
 .scroll-file-tbl {
@@ -37,4 +41,11 @@
 .file-info-tbl {
   width: 1vw !important;
   padding: 0 !important;
+}
+
+.btn-size {
+  height: 2vh !important;
+  width: 2vw !important;
+  padding: 0 !important;
+  margin-top: 1.25vh !important
 }

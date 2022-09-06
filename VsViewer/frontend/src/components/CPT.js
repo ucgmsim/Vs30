@@ -405,7 +405,7 @@ const CPT = () => {
     setVsProfilePlotData(newVsPlotData);
     setVsProfileData(newVsProfileData);
     setVsProfileMidpointData(newVsProfileMidpointData);
-    if (fileToRemove["label"] == selectedCptTable["label"]) {
+    if (selectedCptTable !== null && fileToRemove["label"] === selectedCptTable["label"]) {
       setSelectedCptTable(null);
       setSelectedCptTableData(null);
     }
@@ -484,7 +484,7 @@ const CPT = () => {
             </div>
           </div>
         </div>
-        <div className="col-2 file-section">
+        <div className="col-2 file-section center-elm">
           <div className="form-section-title">CPT Files</div>
           <div className="file-table-section outline form center-elm">
             {Object.keys(cptOptions).length > 0 && (
