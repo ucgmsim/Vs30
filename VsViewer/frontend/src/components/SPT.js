@@ -199,7 +199,7 @@ const SPT = () => {
             }
             setSPTOptions(tempOptions);
             setSPTData(tempSPTData);
-            addToVsProfilePlot(selectedCorrelations);
+            addToVsProfilePlot(tempSPTData, selectedCorrelations);
           } else {
             setUploadErrorText(CONSTANTS.FILE_ERROR);
             setUploadError(true);
@@ -244,9 +244,9 @@ const SPT = () => {
     });
   };
 
-  const sendVsProfileRequest = async (correlationsToSend) => {
+  const sendVsProfileRequest = async (sptsToSend, correlationsToSend) => {
     const jsonBody = {
-      spts: sptData,
+      spts: sptsToSend,
       correlations: correlationsToSend,
     };
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_FROM_SPT_ENDPOINT, {
@@ -264,10 +264,11 @@ const SPT = () => {
     });
   };
 
-  const addToVsProfilePlot = async (selectedCorrelations) => {
+  const addToVsProfilePlot = async (newSptData, selectedCorrelations) => {
     let correlationsToSend = [];
+    let sptsToSend = {};
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         if (
           !vsProfileMidpointData.hasOwnProperty(
             sptKey + "_" + entry["label"]
@@ -275,16 +276,17 @@ const SPT = () => {
           !correlationsToSend.includes(entry["label"])
         ) {
           correlationsToSend.push(entry["label"]);
+          sptsToSend[sptKey] = newSptData[sptKey];
         }
       }
     });
     if (correlationsToSend.length > 0) {
-      await sendVsProfileRequest(correlationsToSend);
+      await sendVsProfileRequest(sptsToSend, correlationsToSend);
     }
     // Check if new midpoint requests are needed
     let vsProfileToSend = [];
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         if (
           !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
@@ -298,7 +300,7 @@ const SPT = () => {
     // Adds to Plot data from midpoint data
     let tempPlotData = [];
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         tempPlotData[sptKey + "_" + entry["label"]] =
           vsProfileMidpointData[sptKey + "_" + entry["label"]];
       }
@@ -363,7 +365,7 @@ const SPT = () => {
 
   const onSelectCorrelations = (e) => {
     setSelectedCorrelations(e);
-    addToVsProfilePlot(e);
+    addToVsProfilePlot(sptData, e);
   };
 
   const onSelectSptTable = (e) => {
@@ -607,7 +609,7 @@ const SPT = () => {
       <div className="hr" />
       <div className="center-elm">
         <Select
-          className="select-cor"
+          className="select-box"
           placeholder="Select Correlations"
           isMulti={true}
           options={correlationsOptions}

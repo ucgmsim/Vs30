@@ -1,8 +1,4 @@
 .cpt-plots {
-    padding-top: 0.5vw;
-    padding-right: 2vw;
-}
-
-.single-plot {
-    height: 33vw;
+    height: 100% !important;
+    width: 100% !important;
 }

@@ -11,11 +11,11 @@ const SPTTable = ({ sptTableData }) => {
     sptTableData["depth"].forEach((depth, rowIdx) => {
       sptTableRows.push(
         <tr key={rowIdx}>
-          <td className="col-size">{Utils.roundValue(depth)}</td>
-          <td className="col-size">
+          <td className="tbl-col-size">{Utils.roundValue(depth)}</td>
+          <td className="tbl-col-size">
             {Utils.roundValue(sptTableData["N"][rowIdx])}
           </td>
-          <td className="col-size">
+          <td className="tbl-col-size">
             {Utils.roundValue(sptTableData["N60"][rowIdx])}
           </td>
         </tr>
@@ -27,13 +27,13 @@ const SPTTable = ({ sptTableData }) => {
         <table className="spt-raw table thead-dark table-striped table-bordered mt-2 w-auto">
           <thead>
             <tr>
-              <th className="col-size" scope="col">
+              <th className="tbl-col-size" scope="col">
                 Depth (m)
               </th>
-              <th className="col-size" scope="col">
+              <th className="tbl-col-size" scope="col">
                 N
               </th>
-              <th className="col-size" scope="col">
+              <th className="tbl-col-size" scope="col">
                 N60 (Computed)
               </th>
             </tr>
@@ -56,11 +56,11 @@ const SPTTable = ({ sptTableData }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth (m)</td>
-                  <td>{Utils.roundValue(sptInfo["z_min"])}</td>
+                  <td className="text-size">{Utils.roundValue(sptInfo["z_min"])}</td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth (m)</td>
-                  <td>{Utils.roundValue(sptInfo["z_max"])}</td>
+                  <td className="text-size">{Utils.roundValue(sptInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -69,12 +69,12 @@ const SPTTable = ({ sptTableData }) => {
             <table className="spt-removed table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Depth Spread (m)</td>
-                  <td>{Utils.roundValue(sptInfo["z_spread"])}</td>
+                  <td className="bold rem-label">Depth Spread (m)</td>
+                  <td className="text-size">{Utils.roundValue(sptInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
-                  <td className="bold info-width">Removed Rows</td>
-                  <td>{sptInfo["removed_rows"].length}</td>
+                  <td className="bold info-width rem-label">Removed Rows</td>
+                  <td className="text-size">{sptInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>
             </table>

@@ -11,10 +11,10 @@ const WeightTable = ({ weights, setFunction, flashError }) => {
     for (const key of Object.keys(displayWeights)) {
       weightRows.push(
         <tr key={key}>
-          <td className="bold col-size">{key}</td>
-          <td>
+          <td className="bold weight-col-size">{key}</td>
+          <td className="weight-col-size">
             <input
-              className="col-size"
+              className="weight-col-size"
               value={weights[key]}
               onChange={(e) => changeWeight(e.target.value, key)}
             ></input>

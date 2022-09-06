@@ -17,9 +17,9 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
           }
           key={rowIdx}
         >
-          <td className="col-size">{Utils.roundValue(row["Depth"])}</td>
-          <td className="col-size">{Utils.roundValue(row["Vs"])}</td>
-          <td className="col-size">{Utils.roundValue(row["Vs_SD"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Depth"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Vs"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Vs_SD"])}</td>
         </tr>
       );
     });
@@ -29,13 +29,13 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
         <table className="vs-raw table thead-dark table-striped table-bordered mt-2 w-auto">
           <thead>
             <tr>
-              <th className="col-size" scope="col">
+              <th className="vs-col-size" scope="col">
                 Depth (m)
               </th>
-              <th className="col-size" scope="col">
+              <th className="vs-col-size" scope="col">
                 Vs (m/s)
               </th>
-              <th className="col-size" scope="col">
+              <th className="vs-col-size" scope="col">
               σ
               </th>
             </tr>
@@ -58,11 +58,11 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth (m)</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_min"])}</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_min"])}</td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth (m)</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_max"])}</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -72,20 +72,20 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Depth Spread (m)</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_spread"])}</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">
                     <div className="row two-colum-row info-width">
-                      <div className="col-9">
+                      <div className="col-9 rem-label">
                         Removed Rows
                       </div>
-                      <div className=" col-1 file-info-tbl">
+                      <div className="col-1 file-info-tbl">
                         <InfoTooltip text={CONSTANTS.VS_REMOVED_ROWS} />
                       </div>
                     </div>
                   </td>
-                  <td>{vsProfileInfo["removed_rows"].length}</td>
+                  <td className="text-size">{vsProfileInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>
             </table>

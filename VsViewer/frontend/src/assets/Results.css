@@ -1,18 +1,13 @@
-.add-vs {
-    margin-top: 1.5vw !important;
-    height: 27vw;
-    width: 22vw;
-}
-
 .vs-file-input {
     margin-top: 1vw;
     margin-left: 5vw;
 }
 
 .form-label {
-    font-size: calc(12px + 0.2vw);
+    font-size: calc(0.55vh + 0.55vw);
     font-weight: 500;
     margin-top: 0.5vh;
+    margin-bottom: 0.5vh !important;
 }
 
 .text-input {
@@ -25,24 +20,24 @@
     width: 100%;
 }
 
-.spt-select {
-    width: 15vw;
-}
-
 .compute-section {
     margin-top: 1.5vh !important;
-    width: 11vw !important;
+    margin-left: 0.5vw !important;
+    width: 13vw !important;
 }
 
 .compute-btn {
-    width: 8vw !important;
+    font-size: calc(0.65vh + 0.65vw) !important;
+    width: 9vw !important;
     margin-top: 0.5vh !important;
     margin-left: 2.5vh !important;
 }
 
 .weights-section {
-    margin-top: 8vh;
-    margin-left: 11vw;
+    margin-top: 6vh;
+    margin-left: -1vw;
+    width: 25vw;
+    height: 78vh;
 }
 
 .vs30-section {
@@ -52,14 +47,14 @@
 }
 
 .vs30-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
     margin-top: 1vh;
     width: 15vw;
 }
 
 .vs30-value {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 400;
     margin-bottom: 0.3vh;
     margin-top: 0.5vh;
@@ -68,7 +63,8 @@
 }
 
 .results-title {
-    font-size: calc(12px + 0.4vw);
+    margin-top: 1vh;
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
     margin-bottom: 0.3vh;
     width: 30vw;
@@ -77,13 +73,13 @@
 .result-plot-section {
     margin-top: 0.5vw !important;
     margin-left: 2vw;
-    height: 80vh;
+    height: 83vh;
     width: 40vw;
     margin-left: 15vw;
 }
 
-.vs-plot {
-    margin-top: 1vw;
+.results-vs-plot {
+    margin-top: 1vh;
     height: 75vh;
     width: 39vw;
 }
@@ -92,12 +88,8 @@
     min-width: 20vw;
 }
 
-.select-box {
-    width: 20vw;
-}
-
 .vs-plot-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
@@ -112,7 +104,7 @@
 }
 
 .result-weights {
-    margin-bottom: 1vh;
+    margin-bottom: 0.vh;
     margin-top: 1vh;
     height: 25vh;
     width: 22vw;
@@ -123,7 +115,7 @@
 }
 
 .vs-weight-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
     width: 22vw;
     margin-top: 1vw;

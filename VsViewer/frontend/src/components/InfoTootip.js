@@ -14,7 +14,7 @@ export default function InfoTooltip({ text, error }) {
   const handleTooltipOpen = () => setOpen(true);
 
   return (
-    <Tooltip open={open} placement="right" arrow title={<a>{text}</a>}>
+    <Tooltip open={open} placement="right" arrow title={<p className="tooltip-text-size">{text}</p>}>
       <FontAwesomeIcon
         icon={error ? faCircleExclamation : faInfoCircle}
         size="1x"

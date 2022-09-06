@@ -275,7 +275,7 @@ const VsProfile = () => {
     <div>
       <div className="row three-column-row center-elm vs-top">
         <div className="col-1 center-elm vs-left-panel">
-          <div className="form-section-title">Upload VsProfile</div>
+          <div className="vs-upload-title">Upload VsProfile</div>
           <div className="outline add-vs">
             <div
               className={
@@ -313,13 +313,6 @@ const VsProfile = () => {
                 onChange={(e) => setLayered(e.target.checked)}
               />
             </div>
-            {/* <button
-              disabled={loading}
-              className="form btn btn-primary add-vs-btn"
-              onClick={() => sendProcessRequest()}
-            >
-              Add VsProfile
-            </button> */}
             <div
               className={
                 flashServerError
@@ -405,7 +398,7 @@ const VsProfile = () => {
           <div className="center-elm">
             <div className="vs-plot-title">VsProfile Plot</div>
             <Select
-              className="vs-select"
+              className="select-box"
               placeholder="Select your VsProfile's"
               isMulti={true}
               options={VsProfileOptions}

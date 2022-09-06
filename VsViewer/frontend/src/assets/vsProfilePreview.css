@@ -1,17 +1,25 @@
 .vs-profile-preview-plot {
     height: 100%;
-    width: 34vw;
+    width: 98%;
     margin-top: 0;
     margin-bottom: 0;
+    margin-left: 1%;
+}
+
+text {
+    font-size: calc(0.5vh + 0.5vw) !important;
 }
 
 .hide-sd {
     margin-top: 0vh;
     margin-bottom: 0.3vh;
+    font-size: calc(0.6vh + 0.6vw);
 }
 
 .hide-sd-check {
     margin-left: 1vh;
+    width: 1.5vw;
+    height: 1.5vh;
 }
 
 .check-plot-height {

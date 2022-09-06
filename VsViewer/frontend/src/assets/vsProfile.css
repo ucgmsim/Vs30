@@ -1,23 +1,25 @@
 .add-vs {
-    margin-top: 1.5vw !important;
     height: 23vh !important;
-    width: 18vw !important;
+    width: 17vw !important;
 }
 
 .vs-file-input-section {
     width: 15.5vw !important;
-    height: 4.5vh !important;
+    height: 4vh !important;
     margin-bottom: 5px;
     margin-left: 8% !important;
     margin-top: 0.5vh !important;
+    margin-bottom: 0.5vh !important;
     padding-right: 0 !important;
 }
 
 .vs-file-input {
-    margin-top: 1vh !important;
-    margin-left: 3.5vw !important;
+    align-items: right !important;
+    font-size: calc(0.55vh + 0.55vw);
+    margin-top: 0.5vh !important;
+    margin-left: 1.75vw !important;
     padding-right: 0 !important;
-    width: 8vw !important;
+    width: 11vw !important;
 }
 
 .vs-left-panel {
@@ -31,12 +33,20 @@
 }
 
 .form-label {
-    font-size: calc(12px + 0.2vw);
+    font-size: calc(0.55vh + 0.55vw);
     font-weight: 500;
     margin-top: 1vw;
 }
 
+.vs-upload-title {
+    margin-top: 3vh !important;
+    font-size: calc(0.7vh + 0.7vw);
+    font-weight: 700;
+    width: 12vw;
+}
+
 .text-input {
+    font-size: calc(0.55vh + 0.55vw);
     margin-top: -0.3vw;
     width: 10vw;
     text-align:center;
@@ -51,16 +61,18 @@
 }
 
 .add-vs-btn-section {
-    margin-left: 4.5vw !important;
-    width: 9.5vw !important;
+    margin-left: 3.25vw !important;
+    width: 12vw !important;
     height: 5vh !important;
-    margin-top: 0.5vh !important;
+    margin-top: 1vh !important;
 }
 
 .add-vs-btn {
-    margin-left: 1.5vw !important;
-    margin-top: 0.75vh !important;
-    width: 6vw !important;
+    font-size: calc(0.6vh + 0.6vw) !important;
+    margin-left: 1vw !important;
+    margin-top: 0.5vh !important;
+    width: 8vw !important;
+    height: 4.5vh !important;
 }
 
 .vs-table-section {
@@ -69,38 +81,30 @@
 }
 
 .vs-table-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
 .vs-table {
-    margin-top: 1vw;
+    margin-top: 1.5vh;
     height: 78vh;
     width: 30vw;
 }
 
 .vs-plot-section {
-    margin-top: 0.5vw !important;
+    margin-top: 1vh !important;
     margin-right: 0.2vw;
     height: 88vh;
 }
 
 .vs-plot {
-    margin-top: 1vw;
-    height: 82vh;
+    margin-top: 1.5vh;
+    height: 78vh !important;
     width: 39vw;
 }
 
-.vs-select {
-    min-width: 20vw;
-}
-
-.select-box {
-    width: 20vw;
-}
-
 .vs-plot-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
@@ -115,26 +119,28 @@
 }
 
 .vs-weights {
-    margin-bottom: 1vw;
-    height: 16vw;
-    width: 22vw;
+    margin-bottom: 1vh;
+    height: 32vh;
+    width: 17vw;
 }
 
 .vs-weight-area {
-    height: 12vw;
+    height: 24vh;
 }
 
 .vs-weight-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
     width: 22vw;
-    margin-top: 1vw;
+    margin-top: 2vh;
 }
 
 .set-weights {
-    width: 6vw !important;
-    top: 15% !important;
+    font-size: calc(0.6vh + 0.6vw) !important;
+    width: 8vw !important;
     margin-left: 1.5vw !important;
+    margin-top: 0.5vh !important;
+    height: 4.5vh !important;
 }
 
 .set-weights-section {
@@ -143,7 +149,7 @@
 }
 
 .vs-checkbox {
-    margin-top: 0.15vh !important;
+    margin-top: 0.2vh !important;
     height: 1.75vh;
     width: 1.75vw;
 }
@@ -151,15 +157,17 @@
 .layered-section {
     margin-left: 1.5vw !important;
     height: 2vh;
-    margin-top: 1.5vh !important;
+    margin-top: 1vh !important;
     width: 12vw;
 }
 
 .layered-title {
-    font-size: calc(12px + 0.2vw);
+    text-align: right;
+    font-size: calc(0.55vh + 0.55vw);
     font-weight: 500;
-    padding: 0;
-    margin-left: 2vw;
+    padding: 0 !important;
+    margin-left: 0.25vw;
+    margin-right: 1vw;
     height: 2vh;
-    width: 10vw;
+    width: 10vw !important;
 }
