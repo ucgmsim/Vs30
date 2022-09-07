@@ -19,7 +19,8 @@ const Results = () => {
     vsProfileResults,
     cptResults,
     sptResults,
-    allCorrelationWeights,
+    cptCorrelationWeights,
+    sptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // Weights
@@ -128,20 +129,36 @@ const Results = () => {
     // Get all weights and reweight based on section weights
     let serverResponse = false;
     let weights = {};
+    let vsProfilesToSend = {};
     for (const sectionKey of Object.keys(sectionWeights)) {
       if (sectionKey === "CPT") {
         for (const key of Object.keys(cptWeights)) {
           weights[key] = sectionWeights[sectionKey] * cptWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
       if (sectionKey === "SPT") {
         for (const key of Object.keys(sptWeights)) {
           weights[key] = sectionWeights[sectionKey] * sptWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
       if (sectionKey === "VsProfile") {
         for (const key of Object.keys(vsProfileWeights)) {
           weights[key] = sectionWeights[sectionKey] * vsProfileWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
     }
@@ -149,9 +166,10 @@ const Results = () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        vsProfiles: VsProfileOptions,
+        vsProfiles: vsProfilesToSend,
         vsWeights: weights,
-        vsCorrelationWeights: allCorrelationWeights,
+        cptVsCorrelationWeights: cptCorrelationWeights,
+        sptVsCorrelationWeights: sptCorrelationWeights,
         vs30CorrelationWeights: correlationWeights,
       }),
     }).then(async (response) => {
@@ -245,6 +263,13 @@ const Results = () => {
     if (checkCor && checkSections) {
       setCanCompute(true);
       setWeightError(false);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function(key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(sectionWeights).forEach(function(key) {
+        sectionWeights[key] = parseFloat(sectionWeights[key]);
+      });
     } else {
       setCanCompute(false);
       await wait(1000);
