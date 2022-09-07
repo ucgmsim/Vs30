@@ -279,7 +279,6 @@ const SPT = () => {
         }
       }
     });
-    // START HERE sptsToSend
     if (correlationsToSend.length > 0) {
       await sendVsProfileRequest(sptsToSend, correlationsToSend);
     }
