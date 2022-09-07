@@ -523,7 +523,7 @@ const CPT = () => {
             </div>
           </div>
         </div>
-        <div className="col-7 cpt-plot">
+        <div className="col-7 cpt-plot-section">
           <div className="center-elm">
             <div className="form-section-title">CPT Plot</div>
             <Select

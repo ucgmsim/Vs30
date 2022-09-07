@@ -260,7 +260,6 @@ const SPT = () => {
       for (const key of Object.keys(responseData)) {
         tempVsProfileData[key] = responseData[key];
       }
-      debugger;
       setVsProfileData(tempVsProfileData);
     });
   };
@@ -271,12 +270,11 @@ const SPT = () => {
     selectedCorrelations.forEach((entry) => {
       for (const sptKey of Object.keys(newSptData)) {
         if (
-          !vsProfileMidpointData.hasOwnProperty(
-            sptKey + "_" + entry["label"]
-          ) &&
-          !correlationsToSend.includes(entry["label"])
+          !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
-          correlationsToSend.push(entry["label"]);
+          if (!correlationsToSend.includes(entry["label"])) {
+            correlationsToSend.push(entry["label"]);
+          }
           sptsToSend[sptKey] = newSptData[sptKey];
         }
       }
@@ -292,12 +290,10 @@ const SPT = () => {
         if (
           !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
-          debugger;
           vsProfileToSend.push(vsProfileData[sptKey + "_" + entry["label"]]);
         }
       }
     });
-    debugger;
     if (vsProfileToSend.length > 0) {
       await sendVsProfileMidpointRequest(vsProfileToSend);
     }
@@ -393,10 +389,10 @@ const SPT = () => {
       // Remove average for now
       // sendAverageRequest(vsProfileData);
       // Ensures the values are floats
-      Object.keys(correlationWeights).forEach(function(key) {
+      Object.keys(correlationWeights).forEach(function (key) {
         correlationWeights[key] = parseFloat(correlationWeights[key]);
       });
-      Object.keys(sptWeights).forEach(function(key) {
+      Object.keys(sptWeights).forEach(function (key) {
         sptWeights[key] = parseFloat(sptWeights[key]);
       });
       setSptCorrelationWeights(correlationWeights);
