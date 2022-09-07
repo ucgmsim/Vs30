@@ -19,6 +19,7 @@ const Results = () => {
     cptResults,
     sptResults,
     allCorrelationWeights,
+    setAllCorrelationWeights,
   } = useContext(GlobalContext);
 
   // Weights
@@ -31,11 +32,13 @@ const Results = () => {
   // VsProfile Plot
   const [selectedVsProfilePlot, setSelectedVsProfilePlot] = useState(null);
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [vs30, setVs30] = useState(null);
   const [vs30SD, setVs30SD] = useState(null);
   const [canCompute, setCanCompute] = useState(false);
+  const [canSet, setCanSet] = useState(false);
 
   // Set the Section Weights
   useEffect(() => {
@@ -59,6 +62,19 @@ const Results = () => {
       setCorrelationWeights(tempCorrelationWeights);
     }
   }, [selectedCorrelations]);
+
+  // Check the user can set Weights
+  useEffect(() => {
+    if (selectedCorrelations.length > 0 && selectedSections.length > 0) {
+      setCanSet(true);
+      if (VsProfileOptions.length > 0) {
+        setCanCompute(true);
+      }
+    } else {
+      setCanSet(false);
+      setCanCompute(false);
+    }
+  }, [selectedCorrelations, selectedSections]);
 
   // Get Sections
   useEffect(() => {
@@ -92,19 +108,21 @@ const Results = () => {
   }, [vsProfileResults, cptResults, sptResults]);
 
   // Get Correlations on page load
-  if (correlationOptions.length === 0) {
-    fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CORRELATIONS_ENDPOINT, {
-      method: "GET",
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Correlation Select Dropdown
-      let tempOptionArray = [];
-      for (const value of Object.values(responseData)) {
-        tempOptionArray.push({ value: value, label: value });
-      }
-      setCorrelationOptions(tempOptionArray);
-    });
-  }
+  useEffect(() => {
+    if (correlationOptions.length === 0) {
+      fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CORRELATIONS_ENDPOINT, {
+        method: "GET",
+      }).then(async (response) => {
+        const responseData = await response.json();
+        // Set Correlation Select Dropdown
+        let tempOptionArray = [];
+        for (const value of Object.values(responseData)) {
+          tempOptionArray.push({ value: value, label: value });
+        }
+        setCorrelationOptions(tempOptionArray);
+      });
+    }
+  }, []);
 
   const computeVs30 = async () => {
     // Get all weights and reweight based on section weights
@@ -129,7 +147,12 @@ const Results = () => {
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_VS30_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vsProfiles: VsProfileOptions, vsWeights: weights, correlationWeights: allCorrelationWeights }),
+      body: JSON.stringify({
+        vsProfiles: VsProfileOptions,
+        vsWeights: weights,
+        vsCorrelationWeights: allCorrelationWeights,
+        vs30CorrelationWeights: correlationWeights,
+      }),
     }).then(async (response) => {
       const responseData = await response.json();
       // Set Vs30 results
@@ -186,6 +209,11 @@ const Results = () => {
     setCorrelationWeights(newWeights);
   };
 
+  const checkWeights = () => {
+    // TODO error checking
+    console.log("Test Weights");
+  };
+
   return (
     <div className="row three-column-row center-elm results-page">
       <div className="col-1">
@@ -208,7 +236,7 @@ const Results = () => {
               />
             )}
           </div>
-          <div className="vs-weight-title">Correlation Weights</div>
+          <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
           <Select
             className="select-box"
             placeholder="Select your Correlation's"
@@ -219,12 +247,21 @@ const Results = () => {
             onChange={(e) => setSelectedCorrelations(e)}
           ></Select>
           <div className="outline center-elm result-weights">
-            {Object.keys(correlationWeights).length > 0 && (
-              <WeightTable
-                weights={correlationWeights}
-                setFunction={changeCorrelationWeights}
-              />
-            )}
+            <div className="result-weight-area">
+              {Object.keys(correlationWeights).length > 0 && (
+                <WeightTable
+                  weights={correlationWeights}
+                  setFunction={changeCorrelationWeights}
+                />
+              )}
+            </div>
+            <button
+              disabled={!canSet}
+              className="preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
           </div>
         </div>
       </div>
@@ -246,6 +283,7 @@ const Results = () => {
             <VsProfilePreviewPlot
               className="vs-plot"
               vsProfilePlotData={vsProfilePlotData}
+              average={vsProfileAveragePlotData}
             />
           )}
         </div>
@@ -259,9 +297,13 @@ const Results = () => {
           Compute Vs30
         </button>
         <div className="vs30-title">Vs30</div>
-        <div className="vs30-value outline">{Utils.roundValue(vs30)}</div>
+        <div className="vs30-value outline">
+          {vs30 === null ? "" : Utils.roundValue(vs30)}
+        </div>
         <div className="vs30-title">Vs30 Sigma</div>
-        <div className="vs30-value outline">{Utils.roundValue(vs30SD)}</div>
+        <div className="vs30-value outline">
+          {vs30SD === null ? "" : Utils.roundValue(vs30SD)}
+        </div>
       </div>
     </div>
   );

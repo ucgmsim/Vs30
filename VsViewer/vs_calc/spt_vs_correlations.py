@@ -11,6 +11,7 @@ def brandenberg_2010(spt):
     N60 = spt.N60
     vs = []
     vs_sd = []
+    depth_values = []
     for depth_idx, depth in enumerate(spt.depth):
         true_d = (
             depth + 0.3048
@@ -19,16 +20,18 @@ def brandenberg_2010(spt):
         # in the vertical effective stress after second increments hence add 12 inches(0.3 m) on top of the start
         # depth given
         cur_N60 = N60[depth_idx]
-        stress, sigma, tao, b0, b1, b2 = effective_stress_brandenberg(
-            true_d, spt.soil_type
-        )
-        lnVs = (
-            b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)
-        )  # (Brandendberg et al, 2010)
-        total_std = np.sqrt(tao**2 + sigma**2)
-        vs.append(np.exp(lnVs))
-        vs_sd.append(total_std)
-    return np.asarray(vs), np.asarray(vs_sd)
+        if cur_N60 > 0:
+            stress, sigma, tao, b0, b1, b2 = effective_stress_brandenberg(
+                true_d, spt.soil_type[depth_idx]
+            )
+            lnVs = (
+                b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)
+            )  # (Brandendberg et al, 2010)
+            total_std = np.sqrt(tao**2 + sigma**2)
+            vs.append(np.exp(lnVs))
+            vs_sd.append(total_std)
+            depth_values.append(depth)
+    return np.asarray(vs), np.asarray(vs_sd), np.asarray(depth_values)
 
 
 def effective_stress_brandenberg(

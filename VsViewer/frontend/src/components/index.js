@@ -9,6 +9,7 @@ import CptTable from "./CptTable";
 import VsProfileTable from "./VsProfileTable"
 import VsProfilePreviewPlot from "./VsProfilePreview";
 import WeightTable from "./WeightTable";
+import FileTable from "./FileTable";
 
 export {
   CPT,
@@ -22,4 +23,5 @@ export {
   SPTPlot,
   SptTable,
   VsProfileTable,
+  FileTable,
 };

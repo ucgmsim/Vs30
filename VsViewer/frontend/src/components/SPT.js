@@ -1,5 +1,6 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
+import Papa from "papaparse";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
@@ -36,8 +37,10 @@ const SPT = () => {
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [file, setFile] = useState("");
+  const [sptName, setSptName] = useState("");
   const [boreholeDiameter, setBoreholeDiameter] = useState(150);
   const [energyRatio, setEnergyRatio] = useState("");
   const [sptOptions, setSPTOptions] = useState([]);
@@ -48,6 +51,7 @@ const SPT = () => {
   const [hammerType, setHammerType] = useState(null);
   const [soilTypeOptions, setSoilTypeOptions] = useState([]);
   const [soilType, setSoilType] = useState(null);
+  const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
 
@@ -134,6 +138,7 @@ const SPT = () => {
     formData.append(
       file.name + "_formData",
       JSON.stringify({
+        sptName: sptName,
         boreholeDiameter: boreholeDiameter,
         energyRatio: energyRatio,
         hammerType: hammerType === null ? "" : hammerType["value"],
@@ -233,7 +238,7 @@ const SPT = () => {
       await sendVsProfileMidpointRequest(vsProfileToSend);
     }
     // Adds to Plot data from midpoint data
-    let tempPlotData = {};
+    let tempPlotData = [];
     selectedCorrelations.forEach((entry) => {
       for (const sptKey of Object.keys(sptData)) {
         tempPlotData[sptKey + "_" + entry["label"]] =
@@ -256,6 +261,23 @@ const SPT = () => {
         tempMidpointData[key] = responseData[key];
       }
       setSptMidpointData(tempMidpointData);
+    });
+  };
+
+  const sendAverageRequest = async (vsProfilesToSend) => {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vsProfiles: vsProfilesToSend,
+        vsWeights: sptWeights,
+        vsCorrelationWeights: correlationWeights,
+        vs30CorrelationWeights: {},
+      }),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set the Plot Average Data
+      setVsProfileAveragePlotData(responseData["average"]);
     });
   };
 
@@ -294,6 +316,7 @@ const SPT = () => {
   const checkWeights = () => {
     // TODO error checking
     setSptResults(vsProfileData);
+    sendAverageRequest(vsProfileData);
     let tempAllWeights = allCorrelationWeights;
     for (const key of Object.keys(correlationWeights)) {
       tempAllWeights[key] = correlationWeights[key];
@@ -311,16 +334,41 @@ const SPT = () => {
     setCorrelationWeights(newWeights);
   };
 
+  // Set the file and check for Soil type
+  const checkFile = (file) => {
+    setFile(file);
+    setSptName(file.name.split(".")[0]);
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function (results) {
+        if (!results.meta.fields.includes("Soil")) {
+          setUserSelectSoil(true);
+        } else {
+          setUserSelectSoil(false);
+        }
+      },
+    });
+};
+
   return (
     <div>
       <div className="row three-column-row center-elm spt-top">
         <div className="outline col-3 add-spt center-elm">
-          <div className="form-section-title">Upload SPT file</div>
+          <div className="form-section-title">Upload SPT</div>
           <input
             className="spt-file-input"
             type="file"
-            onChange={(e) => setFile(e.target.files[0])}
+            onChange={(e) => checkFile(e.target.files[0])}
           />
+          <div className="form-label">SPT Name</div>
+            <div className="stretch">
+              <input
+                className="text-input"
+                value={sptName}
+                onChange={(e) => setSptName(e.target.value)}
+              />
+            </div>
           <div className="form-label">Borehole Diameter</div>
           <input
             className="text-input"
@@ -346,7 +394,7 @@ const SPT = () => {
             className="spt-select"
             placeholder="Select Soil Type"
             options={soilTypeOptions}
-            isDisabled={soilTypeOptions.length === 0}
+            isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
             onChange={(e) => setSoilType(e)}
           />
           <button
@@ -417,7 +465,7 @@ const SPT = () => {
               />
             )}
           </div>
-          <div className="form-section-title">Correlation Weights</div>
+          <div className="form-section-title">SPT - Vs Correlation Weights</div>
           <div className="outline center-elm cor-weights-spt">
             {Object.keys(correlationWeights).length > 0 && (
               <WeightTable
@@ -438,7 +486,10 @@ const SPT = () => {
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot-spt">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} />
+              <VsProfilePreviewPlot
+                vsProfilePlotData={vsProfilePlotData}
+                average={vsProfileAveragePlotData}
+              />
             )}
           </div>
         </div>

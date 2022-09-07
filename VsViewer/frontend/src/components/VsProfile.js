@@ -6,11 +6,7 @@ import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/vsProfile.css";
-import {
-  WeightTable,
-  VsProfilePreviewPlot,
-  VsProfileTable,
-} from "components";
+import { WeightTable, VsProfilePreviewPlot, VsProfileTable } from "components";
 
 const VsProfile = () => {
   const {
@@ -27,10 +23,12 @@ const VsProfile = () => {
   const [vsProfileInfo, setVsProfileInfo] = useState(null);
   const [vsProfileTableData, setVsProfileTableData] = useState({});
   const [selectedVsProfileTable, setSelectedVsProfileTable] = useState(null);
-  const [selectedVsProfileTableData, setSelectedVsProfileTableData] = useState(null);
+  const [selectedVsProfileTableData, setSelectedVsProfileTableData] =
+    useState(null);
   // VsProfile Plot
   const [selectedVsProfilePlot, setSelectedVsProfilePlot] = useState(null);
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
@@ -115,6 +113,27 @@ const VsProfile = () => {
     });
   };
 
+  const sendAverageRequest = async () => {
+    let vsProfilesToSend = {};
+    for (const key of Object.keys(vsProfileData)) {
+      vsProfilesToSend[key] = vsProfileData[key];
+    }
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vsProfiles: vsProfilesToSend,
+        vsWeights: vsProfileWeights,
+        vs30CorrelationWeights: {},
+        vsCorrelationWeights: {},
+      }),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set the Plot Average Data
+      setVsProfileAveragePlotData(responseData["average"]);
+    });
+  };
+
   const changeVsProfileSelection = async (entries) => {
     // Gather Midpoint data
     let VsProfilesToSend = [];
@@ -151,6 +170,7 @@ const VsProfile = () => {
   const checkWeights = () => {
     // TODO error checking
     setVsProfileResults(vsProfileData);
+    sendAverageRequest();
   };
 
   // Change the vsProfile Weights
@@ -189,19 +209,19 @@ const VsProfile = () => {
           <div className="outline center-elm vs-weights">
             <div className="vs-weight-area">
               {Object.keys(vsProfileWeights).length > 0 && (
-              <WeightTable
-                weights={vsProfileWeights}
-                setFunction={changeVsProfileWeights}
-              />
+                <WeightTable
+                  weights={vsProfileWeights}
+                  setFunction={changeVsProfileWeights}
+                />
               )}
             </div>
             <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+              disabled={!canSet}
+              className="preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
           </div>
         </div>
         <div className="col-2 center-elm vs-table-section">
@@ -217,9 +237,13 @@ const VsProfile = () => {
             ></Select>
           </div>
           <div className="outline vs-table">
-            {Object.keys(vsProfileData).length > 0 && selectedVsProfileTable !== null && (
-              <VsProfileTable vsProfileData={selectedVsProfileTableData} vsProfileInfo={vsProfileInfo} />
-            )}
+            {Object.keys(vsProfileData).length > 0 &&
+              selectedVsProfileTable !== null && (
+                <VsProfileTable
+                  vsProfileData={selectedVsProfileTableData}
+                  vsProfileInfo={vsProfileInfo}
+                />
+              )}
           </div>
         </div>
         <div className="col-3 center-elm vs-plot-section">
@@ -237,7 +261,11 @@ const VsProfile = () => {
           </div>
           <div className="outline vs-plot">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot className="vs-plot" vsProfilePlotData={vsProfilePlotData} />
+              <VsProfilePreviewPlot
+                className="vs-plot"
+                vsProfilePlotData={vsProfilePlotData}
+                average={vsProfileAveragePlotData}
+              />
             )}
           </div>
         </div>

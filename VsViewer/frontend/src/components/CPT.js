@@ -10,6 +10,7 @@ import {
   CPTPlot,
   CptTable,
   WeightTable,
+  FileTable,
   VsProfilePreviewPlot,
 } from "components";
 
@@ -39,8 +40,10 @@ const CPT = () => {
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
+  const [vsProfileAveragePlotData, setVsProfileAveragePlotData] = useState({});
   // Form variables
-  const [filenames, setFilenames] = useState("");
+  const [file, setFile] = useState("");
+  const [cptName, setCptName] = useState("");
   const [cptOptions, setCPTOptions] = useState([]);
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
@@ -48,26 +51,13 @@ const CPT = () => {
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
 
-  // Set the CPT Weights
-  useEffect(() => {
-    if (cptOptions.length > 0) {
-      let tempCptWeights = {};
-      cptOptions.forEach((entry) => {
-        tempCptWeights[entry["label"]] = 1 / cptOptions.length;
-      });
-      setCptWeights(tempCptWeights);
-    }
-  }, [cptOptions]);
-
   // Set the Correlation Weights
   useEffect(() => {
-    if (selectedCorrelations.length > 0) {
-      let tempCorWeights = {};
-      selectedCorrelations.forEach((entry) => {
-        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
-      });
-      setCorrelationWeights(tempCorWeights);
-    }
+    let tempCorWeights = {};
+    selectedCorrelations.forEach((entry) => {
+      tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+    });
+    setCorrelationWeights(tempCorWeights);
   }, [selectedCorrelations]);
 
   // Check the user can set Weights
@@ -96,46 +86,55 @@ const CPT = () => {
     }
   }, []);
 
+  const changeCptWeights = (cptArray) => {
+    let tempCptWeights = {};
+    cptArray.forEach((entry) => {
+      tempCptWeights[entry["label"]] = 1 / cptArray.length;
+    });
+    setCptWeights(tempCptWeights);
+  };
+
   const sendProcessRequest = async () => {
     setLoading(true);
     const formData = new FormData();
-    for (const file of filenames) {
-      formData.append(file.name, file);
-    }
+    formData.append(file.name, file);
+    formData.append(
+      file.name + "_formData",
+      JSON.stringify({
+        cptName: cptName,
+      })
+    );
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
       method: "POST",
       body: formData,
     }).then(async (response) => {
       const responseData = await response.json();
-      setCPTData(responseData);
       // Set CPT Select Dropdown
-      let tempOptionArray = [];
+      let tempOptionArray = cptOptions;
+      let tempCPTData = cptData;
       for (const key of Object.keys(responseData)) {
         tempOptionArray.push({
           value: responseData[key],
           label: responseData[key]["name"],
         });
+        tempCPTData[key] = responseData[key];
       }
-
+      setCPTData(tempCPTData);
       setCPTOptions(tempOptionArray);
+      changeCptWeights(tempOptionArray);
+      addToVsProfilePlot(tempCPTData, selectedCorrelations);
     });
     // Set Table Data
-    let tempCptTableData = {};
-    for (const file of filenames) {
-      Papa.parse(file, {
-        header: true,
-        skipEmptyLines: true,
-        complete: function (results, file) {
-          tempCptTableData[file.name.split(".")[0]] = results.data;
-        },
-      });
-    }
+    let tempCptTableData = cptTableData;
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: function (results, file) {
+        tempCptTableData[file.name.split(".")[0]] = results.data;
+      },
+    });
     // Reset Plots and Tables
     setCptTableData(tempCptTableData);
-    setSelectedCptTable(null);
-    setSelectedCptPlot(null);
-    setCptPlotData({});
-    setVsProfilePlotData({});
     setLoading(false);
   };
 
@@ -171,9 +170,9 @@ const CPT = () => {
     });
   };
 
-  const sendVsProfileRequest = async (correlationsToSend) => {
+  const sendVsProfileRequest = async (cptsToSend, correlationsToSend) => {
     const jsonBody = {
-      cpts: cptData,
+      cpts: cptsToSend,
       correlations: correlationsToSend,
     };
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_FROM_CPT_ENDPOINT, {
@@ -191,20 +190,41 @@ const CPT = () => {
     });
   };
 
-  const addToVsProfilePlot = async (selectedCorrelations) => {
+  const sendAverageRequest = async (vsProfilesToSend) => {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_AVERAGE_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vsProfiles: vsProfilesToSend,
+        vsWeights: cptWeights,
+        vsCorrelationWeights: correlationWeights,
+        vs30CorrelationWeights: {},
+      }),
+    }).then(async (response) => {
+      const responseData = await response.json();
+      // Set the Plot Average Data
+      setVsProfileAveragePlotData(responseData["average"]);
+    });
+  };
+
+  const addToVsProfilePlot = async (newCptData, newSelectedCorrelations) => {
     let correlationsToSend = [];
-    selectedCorrelations.forEach((entry) => {
-      if (!vsProfileData.hasOwnProperty(entry["label"])) {
-        correlationsToSend.push(entry["label"]);
+    let cptsToSend = {};
+    newSelectedCorrelations.forEach((entry) => {
+      for (const cptKey of Object.keys(newCptData)) {
+        if (!vsProfileData.hasOwnProperty(cptKey + "_" + entry["label"])) {
+          correlationsToSend.push(entry["label"]);
+          cptsToSend[cptKey] = newCptData[cptKey];
+        }
       }
     });
     if (correlationsToSend.length > 0) {
-      await sendVsProfileRequest(correlationsToSend);
+      await sendVsProfileRequest(cptsToSend, correlationsToSend);
     }
     // Check if new midpoint requests are needed
     let vsProfileToSend = [];
-    selectedCorrelations.forEach((entry) => {
-      for (const cptKey of Object.keys(cptData)) {
+    newSelectedCorrelations.forEach((entry) => {
+      for (const cptKey of Object.keys(newCptData)) {
         if (
           !vsProfileMidpointData.hasOwnProperty(cptKey + "_" + entry["label"])
         ) {
@@ -217,8 +237,8 @@ const CPT = () => {
     }
     // Adds to Plot data from midpoint data
     let tempPlotData = {};
-    selectedCorrelations.forEach((entry) => {
-      for (const cptKey of Object.keys(cptData)) {
+    newSelectedCorrelations.forEach((entry) => {
+      for (const cptKey of Object.keys(newCptData)) {
         tempPlotData[cptKey + "_" + entry["label"]] =
           vsProfileMidpointData[cptKey + "_" + entry["label"]];
       }
@@ -252,6 +272,7 @@ const CPT = () => {
   const checkWeights = () => {
     // TODO error checking
     setCptResults(vsProfileData);
+    sendAverageRequest(vsProfileData);
     let tempAllWeights = allCorrelationWeights;
     for (const key of Object.keys(correlationWeights)) {
       tempAllWeights[key] = correlationWeights[key];
@@ -272,31 +293,87 @@ const CPT = () => {
   const onSelectCPT = (e) => {
     setSelectedCptTable(e);
     setSelectedCptTableData(cptTableData[e["label"]]);
-    setCptInfo(cptData[e["label"]]["info"]);
+    setCptInfo(e["value"]["info"]);
   };
 
   const onSelectCorrelations = (e) => {
     setSelectedCorrelations(e);
-    addToVsProfilePlot(e);
+    addToVsProfilePlot(cptData, e);
+  };
+
+  const onSetFile = (e) => {
+    setFile(e);
+    setCptName(e.name.split(".")[0]);
+  };
+
+  const removeFile = (fileToRemove) => {
+    let newCptOptions = [];
+    let newCptData = [];
+    cptOptions.forEach((object) => {
+      if (object["label"] !== fileToRemove["label"]) {
+        newCptOptions.push(object);
+        newCptData[object["label"]] = cptData[object["label"]];
+      }
+    });
+    setCPTData(newCptData);
+    setCPTOptions(newCptOptions);
+    changeCptWeights(newCptOptions);
+    let newVsPlotData = {};
+    let newVsProfileData = {};
+    let newVsProfileMidpointData = {};
+    for (const key of Object.keys(vsProfilePlotData)) {
+      selectedCorrelations.forEach((correlation) => {
+        if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
+          newVsPlotData[key] = vsProfilePlotData[key];
+          newVsProfileData[key] = vsProfileData[key];
+          newVsProfileMidpointData[key] = vsProfileMidpointData[key];
+        }
+      });
+    }
+    setVsProfilePlotData(newVsPlotData);
+    setVsProfileData(newVsProfileData);
+    setVsProfileMidpointData(newVsProfileMidpointData);
   };
 
   return (
     <div>
-      <div className="process-cpt">
-        <div className="form-section-title">Upload CPT files</div>
-        <input
-          className="form-file-input"
-          type="file"
-          multiple={true}
-          onChange={(e) => setFilenames(e.target.files)}
-        />
-        <button
-          disabled={loading}
-          className="form btn btn-primary"
-          onClick={() => sendProcessRequest()}
-        >
-          Process CPT's
-        </button>
+      <div className="row two-colum-row centre-elm">
+        <div className="col-3 process-cpt">
+          <div className="form-section-title">Upload CPT</div>
+          <div className="outline form">
+            <input
+              className="form-file-input"
+              type="file"
+              onChange={(e) => onSetFile(e.target.files[0])}
+            />
+            <div className="form-label">CPT Name</div>
+            <div className="stretch">
+              <input
+                className="text-input"
+                value={cptName}
+                onChange={(e) => setCptName(e.target.value)}
+              />
+            </div>
+            <button
+              disabled={loading}
+              className="form btn btn-primary"
+              onClick={() => sendProcessRequest()}
+            >
+              Add CPT
+            </button>
+          </div>
+        </div>
+        <div className="col-2 file-section">
+          <div className="form-section-title">CPT Files</div>
+          <div className="file-table-section outline form center-elm">
+              {Object.keys(cptOptions).length > 0 && (
+                <FileTable
+                  files={cptOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
+          </div>
+        </div>
       </div>
       <div className="hr"></div>
       <div className="row two-column-row center-elm cpt-data">
@@ -364,7 +441,7 @@ const CPT = () => {
               />
             )}
           </div>
-          <div className="form-section-title">Correlation Weights</div>
+          <div className="form-section-title">CPT - Vs Correlation Weights</div>
           <div className="outline center-elm cor-weights">
             {Object.keys(correlationWeights).length > 0 && (
               <WeightTable
@@ -385,7 +462,10 @@ const CPT = () => {
           <div className="form-section-title">VsProfile Preview</div>
           <div className="outline vs-preview-plot">
             {Object.keys(vsProfilePlotData).length > 0 && (
-              <VsProfilePreviewPlot vsProfilePlotData={vsProfilePlotData} />
+              <VsProfilePreviewPlot
+                vsProfilePlotData={vsProfilePlotData}
+                average={vsProfileAveragePlotData}
+              />
             )}
           </div>
         </div>

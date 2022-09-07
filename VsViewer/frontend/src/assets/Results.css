@@ -12,7 +12,7 @@
 .form-label {
     font-size: calc(12px + 0.2vw);
     font-weight: 500;
-    margin-top: 1vw;
+    margin-top: 0.5vh;
 }
 
 .text-input {
@@ -109,6 +109,10 @@
     margin-top: 1vh;
     height: 25vh;
     width: 22vw;
+}
+
+.result-weight-area {
+    height: 12vw;
 }
 
 .vs-weight-title {

@@ -3,7 +3,7 @@ from typing import List
 
 import matplotlib.pyplot as plt
 
-from VsViewer.vs_calc import CPT, utils
+from vs_calc import CPT, utils
 
 
 def plot_cpt(cpts: List[CPT], output_ffp: str):
