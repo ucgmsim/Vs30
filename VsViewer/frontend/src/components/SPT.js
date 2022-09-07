@@ -28,8 +28,8 @@ const SPT = () => {
     sptWeights,
     setSptWeights,
     setSptResults,
-    setAllCorrelationWeights,
-    allCorrelationWeights,
+    setSptCorrelationWeights,
+    sptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // SPT Plot
@@ -188,7 +188,7 @@ const SPT = () => {
                 value: sptOption["value"],
                 label: sptOption["label"],
               });
-              tempSPTData[sptOption["label"]] = sptData["label"];
+              tempSPTData[sptOption["label"]] = sptData[sptOption["label"]];
             }
             for (const key of Object.keys(responseData)) {
               tempOptions.push({
@@ -260,6 +260,7 @@ const SPT = () => {
       for (const key of Object.keys(responseData)) {
         tempVsProfileData[key] = responseData[key];
       }
+      debugger;
       setVsProfileData(tempVsProfileData);
     });
   };
@@ -280,6 +281,7 @@ const SPT = () => {
         }
       }
     });
+    // START HERE sptsToSend
     if (correlationsToSend.length > 0) {
       await sendVsProfileRequest(sptsToSend, correlationsToSend);
     }
@@ -290,10 +292,12 @@ const SPT = () => {
         if (
           !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
+          debugger;
           vsProfileToSend.push(vsProfileData[sptKey + "_" + entry["label"]]);
         }
       }
     });
+    debugger;
     if (vsProfileToSend.length > 0) {
       await sendVsProfileMidpointRequest(vsProfileToSend);
     }
@@ -388,11 +392,14 @@ const SPT = () => {
       setSptResults(vsProfileData);
       // Remove average for now
       // sendAverageRequest(vsProfileData);
-      let tempAllWeights = allCorrelationWeights;
-      for (const key of Object.keys(correlationWeights)) {
-        tempAllWeights[key] = correlationWeights[key];
-      }
-      setAllCorrelationWeights(tempAllWeights);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function(key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(sptWeights).forEach(function(key) {
+        sptWeights[key] = parseFloat(sptWeights[key]);
+      });
+      setSptCorrelationWeights(correlationWeights);
       setWeightError(false);
     } else {
       await wait(1000);

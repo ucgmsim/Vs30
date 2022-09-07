@@ -226,7 +226,11 @@ const VsProfile = () => {
     if (check) {
       setVsProfileResults(vsProfileData);
       // Remove average for now
-      // sendAverageRequest();  
+      // sendAverageRequest(); 
+      // Ensures the values are floats
+      Object.keys(vsProfileWeights).forEach(function(key) {
+        vsProfileWeights[key] = parseFloat(vsProfileWeights[key]);
+      }); 
       setWeightError(false);
     } else {
       setFlashWeightError(true);

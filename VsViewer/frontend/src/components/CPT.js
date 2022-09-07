@@ -28,8 +28,8 @@ const CPT = () => {
     cptWeights,
     setCptWeights,
     setCptResults,
-    setAllCorrelationWeights,
-    allCorrelationWeights,
+    setCptCorrelationWeights,
+    cptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // CPT Plot
@@ -338,11 +338,14 @@ const CPT = () => {
       setCptResults(vsProfileData);
       // Remove average for now
       // sendAverageRequest(vsProfileData);
-      let tempAllWeights = allCorrelationWeights;
-      for (const key of Object.keys(correlationWeights)) {
-        tempAllWeights[key] = correlationWeights[key];
-      }
-      setAllCorrelationWeights(tempAllWeights);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function(key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(cptWeights).forEach(function(key) {
+        cptWeights[key] = parseFloat(cptWeights[key]);
+      });
+      setCptCorrelationWeights(correlationWeights);
       setWeightError(false);
     } else {
       await wait(1000);
