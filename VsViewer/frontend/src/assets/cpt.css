@@ -103,16 +103,21 @@
     padding-bottom: 15px;
     padding-left: 1%;
     margin-right: -5%;
-    height: 40vw;
+    height: 74vh;
 }
 
 .cpt-table {
-    height: 35.5vw;
+    height: 65vh;
     width: 100%;
 }
 
-.cpt-plot {
+.cpt-plot-section {
     height: 70.6vh !important;
+    width: 60vw !important;
+}
+
+.cpt-plot {
+    height: 65vh !important;
     width: 60vw !important;
 }
 
@@ -123,7 +128,7 @@
 
 .select-cor {
     min-width: 20vw;
-    margin-bottom: 1vw;
+    margin-bottom: 1vh;
 }
 
 .vs-preview-section {
