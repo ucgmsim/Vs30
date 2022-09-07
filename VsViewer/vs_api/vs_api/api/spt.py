@@ -3,9 +3,9 @@ from flask_cors import cross_origin
 
 from vs_api import server, utils
 from vs_api import constants as const
-from VsViewer.vs_calc import SPT
-from VsViewer.vs_calc import constants as vs_calc_constants
-from VsViewer.vs_calc.spt_vs_correlations import SPT_CORRELATIONS
+from vs_calc import SPT
+from vs_calc import constants as vs_calc_constants
+from vs_calc.spt_vs_correlations import SPT_CORRELATIONS
 
 
 @server.app.route(const.SPT_CREATE_ENDPOINT, methods=["POST"])
@@ -21,7 +21,7 @@ def create_spt():
     spt_dict = dict()
     for csv_name, csv_data in csvs.items():
         formData = eval(flask.request.form.get(f"{csv_name}_formData"))
-        spt = SPT.from_byte_stream_form(csv_data.filename, csv_data.stream.read(), formData)
+        spt = SPT.from_byte_stream_form(formData["sptName"], csv_data.stream.read(), formData)
         spt_dict[spt.name] = spt.to_json()
 
     return flask.jsonify(spt_dict)
