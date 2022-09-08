@@ -24,7 +24,7 @@ def create_vsprofile():
     for csv_name, csv_data in csvs.items():
         form_data = eval(flask.request.form.get(f"{csv_name}_formData"))
         vs_profile = VsProfile.from_byte_stream(
-            form_data.get("vsProfileName"), True if form_data.get("layered") == "True" else False, csv_data.stream.read()
+            form_data.get("vsProfileName"), form_data.get("layered") == "True", csv_data.stream.read()
         )
         vs_profile_dict[vs_profile.name] = vs_profile.to_json()
     return flask.jsonify(vs_profile_dict)
