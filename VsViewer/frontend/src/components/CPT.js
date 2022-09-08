@@ -29,7 +29,6 @@ const CPT = () => {
     setCptWeights,
     setCptResults,
     setCptCorrelationWeights,
-    cptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // CPT Plot
@@ -47,6 +46,9 @@ const CPT = () => {
   // Form variables
   const [file, setFile] = useState("");
   const [cptName, setCptName] = useState("");
+  const [isMPa, setisMPa] = useState(true);
+  const [gwl, setGWL] = useState(1);
+  const [nar, setNAR] = useState(0.8);
   const [cptOptions, setCPTOptions] = useState([]);
   const [correlationsOptions, setCorrelationsOptions] = useState([]);
   const [selectedCorrelations, setSelectedCorrelations] = useState([]);
@@ -464,7 +466,42 @@ const CPT = () => {
                 onChange={(e) => setCptName(e.target.value)}
               />
             </div>
-
+            <div className="form-label">Ground Water Level</div>
+            <div className="stretch">
+              <input
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
+                value={gwl}
+                onChange={(e) => setGWL(e.target.value)}
+              />
+            </div>
+            <div className="form-label">Net Area Ratio</div>
+            <div className="stretch">
+              <input
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
+                value={nar}
+                onChange={(e) => setNAR(e.target.value)}
+              />
+            </div>
+            <div className="form-label">CPT Units</div>
+            <div className="stretch">
+              <input
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
+                value={isMPa}
+                onChange={(e) => setisMPa(e.target.value)}
+              />
+            </div>
             <div
               className={
                 flashServerError
