@@ -126,7 +126,7 @@ class VsProfile:
             np.asarray(json["depth"]),
             None if json["vs_correlation"] == "" else json["vs_correlation"],
             None if json["vs30_correlation"] == "" else json["vs30_correlation"],
-            True if json["layered"] == "True" else False,
+            json["layered"] == "True",
         )
 
     def to_json(self):
