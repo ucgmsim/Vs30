@@ -5,8 +5,6 @@ from flask_cors import cross_origin
 from vs_api import server, utils
 from vs_api import constants as const
 from vs_calc.SPT import SPT
-from vs_calc.utils import convert_to_midpoint
-from vs_calc.SPT import SPT
 from vs_calc.VsProfile import VsProfile
 from vs_calc.utils import convert_to_midpoint
 from vs_calc.calc_weightings import calc_average_vs_midpoint
@@ -50,18 +48,20 @@ def vs_profile_to_midpoint():
     json_array = flask.request.json
     vs_profile_dict = dict()
     for vs_profile_data in json_array:
-        vs, depth = convert_to_midpoint(vs_profile_data["vs"], vs_profile_data["depth"], True if vs_profile_data["layered"] == "True" else False)
+        vs_data = vs_profile_data["vs"]
+        vs_sd_data = vs_profile_data["vs_sd"]
+        depth_data = vs_profile_data["depth"]
+        layered = True if vs_profile_data["layered"] == "True" else False
+        vs, depth = convert_to_midpoint(vs_data, depth_data, layered)
         vs_sd_below, _ = convert_to_midpoint(
-            np.asarray(vs_profile_data["vs"])
-            * np.exp(-np.asarray(vs_profile_data["vs_sd"])),
-            vs_profile_data["depth"],
-            True if vs_profile_data["layered"] == "True" else False,
+            np.asarray(vs_data) * np.exp(-np.asarray(vs_sd_data)),
+            depth_data,
+            layered,
         )
         vs_sd_above, _ = convert_to_midpoint(
-            np.asarray(vs_profile_data["vs"])
-            * np.exp(np.asarray(vs_profile_data["vs_sd"])),
-            vs_profile_data["depth"],
-            True if vs_profile_data["layered"] == "True" else False,
+            np.asarray(vs_data) * np.exp(np.asarray(vs_sd_data)),
+            depth_data,
+            layered,
         )
         vs_profile_name = (
             vs_profile_data["name"]
@@ -116,9 +116,15 @@ def calc_average():
         for vs_profile_data in json_array["vsProfiles"].values()
     ]
     vs_weights = {k: float(v) for k, v in json_array["vsWeights"].items()}
-    vs_correlation_weights = {k: float(v) for k, v in json_array["vsCorrelationWeights"].items()}
-    vs30_correlation_weights = {k: float(v) for k, v in json_array["vs30CorrelationWeights"].items()}
-    depth, vs, sd = calc_average_vs_midpoint(vs_profiles, vs_weights, vs_correlation_weights, vs30_correlation_weights)
+    vs_correlation_weights = {
+        k: float(v) for k, v in json_array["vsCorrelationWeights"].items()
+    }
+    vs30_correlation_weights = {
+        k: float(v) for k, v in json_array["vs30CorrelationWeights"].items()
+    }
+    depth, vs, sd = calc_average_vs_midpoint(
+        vs_profiles, vs_weights, vs_correlation_weights, vs30_correlation_weights
+    )
     vs_sd_below = np.asarray(vs) * np.exp(-np.asarray(sd))
     vs_sd_above = np.asarray(vs) * np.exp(np.asarray(sd))
     return flask.jsonify(
