@@ -1,10 +1,14 @@
 .process-cpt {
-    margin-top: 1vh;
+    margin-top: 5vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 25%;
-    margin-left: 24.5vw;
+    width: 15vw !important;
+    margin-left: 2vw;
+}
+
+.cpt-file-manage {
+    width: 20vw !important;
 }
 
 .hr {
@@ -23,7 +27,7 @@
 }
 
 .form-label {
-    font-size: calc(12px + 0.2vw);
+    font-size: calc(0.55vh + 0.55vw);
     font-weight: 500;
     margin-top: 0.5vh;
 }
@@ -43,14 +47,37 @@
     width: 11vw !important;
 }
 
+.switch-input-section {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    height: 4vh;
+}
+
+.normal-label {
+    font-size: calc(0.55vh + 0.55vw);
+    padding-top: 1vh;
+    padding-bottom: 1vh;
+}
+
+.highlight-label {
+    font-size: calc(0.55vh + 0.55vw);
+    font-weight: 500;
+    color: #0d6efd;
+    padding-top: 1vh;
+    padding-bottom: 1vh;
+}
+
 .form-section-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
 .file-section {
+    margin-top: 2vh;
     height: 20vh;
-    width: 22vw !important;
+    width: 19.25vw !important;
 }
 
 .file-table-section {
@@ -106,19 +133,26 @@
     height: 74vh;
 }
 
+.cpt-table-section {
+    height: 65vh;
+    width: 30vw !important;
+    margin-left: -3.5vw;
+}
+
 .cpt-table {
     height: 65vh;
-    width: 100%;
+    width: 30vw !important;
 }
 
 .cpt-plot-section {
     height: 70.6vh !important;
-    width: 60vw !important;
+    width: 42vw !important;
+    margin-left: -3vw;
 }
 
 .cpt-plot {
     height: 65vh !important;
-    width: 60vw !important;
+    width: 42vw !important;
 }
 
 .cor-section {

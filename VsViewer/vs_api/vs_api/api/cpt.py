@@ -16,11 +16,11 @@ def create_cpts():
     """
     server.app.logger.info(f"Received request at {const.CPT_CREATE_ENDPOINT}")
 
-    csvs = flask.request.files
+    files = flask.request.files
     cpt_dict = dict()
-    for csv_name, csv_data in csvs.items():
-        formData = eval(flask.request.form.get(f"{csv_name}_formData"))
-        cpt = CPT.from_byte_stream(formData["cptName"], csv_data.stream.read())
+    for file_name, file_data in files.items():
+        form_data = eval(flask.request.form.get(f"{file_name}_formData"))
+        cpt = CPT.from_byte_stream(file_name, file_data.stream.read(), form_data)
         cpt_dict[cpt.name] = cpt.to_json()
     return flask.jsonify(cpt_dict)
 

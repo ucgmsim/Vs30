@@ -7,7 +7,7 @@ import * as CONSTANTS from "Constants";
 
 import "assets/Results.css";
 import * as Utils from "Utils";
-import { WeightTable, VsProfilePreviewPlot, InfoTooltip, } from "components";
+import { WeightTable, VsProfilePreviewPlot, InfoTooltip } from "components";
 
 const Results = () => {
   const {
@@ -46,29 +46,26 @@ const Results = () => {
   const [weightError, setWeightError] = useState(false);
   const [flashComputeError, setFlashComputeError] = useState(false);
   const [computeError, setComputeError] = useState(false);
-  const [computeErrorText, setComputeErrorText] = useState(CONSTANTS.COMPUTE_ERROR);
+  const [computeErrorText, setComputeErrorText] = useState(
+    CONSTANTS.COMPUTE_ERROR
+  );
 
   // Set the Section Weights
   useEffect(() => {
-    if (selectedSections.length > 0) {
-      let tempSectionWeights = {};
-      selectedSections.forEach((entry) => {
-        tempSectionWeights[entry["label"]] = 1 / selectedSections.length;
-      });
-      setSectionWeights(tempSectionWeights);
-    }
+    let tempSectionWeights = {};
+    selectedSections.forEach((entry) => {
+      tempSectionWeights[entry["label"]] = 1 / selectedSections.length;
+    });
+    setSectionWeights(tempSectionWeights);
   }, [selectedSections]);
 
   // Set the Correlation Weights
   useEffect(() => {
-    if (selectedCorrelations.length > 0) {
-      let tempCorrelationWeights = {};
-      selectedCorrelations.forEach((entry) => {
-        tempCorrelationWeights[entry["label"]] =
-          1 / selectedCorrelations.length;
-      });
-      setCorrelationWeights(tempCorrelationWeights);
-    }
+    let tempCorrelationWeights = {};
+    selectedCorrelations.forEach((entry) => {
+      tempCorrelationWeights[entry["label"]] = 1 / selectedCorrelations.length;
+    });
+    setCorrelationWeights(tempCorrelationWeights);
   }, [selectedCorrelations]);
 
   // Check the user can set Weights
@@ -172,33 +169,34 @@ const Results = () => {
         sptVsCorrelationWeights: sptCorrelationWeights,
         vs30CorrelationWeights: correlationWeights,
       }),
-    }).then(async (response) => {
-      if (response.ok) {
-        serverResponse = true;
-        const responseData = await response.json();
-        // Set Vs30 results
-        setVs30(responseData["Vs30"]);
-        setVs30SD(responseData["Vs30_SD"]);
-        setComputeError(false);
-      } else {
-        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+    })
+      .then(async (response) => {
+        if (response.ok) {
+          serverResponse = true;
+          const responseData = await response.json();
+          // Set Vs30 results
+          setVs30(responseData["Vs30"]);
+          setVs30SD(responseData["Vs30_SD"]);
+          setComputeError(false);
+        } else {
+          setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+          setComputeError(true);
+          setFlashComputeError(true);
+          await wait(1000);
+          setFlashComputeError(false);
+        }
+      })
+      .catch(async () => {
+        if (serverResponse) {
+          setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+        } else {
+          setComputeErrorText(CONSTANTS.REQUEST_ERROR);
+        }
         setComputeError(true);
         setFlashComputeError(true);
         await wait(1000);
         setFlashComputeError(false);
-      }
-
-    }) .catch(async () => {
-      if (serverResponse) {
-        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
-      } else {
-        setComputeErrorText(CONSTANTS.REQUEST_ERROR);
-      }
-      setComputeError(true);
-      setFlashComputeError(true);
-      await wait(1000);
-      setFlashComputeError(false);
-    });
+      });
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -264,10 +262,10 @@ const Results = () => {
       setCanCompute(true);
       setWeightError(false);
       // Ensures the values are floats
-      Object.keys(correlationWeights).forEach(function(key) {
+      Object.keys(correlationWeights).forEach(function (key) {
         correlationWeights[key] = parseFloat(correlationWeights[key]);
       });
-      Object.keys(sectionWeights).forEach(function(key) {
+      Object.keys(sectionWeights).forEach(function (key) {
         sectionWeights[key] = parseFloat(sectionWeights[key]);
       });
     } else {
@@ -323,19 +321,19 @@ const Results = () => {
             </div>
           </div>
           <div className="row two-colum-row set-weights-section">
-              <button
-                disabled={!canSetWeights}
-                className="col-5 set-weights preview-btn btn btn-primary"
-                onClick={() => checkWeights()}
-              >
-                Set Weights
-              </button>
-              <div className="col-1 weight-error">
-                {weightError && (
-                  <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
-                )}
-              </div>
+            <button
+              disabled={!canSetWeights}
+              className="col-5 set-weights preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
+            <div className="col-1 weight-error">
+              {weightError && (
+                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+              )}
             </div>
+          </div>
         </div>
       </div>
       <div className="col-5 center-elm result-plot-section">
@@ -377,7 +375,9 @@ const Results = () => {
             Compute Vs30
           </button>
           <div className="col-1 weight-error">
-            {computeError && <InfoTooltip text={computeErrorText} error={true} />}
+            {computeError && (
+              <InfoTooltip text={computeErrorText} error={true} />
+            )}
           </div>
         </div>
         <div className="vs30-title">Vs30 (m/s)</div>

@@ -1,5 +1,6 @@
 from io import BytesIO
 from typing import Dict
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -69,16 +70,21 @@ class VsProfile:
         self._vs30_sd = None
 
     @staticmethod
-    def from_byte_stream(name: str, layered: bool, stream: bytes):
+    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes):
         """
         Creates a VsProfile from a file stream
         """
-        csv_data = pd.read_csv(BytesIO(stream))
+        file_name = Path(file_name)
+        file_data = (
+            pd.read_csv(BytesIO(stream))
+            if file_name.suffix == ".csv"
+            else pd.read_excel(BytesIO(stream))
+        )
         return VsProfile(
             name,
-            np.asarray(csv_data["Vs"]),
-            np.asarray(csv_data["Vs_SD"]),
-            np.asarray(csv_data["Depth"]),
+            np.asarray(file_data["Vs"]),
+            np.asarray(file_data["Vs_SD"]),
+            np.asarray(file_data["Depth"]),
             None,
             None,
             layered

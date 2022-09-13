@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useContext, memo } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import readXlsxFile from 'read-excel-file';
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -16,6 +17,7 @@ import {
   InfoTooltip,
   VsProfilePreviewPlot,
 } from "components";
+import { Switch } from "@mui/material";
 
 const CPT = () => {
   const {
@@ -39,6 +41,7 @@ const CPT = () => {
   const [selectedCptTable, setSelectedCptTable] = useState(null);
   const [selectedCptTableData, setSelectedCptTableData] = useState(null);
   const [cptInfo, setCptInfo] = useState(null);
+  const [dataIsKPa, setDataIsKPa] = useState(false);
   // VsProfilePreview
   const [vsProfileData, setVsProfileData] = useState({});
   const [vsProfilePlotData, setVsProfilePlotData] = useState({});
@@ -46,7 +49,7 @@ const CPT = () => {
   // Form variables
   const [file, setFile] = useState("");
   const [cptName, setCptName] = useState("");
-  const [isMPa, setisMPa] = useState(true);
+  const [iskPa, setiskPa] = useState(false);
   const [gwl, setGWL] = useState(1);
   const [nar, setNAR] = useState(0.8);
   const [cptOptions, setCPTOptions] = useState([]);
@@ -61,6 +64,8 @@ const CPT = () => {
   const [weightError, setWeightError] = useState(false);
   const [flashFileUploadError, setFlashFileUploadError] = useState(false);
   const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashGWLUploadError, setFlashGWLUploadError] = useState(false);
+  const [flashNARUploadError, setFlashNARUploadError] = useState(false);
   const [flashServerError, setFlashServerError] = useState(false);
   const [uploadError, setUploadError] = useState(false);
   const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
@@ -121,6 +126,18 @@ const CPT = () => {
       setFlashNameUploadError(true);
       await wait(1000);
       setFlashNameUploadError(false);
+    } else if (!Utils.errorCheckFloatInput(gwl)) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.GWL_ERROR);
+      setFlashGWLUploadError(true);
+      await wait(1000);
+      setFlashGWLUploadError(false);
+    } else if (!Utils.errorCheckFloatInput(nar)) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAR_ERROR);
+      setFlashNARUploadError(true);
+      await wait(1000);
+      setFlashNARUploadError(false);
     } else {
       setUploadError(false);
       setLoading(true);
@@ -131,6 +148,9 @@ const CPT = () => {
         file.name + "_formData",
         JSON.stringify({
           cptName: cptName,
+          gwl: gwl,
+          nar: nar,
+          iskPa: iskPa ? "True" : "False",
         })
       );
       await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
@@ -141,6 +161,23 @@ const CPT = () => {
           if (response.ok) {
             serverResponse = true;
             const responseData = await response.json();
+            // Set Table Data
+            let tempCptTableData = cptTableData;
+            if (file.name.split(".")[1] === "xlsx") {
+              readXlsxFile(file).then((rows) => {
+                rows.shift();
+                tempCptTableData[cptName] = rows;
+              });
+            } else {
+              Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function (results, file) {
+                  tempCptTableData[cptName] = results.data;
+                },
+              });
+            }
+            setCptTableData(tempCptTableData);
             // Set CPT Select Dropdown
             let tempOptionArray = cptOptions;
             let tempCPTData = cptData;
@@ -155,17 +192,6 @@ const CPT = () => {
             setCPTOptions(tempOptionArray);
             changeCptWeights(tempOptionArray);
             addToVsProfilePlot(tempCPTData, selectedCorrelations);
-            // Set Table Data
-            let tempCptTableData = cptTableData;
-            Papa.parse(file, {
-              header: true,
-              skipEmptyLines: true,
-              complete: function (results, file) {
-                tempCptTableData[file.name.split(".")[0]] = results.data;
-              },
-            });
-            // Reset Plots and Tables
-            setCptTableData(tempCptTableData);
           } else {
             setUploadErrorText(CONSTANTS.FILE_ERROR);
             setUploadError(true);
@@ -341,10 +367,10 @@ const CPT = () => {
       // Remove average for now
       // sendAverageRequest(vsProfileData);
       // Ensures the values are floats
-      Object.keys(correlationWeights).forEach(function(key) {
+      Object.keys(correlationWeights).forEach(function (key) {
         correlationWeights[key] = parseFloat(correlationWeights[key]);
       });
-      Object.keys(cptWeights).forEach(function(key) {
+      Object.keys(cptWeights).forEach(function (key) {
         cptWeights[key] = parseFloat(cptWeights[key]);
       });
       setCptCorrelationWeights(correlationWeights);
@@ -370,6 +396,7 @@ const CPT = () => {
     setSelectedCptTable(e);
     setSelectedCptTableData(cptTableData[e["label"]]);
     setCptInfo(e["value"]["info"]);
+    setDataIsKPa(e["value"]["is_kpa"]);
   };
 
   const onSelectCorrelations = (e) => {
@@ -410,7 +437,10 @@ const CPT = () => {
     setVsProfilePlotData(newVsPlotData);
     setVsProfileData(newVsProfileData);
     setVsProfileMidpointData(newVsProfileMidpointData);
-    if (selectedCptTable !== null && fileToRemove["label"] === selectedCptTable["label"]) {
+    if (
+      selectedCptTable !== null &&
+      fileToRemove["label"] === selectedCptTable["label"]
+    ) {
       setSelectedCptTable(null);
       setSelectedCptTableData(null);
     }
@@ -434,111 +464,111 @@ const CPT = () => {
 
   return (
     <div>
-      <div className="row two-colum-row centre-elm">
-        <div className="col-3 process-cpt">
-          <div className="form-section-title">Upload CPT</div>
-          <div className="outline form-section">
-            <div
-              className={
-                flashFileUploadError
-                  ? "cpt-flash-warning row two-colum-row form-file-input-section"
-                  : "row two-colum-row form-file-input-section temp-border"
-              }
-            >
-              <input
-                className="col-8 form-file-input"
-                type="file"
-                onChange={(e) => onSetFile(e.target.files[0])}
-              />
-              <div className="col-1 file-info">
-                <InfoTooltip text={CONSTANTS.CPT_FILE} />
-              </div>
-            </div>
-            <div className="form-label">CPT Name</div>
-            <div className="stretch">
-              <input
+      <div className="row three-column-row center-elm cpt-data">
+        <div className="col-2 centre-elm cpt-file-manage">
+          <div className="process-cpt">
+            <div className="form-section-title">Upload CPT</div>
+            <div className="outline form-section">
+              <div
                 className={
-                  flashNameUploadError
-                    ? "cpt-flash-warning text-input"
-                    : "cpt-input text-input"
+                  flashFileUploadError
+                    ? "cpt-flash-warning row two-colum-row form-file-input-section"
+                    : "row two-colum-row form-file-input-section temp-border"
                 }
-                value={cptName}
-                onChange={(e) => setCptName(e.target.value)}
-              />
-            </div>
-            <div className="form-label">Ground Water Level</div>
-            <div className="stretch">
-              <input
-                className={
-                  flashNameUploadError
-                    ? "cpt-flash-warning text-input"
-                    : "cpt-input text-input"
-                }
-                value={gwl}
-                onChange={(e) => setGWL(e.target.value)}
-              />
-            </div>
-            <div className="form-label">Net Area Ratio</div>
-            <div className="stretch">
-              <input
-                className={
-                  flashNameUploadError
-                    ? "cpt-flash-warning text-input"
-                    : "cpt-input text-input"
-                }
-                value={nar}
-                onChange={(e) => setNAR(e.target.value)}
-              />
-            </div>
-            <div className="form-label">CPT Units</div>
-            <div className="stretch">
-              <input
-                className={
-                  flashNameUploadError
-                    ? "cpt-flash-warning text-input"
-                    : "cpt-input text-input"
-                }
-                value={isMPa}
-                onChange={(e) => setisMPa(e.target.value)}
-              />
-            </div>
-            <div
-              className={
-                flashServerError
-                  ? "cpt-flash-warning row two-colum-row add-cpt-section"
-                  : "row two-colum-row add-cpt-section temp-border"
-              }
-            >
-              <button
-                disabled={loading}
-                className="add-cpt-btn form btn btn-primary"
-                onClick={() => sendProcessRequest()}
               >
-                Add CPT
-              </button>
-              <div className="col-1 weight-error">
-                {uploadError && (
-                  <InfoTooltip text={uploadErrorText} error={true} />
-                )}
+                <input
+                  className="col-8 form-file-input"
+                  type="file"
+                  onChange={(e) => onSetFile(e.target.files[0])}
+                />
+                <div className="col-1 file-info">
+                  <InfoTooltip text={CONSTANTS.CPT_FILE} />
+                </div>
+              </div>
+              <div className="form-label">CPT Name</div>
+              <div className="stretch">
+                <input
+                  className={
+                    flashNameUploadError
+                      ? "cpt-flash-warning text-input"
+                      : "cpt-input text-input"
+                  }
+                  value={cptName}
+                  onChange={(e) => setCptName(e.target.value)}
+                />
+              </div>
+              <div className="form-label">Ground Water Level (m)</div>
+              <div className="stretch">
+                <input
+                  className={
+                    flashGWLUploadError
+                      ? "cpt-flash-warning text-input"
+                      : "cpt-input text-input"
+                  }
+                  value={gwl}
+                  onChange={(e) => setGWL(e.target.value)}
+                />
+              </div>
+              <div className="form-label">Net Area Ratio</div>
+              <div className="stretch">
+                <input
+                  className={
+                    flashNARUploadError
+                      ? "cpt-flash-warning text-input"
+                      : "cpt-input text-input"
+                  }
+                  value={nar}
+                  onChange={(e) => setNAR(e.target.value)}
+                />
+              </div>
+              <div className="form-label">CPT Units</div>
+              <div className="stretch switch-input-section">
+                <div className={iskPa ? "normal-label" : "highlight-label"}>
+                  MPa
+                </div>
+                <Switch
+                  size="medium"
+                  onChange={(e) => setiskPa(e.target.checked)}
+                />
+                <div className={iskPa ? "highlight-label" : "normal-label"}>
+                  kPa
+                </div>
+              </div>
+              <div
+                className={
+                  flashServerError
+                    ? "cpt-flash-warning row two-colum-row add-cpt-section"
+                    : "row two-colum-row add-cpt-section temp-border"
+                }
+              >
+                <button
+                  disabled={loading}
+                  className="add-cpt-btn form btn btn-primary"
+                  onClick={() => sendProcessRequest()}
+                >
+                  Add CPT
+                </button>
+                <div className="col-1 weight-error">
+                  {uploadError && (
+                    <InfoTooltip text={uploadErrorText} error={true} />
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        <div className="col-2 file-section center-elm">
-          <div className="form-section-title">CPT Files</div>
-          <div className="file-table-section outline form center-elm">
-            {Object.keys(cptOptions).length > 0 && (
-              <FileTable
-                files={cptOptions}
-                removeFunction={removeFile}
-              ></FileTable>
-            )}
+          <div className="file-section center-elm">
+            <div className="form-section-title">CPT Files</div>
+            <div className="file-table-section outline form center-elm">
+              {Object.keys(cptOptions).length > 0 && (
+                <FileTable
+                  files={cptOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-      <div className="hr"></div>
-      <div className="row two-column-row center-elm cpt-data">
-        <div className="col-4 cpt-table">
+        <div className="col-4 cpt-table-section">
           <div className="center-elm">
             <div className="form-section-title">CPT Table</div>
             <Select
@@ -555,6 +585,7 @@ const CPT = () => {
                   <CptTable
                     cptTableData={selectedCptTableData}
                     cptInfo={cptInfo}
+                    dataIsKPa={dataIsKPa}
                   ></CptTable>
                 )}
             </div>
@@ -575,7 +606,7 @@ const CPT = () => {
           </div>
           <div className="outline cpt-plot">
             {Object.keys(cptPlotData).length > 0 && (
-              <CPTPlot cptPlotData={cptPlotData}></CPTPlot>
+              <CPTPlot cptPlotData={cptPlotData} gwl={gwl}></CPTPlot>
             )}
           </div>
         </div>

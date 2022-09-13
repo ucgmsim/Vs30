@@ -9,6 +9,7 @@ import "assets/vsProfileTable.css";
 const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
   if (vsProfileData !== undefined && vsProfileData !== null) {
     const vsProfileRows = [];
+    let rowLabels = Object.keys(vsProfileData[0]);
     vsProfileData.forEach((row, rowIdx) => {
       vsProfileRows.push(
         <tr
@@ -17,9 +18,9 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
           }
           key={rowIdx}
         >
-          <td className="vs-col-size">{Utils.roundValue(row["Depth"])}</td>
-          <td className="vs-col-size">{Utils.roundValue(row["Vs"])}</td>
-          <td className="vs-col-size">{Utils.roundValue(row["Vs_SD"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row[rowLabels[0]])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row[rowLabels[1]])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row[rowLabels[2]])}</td>
         </tr>
       );
     });
