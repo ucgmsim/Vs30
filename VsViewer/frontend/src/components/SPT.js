@@ -63,6 +63,8 @@ const SPT = () => {
   const [weightError, setWeightError] = useState(false);
   const [flashFileUploadError, setFlashFileUploadError] = useState(false);
   const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashBoreUploadError, setFlashBoreUploadError] = useState(false);
+  const [flashEnergyUploadError, setFlashEnergyUploadError] = useState(false);
   const [flashServerError, setFlashServerError] = useState(false);
   const [uploadError, setUploadError] = useState(false);
   const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
@@ -80,19 +82,17 @@ const SPT = () => {
 
   // Set the Correlation Weights
   useEffect(() => {
-    if (selectedCorrelations.length > 0) {
-      let tempCorWeights = {};
-      let tempNewVsData = {};
-      selectedCorrelations.forEach((entry) => {
-        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
-        sptOptions.forEach((object) => {
-          let key = object["label"] + "_" + entry["label"];
-          tempNewVsData[key] = vsProfileData[key];
-        });
+    let tempCorWeights = {};
+    let tempNewVsData = {};
+    selectedCorrelations.forEach((entry) => {
+      tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      sptOptions.forEach((object) => {
+        let key = object["label"] + "_" + entry["label"];
+        tempNewVsData[key] = vsProfileData[key];
       });
-      setVsProfileData(tempNewVsData);
-      setCorrelationWeights(tempCorWeights);
-    }
+    });
+    setVsProfileData(tempNewVsData);
+    setCorrelationWeights(tempCorWeights);
   }, [selectedCorrelations]);
 
   // Check the user can set Weights
@@ -156,6 +156,18 @@ const SPT = () => {
       setFlashNameUploadError(true);
       await wait(1000);
       setFlashNameUploadError(false);
+    } else if (!Utils.errorCheckFloatInput(boreholeDiameter)){
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.BORE_ERROR);
+      setFlashBoreUploadError(true);
+      await wait(1000);
+      setFlashBoreUploadError(false);
+    } else if (energyRatio !== "" && !Utils.errorCheckFloatInput(energyRatio)){
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.ENERGY_ERROR);
+      setFlashEnergyUploadError(true);
+      await wait(1000);
+      setFlashEnergyUploadError(false);
     } else {
       setUploadError(false);
       setLoading(true);
@@ -508,13 +520,21 @@ const SPT = () => {
               </div>
               <div className="form-label">Borehole Diameter (mm)</div>
               <input
-                className="text-input"
+                className={
+                  flashBoreUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={boreholeDiameter}
                 onChange={(e) => setBoreholeDiameter(e.target.value)}
               />
               <div className="form-label">Energy Ratio</div>
               <input
-                className="text-input"
+                className={
+                  flashEnergyUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={energyRatio}
                 onChange={(e) => setEnergyRatio(e.target.value)}
               />
@@ -557,7 +577,7 @@ const SPT = () => {
               </div>
             </div>
           </div>
-          <div className="file-section center-elm">
+          <div className="spt-file-section center-elm">
             <div className="form-section-title">SPT Files</div>
             <div className="file-table-section outline form center-elm">
               {Object.keys(sptOptions).length > 0 && (

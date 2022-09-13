@@ -19,12 +19,12 @@ def create_vsprofile():
     """
     server.app.logger.info(f"Received request at {const.VS_PROFILE_CREATE_ENDPOINT}")
 
-    csvs = flask.request.files
+    files = flask.request.files
     vs_profile_dict = dict()
-    for csv_name, csv_data in csvs.items():
-        form_data = eval(flask.request.form.get(f"{csv_name}_formData"))
+    for file_name, file_data in files.items():
+        form_data = eval(flask.request.form.get(f"{file_name}_formData"))
         vs_profile = VsProfile.from_byte_stream(
-            form_data.get("vsProfileName"), form_data.get("layered") == "True", csv_data.stream.read()
+            file_name, form_data.get("vsProfileName"), form_data.get("layered") == "True", file_data.stream.read()
         )
         vs_profile_dict[vs_profile.name] = vs_profile.to_json()
     return flask.jsonify(vs_profile_dict)

@@ -114,17 +114,22 @@ class SPT:
         """
         Creates an SPT from a file stream and form data
         """
-        csv_data = pd.read_csv(BytesIO(stream))
+        file_name = Path(file_name)
+        file_data = (
+            pd.read_csv(BytesIO(stream))
+            if file_name.suffix == ".csv"
+            else pd.read_excel(BytesIO(stream))
+        )
         # Manage soil type from file first then form
         soil_type = (
-            csv_data["Soil"]
-            if "Soil" in csv_data.columns
-            else (None if form["soilType"] == "" else np.repeat(form["soilType"], len(csv_data.values)))
+            file_data["Soil"]
+            if "Soil" in file_data.columns
+            else (None if form["soilType"] == "" else np.repeat(form["soilType"], len(file_data.values)))
         )
         return SPT(
-            Path(file_name).stem,
-            np.asarray(csv_data["Depth"]),
-            np.asarray(csv_data["NValue"]),
+            form.get("sptName", file_name.stem),
+            np.asarray(file_data["Depth"]),
+            np.asarray(file_data["NValue"]),
             HammerType.Auto
             if form["hammerType"] == ""
             else HammerType[form["hammerType"]],

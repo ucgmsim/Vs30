@@ -1,6 +1,7 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import readXlsxFile from "read-excel-file";
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -95,6 +96,23 @@ const VsProfile = () => {
           if (response.ok) {
             serverResponse = true;
             const responseData = await response.json();
+            // Set Table Data
+            let tempVsTableData = vsProfileTableData;
+            if (file.name.split(".")[1] === "xlsx") {
+              readXlsxFile(file).then((rows) => {
+                rows.shift();
+                tempVsTableData[vsProfileName] = rows;
+              });
+            } else {
+              Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function (results, file) {
+                  tempVsTableData[vsProfileName] = results.data;
+                },
+              });
+            }
+            setVsProfileTableData(tempVsTableData);
             // Add to VsProfile Select Dropdown and VsProfile Data
             let tempOptions = [];
             let tempVsData = vsProfileData;
@@ -113,16 +131,6 @@ const VsProfile = () => {
             }
             setVsProfileOptions(tempOptions);
             setVsProfileData(tempVsData);
-            // Set Table Data
-            let tempVsTableData = vsProfileTableData;
-            Papa.parse(file, {
-              header: true,
-              skipEmptyLines: true,
-              complete: function (results) {
-                tempVsTableData[vsProfileName] = results.data;
-              },
-            });
-            setVsProfileTableData(tempVsTableData);
           } else {
             setUploadErrorText(CONSTANTS.FILE_ERROR);
             setUploadError(true);

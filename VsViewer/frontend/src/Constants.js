@@ -39,7 +39,7 @@ export const DEFAULTCOLOURS = [
 ];
 
 // Tooltips
-export const CPT_FILE = "CSV file format with 4 columns labelled in order [Depth, Qc, Fs, u]";
+export const CPT_FILE = "CSV file format with 4 columns labelled in order [Depth, qc, fs, u]";
 export const SPT_FILE = "CSV file format with 2-3 columns labelled in order [Depth, NValue, Soil] in which Soil is optional";
 export const VS_FILE = "CSV file format with 3 columns labelled in order [Depth, Vs, Vs_SD]";
 export const CPT_REMOVED_ROWS = "Number of rows removed during processing where Depth is > 30m or Qc or Fs is <= 0";
@@ -51,3 +51,7 @@ export const FILE_ERROR = "This file has produced an error while processing";
 export const NAME_ERROR = "This CPT Name is already taken";
 export const REQUEST_ERROR = "Could not reach server. Please try again later";
 export const COMPUTE_ERROR = "Error computing Vs30";
+export const GWL_ERROR = "Ground Water Level input needs to be a valid number";
+export const NAR_ERROR = "Net Area Ratio input needs to be a valid number";
+export const BORE_ERROR = "Borehole Diameter input needs to be a valid number";
+export const ENERGY_ERROR = "Energy Ratio input needs to be a valid number";

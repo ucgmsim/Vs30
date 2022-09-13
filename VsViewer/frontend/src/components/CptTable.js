@@ -6,11 +6,13 @@ import { InfoTooltip } from "components";
 
 import "assets/cptTable.css";
 
-const CPTTable = ({ cptTableData, cptInfo }) => {
+const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
   if (cptTableData !== undefined && cptTableData !== null) {
     const cptTableRows = [];
+    let rowLabels = Object.keys(cptTableData[0]);
+
+    const rowClassName = "col-size";
     cptTableData.forEach((row, rowIdx) => {
-      const rowClassName = "col-size";
       cptTableRows.push(
         <tr
           className={
@@ -18,10 +20,10 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           }
           key={rowIdx}
         >
-          <td className={rowClassName}>{Utils.roundValue(row["Depth"])}</td>
-          <td className={rowClassName}>{Utils.roundValue(row["Qc"])}</td>
-          <td className={rowClassName}>{Utils.roundValue(row["Fs"])}</td>
-          <td className={rowClassName}>{Utils.roundValue(row["u"])}</td>
+          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[0]])}</td>
+          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[1]], dataIsKPa)}</td>
+          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[2]], dataIsKPa)}</td>
+          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[3]], dataIsKPa)}</td>
         </tr>
       );
     });

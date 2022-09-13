@@ -5,7 +5,7 @@ import Plot from "react-plotly.js";
 import * as CONSTANTS from "Constants";
 import "assets/cptPlot.css";
 
-const CPTPlot = ({ cptPlotData }) => {
+const CPTPlot = ({ cptPlotData, gwl }) => {
   const [data, setData] = useState([]);
 
   useEffect(() => {
@@ -68,6 +68,15 @@ const CPTPlot = ({ cptPlotData }) => {
         tempData.push(UData);
         colourCounter += 1;
       }
+      let GWLLegend = {
+        x: [undefined],
+        name: "GWL",
+        mode: "lines",
+        line: {
+          color: "rgba(0, 0, 0, 0.60)"
+        },
+      };
+      tempData.push(GWLLegend);
       setData(tempData);
     }
   };
@@ -124,6 +133,21 @@ const CPTPlot = ({ cptPlotData }) => {
               xref: "x3 domain",
               y: 1.03,
               yref: "y domain",
+            },
+          ],
+          shapes: [
+            {
+              type: 'line',
+              xref: 'paper',
+              yref: 'y',
+              x0: 0,
+              y0: gwl,
+              x1: 1,
+              y1: gwl,
+              line: {
+                color: "rgba(0, 0, 0, 0.60)",
+                width: 2.5
+              },
             },
           ],
         }}
