@@ -51,7 +51,7 @@ def vs_profile_to_midpoint():
         vs_data = vs_profile_data["vs"]
         vs_sd_data = vs_profile_data["vs_sd"]
         depth_data = vs_profile_data["depth"]
-        layered = True if vs_profile_data["layered"] == "True" else False
+        layered = vs_profile_data["layered"] == "True"
         vs, depth = convert_to_midpoint(vs_data, depth_data, layered)
         vs_sd_below, _ = convert_to_midpoint(
             np.asarray(vs_data) * np.exp(-np.asarray(vs_sd_data)),
