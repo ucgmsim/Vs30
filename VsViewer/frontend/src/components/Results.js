@@ -1,12 +1,13 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
 
 import "assets/Results.css";
 import * as Utils from "Utils";
-import { WeightTable, VsProfilePreviewPlot } from "components";
+import { WeightTable, VsProfilePreviewPlot, InfoTooltip, } from "components";
 
 const Results = () => {
   const {
@@ -18,8 +19,8 @@ const Results = () => {
     vsProfileResults,
     cptResults,
     sptResults,
-    allCorrelationWeights,
-    setAllCorrelationWeights,
+    cptCorrelationWeights,
+    sptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // Weights
@@ -38,7 +39,14 @@ const Results = () => {
   const [vs30, setVs30] = useState(null);
   const [vs30SD, setVs30SD] = useState(null);
   const [canCompute, setCanCompute] = useState(false);
-  const [canSet, setCanSet] = useState(false);
+  const [canSetWeights, setCanSetWeights] = useState(false);
+  // Errors
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [flashSecWeightError, setFlashSecWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
+  const [flashComputeError, setFlashComputeError] = useState(false);
+  const [computeError, setComputeError] = useState(false);
+  const [computeErrorText, setComputeErrorText] = useState(CONSTANTS.COMPUTE_ERROR);
 
   // Set the Section Weights
   useEffect(() => {
@@ -66,13 +74,9 @@ const Results = () => {
   // Check the user can set Weights
   useEffect(() => {
     if (selectedCorrelations.length > 0 && selectedSections.length > 0) {
-      setCanSet(true);
-      if (VsProfileOptions.length > 0) {
-        setCanCompute(true);
-      }
+      setCanSetWeights(true);
     } else {
-      setCanSet(false);
-      setCanCompute(false);
+      setCanSetWeights(false);
     }
   }, [selectedCorrelations, selectedSections]);
 
@@ -100,11 +104,6 @@ const Results = () => {
     }
     setSections(tempOptionArray);
     setVsProfileOptions(tempVsProfileOptions);
-    if (tempOptionArray.length > 0) {
-      setCanCompute(true);
-    } else {
-      setCanCompute(false);
-    }
   }, [vsProfileResults, cptResults, sptResults]);
 
   // Get Correlations on page load
@@ -125,22 +124,41 @@ const Results = () => {
   }, []);
 
   const computeVs30 = async () => {
+    setVs30(null);
+    setVs30SD(null);
     // Get all weights and reweight based on section weights
+    let serverResponse = false;
     let weights = {};
+    let vsProfilesToSend = {};
     for (const sectionKey of Object.keys(sectionWeights)) {
       if (sectionKey === "CPT") {
         for (const key of Object.keys(cptWeights)) {
           weights[key] = sectionWeights[sectionKey] * cptWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
       if (sectionKey === "SPT") {
         for (const key of Object.keys(sptWeights)) {
           weights[key] = sectionWeights[sectionKey] * sptWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
       if (sectionKey === "VsProfile") {
         for (const key of Object.keys(vsProfileWeights)) {
           weights[key] = sectionWeights[sectionKey] * vsProfileWeights[key];
+          VsProfileOptions.forEach((entry) => {
+            if (entry["label"].includes(key)) {
+              vsProfilesToSend[entry["label"]] = entry["value"];
+            }
+          });
         }
       }
     }
@@ -148,16 +166,38 @@ const Results = () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        vsProfiles: VsProfileOptions,
+        vsProfiles: vsProfilesToSend,
         vsWeights: weights,
-        vsCorrelationWeights: allCorrelationWeights,
+        cptVsCorrelationWeights: cptCorrelationWeights,
+        sptVsCorrelationWeights: sptCorrelationWeights,
         vs30CorrelationWeights: correlationWeights,
       }),
     }).then(async (response) => {
-      const responseData = await response.json();
-      // Set Vs30 results
-      setVs30(responseData["Vs30"]);
-      setVs30SD(responseData["Vs30_SD"]);
+      if (response.ok) {
+        serverResponse = true;
+        const responseData = await response.json();
+        // Set Vs30 results
+        setVs30(responseData["Vs30"]);
+        setVs30SD(responseData["Vs30_SD"]);
+        setComputeError(false);
+      } else {
+        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+        setComputeError(true);
+        setFlashComputeError(true);
+        await wait(1000);
+        setFlashComputeError(false);
+      }
+
+    }) .catch(async () => {
+      if (serverResponse) {
+        setComputeErrorText(CONSTANTS.COMPUTE_ERROR);
+      } else {
+        setComputeErrorText(CONSTANTS.REQUEST_ERROR);
+      }
+      setComputeError(true);
+      setFlashComputeError(true);
+      await wait(1000);
+      setFlashComputeError(false);
     });
   };
 
@@ -209,18 +249,42 @@ const Results = () => {
     setCorrelationWeights(newWeights);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    console.log("Test Weights");
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkSections = Utils.errorCheckWeights(sectionWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
+    }
+    if (!checkSections) {
+      setFlashSecWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkSections) {
+      setCanCompute(true);
+      setWeightError(false);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function(key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(sectionWeights).forEach(function(key) {
+        sectionWeights[key] = parseFloat(sectionWeights[key]);
+      });
+    } else {
+      setCanCompute(false);
+      await wait(1000);
+      setFlashSecWeightError(false);
+      setFlashCorWeightError(false);
+    }
   };
 
   return (
     <div className="row three-column-row center-elm results-page">
       <div className="col-1">
-        <div className="weights-section center-elm">
+        <div className="weights-section center-elm outline">
           <div className="results-title">Section Weights</div>
           <Select
-            className="select-box"
+            className="small-select-box"
             placeholder="Select your Section's"
             options={sections}
             isMulti={true}
@@ -233,12 +297,13 @@ const Results = () => {
               <WeightTable
                 weights={sectionWeights}
                 setFunction={changeSectionWeights}
+                flashError={flashSecWeightError}
               />
             )}
           </div>
           <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
           <Select
-            className="select-box"
+            className="small-select-box"
             placeholder="Select your Correlation's"
             options={correlationOptions}
             isMulti={true}
@@ -252,24 +317,32 @@ const Results = () => {
                 <WeightTable
                   weights={correlationWeights}
                   setFunction={changeCorrelationWeights}
+                  flashError={flashCorWeightError}
                 />
               )}
             </div>
-            <button
-              disabled={!canSet}
-              className="preview-btn btn btn-primary"
-              onClick={() => checkWeights()}
-            >
-              Set Weights
-            </button>
           </div>
+          <div className="row two-colum-row set-weights-section">
+              <button
+                disabled={!canSetWeights}
+                className="col-5 set-weights preview-btn btn btn-primary"
+                onClick={() => checkWeights()}
+              >
+                Set Weights
+              </button>
+              <div className="col-1 weight-error">
+                {weightError && (
+                  <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+                )}
+              </div>
+            </div>
         </div>
       </div>
       <div className="col-5 center-elm result-plot-section">
         <div className="center-elm">
           <div className="vs-plot-title">VsProfile Plot</div>
           <Select
-            className="vs-select"
+            className="select-box"
             placeholder="Select your VsProfile's"
             isMulti={true}
             options={VsProfileOptions}
@@ -278,7 +351,7 @@ const Results = () => {
             onChange={(e) => changeVsProfileSelection(e)}
           ></Select>
         </div>
-        <div className="outline vs-plot">
+        <div className="outline results-vs-plot">
           {Object.keys(vsProfilePlotData).length > 0 && (
             <VsProfilePreviewPlot
               className="vs-plot"
@@ -289,14 +362,25 @@ const Results = () => {
         </div>
       </div>
       <div className="col-1 center-elm vs30-section outline">
-        <button
-          disabled={!canCompute}
-          className="form btn btn-primary compute-btn"
-          onClick={() => computeVs30()}
+        <div
+          className={
+            flashComputeError
+              ? "cpt-flash-warning row two-colum-row compute-section"
+              : "row two-colum-row compute-section temp-border"
+          }
         >
-          Compute Vs30
-        </button>
-        <div className="vs30-title">Vs30</div>
+          <button
+            disabled={!canCompute}
+            className="form btn btn-primary compute-btn"
+            onClick={() => computeVs30()}
+          >
+            Compute Vs30
+          </button>
+          <div className="col-1 weight-error">
+            {computeError && <InfoTooltip text={computeErrorText} error={true} />}
+          </div>
+        </div>
+        <div className="vs30-title">Vs30 (m/s)</div>
         <div className="vs30-value outline">
           {vs30 === null ? "" : Utils.roundValue(vs30)}
         </div>

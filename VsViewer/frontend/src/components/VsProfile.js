@@ -1,12 +1,20 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/vsProfile.css";
-import { WeightTable, VsProfilePreviewPlot, VsProfileTable } from "components";
+import {
+  WeightTable,
+  FileTable,
+  VsProfilePreviewPlot,
+  VsProfileTable,
+  InfoTooltip,
+} from "components";
 
 const VsProfile = () => {
   const {
@@ -32,9 +40,18 @@ const VsProfile = () => {
   // Form variables
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
+  const [layered, setLayered] = useState(false);
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  // Errors
+  const [flashWeightError, setFlashWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the VsProfile Weights
   useEffect(() => {
@@ -51,50 +68,87 @@ const VsProfile = () => {
   }, [VsProfileOptions]);
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        vsProfileName: vsProfileName,
+    if (vsProfileName in vsProfileData) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      let serverResponse = false;
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          vsProfileName: vsProfileName,
+          layered: layered ? "True" : "False",
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CREATE_ENDPOINT, {
+        method: "POST",
+        body: formData,
       })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_CREATE_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Add to VsProfile Select Dropdown and VsProfile Data
-      let tempOptions = [];
-      let tempVsData = vsProfileData;
-      for (const sptOption of VsProfileOptions) {
-        tempOptions.push({
-          value: sptOption["value"],
-          label: sptOption["label"],
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Add to VsProfile Select Dropdown and VsProfile Data
+            let tempOptions = [];
+            let tempVsData = vsProfileData;
+            for (const sptOption of VsProfileOptions) {
+              tempOptions.push({
+                value: sptOption["value"],
+                label: sptOption["label"],
+              });
+            }
+            for (const key of Object.keys(responseData)) {
+              tempOptions.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempVsData[key] = responseData[key];
+            }
+            setVsProfileOptions(tempOptions);
+            setVsProfileData(tempVsData);
+            // Set Table Data
+            let tempVsTableData = vsProfileTableData;
+            Papa.parse(file, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function (results) {
+                tempVsTableData[vsProfileName] = results.data;
+              },
+            });
+            setVsProfileTableData(tempVsTableData);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          }
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
         });
-      }
-      for (const key of Object.keys(responseData)) {
-        tempOptions.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
-        });
-        tempVsData[key] = responseData[key];
-      }
-      setVsProfileOptions(tempOptions);
-      setVsProfileData(tempVsData);
-    });
-    // Set Table Data
-    let tempVsTableData = vsProfileTableData;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function (results) {
-        tempVsTableData[vsProfileName] = results.data;
-      },
-    });
-    setVsProfileTableData(tempVsTableData);
-    setLoading(false);
+    }
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -167,10 +221,23 @@ const VsProfile = () => {
     setVsProfileName(e.name.split(".")[0]);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setVsProfileResults(vsProfileData);
-    sendAverageRequest();
+  const checkWeights = async () => {
+    let check = Utils.errorCheckWeights(vsProfileWeights);
+    if (check) {
+      setVsProfileResults(vsProfileData);
+      // Remove average for now
+      // sendAverageRequest();
+      // Ensures the values are floats
+      Object.keys(vsProfileWeights).forEach(function (key) {
+        vsProfileWeights[key] = parseFloat(vsProfileWeights[key]);
+      });
+      setWeightError(false);
+    } else {
+      setFlashWeightError(true);
+      setWeightError(true);
+      await wait(1000);
+      setFlashWeightError(false);
+    }
   };
 
   // Change the vsProfile Weights
@@ -178,32 +245,109 @@ const VsProfile = () => {
     setVsProfileWeights(newWeights);
   };
 
+  const removeFile = (fileToRemove) => {
+    let newVsOptions = [];
+    let newVsData = {};
+    let newPlotSelected = [];
+    let newPlotData = {};
+    let newVsProfileMidpointData = {};
+    VsProfileOptions.forEach((object) => {
+      if (object["label"] !== fileToRemove["label"]) {
+        newVsOptions.push(object);
+        newVsData[object["label"]] = vsProfileData[object["label"]];
+        newPlotSelected.push(object);
+        if (vsProfilePlotData[object["label"]] !== undefined) {
+          newPlotData[object["label"]] = vsProfilePlotData[object["label"]];
+          newVsProfileMidpointData[object["label"]] =
+            vsProfileMidpointData[object["label"]];
+        }
+      }
+    });
+    setSelectedVsProfilePlot(newPlotSelected);
+    setVsProfilePlotData(newPlotData);
+    setVsProfileData(newVsData);
+    setVsProfileOptions(newVsOptions);
+    changeVsProfileWeights(newVsOptions);
+    setVsProfileMidpointData(newVsProfileMidpointData);
+    if (selectedVsProfileTable === fileToRemove) {
+      setSelectedVsProfileTable(null);
+    }
+    setVsProfileAveragePlotData({});
+  };
+
   return (
     <div>
       <div className="row three-column-row center-elm vs-top">
-        <div className="col-1 center-elm">
+        <div className="col-1 center-elm vs-left-panel">
+          <div className="vs-upload-title">Upload VsProfile</div>
           <div className="outline add-vs">
-            <div className="form-section-title">Upload VsProfile</div>
-            <input
-              className="vs-file-input"
-              type="file"
-              onChange={(e) => onSetFile(e.target.files[0])}
-            />
+            <div
+              className={
+                flashFileUploadError
+                  ? "cpt-flash-warning row two-colum-row vs-file-input-section"
+                  : "row two-colum-row vs-file-input-section temp-border"
+              }
+            >
+              <input
+                className="col-8 vs-file-input"
+                type="file"
+                onChange={(e) => onSetFile(e.target.files[0])}
+              />
+              <div className="col-1 file-info">
+                <InfoTooltip text={CONSTANTS.VS_FILE} />
+              </div>
+            </div>
             <div className="form-label">VsProfile Name</div>
             <div className="stretch">
               <input
-                className="text-input"
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={vsProfileName}
                 onChange={(e) => setVsProfileName(e.target.value)}
               />
             </div>
-            <button
-              disabled={loading}
-              className="form btn btn-primary add-vs-btn"
-              onClick={() => sendProcessRequest()}
+            <div className="row two-colum-row layered-section center-elm">
+              <div className="col-8 layered-title">Layered Approach</div>
+              <input
+                className="col-1 vs-checkbox"
+                type="checkbox"
+                onChange={(e) => setLayered(e.target.checked)}
+              />
+            </div>
+            <div
+              className={
+                flashServerError
+                  ? "cpt-flash-warning row two-colum-row add-vs-btn-section"
+                  : "row two-colum-row add-vs-btn-section temp-border"
+              }
             >
-              Add VsProfile
-            </button>
+              <button
+                disabled={loading}
+                className="add-cpt-btn add-vs-btn form btn btn-primary"
+                onClick={() => sendProcessRequest()}
+              >
+                Add VsProfile
+              </button>
+              <div className="col-1 weight-error">
+                {uploadError && (
+                  <InfoTooltip text={uploadErrorText} error={true} />
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="vs-file-section center-elm">
+            <div className="form-section-title">VsProfile Files</div>
+            <div className="file-table-section outline form center-elm">
+              {Object.keys(VsProfileOptions).length > 0 && (
+                <FileTable
+                  files={VsProfileOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
+            </div>
           </div>
           <div className="vs-weight-title">VsProfile Weights</div>
           <div className="outline center-elm vs-weights">
@@ -212,16 +356,24 @@ const VsProfile = () => {
                 <WeightTable
                   weights={vsProfileWeights}
                   setFunction={changeVsProfileWeights}
+                  flashError={flashWeightError}
                 />
               )}
             </div>
-            <button
-              disabled={!canSet}
-              className="preview-btn btn btn-primary"
-              onClick={() => checkWeights()}
-            >
-              Set Weights
-            </button>
+            <div className="row two-colum-row set-weights-section">
+              <button
+                disabled={!canSet}
+                className="col-5 set-weights preview-btn btn btn-primary"
+                onClick={() => checkWeights()}
+              >
+                Set Weights
+              </button>
+              <div className="col-1 weight-error">
+                {weightError && (
+                  <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <div className="col-2 center-elm vs-table-section">
@@ -250,7 +402,7 @@ const VsProfile = () => {
           <div className="center-elm">
             <div className="vs-plot-title">VsProfile Plot</div>
             <Select
-              className="vs-select"
+              className="select-box"
               placeholder="Select your VsProfile's"
               isMulti={true}
               options={VsProfileOptions}

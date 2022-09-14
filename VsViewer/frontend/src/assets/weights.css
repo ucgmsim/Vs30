@@ -1,15 +1,21 @@
 .bold {
     font-weight: bold;
+    font-size: calc(0.55vh + 0.55vw);
+    padding: 0.5vh !important;
 }
 
-.col-size {
+.weight-col-size {
+    font-size: calc(0.55vh + 0.55vw);
     width: 7vw;
-    text-align:center
+    height: 3vh;
+    text-align:center;
+    padding: 0.5vh !important;
 }
 
 .form-section-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
+    width: 22vw;
 }
 
 .scroll-weights {
@@ -28,4 +34,22 @@
 
 ::-webkit-scrollbar {
     display: none;
+}
+
+.weight-error {
+    margin-top: 1.5vh !important;
+    width: 1vw !important;
+    height: 4vh !important;
+    padding: 0 !important;
+    margin-left: 0.5vw !important;
+}
+
+.custom-border-size {
+    transition: border 2s;
+    border: 2px solid #dee2e6 !important;
+}
+
+.flash-warning {
+    transition: border 1s;
+    border: 2px solid #ff0000b7 !important;
 }

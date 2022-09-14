@@ -1,15 +1,16 @@
 .spt-raw {
-  height: 18vw;
+  max-height: 55vh;
+  margin-bottom: 0 !important;
 }
 
 .spt-scroll-tbl {
-  max-height: 23.3vw;
+  max-height: 50vh;
   overflow-y: scroll;
 }
 
 .spt-info {
   margin-top: 0 !important; 
-  height: 5vw;
+  height: 9vh;
 }
 
 .spt-tbl-width {
@@ -22,10 +23,18 @@
 .spt-min-max{
   margin-left: -4.7vw;
   width: 12vw !important;
-  height: 3vw;
+  height: 6vh;
 }
 
 .spt-removed{
   width: 13vw !important;
   height: 4vh;
+}
+
+.tbl-col-size {
+  font-size: calc(0.55vh + 0.55vw);
+  width: 7vw;
+  height: 2vh;
+  text-align: center;
+  padding: 0.6vh !important;
 }

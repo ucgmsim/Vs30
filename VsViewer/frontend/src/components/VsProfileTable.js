@@ -1,6 +1,8 @@
 import React, { memo } from "react";
 
 import * as Utils from "Utils";
+import * as CONSTANTS from "Constants";
+import { InfoTooltip } from "components";
 
 import "assets/vsProfileTable.css";
 
@@ -15,9 +17,9 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
           }
           key={rowIdx}
         >
-          <td className="col-size">{Utils.roundValue(row["Depth"])}</td>
-          <td className="col-size">{Utils.roundValue(row["Vs"])}</td>
-          <td className="col-size">{Utils.roundValue(row["Vs_SD"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Depth"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Vs"])}</td>
+          <td className="vs-col-size">{Utils.roundValue(row["Vs_SD"])}</td>
         </tr>
       );
     });
@@ -27,14 +29,14 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
         <table className="vs-raw table thead-dark table-striped table-bordered mt-2 w-auto">
           <thead>
             <tr>
-              <th className="col-size" scope="col">
-                Depth
+              <th className="vs-col-size" scope="col">
+                Depth (m)
               </th>
-              <th className="col-size" scope="col">
-                Vs
+              <th className="vs-col-size" scope="col">
+                Vs (m/s)
               </th>
-              <th className="col-size" scope="col">
-                Sigma
+              <th className="vs-col-size" scope="col">
+              σ
               </th>
             </tr>
           </thead>
@@ -55,12 +57,12 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
             <table className="vs-min-max table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Min Depth</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_min"])}m</td>
+                  <td className="bold">Min Depth (m)</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_min"])}</td>
                 </tr>
                 <tr>
-                  <td className="bold">Max Depth</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_max"])}m</td>
+                  <td className="bold">Max Depth (m)</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -69,12 +71,21 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
             <table className="vs-removed table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Depth Spread</td>
-                  <td>{Utils.roundValue(vsProfileInfo["z_spread"])}m</td>
+                  <td className="bold">Depth Spread (m)</td>
+                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
-                  <td className="bold">Removed Rows</td>
-                  <td>{vsProfileInfo["removed_rows"].length}</td>
+                  <td className="bold info-width">
+                    <div className="row two-colum-row info-width">
+                      <div className="col-9 rem-label">
+                        Removed Rows
+                      </div>
+                      <div className="col-1 file-info-tbl">
+                        <InfoTooltip text={CONSTANTS.VS_REMOVED_ROWS} />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="text-size">{vsProfileInfo["removed_rows"].length}</td>
                 </tr>
               </tbody>
             </table>

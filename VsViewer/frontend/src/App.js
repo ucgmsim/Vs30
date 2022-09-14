@@ -10,6 +10,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 function App() {
   return (
     <GlobalContextProvider>
+      <div className="header">VsViewer</div>
       <div className="App d-flex flex-column h-100">
         <Tabs defaultActiveKey="cpt" className="vs-tabs">
           <Tab eventKey="cpt" title="CPT" tabClassName="tab-fonts">

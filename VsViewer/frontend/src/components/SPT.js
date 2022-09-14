@@ -1,16 +1,20 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/spt.css";
 import {
   WeightTable,
+  FileTable,
   VsProfilePreviewPlot,
   SPTPlot,
   SptTable,
+  InfoTooltip,
 } from "components";
 
 const SPT = () => {
@@ -24,8 +28,8 @@ const SPT = () => {
     sptWeights,
     setSptWeights,
     setSptResults,
-    setAllCorrelationWeights,
-    allCorrelationWeights,
+    setSptCorrelationWeights,
+    sptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // SPT Plot
@@ -54,6 +58,14 @@ const SPT = () => {
   const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [flashSPTWeightError, setFlashSPTWeightError] = useState(false);
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the SPT Weights
   useEffect(() => {
@@ -70,9 +82,15 @@ const SPT = () => {
   useEffect(() => {
     if (selectedCorrelations.length > 0) {
       let tempCorWeights = {};
+      let tempNewVsData = {};
       selectedCorrelations.forEach((entry) => {
         tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+        sptOptions.forEach((object) => {
+          let key = object["label"] + "_" + entry["label"];
+          tempNewVsData[key] = vsProfileData[key];
+        });
       });
+      setVsProfileData(tempNewVsData);
       setCorrelationWeights(tempCorWeights);
     }
   }, [selectedCorrelations]);
@@ -132,45 +150,82 @@ const SPT = () => {
   }, []);
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        sptName: sptName,
-        boreholeDiameter: boreholeDiameter,
-        energyRatio: energyRatio,
-        hammerType: hammerType === null ? "" : hammerType["value"],
-        soilType: soilType === null ? "" : soilType["value"],
+    if (sptName in sptData) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      let serverResponse = false;
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          sptName: sptName,
+          boreholeDiameter: boreholeDiameter,
+          energyRatio: energyRatio,
+          hammerType: hammerType === null ? "" : hammerType["value"],
+          soilType: soilType === null ? "" : soilType["value"],
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
+        method: "POST",
+        body: formData,
       })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.SPT_CREATE_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Add to SPT Select Dropdown and SPT Data
-      let tempOptions = [];
-      let tempSPTData = sptData;
-      for (const sptOption of sptOptions) {
-        tempOptions.push({
-          value: sptOption["value"],
-          label: sptOption["label"],
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Add to SPT Select Dropdown and SPT Data
+            let tempOptions = [];
+            let tempSPTData = {};
+            for (const sptOption of sptOptions) {
+              tempOptions.push({
+                value: sptOption["value"],
+                label: sptOption["label"],
+              });
+              tempSPTData[sptOption["label"]] = sptData[sptOption["label"]];
+            }
+            for (const key of Object.keys(responseData)) {
+              tempOptions.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempSPTData[key] = responseData[key];
+            }
+            setSPTOptions(tempOptions);
+            setSPTData(tempSPTData);
+            addToVsProfilePlot(tempSPTData, selectedCorrelations);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          }
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
         });
-      }
-      for (const key of Object.keys(responseData)) {
-        tempOptions.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
-        });
-        tempSPTData[key] = responseData[key];
-      }
-      setSPTOptions(tempOptions);
-      setSPTData(tempSPTData);
-    });
-    setLoading(false);
-    addToVsProfilePlot(selectedCorrelations);
+    }
   };
 
   const sendVsProfileMidpointRequest = async (vsProfileToSend) => {
@@ -189,9 +244,9 @@ const SPT = () => {
     });
   };
 
-  const sendVsProfileRequest = async (correlationsToSend) => {
+  const sendVsProfileRequest = async (sptsToSend, correlationsToSend) => {
     const jsonBody = {
-      spts: sptData,
+      spts: sptsToSend,
       correlations: correlationsToSend,
     };
     await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_FROM_SPT_ENDPOINT, {
@@ -209,24 +264,28 @@ const SPT = () => {
     });
   };
 
-  const addToVsProfilePlot = async (selectedCorrelations) => {
+  const addToVsProfilePlot = async (newSptData, selectedCorrelations) => {
     let correlationsToSend = [];
+    let sptsToSend = {};
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         if (
           !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
-          correlationsToSend.push(entry["label"]);
+          if (!correlationsToSend.includes(entry["label"])) {
+            correlationsToSend.push(entry["label"]);
+          }
+          sptsToSend[sptKey] = newSptData[sptKey];
         }
       }
     });
     if (correlationsToSend.length > 0) {
-      await sendVsProfileRequest(correlationsToSend);
+      await sendVsProfileRequest(sptsToSend, correlationsToSend);
     }
     // Check if new midpoint requests are needed
     let vsProfileToSend = [];
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         if (
           !vsProfileMidpointData.hasOwnProperty(sptKey + "_" + entry["label"])
         ) {
@@ -240,7 +299,7 @@ const SPT = () => {
     // Adds to Plot data from midpoint data
     let tempPlotData = [];
     selectedCorrelations.forEach((entry) => {
-      for (const sptKey of Object.keys(sptData)) {
+      for (const sptKey of Object.keys(newSptData)) {
         tempPlotData[sptKey + "_" + entry["label"]] =
           vsProfileMidpointData[sptKey + "_" + entry["label"]];
       }
@@ -305,7 +364,7 @@ const SPT = () => {
 
   const onSelectCorrelations = (e) => {
     setSelectedCorrelations(e);
-    addToVsProfilePlot(e);
+    addToVsProfilePlot(sptData, e);
   };
 
   const onSelectSptTable = (e) => {
@@ -313,15 +372,35 @@ const SPT = () => {
     setSelectedSptTableData(sptData[e["label"]]);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setSptResults(vsProfileData);
-    sendAverageRequest(vsProfileData);
-    let tempAllWeights = allCorrelationWeights;
-    for (const key of Object.keys(correlationWeights)) {
-      tempAllWeights[key] = correlationWeights[key];
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkSPT = Utils.errorCheckWeights(sptWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
     }
-    setAllCorrelationWeights(tempAllWeights);
+    if (!checkSPT) {
+      setFlashSPTWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkSPT) {
+      setSptResults(vsProfileData);
+      // Remove average for now
+      // sendAverageRequest(vsProfileData);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function (key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(sptWeights).forEach(function (key) {
+        sptWeights[key] = parseFloat(sptWeights[key]);
+      });
+      setSptCorrelationWeights(correlationWeights);
+      setWeightError(false);
+    } else {
+      await wait(1000);
+      setFlashSPTWeightError(false);
+      setFlashCorWeightError(false);
+    }
   };
 
   // Change the SPT Weights
@@ -332,6 +411,47 @@ const SPT = () => {
   // Change the Correlation Weights
   const changeCorrelationWeights = (newWeights) => {
     setCorrelationWeights(newWeights);
+  };
+
+  const removeFile = (fileToRemove) => {
+    let newSptOptions = [];
+    let newSptData = {};
+    let newPlotSelected = [];
+    let newPlotData = {};
+    sptOptions.forEach((object) => {
+      if (object["label"] !== fileToRemove["label"]) {
+        newSptOptions.push(object);
+        newSptData[object["label"]] = sptData[object["label"]];
+        newPlotSelected.push(object);
+        if (sptPlotData[object["label"]] !== undefined) {
+          newPlotData[object["label"]] = sptPlotData[object["label"]];
+        }
+      }
+    });
+    setSelectedSptPlot(newPlotSelected);
+    setSptPlotData(newPlotData);
+    setSPTData(newSptData);
+    setSPTOptions(newSptOptions);
+    changeSPTWeights(newSptOptions);
+    let newVsPlotData = {};
+    let newVsProfileData = {};
+    let newVsProfileMidpointData = {};
+    for (const key of Object.keys(vsProfilePlotData)) {
+      selectedCorrelations.forEach((correlation) => {
+        if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
+          newVsPlotData[key] = vsProfilePlotData[key];
+          newVsProfileData[key] = vsProfileData[key];
+          newVsProfileMidpointData[key] = vsProfileMidpointData[key];
+        }
+      });
+    }
+    setVsProfilePlotData(newVsPlotData);
+    setVsProfileData(newVsProfileData);
+    setVsProfileMidpointData(newVsProfileMidpointData);
+    if (selectedSptTable === fileToRemove) {
+      setSelectedSptTable(null);
+    }
+    setVsProfileAveragePlotData({});
   };
 
   // Set the file and check for Soil type
@@ -349,62 +469,107 @@ const SPT = () => {
         }
       },
     });
-};
+  };
 
   return (
     <div>
       <div className="row three-column-row center-elm spt-top">
-        <div className="outline col-3 add-spt center-elm">
-          <div className="form-section-title">Upload SPT</div>
-          <input
-            className="spt-file-input"
-            type="file"
-            onChange={(e) => checkFile(e.target.files[0])}
-          />
-          <div className="form-label">SPT Name</div>
-            <div className="stretch">
+        <div className="col-3 upload-section">
+          <div className="center-elm spt-form-section">
+            <div className="form-section-title">Upload SPT</div>
+            <div className="outline add-spt center-elm">
+              <div
+                className={
+                  flashFileUploadError
+                    ? "cpt-flash-warning row two-colum-row form-file-input-section"
+                    : "row two-colum-row form-file-input-section temp-border"
+                }
+              >
+                <input
+                  className="col-8 spt-file-input"
+                  type="file"
+                  onChange={(e) => checkFile(e.target.files[0])}
+                />
+                <div className="col-1 file-info">
+                  <InfoTooltip text={CONSTANTS.SPT_FILE} />
+                </div>
+              </div>
+              <div className="form-label">SPT Name</div>
+              <div className="stretch">
+                <input
+                  className={
+                    flashNameUploadError
+                      ? "cpt-flash-warning text-input"
+                      : "cpt-input text-input"
+                  }
+                  value={sptName}
+                  onChange={(e) => setSptName(e.target.value)}
+                />
+              </div>
+              <div className="form-label">Borehole Diameter (mm)</div>
               <input
                 className="text-input"
-                value={sptName}
-                onChange={(e) => setSptName(e.target.value)}
+                value={boreholeDiameter}
+                onChange={(e) => setBoreholeDiameter(e.target.value)}
               />
+              <div className="form-label">Energy Ratio</div>
+              <input
+                className="text-input"
+                value={energyRatio}
+                onChange={(e) => setEnergyRatio(e.target.value)}
+              />
+              <div className="form-label">Hammer Type</div>
+              <Select
+                className="spt-select"
+                placeholder="Select Hammer Type"
+                options={hammerTypeOptions}
+                isDisabled={hammerTypeOptions.length === 0}
+                onChange={(e) => setHammerType(e)}
+              />
+              <div className="form-label">Soil Type</div>
+              <Select
+                className="spt-select"
+                placeholder="Select Soil Type"
+                options={soilTypeOptions}
+                isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
+                onChange={(e) => setSoilType(e)}
+              />
+
+              <div
+                className={
+                  flashServerError
+                    ? "cpt-flash-warning row two-colum-row add-spt-section"
+                    : "row two-colum-row add-spt-section temp-border"
+                }
+              >
+                <button
+                  disabled={loading}
+                  className="form btn btn-primary add-spt-btn"
+                  onClick={() => sendProcessRequest()}
+                >
+                  Add SPT
+                </button>
+                <div className="col-1 weight-error">
+                  {uploadError && (
+                    <InfoTooltip text={uploadErrorText} error={true} />
+                  )}
+                </div>
+              </div>
             </div>
-          <div className="form-label">Borehole Diameter</div>
-          <input
-            className="text-input"
-            value={boreholeDiameter}
-            onChange={(e) => setBoreholeDiameter(e.target.value)}
-          />
-          <div className="form-label">Energy Ratio</div>
-          <input
-            className="text-input"
-            value={energyRatio}
-            onChange={(e) => setEnergyRatio(e.target.value)}
-          />
-          <div className="form-label">Hammer Type</div>
-          <Select
-            className="spt-select"
-            placeholder="Select Hammer Type"
-            options={hammerTypeOptions}
-            isDisabled={hammerTypeOptions.length === 0}
-            onChange={(e) => setHammerType(e)}
-          />
-          <div className="form-label">Soil Type</div>
-          <Select
-            className="spt-select"
-            placeholder="Select Soil Type"
-            options={soilTypeOptions}
-            isDisabled={soilTypeOptions.length === 0 || !userSelectSoil}
-            onChange={(e) => setSoilType(e)}
-          />
-          <button
-            disabled={loading}
-            className="form btn btn-primary add-spt-btn"
-            onClick={() => sendProcessRequest()}
-          >
-            Add SPT
-          </button>
+          </div>
+          <div className="file-section center-elm">
+            <div className="form-section-title">SPT Files</div>
+            <div className="file-table-section outline form center-elm">
+              {Object.keys(sptOptions).length > 0 && (
+                <FileTable
+                  files={sptOptions}
+                  removeFunction={removeFile}
+                ></FileTable>
+              )}
+            </div>
+          </div>
         </div>
+
         <div className="col-2 center-elm spt-table-section">
           <div className="center-elm">
             <div className="spt-table-title">SPT Table</div>
@@ -446,7 +611,7 @@ const SPT = () => {
       <div className="hr" />
       <div className="center-elm">
         <Select
-          className="select-cor"
+          className="select-box"
           placeholder="Select Correlations"
           isMulti={true}
           options={correlationsOptions}
@@ -455,13 +620,14 @@ const SPT = () => {
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
-        <div className="outline col-3 weights-spt">
+        <div className="outline col-3 weights-spt center-elm">
           <div className="form-section-title">SPT Weights</div>
           <div className="outline center-elm spt-weights">
             {Object.keys(sptWeights).length > 0 && (
               <WeightTable
                 weights={sptWeights}
                 setFunction={changeSPTWeights}
+                flashError={flashSPTWeightError}
               />
             )}
           </div>
@@ -471,16 +637,24 @@ const SPT = () => {
               <WeightTable
                 weights={correlationWeights}
                 setFunction={changeCorrelationWeights}
+                flashError={flashCorWeightError}
               />
             )}
           </div>
-          <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+          <div className="row two-colum-row set-weights-section">
+            <button
+              disabled={!canSet}
+              className="col-5 set-weights preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
+            <div className="col-1 weight-error">
+              {weightError && (
+                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+              )}
+            </div>
+          </div>
         </div>
         <div className="col-4 vs-preview-section-spt center-elm">
           <div className="form-section-title">VsProfile Preview</div>

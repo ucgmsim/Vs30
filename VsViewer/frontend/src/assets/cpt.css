@@ -1,17 +1,20 @@
 .process-cpt {
-    margin-left: 37.5%;
-    margin-top: 5px;
+    margin-top: 1vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 25%;
-    margin-left: 26.5vw;
+    margin-left: 24.5vw;
 }
 
 .hr {
     border-top: 1px solid silver;
-    margin-bottom: 0.5vw;
-    margin-top: 1vw;
+    margin-bottom: 0.75vh;
+    margin-top: 1.5vh;
+}
+
+.form-section {
+    width: 15vw;
 }
 
 .form {
@@ -25,10 +28,19 @@
     margin-top: 0.5vh;
 }
 
+.form-file-input-section {
+    width: 12.5vw !important;
+    height: 4.5vh !important;
+    margin-left: 8% !important;
+    margin-top: 0.5vh !important;
+    padding-right: 0 !important;
+}
+
 .form-file-input {
-    margin-top: 1vh;
-    margin-bottom: 5px;
-    margin-left: 15%;
+    align-items: right !important;
+    font-size: calc(0.55vh + 0.55vw);
+    margin-top: 0.5vh !important;
+    width: 11vw !important;
 }
 
 .form-section-title {
@@ -38,12 +50,38 @@
 
 .file-section {
     height: 20vh;
-    width: 15vw;
+    width: 22vw !important;
 }
 
 .file-table-section {
     height: 18vh;
-    width: 15vw;
+    width: 17vw;
+    margin-top: 0vh;
+}
+
+.file-info {
+    width: 1vw !important;
+    padding: 0 !important;
+    margin-top: 0.8vh !important;
+}
+
+.add-cpt-section {
+    margin-left: 3vw !important;
+    width: 10vw !important;
+    height: 5vh !important;
+    margin-top: 0.5vh !important;
+    margin-bottom: 1vh !important;
+}
+.add-cpt-btn {
+    font-size: calc(0.6vh + 0.6vw) !important;
+    margin-left: 1.5vw !important;
+    margin-top: 0.5vh !important;
+    width: 6vw !important;
+    height: 4.5vh;
+}
+
+.cpt-input {
+    transition: border 2s;
 }
 
 .select-cpt {
@@ -65,17 +103,22 @@
     padding-bottom: 15px;
     padding-left: 1%;
     margin-right: -5%;
-    height: 40vw;
+    height: 74vh;
 }
 
 .cpt-table {
-    height: 35.5vw;
+    height: 65vh;
     width: 100%;
 }
 
+.cpt-plot-section {
+    height: 70.6vh !important;
+    width: 60vw !important;
+}
+
 .cpt-plot {
-    padding-left: 0.5vw;
-    height: 35.5vw;
+    height: 65vh !important;
+    width: 60vw !important;
 }
 
 .cor-section {
@@ -85,17 +128,17 @@
 
 .select-cor {
     min-width: 20vw;
-    margin-bottom: 1vw;
+    margin-bottom: 1vh;
 }
 
 .vs-preview-section {
     margin-right: 17vw;
     padding-bottom: 1vh;
-    height: 40vw;
+    height: 75vh;
 }
 
 .vs-preview-plot {
-    height: 75vh;
+    height: 70vh !important;
     width: 36vw;
     margin-bottom: 1vh;
 }
@@ -103,18 +146,20 @@
 .weights {
     margin-top: 3vh !important;
     padding-top: 2vh;
-    padding-bottom: 1vw;
-    height: 67vh;
+    padding-bottom: 0.5vh;
+    height: 70vh;
     margin-left: 18vw;
 }
 
 .cpt-weights {
-    margin-bottom: 1vw;
-    height: 13vw;
+    margin-bottom: 2vh;
+    height: 26vh;
+    width: 20vw;
 }
 
 .cor-weights {
-    height: 13vw;
+    height: 26vh;
+    width: 20vw;
 }
 
 .preview-btn {
@@ -123,5 +168,21 @@
 }
 
 .select-box {
+    width: 25vw;
+    font-size: calc(0.6vh + 0.6vw) !important;
+}
+
+.small-select-box {
     width: 20vw;
+    font-size: calc(0.6vh + 0.6vw) !important;
+}
+
+.cpt-flash-warning {
+    transition: border 1s;
+    border: 2px solid #ff0000b7 !important;
+}
+
+.temp-border {
+    transition: border 2s;
+    border: 2px solid white;
 }

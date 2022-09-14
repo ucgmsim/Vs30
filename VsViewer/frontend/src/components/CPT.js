@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useContext, memo } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
 import * as CONSTANTS from "Constants";
+import * as Utils from "Utils";
 
 import "assets/cpt.css";
 import {
@@ -11,6 +13,7 @@ import {
   CptTable,
   WeightTable,
   FileTable,
+  InfoTooltip,
   VsProfilePreviewPlot,
 } from "components";
 
@@ -25,8 +28,8 @@ const CPT = () => {
     cptWeights,
     setCptWeights,
     setCptResults,
-    setAllCorrelationWeights,
-    allCorrelationWeights,
+    setCptCorrelationWeights,
+    cptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // CPT Plot
@@ -50,13 +53,28 @@ const CPT = () => {
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  // Errors
+  const [flashCPTWeightError, setFlashCPTWeightError] = useState(false);
+  const [flashCorWeightError, setFlashCorWeightError] = useState(false);
+  const [weightError, setWeightError] = useState(false);
+  const [flashFileUploadError, setFlashFileUploadError] = useState(false);
+  const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashServerError, setFlashServerError] = useState(false);
+  const [uploadError, setUploadError] = useState(false);
+  const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
 
   // Set the Correlation Weights
   useEffect(() => {
     let tempCorWeights = {};
+    let tempNewVsData = {};
     selectedCorrelations.forEach((entry) => {
       tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      cptOptions.forEach((object) => {
+        let key = object["label"] + "_" + entry["label"];
+        tempNewVsData[key] = vsProfileData[key];
+      });
     });
+    setVsProfileData(tempNewVsData);
     setCorrelationWeights(tempCorWeights);
   }, [selectedCorrelations]);
 
@@ -95,47 +113,83 @@ const CPT = () => {
   };
 
   const sendProcessRequest = async () => {
-    setLoading(true);
-    const formData = new FormData();
-    formData.append(file.name, file);
-    formData.append(
-      file.name + "_formData",
-      JSON.stringify({
-        cptName: cptName,
+    if (cptName in cptData) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.NAME_ERROR);
+      setFlashNameUploadError(true);
+      await wait(1000);
+      setFlashNameUploadError(false);
+    } else {
+      setUploadError(false);
+      setLoading(true);
+      let serverResponse = false;
+      const formData = new FormData();
+      formData.append(file.name, file);
+      formData.append(
+        file.name + "_formData",
+        JSON.stringify({
+          cptName: cptName,
+        })
+      );
+      await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
+        method: "POST",
+        body: formData,
       })
-    );
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.CREATE_CPTS_ENDPOINT, {
-      method: "POST",
-      body: formData,
-    }).then(async (response) => {
-      const responseData = await response.json();
-      // Set CPT Select Dropdown
-      let tempOptionArray = cptOptions;
-      let tempCPTData = cptData;
-      for (const key of Object.keys(responseData)) {
-        tempOptionArray.push({
-          value: responseData[key],
-          label: responseData[key]["name"],
+        .then(async (response) => {
+          if (response.ok) {
+            serverResponse = true;
+            const responseData = await response.json();
+            // Set CPT Select Dropdown
+            let tempOptionArray = cptOptions;
+            let tempCPTData = cptData;
+            for (const key of Object.keys(responseData)) {
+              tempOptionArray.push({
+                value: responseData[key],
+                label: responseData[key]["name"],
+              });
+              tempCPTData[key] = responseData[key];
+            }
+            setCPTData(tempCPTData);
+            setCPTOptions(tempOptionArray);
+            changeCptWeights(tempOptionArray);
+            addToVsProfilePlot(tempCPTData, selectedCorrelations);
+            // Set Table Data
+            let tempCptTableData = cptTableData;
+            Papa.parse(file, {
+              header: true,
+              skipEmptyLines: true,
+              complete: function (results, file) {
+                tempCptTableData[file.name.split(".")[0]] = results.data;
+              },
+            });
+            // Reset Plots and Tables
+            setCptTableData(tempCptTableData);
+          } else {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          }
+          setLoading(false);
+        })
+        .catch(async () => {
+          if (serverResponse) {
+            setUploadErrorText(CONSTANTS.FILE_ERROR);
+            setUploadError(true);
+            setFlashFileUploadError(true);
+            await wait(1000);
+            setFlashFileUploadError(false);
+          } else {
+            setUploadErrorText(CONSTANTS.REQUEST_ERROR);
+            setUploadError(true);
+            setFlashServerError(true);
+            await wait(1000);
+            setFlashServerError(false);
+          }
+          setLoading(false);
         });
-        tempCPTData[key] = responseData[key];
-      }
-      setCPTData(tempCPTData);
-      setCPTOptions(tempOptionArray);
-      changeCptWeights(tempOptionArray);
-      addToVsProfilePlot(tempCPTData, selectedCorrelations);
-    });
-    // Set Table Data
-    let tempCptTableData = cptTableData;
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: function (results, file) {
-        tempCptTableData[file.name.split(".")[0]] = results.data;
-      },
-    });
-    // Reset Plots and Tables
-    setCptTableData(tempCptTableData);
-    setLoading(false);
+    }
   };
 
   const sendCPTMidpointRequest = async (cptsToSend) => {
@@ -269,15 +323,35 @@ const CPT = () => {
     setSelectedCptPlot(entries);
   };
 
-  const checkWeights = () => {
-    // TODO error checking
-    setCptResults(vsProfileData);
-    sendAverageRequest(vsProfileData);
-    let tempAllWeights = allCorrelationWeights;
-    for (const key of Object.keys(correlationWeights)) {
-      tempAllWeights[key] = correlationWeights[key];
+  const checkWeights = async () => {
+    let checkCor = Utils.errorCheckWeights(correlationWeights);
+    let checkCPT = Utils.errorCheckWeights(cptWeights);
+    if (!checkCor) {
+      setFlashCorWeightError(true);
+      setWeightError(true);
     }
-    setAllCorrelationWeights(tempAllWeights);
+    if (!checkCPT) {
+      setFlashCPTWeightError(true);
+      setWeightError(true);
+    }
+    if (checkCor && checkCPT) {
+      setCptResults(vsProfileData);
+      // Remove average for now
+      // sendAverageRequest(vsProfileData);
+      // Ensures the values are floats
+      Object.keys(correlationWeights).forEach(function(key) {
+        correlationWeights[key] = parseFloat(correlationWeights[key]);
+      });
+      Object.keys(cptWeights).forEach(function(key) {
+        cptWeights[key] = parseFloat(cptWeights[key]);
+      });
+      setCptCorrelationWeights(correlationWeights);
+      setWeightError(false);
+    } else {
+      await wait(1000);
+      setFlashCPTWeightError(false);
+      setFlashCorWeightError(false);
+    }
   };
 
   // Change the CPT Weights
@@ -321,18 +395,39 @@ const CPT = () => {
     let newVsPlotData = {};
     let newVsProfileData = {};
     let newVsProfileMidpointData = {};
-    for (const key of Object.keys(vsProfilePlotData)) {
+    newCptOptions.forEach((cptOption) => {
       selectedCorrelations.forEach((correlation) => {
+        let key = cptOption["label"] + "_" + correlation["label"];
         if (key !== fileToRemove["label"] + "_" + correlation["label"]) {
           newVsPlotData[key] = vsProfilePlotData[key];
           newVsProfileData[key] = vsProfileData[key];
           newVsProfileMidpointData[key] = vsProfileMidpointData[key];
         }
       });
-    }
+    });
     setVsProfilePlotData(newVsPlotData);
     setVsProfileData(newVsProfileData);
     setVsProfileMidpointData(newVsProfileMidpointData);
+    if (selectedCptTable !== null && fileToRemove["label"] === selectedCptTable["label"]) {
+      setSelectedCptTable(null);
+      setSelectedCptTableData(null);
+    }
+    let cptLabels = [];
+    let newSelected = [];
+    selectedCptPlot.forEach((entry) => {
+      if (entry["label"] !== fileToRemove["label"]) {
+        cptLabels.push(entry["label"]);
+        newSelected.push(entry);
+      }
+    });
+    let tempPlotData = {};
+    // Create CPT Plot Data
+    cptLabels.forEach((name) => {
+      tempPlotData[name] = cptMidpointData[name];
+    });
+    setCptPlotData(tempPlotData);
+    setSelectedCptPlot(newSelected);
+    setCptMidpointData(tempPlotData);
   };
 
   return (
@@ -340,38 +435,67 @@ const CPT = () => {
       <div className="row two-colum-row centre-elm">
         <div className="col-3 process-cpt">
           <div className="form-section-title">Upload CPT</div>
-          <div className="outline form">
-            <input
-              className="form-file-input"
-              type="file"
-              onChange={(e) => onSetFile(e.target.files[0])}
-            />
+          <div className="outline form-section">
+            <div
+              className={
+                flashFileUploadError
+                  ? "cpt-flash-warning row two-colum-row form-file-input-section"
+                  : "row two-colum-row form-file-input-section temp-border"
+              }
+            >
+              <input
+                className="col-8 form-file-input"
+                type="file"
+                onChange={(e) => onSetFile(e.target.files[0])}
+              />
+              <div className="col-1 file-info">
+                <InfoTooltip text={CONSTANTS.CPT_FILE} />
+              </div>
+            </div>
             <div className="form-label">CPT Name</div>
             <div className="stretch">
               <input
-                className="text-input"
+                className={
+                  flashNameUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={cptName}
                 onChange={(e) => setCptName(e.target.value)}
               />
             </div>
-            <button
-              disabled={loading}
-              className="form btn btn-primary"
-              onClick={() => sendProcessRequest()}
+
+            <div
+              className={
+                flashServerError
+                  ? "cpt-flash-warning row two-colum-row add-cpt-section"
+                  : "row two-colum-row add-cpt-section temp-border"
+              }
             >
-              Add CPT
-            </button>
+              <button
+                disabled={loading}
+                className="add-cpt-btn form btn btn-primary"
+                onClick={() => sendProcessRequest()}
+              >
+                Add CPT
+              </button>
+              <div className="col-1 weight-error">
+                {uploadError && (
+                  <InfoTooltip text={uploadErrorText} error={true} />
+                )}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="col-2 file-section">
+        <div className="col-2 file-section center-elm">
           <div className="form-section-title">CPT Files</div>
           <div className="file-table-section outline form center-elm">
-              {Object.keys(cptOptions).length > 0 && (
-                <FileTable
-                  files={cptOptions}
-                  removeFunction={removeFile}
-                ></FileTable>
-              )}
+            {Object.keys(cptOptions).length > 0 && (
+              <FileTable
+                files={cptOptions}
+                removeFunction={removeFile}
+              ></FileTable>
+            )}
           </div>
         </div>
       </div>
@@ -399,7 +523,7 @@ const CPT = () => {
             </div>
           </div>
         </div>
-        <div className="col-7 cpt-plot">
+        <div className="col-7 cpt-plot-section">
           <div className="center-elm">
             <div className="form-section-title">CPT Plot</div>
             <Select
@@ -431,13 +555,14 @@ const CPT = () => {
         ></Select>
       </div>
       <div className="row two-column-row center-elm cor-section">
-        <div className="outline col-3 weights">
+        <div className="outline col-3 weights center-elm">
           <div className="form-section-title">CPT Weights</div>
           <div className="outline center-elm cpt-weights">
             {Object.keys(cptWeights).length > 0 && (
               <WeightTable
                 weights={cptWeights}
                 setFunction={changeCPTWeights}
+                flashError={flashCPTWeightError}
               />
             )}
           </div>
@@ -447,16 +572,24 @@ const CPT = () => {
               <WeightTable
                 weights={correlationWeights}
                 setFunction={changeCorrelationWeights}
+                flashError={flashCorWeightError}
               />
             )}
           </div>
-          <button
-            disabled={!canSet}
-            className="preview-btn btn btn-primary"
-            onClick={() => checkWeights()}
-          >
-            Set Weights
-          </button>
+          <div className="row two-colum-row set-weights-section">
+            <button
+              disabled={!canSet}
+              className="col-5 set-weights preview-btn btn btn-primary"
+              onClick={() => checkWeights()}
+            >
+              Set Weights
+            </button>
+            <div className="col-1 weight-error">
+              {weightError && (
+                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+              )}
+            </div>
+          </div>
         </div>
         <div className="col-4 vs-preview-section center-elm">
           <div className="form-section-title">VsProfile Preview</div>

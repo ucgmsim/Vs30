@@ -1,0 +1,7 @@
+.fa-1x {
+  height: 2.25vh !important;
+}
+
+.tooltip-text-size{
+  font-size: calc(0.5vw + 0.5vh) !important;
+}

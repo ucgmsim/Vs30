@@ -1,12 +1,15 @@
 .spt-plots {
-    padding-top: 0.5vw;
-    padding-left: 0.5vw;
-    margin-right: 2vw !important;
+    padding-top: 1vh !important;
+    padding-left: 0.5vw !important;
+    margin-right: 0vw !important;
     display: flex;
     flex-direction: row;
     align-items: center;
+    width: 100% !important;
+    height: 100% !important;
 }
 
-.single-spt-plot {
-    height: 33vw;
+.spt-chart {
+    width: 100% !important;
+    height: 100%;
 }
