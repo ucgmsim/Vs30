@@ -13,7 +13,7 @@ const FileTable = ({ files, removeFunction }) => {
           <td className="remove-col-size">
             <button
               type="button"
-              className="btn-close"
+              className="btn-close btn-size"
               onClick={(row) => removeFunction(files[rowIdx])}
             />
           </td>

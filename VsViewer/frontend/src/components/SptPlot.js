@@ -1,115 +1,109 @@
-import React, { memo } from "react";
+import React, { memo, useState, useEffect } from "react";
 
 import Plot from "react-plotly.js";
 
+import * as CONSTANTS from "Constants";
 import "assets/sptPlot.css";
 
 const SPTPlot = ({ sptPlotData }) => {
-  if (Object.keys(sptPlotData).length > 0) {
-    let NArr = [];
-    let N60Arr = [];
-    for (const name of Object.keys(sptPlotData)) {
-      NArr.push({
-        x: sptPlotData[name]["N"],
-        y: sptPlotData[name]["Depth"],
-        type: "scatter",
-        mode: "lines",
-        name: name,
-        hoverinfo: "none",
-      });
-      N60Arr.push({
-        x: sptPlotData[name]["N60"],
-        y: sptPlotData[name]["Depth"],
-        type: "scatter",
-        mode: "lines",
-        name: name,
-        hoverinfo: "none",
-      });
-    }
+  const [data, setData] = useState([]);
 
+  useEffect(() => {
+    updatePlotData();
+  }, [sptPlotData]);
+
+  const updatePlotData = () => {
+    let tempData = [];
+    let colourCounter = 0;
+    if (Object.keys(sptPlotData).length > 0) {
+      for (const name of Object.keys(sptPlotData)) {
+        let NData = {
+          x: sptPlotData[name]["N"],
+          y: sptPlotData[name]["Depth"],
+          xaxis: "x1",
+          yaxis: "y1",
+          legendgroup: name,
+          name: name,
+          mode: "lines",
+          type: "scatter",
+          hoverinfo: "none",
+          line: {
+            color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
+          },
+        };
+        let N60Data = {
+          x: sptPlotData[name]["N60"],
+          y: sptPlotData[name]["Depth"],
+          xaxis: "x2",
+          legendgroup: name,
+          name: name,
+          title: "N",
+          yaxis: "y1",
+          mode: "lines",
+          type: "scatter",
+          hoverinfo: "none",
+          showlegend: false,
+          line: {
+            color: CONSTANTS.DEFAULTCOLOURS[colourCounter % 10],
+          },
+        };
+        tempData.push(NData);
+        tempData.push(N60Data);
+        colourCounter += 1;
+      }
+      setData(tempData);
+    }
+  };
+
+  if (Object.keys(sptPlotData).length > 0) {
+    if (data.length === 0) {
+      updatePlotData();
+    }
     return (
-      <div className="row two-column-row spt-plots">
+      <div className="spt-plots">
         <Plot
-          className={"col-6 single-plot"}
-          data={NArr}
-          config={{ displayModeBar: false }}
+          className="spt-chart"
+          data={data}
+          config={{ displayModeBar: false, responsive: true }}
+          title="N"
           layout={{
-            xaxis: {
-              title: "N",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            yaxis: {
-              autorange: "reversed",
-              title: "Depth (m)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            title: "N",
-            titlefont: {
-              size: 22,
-            },
+            rows: 1,
+            columns: 2,
+            pattern: "independent",
             autosize: true,
+            xaxis: { title: "N", domain: [0, 0.475] },
+            xaxis2: { title: "N60", domain: [0.525, 1] },
+            yaxis: { autorange: "reversed", title: "Depth (m)" },
             margin: {
-              l: 40,
-              r: 40,
-              b: 60,
-              t: 40,
-              pad: 1,
-            },
-            showlegend: false,
-          }}
-          useResizeHandler={true}
-        />
-        <Plot
-          className={"col-6 single-plot"}
-          data={N60Arr}
-          config={{ displayModeBar: false }}
-          layout={{
-            xaxis: {
-              title: "N60",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            yaxis: {
-              autorange: "reversed",
-              title: "Depth (m)",
-              titlefont: {
-                size: 16,
-              },
-              tickfont: {
-                size: 14,
-              },
-            },
-            title: "N60",
-            titlefont: {
-              size: 22,
-            },
-            autosize: true,
-            margin: {
-              l: 40,
+              l: 55,
               r: 40,
               b: 60,
               t: 40,
               pad: 1,
             },
             showlegend: true,
-            legend: { x: 0.7, y: 1.06 },
+            legend: { x: 0, y: -0.15, orientation: "h" },
+            annotations: [
+              {
+                text: "N",
+                showarrow: false,
+                x: 0.5,
+                xref: "x domain",
+                y: 1.03,
+                yref: "y domain",
+              },
+              {
+                text: "N60",
+                showarrow: false,
+                x: 0.5,
+                xref: "x2 domain",
+                y: 1.03,
+                yref: "y domain",
+              },
+            ],
           }}
           useResizeHandler={true}
-        />
+        ></Plot>
       </div>
     );
   }

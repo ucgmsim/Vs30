@@ -1,6 +1,8 @@
 import React, { memo } from "react";
 
 import * as Utils from "Utils";
+import * as CONSTANTS from "Constants";
+import { InfoTooltip } from "components";
 
 import "assets/cptTable.css";
 
@@ -16,15 +18,9 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           }
           key={rowIdx}
         >
-          <td className={rowClassName}>
-            {Utils.roundValue(row["Depth"])}
-          </td>
-          <td className={rowClassName}>
-            {Utils.roundValue(row["Qc"])}
-          </td>
-          <td className={rowClassName}>
-            {Utils.roundValue(row["Fs"])}
-          </td>
+          <td className={rowClassName}>{Utils.roundValue(row["Depth"])}</td>
+          <td className={rowClassName}>{Utils.roundValue(row["Qc"])}</td>
+          <td className={rowClassName}>{Utils.roundValue(row["Fs"])}</td>
           <td className={rowClassName}>{Utils.roundValue(row["u"])}</td>
         </tr>
       );
@@ -36,16 +32,16 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
           <thead>
             <tr>
               <th className="col-size" scope="col">
-                Depth
+                Depth (m)
               </th>
               <th className="col-size" scope="col">
-                Qc
+                qc (MPa)
               </th>
               <th className="col-size" scope="col">
-                Fs
+                fs (MPa)
               </th>
               <th className="col-size" scope="col">
-                u
+                u (MPa)
               </th>
             </tr>
           </thead>
@@ -66,12 +62,12 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
             <table className="table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Min Depth</td>
-                  <td>{Utils.roundValue(cptInfo["z_min"])}m</td>
+                  <td className="bold">Min Depth (m)</td>
+                  <td className="text-size">{Utils.roundValue(cptInfo["z_min"])}</td>
                 </tr>
                 <tr>
-                  <td className="bold">Max Depth</td>
-                  <td>{Utils.roundValue(cptInfo["z_max"])}m</td>
+                  <td className="bold">Max Depth (m)</td>
+                  <td className="text-size">{Utils.roundValue(cptInfo["z_max"])}</td>
                 </tr>
               </tbody>
             </table>
@@ -80,12 +76,21 @@ const CPTTable = ({ cptTableData, cptInfo }) => {
             <table className=" table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold">Depth Spread</td>
-                  <td>{Utils.roundValue(cptInfo["z_spread"])}m</td>
+                  <td className="bold info-width rem-label">Depth Spread (m)</td>
+                  <td className="text-size">{Utils.roundValue(cptInfo["z_spread"])}</td>
                 </tr>
                 <tr className="highlight">
-                  <td className="bold">Removed Rows</td>
-                  <td>{cptInfo["Removed rows"].length}</td>
+                  <td className="bold info-width">
+                  <div className="row two-colum-row info-width">
+                    <div className="col-9 rem-label">
+                      Removed Rows
+                    </div>
+                    <div className=" col-1 file-info-tbl">
+                      <InfoTooltip text={CONSTANTS.CPT_REMOVED_ROWS} />
+                    </div>
+                  </div>
+                  </td>
+                  <td className="text-size">{cptInfo["Removed rows"].length}</td>
                 </tr>
               </tbody>
             </table>

@@ -24,10 +24,9 @@ def create_vsprofile():
     for csv_name, csv_data in csvs.items():
         form_data = eval(flask.request.form.get(f"{csv_name}_formData"))
         vs_profile = VsProfile.from_byte_stream(
-            form_data.get("vsProfileName"), csv_data.stream.read()
+            form_data.get("vsProfileName"), form_data.get("layered") == "True", csv_data.stream.read()
         )
         vs_profile_dict[vs_profile.name] = vs_profile.to_json()
-
     return flask.jsonify(vs_profile_dict)
 
 
@@ -98,14 +97,14 @@ def compute_vs30():
     # Create the VsProfiles
     vs_profiles = []
     for correlation in json["vs30CorrelationWeights"]:
-        for vs_profile in json["vsProfiles"]:
-            json_dict = vs_profile["value"]
-            json_dict["vs30_correlation"] = correlation
-            vs_profiles.append(VsProfile.from_json(json_dict))
+        for vs_profile in json["vsProfiles"].values():
+            vs_profile["vs30_correlation"] = correlation
+            vs_profiles.append(VsProfile.from_json(vs_profile))
     vs30, vs30_sd = calculate_weighted_vs30(
         vs_profiles,
         json["vsWeights"],
-        json["vsCorrelationWeights"],
+        json["cptVsCorrelationWeights"],
+        json["sptVsCorrelationWeights"],
         json["vs30CorrelationWeights"],
     )
     return flask.jsonify({"Vs30": vs30, "Vs30_SD": vs30_sd})

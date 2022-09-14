@@ -1,12 +1,40 @@
-.add-spt {
-    margin-top: 1.5vw !important;
+.upload-section {
+    margin-top: 3vh !important;
     margin-left: -3vw;
-    height: 38vw;
+}
+
+.add-spt {
+    margin-top: 0.5vh;
+    width: 18vw !important;
+}
+
+.spt-form-section {
+    margin-top: 1vh;
 }
 
 .spt-file-input {
-    margin-top: 1vw;
-    margin-left: 5vw;
+    align-items: right !important;
+    font-size: calc(0.55vh + 0.55vw);
+    margin-top: 0.5vh !important;
+    margin-left: 0.5vw;
+    min-height: 30px;
+    margin-bottom: 0.2vh;
+    padding-right: 0 !important;
+    width: 10vw !important;
+}
+
+.add-spt-section {
+    margin-left: 0.5vw !important;
+    width: 11vw !important;
+    height: 7vh !important;
+    margin-top: 1vh !important;
+    margin-bottom: 0.5vh !important;
+}
+
+.file-section {
+    margin-top: 2vh;
+    width: 100%;
+    min-height: 26vh;
 }
 
 .form-label {
@@ -16,54 +44,55 @@
 }
 
 .text-input {
-    margin-top: -0.3vw;
+    margin-top: -0.3vh;
     width: 10vw;
     text-align:center
 }
 
 .spt-select {
     width: 15vw;
+    font-size: calc(0.55vh + 0.55vw) !important;
 }
 
 .add-spt-btn {
-    margin-top: 2vw;
+    font-size: calc(0.6vh + 0.6vw) !important;
+    margin-top: 0.5vh !important;
+    margin-left: 1vw !important;
+    width: 7vw !important;
+    height: 4.5vh !important;
 }
 
 .spt-table-section {
-    margin-top: 0.5vw !important;
+    margin-top: 1vh !important;
     margin-right: 3.5vw;
-    height: 39vw;
+    height: 78vh;
 }
 
 .spt-table {
-    margin-top: 1vw;
-    height: 34vw;
+    margin-top: 1vh;
+    height: 78vh;
     width: 30vw;
 }
 
 .spt-plot-section {
-    margin-top: 0.5vw !important;
+    margin-top: 1vh !important;
     margin-right: 0.2vw;
-    height: 39vw;
+    height: 78vh;
 }
 
 .spt-plot {
-    margin-top: 1vw;
-    height: 39vw;
+    margin-top: 1vh;
+    height: 70vh;
     width: 39vw;
 }
 
-.select-box {
-    min-width: 20vw;
-}
-
 .spt-plot-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
 .spt-table-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
@@ -74,22 +103,23 @@
 }
 
 .spt-top {
-    height: 40vw;
+    min-height: 79vh;
+    max-height: 82vh;
 }
 
 .spt-bot {
-    height: 40vw;
-    margin-top: 1vw;
+    height: 40vh;
+    margin-top: 1vh;
 }
 
 .vs-preview-section-spt {
     margin-right: 17vw;
     margin-bottom: 1vh;
-    height: 40vw;
+    height: 75vh;
 }
 
 .vs-preview-plot-spt {
-    height: 67vh;
+    height: 70vh;
     width: 36vw;
     margin-bottom: 1vh;
 }
@@ -99,14 +129,16 @@
     margin-top: 3vh !important;
     padding-top: 2vh;
     margin-bottom: 1vh;
-    height: 67vh;
+    height: 70vh;
 }
 
 .spt-weights {
-    margin-bottom: 1vw;
-    height: 13vw;
+    margin-bottom: 2vh;
+    height: 26vh;
+    width: 20vw;
 }
 
 .cor-weights-spt {
-    height: 13vw;
+    height: 26vh;
+    width: 20vw;
 }

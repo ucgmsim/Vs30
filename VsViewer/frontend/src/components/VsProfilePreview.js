@@ -116,7 +116,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
         <Plot
           className={"vs-profile-preview-plot"}
           data={VsArr}
-          config={{ displayModeBar: false }}
+          config={{ displayModeBar: false, responsive: true }}
           layout={{
             xaxis: {
               title: "Vs (m/s)",
@@ -129,7 +129,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
             },
             yaxis: {
               autorange: "reversed",
-              title: "Depth (m)",
+              title: {text: "Depth (m)", standoff: -15},
               titlefont: {
                 size: 16,
               },
@@ -140,7 +140,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
             },
             autosize: true,
             margin: {
-              l: 40,
+              l: 50,
               r: 40,
               b: 60,
               t: 10,

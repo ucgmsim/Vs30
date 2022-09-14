@@ -10,6 +10,7 @@ import VsProfileTable from "./VsProfileTable"
 import VsProfilePreviewPlot from "./VsProfilePreview";
 import WeightTable from "./WeightTable";
 import FileTable from "./FileTable";
+import InfoTooltip from "./InfoTootip";
 
 export {
   CPT,
@@ -24,4 +25,5 @@ export {
   SptTable,
   VsProfileTable,
   FileTable,
+  InfoTooltip,
 };

@@ -3,7 +3,7 @@ from typing import Iterable, Dict
 import numpy as np
 
 from vs_calc.VsProfile import VsProfile
-from vs_calc.utils import convert_to_midpoint
+from vs_calc.utils import convert_to_midpoint, normalise_weights
 
 
 def get_weight(
@@ -30,13 +30,21 @@ def get_weight(
 def calculate_weighted_vs30(
     vs_profiles: Iterable[VsProfile],
     vs_weights: dict,
-    vs_correlation_weights: dict,
+    cpt_vs_correlation_weights: dict,
+    spt_vs_correlation_weights: dict,
     vs30_correlation_weights: dict,
 ):
     """
     Calculates the weighted Vs30 by combining each of the Vs30Profiles
     with set weights for the VsProfile's and the Correlations
     """
+    vs_weights, vs_correlation_weights, spt_vs_correlation_weights, vs30_correlation_weights = (
+        normalise_weights(vs_weights),
+        normalise_weights(cpt_vs_correlation_weights),
+        normalise_weights(spt_vs_correlation_weights),
+        normalise_weights(vs30_correlation_weights),
+    )
+    vs_correlation_weights.update(spt_vs_correlation_weights)
     average_vs30 = sum(
         get_weight(
             vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
@@ -53,7 +61,7 @@ def calculate_weighted_vs30(
         )
         average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
         average_vs30_variance += weight * np.square(vs_profile.vs30 - average_vs30)
-    average_vs30_sd = np.log(np.sqrt(average_vs30_variance))
+    average_vs30_sd = 0 if average_vs30_variance == 0 else np.log(np.sqrt(average_vs30_variance))
     return average_vs30, average_vs30_sd
 
 
@@ -68,6 +76,11 @@ def calc_average_vs_midpoint(
     Re-Samples at 0.005 as depth may not be consistent with each VsProfile
     Ignores 0 values and starting constants when not starting from depth of 0
     """
+    vs_weights, vs_correlation_weights, vs30_correlation_weights = (
+        normalise_weights(vs_weights),
+        normalise_weights(vs_correlation_weights),
+        normalise_weights(vs30_correlation_weights),
+    )
     depth_values = []
     weighted_vs = []
     weighted_sd = []
