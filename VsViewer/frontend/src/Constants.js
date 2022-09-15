@@ -16,6 +16,7 @@ export const VS_PROFILE_CORRELATIONS_ENDPOINT = "/vsprofile/correlations";
 export const VS_PROFILE_MIDPOINT_ENDPOINT = "/plot/vsprofile/midpoint";
 export const VS_PROFILE_AVERAGE_ENDPOINT = "/plot/vsprofile/average";
 export const VS_PROFILE_VS30_ENDPOINT = "/vsprofile/vs30";
+export const VS_PROFILE_DOWNLOAD_ENDPOINT = "/vsprofile/download";
 
 // SPT Endpoints
 export const SPT_CREATE_ENDPOINT = "/spt/create"

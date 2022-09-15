@@ -119,6 +119,8 @@ class CPT:
             "u": self.u.tolist(),
             "info": self.info,
             "is_kpa": self.is_kpa,
+            "gwl": self.ground_water_level,
+            "nar": self.net_area_ratio,
             "qt": self._qt,
             "Ic": self._Ic,
             "Qtn": self._Qtn,
@@ -137,6 +139,9 @@ class CPT:
             np.asarray(json["Fs"]),
             np.asarray(json["u"]),
             json["info"],
+            json["is_kpa"],
+            json["gwl"],
+            json["nar"],
         )
 
     @staticmethod
@@ -171,8 +176,8 @@ class CPT:
             u,
             info,
             is_kpa,
-            form.get("gwl"),
-            form.get("nar"),
+            float(form.get("gwl")),
+            float(form.get("nar")),
         )
 
     @staticmethod
