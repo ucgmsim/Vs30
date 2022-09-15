@@ -215,6 +215,23 @@ const Results = () => {
     });
   };
 
+  const downloadData = async () => {
+    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_DOWNLOAD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      responseType: "blob",
+      body: JSON.stringify({"VsProfiles": VsProfileOptions}),
+    }).then(async (response) => {
+      debugger;
+      const url = window.URL.createObjectURL(new Blob([response.body], {type: "application/zip"}));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "VsProfileData");
+      document.body.appendChild(link);
+      link.click();
+    });
+  }
+
   const changeVsProfileSelection = async (entries) => {
     // Gather Midpoint data
     let VsProfilesToSend = [];
@@ -359,34 +376,45 @@ const Results = () => {
           )}
         </div>
       </div>
-      <div className="col-1 center-elm vs30-section outline">
-        <div
-          className={
-            flashComputeError
-              ? "cpt-flash-warning row two-colum-row compute-section"
-              : "row two-colum-row compute-section temp-border"
-          }
-        >
-          <button
-            disabled={!canCompute}
-            className="form btn btn-primary compute-btn"
-            onClick={() => computeVs30()}
+      <div className="col-1 center-elm vs30-results-section">
+        <div className="center-elm vs30-section outline">
+          <div
+            className={
+              flashComputeError
+                ? "cpt-flash-warning row two-colum-row compute-section"
+                : "row two-colum-row compute-section temp-border"
+            }
           >
-            Compute Vs30
-          </button>
-          <div className="col-1 weight-error">
-            {computeError && (
-              <InfoTooltip text={computeErrorText} error={true} />
-            )}
+            <button
+              disabled={!canCompute}
+              className="form btn btn-primary compute-btn"
+              onClick={() => computeVs30()}
+            >
+              Compute Vs30
+            </button>
+            <div className="col-1 weight-error">
+              {computeError && (
+                <InfoTooltip text={computeErrorText} error={true} />
+              )}
+            </div>
+          </div>
+          <div className="vs30-title">Vs30 (m/s)</div>
+          <div className="vs30-value outline">
+            {vs30 === null ? "" : Utils.roundValue(vs30)}
+          </div>
+          <div className="vs30-title">Vs30 Sigma</div>
+          <div className="vs30-value outline">
+            {vs30SD === null ? "" : Utils.roundValue(vs30SD)}
           </div>
         </div>
-        <div className="vs30-title">Vs30 (m/s)</div>
-        <div className="vs30-value outline">
-          {vs30 === null ? "" : Utils.roundValue(vs30)}
-        </div>
-        <div className="vs30-title">Vs30 Sigma</div>
-        <div className="vs30-value outline">
-          {vs30SD === null ? "" : Utils.roundValue(vs30SD)}
+        <div className="results-download-section outline">
+          <button
+            disabled={!canCompute}
+            className="form btn btn-primary download-btn"
+            onClick={() => downloadData()}
+          >
+            Download Data
+          </button>
         </div>
       </div>
     </div>

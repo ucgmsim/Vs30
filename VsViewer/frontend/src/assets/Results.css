@@ -40,10 +40,25 @@
     height: 78vh;
 }
 
-.vs30-section {
+.vs30-results-section {
     margin-top: 10vh !important;
+    width: 25vw !important;
+}
+
+.vs30-section {
     height: 30vh;
     width: 25vw !important;
+}
+
+.results-download-section {
+    margin-top: 3vh !important;
+    width: 10.5vw !important;
+}
+
+.download-btn {
+    font-size: calc(0.65vh + 0.65vw) !important;
+    width: 9vw !important;
+    margin-top: 1vh !important;
 }
 
 .vs30-title {

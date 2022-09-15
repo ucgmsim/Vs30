@@ -154,6 +154,12 @@ class VsProfile:
             "vs30_sd": self._vs30_sd,
         }
 
+    def to_dataframe(self):
+        """
+        Turns the VsProfile into a dataframe for download
+        """
+        return pd.DataFrame(np.column_stack([self.depth, self.vs, self.vs_sd]), columns=["Depth", "Vs", "Vs_SD"])
+
     @property
     def vsz(self):
         """

@@ -11,6 +11,7 @@ VS_PROFILE_CORRELATIONS_ENDPOINT = "/vsprofile/correlations"
 VS_PROFILE_MIDPOINT_ENDPOINT = "/plot/vsprofile/midpoint"
 VS_PROFILE_AVERAGE_ENDPOINT = "/plot/vsprofile/average"
 VS_PROFILE_VS30_ENDPOINT = "/vsprofile/vs30"
+VS_PROFILE_DOWNLOAD_ENDPOINT = "/vsprofile/download"
 
 # SPT endpoints
 SPT_CREATE_ENDPOINT = "/spt/create"

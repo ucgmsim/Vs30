@@ -28,8 +28,7 @@
     "reactstrap": "^9.1.1",
     "read-excel-file": "^5.4.7",
     "use-file-picker": "^1.4.2",
-    "web-vitals": "^2.1.4",
-    "xlsx": "^0.18.5"
+    "web-vitals": "^2.1.4"
   },
   "scripts": {
     "start": "react-scripts start",
