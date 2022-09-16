@@ -114,29 +114,3 @@ def compute_vs30():
         json["vs30CorrelationWeights"],
     )
     return flask.jsonify({"Vs30": vs30, "Vs30_SD": vs30_sd})
-
-
-@server.app.route(const.VS_PROFILE_DOWNLOAD_ENDPOINT, methods=["POST"])
-@cross_origin(expose_headers=["Content-Type", "Authorization"])
-@utils.endpoint_exception_handling(server.app)
-def download_data():
-    server.app.logger.info(f"Received request at {const.VS_PROFILE_DOWNLOAD_ENDPOINT}")
-    json = flask.request.json
-    # Create the VsProfiles
-    vs_profiles = []
-    for vs_profile in json["VsProfiles"]:
-        vs_profiles.append(VsProfile.from_json(vs_profile["value"]))
-
-    with tempfile.TemporaryDirectory() as zip_tmp_dir:
-        zip_ffp = Path(zip_tmp_dir) / "download_data.zip"
-        with zipfile.ZipFile(zip_ffp, mode="w") as cur_zip:
-            for vs_profile in vs_profiles:
-                filename = Path(zip_tmp_dir) / f"{vs_profile.name}.csv"
-                vs_profile.to_dataframe().to_csv(filename, index=False)
-                cur_zip.write(filename, f"{vs_profile.name}.csv")
-
-        return flask.send_file(
-            zip_ffp,
-            as_attachment=True,
-            attachment_filename="download_data.zip",
-        )
