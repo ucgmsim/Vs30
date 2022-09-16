@@ -1,5 +1,7 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
+import JSZip from "jszip";
+import { saveAs } from 'file-saver';
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -215,22 +217,24 @@ const Results = () => {
     });
   };
 
-  const downloadData = async () => {
-    await fetch(CONSTANTS.VS_API_URL + CONSTANTS.VS_PROFILE_DOWNLOAD_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      responseType: "blob",
-      body: JSON.stringify({"VsProfiles": VsProfileOptions}),
-    }).then(async (response) => {
-      debugger;
-      const url = window.URL.createObjectURL(new Blob([response.body], {type: "application/zip"}));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "VsProfileData");
-      document.body.appendChild(link);
-      link.click();
+  const downloadData = () => {
+    const createRows = (vsProfile) => {
+      let rows = [["Depth", "Vs", "Vs_SD"]];
+      for (let i = 0; i < vsProfile.depth.length; i++) {
+        rows.push([`${vsProfile.depth[i]}`, `${vsProfile.vs[i]}`, `${vsProfile.vs_sd[i]}`]);
+      }
+      return rows.map((e) => e.join(",")).join("\n");
+    };
+    var zip = new JSZip();
+
+    VsProfileOptions.forEach((entry) => {
+      zip.file(entry["label"] + ".csv", createRows(entry["value"]));
     });
-  }
+    
+    zip.generateAsync({ type: "blob" }).then(function (content) {
+      saveAs(content, "VsProfile Data.zip");
+    });
+  };
 
   const changeVsProfileSelection = async (entries) => {
     // Gather Midpoint data
