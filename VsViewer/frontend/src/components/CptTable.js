@@ -16,14 +16,24 @@ const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
       cptTableRows.push(
         <tr
           className={
-            cptInfo["Removed rows"].includes(rowIdx) ? "highlight" : ""
+            cptInfo["Removed rows"].includes(rowIdx)
+              ? "highlight main-row-width"
+              : "main-row-width"
           }
           key={rowIdx}
         >
-          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[0]])}</td>
-          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[1]], dataIsKPa)}</td>
-          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[2]], dataIsKPa)}</td>
-          <td className={rowClassName}>{Utils.roundValue(row[rowLabels[3]], dataIsKPa)}</td>
+          <td className={rowClassName}>
+            {Utils.roundValue(row[rowLabels[0]])}
+          </td>
+          <td className={rowClassName}>
+            {Utils.roundValue(row[rowLabels[1]], dataIsKPa)}
+          </td>
+          <td className={rowClassName}>
+            {Utils.roundValue(row[rowLabels[2]], dataIsKPa)}
+          </td>
+          <td className={rowClassName}>
+            {Utils.roundValue(row[rowLabels[3]], dataIsKPa)}
+          </td>
         </tr>
       );
     });
@@ -50,9 +60,9 @@ const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
           <tbody className="tbl-width scroll-tbl">
             <tr>
               <td className="tbl-width" colSpan="4">
-                <div className="scroll-tbl">
+                <div className=" scroll-tbl add-overlap-scrollbar">
                   <table className="tbl-width">
-                    <tbody>{cptTableRows}</tbody>
+                    <tbody className="table-full-width">{cptTableRows}</tbody>
                   </table>
                 </div>
               </td>
@@ -65,11 +75,15 @@ const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(cptInfo["z_min"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(cptInfo["z_min"])}
+                  </td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(cptInfo["z_max"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(cptInfo["z_max"])}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -78,21 +92,25 @@ const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
             <table className=" table thead-dark table-striped table-bordered mt-2 w-auto">
               <tbody>
                 <tr>
-                  <td className="bold info-width rem-label">Depth Spread (m)</td>
-                  <td className="text-size">{Utils.roundValue(cptInfo["z_spread"])}</td>
+                  <td className="bold info-width rem-label">
+                    Depth Spread (m)
+                  </td>
+                  <td className="text-size">
+                    {Utils.roundValue(cptInfo["z_spread"])}
+                  </td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">
-                  <div className="row two-colum-row info-width">
-                    <div className="col-9 rem-label">
-                      Removed Rows
+                    <div className="row two-colum-row info-width">
+                      <div className="col-9 rem-label">Removed Rows</div>
+                      <div className=" col-1 file-info-tbl">
+                        <InfoTooltip text={CONSTANTS.CPT_REMOVED_ROWS} />
+                      </div>
                     </div>
-                    <div className=" col-1 file-info-tbl">
-                      <InfoTooltip text={CONSTANTS.CPT_REMOVED_ROWS} />
-                    </div>
-                  </div>
                   </td>
-                  <td className="text-size">{cptInfo["Removed rows"].length}</td>
+                  <td className="text-size">
+                    {cptInfo["Removed rows"].length}
+                  </td>
                 </tr>
               </tbody>
             </table>

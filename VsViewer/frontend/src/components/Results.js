@@ -1,7 +1,7 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import JSZip from "jszip";
-import { saveAs } from 'file-saver';
+import { saveAs } from "file-saver";
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -83,23 +83,23 @@ const Results = () => {
   useEffect(() => {
     let tempOptionArray = [];
     let tempVsProfileOptions = [];
-    if (Object.keys(vsProfileResults).length > 0) {
-      tempOptionArray.push({ value: "VsProfile", label: "VsProfile" });
-      for (const key of Object.keys(vsProfileResults)) {
-        tempVsProfileOptions.push({ value: vsProfileResults[key], label: key });
-      }
-    }
-    if (Object.keys(cptResults).length > 0) {
+    if (cptResults.length > 0) {
       tempOptionArray.push({ value: "CPT", label: "CPT" });
-      for (const key of Object.keys(cptResults)) {
-        tempVsProfileOptions.push({ value: cptResults[key], label: key });
-      }
+      cptResults.forEach((entry) => {
+        tempVsProfileOptions.push(entry);
+      });
     }
-    if (Object.keys(sptResults).length > 0) {
+    if (sptResults.length > 0) {
       tempOptionArray.push({ value: "SPT", label: "SPT" });
-      for (const key of Object.keys(sptResults)) {
-        tempVsProfileOptions.push({ value: sptResults[key], label: key });
-      }
+      sptResults.forEach((entry) => {
+        tempVsProfileOptions.push(entry);
+      });
+    }
+    if (vsProfileResults.length > 0) {
+      tempOptionArray.push({ value: "VsProfile", label: "VsProfile" });
+      vsProfileResults.forEach((entry) => {
+        tempVsProfileOptions.push(entry);
+      });
     }
     setSections(tempOptionArray);
     setVsProfileOptions(tempVsProfileOptions);
@@ -221,7 +221,11 @@ const Results = () => {
     const createRows = (vsProfile) => {
       let rows = [["Depth", "Vs", "Vs_SD"]];
       for (let i = 0; i < vsProfile.depth.length; i++) {
-        rows.push([`${vsProfile.depth[i]}`, `${vsProfile.vs[i]}`, `${vsProfile.vs_sd[i]}`]);
+        rows.push([
+          `${vsProfile.depth[i]}`,
+          `${vsProfile.vs[i]}`,
+          `${vsProfile.vs_sd[i]}`,
+        ]);
       }
       return rows.map((e) => e.join(",")).join("\n");
     };
@@ -230,7 +234,7 @@ const Results = () => {
     VsProfileOptions.forEach((entry) => {
       zip.file(entry["label"] + ".csv", createRows(entry["value"]));
     });
-    
+
     zip.generateAsync({ type: "blob" }).then(function (content) {
       saveAs(content, "VsProfile Data.zip");
     });
@@ -298,62 +302,60 @@ const Results = () => {
   };
 
   return (
-    <div className="row three-column-row center-elm results-page">
-      <div className="col-1">
-        <div className="weights-section center-elm outline">
-          <div className="results-title">Section Weights</div>
-          <Select
-            className="small-select-box"
-            placeholder="Select your Section's"
-            options={sections}
-            isMulti={true}
-            isDisabled={sections.length === 0}
-            value={selectedSections}
-            onChange={(e) => setSelectedSections(e)}
-          ></Select>
-          <div className="outline center-elm result-weights">
-            {Object.keys(sectionWeights).length > 0 && (
+    <div className="row three-column-row results-page">
+      <div className="col-1 weights-section center-elm outline">
+        <div className="results-title">Section Weights</div>
+        <Select
+          className="small-select-box"
+          placeholder="Select Sections"
+          options={sections}
+          isMulti={true}
+          isDisabled={sections.length === 0}
+          value={selectedSections}
+          onChange={(e) => setSelectedSections(e)}
+        ></Select>
+        <div className="outline center-elm result-weights">
+          {Object.keys(sectionWeights).length > 0 && (
+            <WeightTable
+              weights={sectionWeights}
+              setFunction={changeSectionWeights}
+              flashError={flashSecWeightError}
+            />
+          )}
+        </div>
+        <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
+        <Select
+          className="small-select-box"
+          placeholder="Select VsZ - Vs30 Correlations"
+          options={correlationOptions}
+          isMulti={true}
+          isDisabled={correlationOptions.length === 0}
+          value={selectedCorrelations}
+          onChange={(e) => setSelectedCorrelations(e)}
+        ></Select>
+        <div className="outline center-elm result-weights">
+          <div className="result-weight-area">
+            {Object.keys(correlationWeights).length > 0 && (
               <WeightTable
-                weights={sectionWeights}
-                setFunction={changeSectionWeights}
-                flashError={flashSecWeightError}
+                weights={correlationWeights}
+                setFunction={changeCorrelationWeights}
+                flashError={flashCorWeightError}
               />
             )}
           </div>
-          <div className="vs-weight-title">VsZ - Vs30 Correlation Weights</div>
-          <Select
-            className="small-select-box"
-            placeholder="Select your Correlation's"
-            options={correlationOptions}
-            isMulti={true}
-            isDisabled={correlationOptions.length === 0}
-            value={selectedCorrelations}
-            onChange={(e) => setSelectedCorrelations(e)}
-          ></Select>
-          <div className="outline center-elm result-weights">
-            <div className="result-weight-area">
-              {Object.keys(correlationWeights).length > 0 && (
-                <WeightTable
-                  weights={correlationWeights}
-                  setFunction={changeCorrelationWeights}
-                  flashError={flashCorWeightError}
-                />
-              )}
-            </div>
-          </div>
-          <div className="row two-colum-row set-weights-section">
-            <button
-              disabled={!canSetWeights}
-              className="col-5 set-weights preview-btn btn btn-primary"
-              onClick={() => checkWeights()}
-            >
-              Set Weights
-            </button>
-            <div className="col-1 weight-error">
-              {weightError && (
-                <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
-              )}
-            </div>
+        </div>
+        <div className="row two-colum-row set-weights-section">
+          <button
+            disabled={!canSetWeights}
+            className="col-5 set-weights preview-btn btn btn-primary"
+            onClick={() => checkWeights()}
+          >
+            Set Weights
+          </button>
+          <div className="col-1 weight-error">
+            {weightError && (
+              <InfoTooltip text={CONSTANTS.WEIGHT_ERROR} error={true} />
+            )}
           </div>
         </div>
       </div>
@@ -362,7 +364,7 @@ const Results = () => {
           <div className="vs-plot-title">VsProfile Plot</div>
           <Select
             className="select-box"
-            placeholder="Select your VsProfile's"
+            placeholder="Select VsProfiles"
             isMulti={true}
             options={VsProfileOptions}
             isDisabled={VsProfileOptions.length === 0}
@@ -382,16 +384,14 @@ const Results = () => {
       </div>
       <div className="col-1 center-elm vs30-results-section">
         <div className="center-elm vs30-section outline">
-          <div
-            className={
-              flashComputeError
-                ? "cpt-flash-warning row two-colum-row compute-section"
-                : "row two-colum-row compute-section temp-border"
-            }
-          >
+          <div className="row two-colum-row compute-section temp-border">
             <button
               disabled={!canCompute}
-              className="form btn btn-primary compute-btn"
+              className={
+                flashComputeError
+                  ? "trans-btn form btn btn-danger compute-btn"
+                  : "trans-btn form compute-btn btn btn-primary"
+              }
               onClick={() => computeVs30()}
             >
               Compute Vs30

@@ -10,8 +10,8 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray, layered: bool 
     for ix, depth in enumerate(depths):
         measure = measures[ix]
         if ix == 0:
-            new_depths.append(0)
-            new_measures.append(float(measure))
+            new_depths.append(float(0))
+            new_measures.append(float(measures[1]) if measure == 0 else float(measure))
         else:
             if prev_depth is not None:
                 new_depths.append(float(prev_depth) if layered else float((depth + prev_depth) / 2))
@@ -22,8 +22,10 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray, layered: bool 
             # Add extra depth for last value in array
             new_depths.append(float(depth))
             new_measures.append(float(measure))
-        prev_depth = depth
-        prev_measure = measure
+        if ix != 0 or measure != 0:
+            prev_depth = depth
+            prev_measure = measure
+
     return new_measures, new_depths
 
 

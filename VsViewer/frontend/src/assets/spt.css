@@ -1,30 +1,39 @@
 .upload-section {
     margin-top: 3vh !important;
-    margin-left: -3vw;
+    margin-left: 3.25vw;
+    padding: 0 !important;
+    width: 17vw !important;
 }
 
 .add-spt {
     margin-top: 0.5vh;
-    width: 18vw !important;
+    width: 17vw !important;
 }
 
 .spt-form-section {
     margin-top: 1vh;
+    height: 51vh;
+}
+
+.spt-file-input-section {
+    width: 16vw !important;
+    height: 4.5vh !important;
+    margin-left: -4% !important;
+    margin-top: 0.5vh !important;
+    padding-right: 0 !important;
 }
 
 .spt-file-input {
     align-items: right !important;
     font-size: calc(0.55vh + 0.55vw);
     margin-top: 0.5vh !important;
-    margin-left: 0.5vw;
-    min-height: 30px;
-    margin-bottom: 0.2vh;
-    padding-right: 0 !important;
-    width: 10vw !important;
+    width: 11vw !important;
+    padding: 0 !important;
+    margin-left: 2.9vw;
 }
 
 .add-spt-section {
-    margin-left: 0.5vw !important;
+    margin-left: 1.25vw !important;
     width: 11vw !important;
     height: 7vh !important;
     margin-top: 1vh !important;
@@ -64,8 +73,9 @@
 
 .spt-table-section {
     margin-top: 1vh !important;
-    margin-right: 3.5vw;
+    margin-left: 3.25vw;
     height: 78vh;
+    width: 30vw !important;
 }
 
 .spt-table {
@@ -76,14 +86,15 @@
 
 .spt-plot-section {
     margin-top: 1vh !important;
-    margin-right: 0.2vw;
+    margin-left: 3.25vw;
     height: 78vh;
+    width: 40vw !important;
 }
 
 .spt-plot {
     margin-top: 1vh;
     height: 70vh;
-    width: 39vw;
+    width: 40vw;
 }
 
 .spt-plot-title {
@@ -103,8 +114,7 @@
 }
 
 .spt-top {
-    min-height: 79vh;
-    max-height: 82vh;
+    height: 81vh;
 }
 
 .spt-bot {
@@ -113,23 +123,25 @@
 }
 
 .vs-preview-section-spt {
-    margin-right: 17vw;
+    margin-left: 3.25vw;
     margin-bottom: 1vh;
     height: 75vh;
+    width: 40vw !important;
 }
 
 .vs-preview-plot-spt {
     height: 70vh;
-    width: 36vw;
+    width: 40vw;
     margin-bottom: 1vh;
 }
 
 .weights-spt {
-    margin-left: 18vw;
+    margin-left: 18.875vw;
     margin-top: 3vh !important;
     padding-top: 2vh;
     margin-bottom: 1vh;
     height: 70vh;
+    width: 25vw !important;
 }
 
 .spt-weights {

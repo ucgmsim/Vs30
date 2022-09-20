@@ -56,7 +56,7 @@ class SPT:
                     self.borehole_diameter,
                     self.depth[idx],
                 )
-                N60 = N * Ce * Cb * Cr
+                N60 = round(N * Ce * Cb * Cr, 2)
                 N60_list.append(N60)
             self._n60 = np.asarray(N60_list)
         return self._n60

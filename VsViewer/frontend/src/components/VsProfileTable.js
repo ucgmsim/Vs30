@@ -37,14 +37,14 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
                 Vs (m/s)
               </th>
               <th className="vs-col-size" scope="col">
-              σ
+                σ
               </th>
             </tr>
           </thead>
           <tbody className="tbl-width vs-scroll-tbl">
             <tr>
               <td className="tbl-width" colSpan="4">
-                <div className="vs-scroll-tbl">
+                <div className="vs-scroll-tbl add-overlap-scrollbar">
                   <table className="vs-tbl-width">
                     <tbody>{vsProfileRows}</tbody>
                   </table>
@@ -59,11 +59,15 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_min"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(vsProfileInfo["z_min"])}
+                  </td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_max"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(vsProfileInfo["z_max"])}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -73,20 +77,22 @@ const VsProfileTable = ({ vsProfileData, vsProfileInfo }) => {
               <tbody>
                 <tr>
                   <td className="bold">Depth Spread (m)</td>
-                  <td className="text-size">{Utils.roundValue(vsProfileInfo["z_spread"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(vsProfileInfo["z_spread"])}
+                  </td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width">
                     <div className="row two-colum-row info-width">
-                      <div className="col-9 rem-label">
-                        Removed Rows
-                      </div>
+                      <div className="col-9 rem-label">Removed Rows</div>
                       <div className="col-1 file-info-tbl">
                         <InfoTooltip text={CONSTANTS.VS_REMOVED_ROWS} />
                       </div>
                     </div>
                   </td>
-                  <td className="text-size">{vsProfileInfo["removed_rows"].length}</td>
+                  <td className="text-size">
+                    {vsProfileInfo["removed_rows"].length}
+                  </td>
                 </tr>
               </tbody>
             </table>

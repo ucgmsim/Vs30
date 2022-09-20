@@ -73,7 +73,7 @@ const CPTPlot = ({ cptPlotData, gwl }) => {
         name: "GWL",
         mode: "lines",
         line: {
-          color: "rgba(0, 0, 0, 0.60)"
+          color: "rgba(0, 0, 0, 0.60)",
         },
       };
       tempData.push(GWLLegend);
@@ -137,16 +137,16 @@ const CPTPlot = ({ cptPlotData, gwl }) => {
           ],
           shapes: [
             {
-              type: 'line',
-              xref: 'paper',
-              yref: 'y',
+              type: "line",
+              xref: "paper",
+              yref: "y",
               x0: 0,
               y0: gwl,
               x1: 1,
               y1: gwl,
               line: {
                 color: "rgba(0, 0, 0, 0.60)",
-                width: 2.5
+                width: 2.5,
               },
             },
           ],

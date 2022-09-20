@@ -1,6 +1,9 @@
 .scroll-tbl {
     max-height: 50vh;
-    overflow-y: scroll;
+}
+
+.main-row-width {
+    width: 30vw !important;
 }
 
 .col-size {

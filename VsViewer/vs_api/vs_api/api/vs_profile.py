@@ -32,6 +32,9 @@ def create_vsprofile():
             form_data.get("layered") == "True",
             file_data.stream.read(),
         )
+        for depth in vs_profile.depth:
+            if depth < 0:
+                raise ValueError("Depth can't be negative")
         vs_profile_dict[vs_profile.name] = vs_profile.to_json()
     return flask.jsonify(vs_profile_dict)
 
