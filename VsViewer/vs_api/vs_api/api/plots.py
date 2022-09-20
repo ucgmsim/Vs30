@@ -5,8 +5,6 @@ from flask_cors import cross_origin
 from vs_api import server, utils
 from vs_api import constants as const
 from vs_calc.SPT import SPT
-from vs_calc.utils import convert_to_midpoint
-from vs_calc.SPT import SPT
 from vs_calc.VsProfile import VsProfile
 from vs_calc.utils import convert_to_midpoint
 from vs_calc.calc_weightings import calc_average_vs_midpoint

@@ -22,6 +22,9 @@ def create_spt():
     for file_name, file_data in files.items():
         form_data = eval(flask.request.form.get(f"{file_name}_formData"))
         spt = SPT.from_byte_stream_form(file_name, file_data.stream.read(), form_data)
+        for depth in spt.depth:
+            if depth < 0:
+                raise ValueError("Depth can't be negative")
         spt_dict[spt.name] = spt.to_json()
     return flask.jsonify(spt_dict)
 

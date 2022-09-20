@@ -34,20 +34,23 @@
 }
 
 .weights-section {
-    margin-top: 6vh;
-    margin-left: -1vw;
-    width: 25vw;
+    margin-top: 6vh !important;
+    margin-left: 3.25vw;
+    width: 25vw !important;
     height: 78vh;
+    padding: 0 !important;
 }
 
 .vs30-results-section {
+    margin-left: 3.25vw;
+    padding: 0 !important;
     margin-top: 10vh !important;
-    width: 25vw !important;
+    width: 22vw !important;
 }
 
 .vs30-section {
     height: 30vh;
-    width: 25vw !important;
+    width: 22vw !important;
 }
 
 .results-download-section {
@@ -86,17 +89,17 @@
 }
 
 .result-plot-section {
-    margin-top: 0.5vw !important;
-    margin-left: 2vw;
+    margin-top: 1vh !important;
     height: 83vh;
-    width: 40vw;
-    margin-left: 15vw;
+    width: 40vw !important;
+    margin-left: 3.25vw;
+    padding: 0 !important;
 }
 
 .results-vs-plot {
     margin-top: 1vh;
     height: 75vh;
-    width: 39vw;
+    width: 40vw;
 }
 
 .vs-select {

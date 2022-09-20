@@ -6,10 +6,17 @@
 
 .weight-col-size {
     font-size: calc(0.55vh + 0.55vw);
+    max-width: 7vw;
     width: 7vw;
     height: 3vh;
     text-align:center;
     padding: 0.5vh !important;
+}
+
+.weight-value {
+    width: 6vw;
+    font-size: calc(0.55vh + 0.55vw);
+    text-align:center;
 }
 
 .form-section-title {
@@ -20,7 +27,6 @@
 
 .scroll-weights {
     max-height: 12.7vw;
-    overflow: scroll;
 }
 
 .weight-table {
@@ -30,10 +36,6 @@
 .table-padding {
     padding-top: 0.3vw;
     padding-bottom: 0.2vw;
-}
-
-::-webkit-scrollbar {
-    display: none;
 }
 
 .weight-error {

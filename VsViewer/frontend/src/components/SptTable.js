@@ -41,7 +41,7 @@ const SPTTable = ({ sptTableData }) => {
           <tbody className="tbl-width spt-scroll-tbl">
             <tr>
               <td className="tbl-width" colSpan="4">
-                <div className="spt-scroll-tbl">
+                <div className="spt-scroll-tbl add-overlap-scrollbar">
                   <table className="spt-tbl-width">
                     <tbody>{sptTableRows}</tbody>
                   </table>
@@ -56,11 +56,15 @@ const SPTTable = ({ sptTableData }) => {
               <tbody>
                 <tr>
                   <td className="bold">Min Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(sptInfo["z_min"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(sptInfo["z_min"])}
+                  </td>
                 </tr>
                 <tr>
                   <td className="bold">Max Depth (m)</td>
-                  <td className="text-size">{Utils.roundValue(sptInfo["z_max"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(sptInfo["z_max"])}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -70,11 +74,15 @@ const SPTTable = ({ sptTableData }) => {
               <tbody>
                 <tr>
                   <td className="bold rem-label">Depth Spread (m)</td>
-                  <td className="text-size">{Utils.roundValue(sptInfo["z_spread"])}</td>
+                  <td className="text-size">
+                    {Utils.roundValue(sptInfo["z_spread"])}
+                  </td>
                 </tr>
                 <tr className="highlight">
                   <td className="bold info-width rem-label">Removed Rows</td>
-                  <td className="text-size">{sptInfo["removed_rows"].length}</td>
+                  <td className="text-size">
+                    {sptInfo["removed_rows"].length}
+                  </td>
                 </tr>
               </tbody>
             </table>

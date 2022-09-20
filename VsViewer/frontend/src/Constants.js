@@ -18,11 +18,11 @@ export const VS_PROFILE_AVERAGE_ENDPOINT = "/plot/vsprofile/average";
 export const VS_PROFILE_VS30_ENDPOINT = "/vsprofile/vs30";
 
 // SPT Endpoints
-export const SPT_CREATE_ENDPOINT = "/spt/create"
-export const GET_SPT_CORRELATIONS_ENDPOINT = "/spt/correlations"
-export const SPT_MIDPOINT_ENDPOINT = "/plot/spt/midpoint"
-export const GET_HAMMER_TYPES_ENDPOINT = "/spt/hammertypes"
-export const GET_SOIL_TYPES_ENDPOINT = "/spt/soiltypes"
+export const SPT_CREATE_ENDPOINT = "/spt/create";
+export const GET_SPT_CORRELATIONS_ENDPOINT = "/spt/correlations";
+export const SPT_MIDPOINT_ENDPOINT = "/plot/spt/midpoint";
+export const GET_HAMMER_TYPES_ENDPOINT = "/spt/hammertypes";
+export const GET_SOIL_TYPES_ENDPOINT = "/spt/soiltypes";
 
 // Plots
 export const DEFAULTCOLOURS = [
@@ -39,16 +39,22 @@ export const DEFAULTCOLOURS = [
 ];
 
 // Tooltips
-export const CPT_FILE = "CSV file format with 4 columns labelled in order [Depth, qc, fs, u]";
-export const SPT_FILE = "CSV file format with 2-3 columns labelled in order [Depth, NValue, Soil] in which Soil is optional";
-export const VS_FILE = "CSV file format with 3 columns labelled in order [Depth, Vs, Vs_SD]";
-export const CPT_REMOVED_ROWS = "Number of rows removed during processing where Depth is > 30m or Qc or Fs is <= 0";
-export const VS_REMOVED_ROWS = "Number of rows removed during processing where Depth is > 30m or the ending depth value is not a whole number";
+export const CPT_FILE =
+  "CSV or XLSX file format with 4 columns labelled in order [Depth, qc, fs, u]";
+export const SPT_FILE =
+  "CSV or XLSX file format with 2-3 columns labelled in order [Depth, NValue, Soil] in which Soil is optional";
+export const VS_FILE =
+  "CSV or XLSX file format with 3 columns labelled in order [Depth, Vs, Vs_SD]";
+export const CPT_REMOVED_ROWS =
+  "Number of rows removed during processing where Depth is > 30m or Qc or Fs is <= 0";
+export const VS_REMOVED_ROWS =
+  "Number of rows removed during processing where Depth is > 30m or the ending depth value is not a whole number";
 
 // Errors
-export const WEIGHT_ERROR = "Weights sum is not close enough to 1 or are not numbers";
+export const WEIGHT_ERROR =
+  "Weights sum is not close enough to 1 or are not numbers";
 export const FILE_ERROR = "This file has produced an error while processing";
-export const NAME_ERROR = "This CPT Name is already taken";
+export const NAME_ERROR = "This name is already taken";
 export const REQUEST_ERROR = "Could not reach server. Please try again later";
 export const COMPUTE_ERROR = "Error computing Vs30";
 export const GWL_ERROR = "Ground Water Level input needs to be a valid number";

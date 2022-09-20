@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useContext, memo } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
-import readXlsxFile from 'read-excel-file';
+import readXlsxFile from "read-excel-file";
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -87,12 +87,12 @@ const CPT = () => {
 
   // Check the user can set Weights
   useEffect(() => {
-    if (selectedCorrelations.length > 0 && cptOptions.length > 0) {
+    if (selectedCorrelations.length > 0 && Object.keys(cptWeights).length > 0) {
       setCanSet(true);
     } else {
       setCanSet(false);
     }
-  }, [selectedCorrelations, cptOptions]);
+  }, [selectedCorrelations, cptWeights]);
 
   // Get Correlations on page load
   useEffect(() => {
@@ -363,7 +363,11 @@ const CPT = () => {
       setWeightError(true);
     }
     if (checkCor && checkCPT) {
-      setCptResults(vsProfileData);
+      let tempCPTResults = [];
+      Object.keys(vsProfileData).forEach(function (key) {
+        tempCPTResults.push({ label: key, value: vsProfileData[key] });
+      });
+      setCptResults(tempCPTResults);
       // Remove average for now
       // sendAverageRequest(vsProfileData);
       // Ensures the values are floats
@@ -464,7 +468,7 @@ const CPT = () => {
 
   return (
     <div>
-      <div className="row three-column-row center-elm cpt-data">
+      <div className="row three-column-row cpt-data">
         <div className="col-2 centre-elm cpt-file-manage">
           <div className="process-cpt">
             <div className="form-section-title">Upload CPT</div>
@@ -534,16 +538,14 @@ const CPT = () => {
                   kPa
                 </div>
               </div>
-              <div
-                className={
-                  flashServerError
-                    ? "cpt-flash-warning row two-colum-row add-cpt-section"
-                    : "row two-colum-row add-cpt-section temp-border"
-                }
-              >
+              <div className="row two-colum-row add-cpt-section temp-border">
                 <button
                   disabled={loading}
-                  className="add-cpt-btn form btn btn-primary"
+                  className={
+                    flashServerError
+                      ? "trans-btn add-cpt-btn form btn btn-danger"
+                      : "trans-btn add-cpt-btn form btn btn-primary"
+                  }
                   onClick={() => sendProcessRequest()}
                 >
                   Add CPT
@@ -573,7 +575,7 @@ const CPT = () => {
             <div className="form-section-title">CPT Table</div>
             <Select
               className="select-cpt select-box"
-              placeholder="Select your CPT's"
+              placeholder="Select CPT"
               options={cptOptions}
               isDisabled={cptOptions.length === 0}
               value={selectedCptTable}
@@ -596,7 +598,7 @@ const CPT = () => {
             <div className="form-section-title">CPT Plot</div>
             <Select
               className="select-cpt select-box"
-              placeholder="Select your CPT's"
+              placeholder="Select CPTs"
               isMulti={true}
               options={cptOptions}
               isDisabled={cptOptions.length === 0}
@@ -615,14 +617,14 @@ const CPT = () => {
       <div className="center-elm">
         <Select
           className="select-cor select-box"
-          placeholder="Select Correlations"
+          placeholder="Select CPT - Vs Correlations"
           isMulti={true}
           options={correlationsOptions}
           isDisabled={correlationsOptions.length === 0}
           onChange={(e) => onSelectCorrelations(e)}
         ></Select>
       </div>
-      <div className="row two-column-row center-elm cor-section">
+      <div className="row two-column-row cor-section">
         <div className="outline col-3 weights center-elm">
           <div className="form-section-title">CPT Weights</div>
           <div className="outline center-elm cpt-weights">

@@ -21,6 +21,9 @@ def create_cpts():
     for file_name, file_data in files.items():
         form_data = eval(flask.request.form.get(f"{file_name}_formData"))
         cpt = CPT.from_byte_stream(file_name, file_data.stream.read(), form_data)
+        for depth in cpt.depth:
+            if depth < 0:
+                raise ValueError("Depth can't be negative")
         cpt_dict[cpt.name] = cpt.to_json()
     return flask.jsonify(cpt_dict)
 
