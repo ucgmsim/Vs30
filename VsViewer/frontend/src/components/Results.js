@@ -59,6 +59,9 @@ const Results = () => {
       tempSectionWeights[entry["label"]] = 1 / selectedSections.length;
     });
     setSectionWeights(tempSectionWeights);
+    if (selectedSections.length === 0) {
+      setCanCompute(false);
+    }
   }, [selectedSections]);
 
   // Set the Correlation Weights
@@ -68,6 +71,9 @@ const Results = () => {
       tempCorrelationWeights[entry["label"]] = 1 / selectedCorrelations.length;
     });
     setCorrelationWeights(tempCorrelationWeights);
+    if (selectedCorrelations.length === 0) {
+      setCanCompute(false);
+    }
   }, [selectedCorrelations]);
 
   // Check the user can set Weights

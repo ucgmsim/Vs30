@@ -58,6 +58,7 @@ const CPT = () => {
   const [correlationWeights, setCorrelationWeights] = useState({});
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [canAdd, setCanAdd] = useState(false);
   // Errors
   const [flashCPTWeightError, setFlashCPTWeightError] = useState(false);
   const [flashCorWeightError, setFlashCorWeightError] = useState(false);
@@ -411,6 +412,7 @@ const CPT = () => {
   const onSetFile = (e) => {
     setFile(e);
     setCptName(e.name.split(".")[0]);
+    setCanAdd(true);
   };
 
   const removeFile = (fileToRemove) => {
@@ -540,7 +542,7 @@ const CPT = () => {
               </div>
               <div className="row two-colum-row add-cpt-section temp-border">
                 <button
-                  disabled={loading}
+                  disabled={loading || !canAdd}
                   className={
                     flashServerError
                       ? "trans-btn add-cpt-btn form btn btn-danger"

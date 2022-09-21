@@ -81,10 +81,35 @@ class CPT:
             self._Qtn, self._effStress = self.calc_cpt_params()
         return self._effStress
 
+    @property
+    def gamma(self):
+        """
+        It estimates the soil total unit weight - in (MN/m3)
+
+        According to Robertson & Cabal (2010)
+
+        References
+        ----------
+        Robertson P.K., Cabal K.L. (2010). Estimating soil unit weight from CPT. 2nd International
+        Symposium on Cone Penetration Test, CPT'10, Huntington Beach, CA, USA.
+        """
+        default_gamma = 0.00981 * 1.9  # (MN/m3)
+        # Unit weight of water (kN/m3)
+        gamma_w = 9.80665
+        # atmospheric pressure (MPa)
+        pa = 0.1
+        # Friction ratio
+        Rf = self.Fs / self.qt * 100
+        # Equation is in kN/m3, then converted back into MN/n3 (Rf and qt / pa are ratios so no need to convert)
+        gamma = (
+            (0.27 * np.log10(Rf) + 0.36 * np.log10(self.qt / pa) + 1.236) * gamma_w
+        ) / 1000
+        # If the values of qc or fs are zero, negative or non-existent, then enforce default gamma
+        gamma = np.where((self.Qc <= 0) | (self.Fs <= 0), default_gamma, gamma)
+        return gamma
+
     def calc_cpt_params(self):
         """Compute and save Qtn and effStress CPT parameters"""
-        # assume soil unit weight (MN/m3)
-        gamma = 0.00981 * 1.9
         # atmospheric pressure (MPa)
         pa = 0.1
         # compute vertical stress profile
@@ -92,7 +117,7 @@ class CPT:
         u0 = np.zeros(len(self.depth))
         for i in range(1, len(self.depth)):
             totalStress[i] = (
-                gamma * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
+                self.gamma[i] * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
             )
             if self.depth[i] >= self.ground_water_level:
                 u0[i] = 0.00981 * (self.depth[i] - self.depth[i - 1]) + u0[i - 1]
@@ -121,10 +146,10 @@ class CPT:
             "is_kpa": self.is_kpa,
             "gwl": self.ground_water_level,
             "nar": self.net_area_ratio,
-            "qt": self._qt,
-            "Ic": self._Ic,
-            "Qtn": self._Qtn,
-            "effStress": self._effStress,
+            "qt": None if self._qt is None else self._qt.tolist(),
+            "Ic": None if self._Ic is None else self._Ic.tolist(),
+            "Qtn": None if self._Qtn is None else self._Qtn.tolist(),
+            "effStress": None if self._effStress is None else self._effStress.tolist(),
         }
 
     @staticmethod
