@@ -57,6 +57,7 @@ const SPT = () => {
   const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [canAdd, setCanAdd] = useState(false);
   const [flashSPTWeightError, setFlashSPTWeightError] = useState(false);
   const [flashCorWeightError, setFlashCorWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
@@ -484,6 +485,7 @@ const SPT = () => {
         }
       },
     });
+    setCanAdd(true);
   };
 
   return (
@@ -560,7 +562,7 @@ const SPT = () => {
 
               <div className="row two-colum-row add-spt-section">
                 <button
-                  disabled={loading}
+                  disabled={loading || !canAdd}
                   className={
                     flashServerError
                       ? "trans-btn form btn btn-danger add-spt-btn"

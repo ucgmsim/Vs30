@@ -45,6 +45,7 @@ const VsProfile = () => {
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [canAdd, setCanAdd] = useState(false);
   // Errors
   const [flashWeightError, setFlashWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
@@ -227,6 +228,7 @@ const VsProfile = () => {
   const onSetFile = (e) => {
     setFile(e);
     setVsProfileName(e.name.split(".")[0]);
+    setCanAdd(true);
   };
 
   const checkWeights = async () => {
@@ -331,7 +333,7 @@ const VsProfile = () => {
             </div>
             <div className="row two-colum-row add-vs-btn-section temp-border">
               <button
-                disabled={loading}
+                disabled={loading || !canAdd}
                 className={
                   flashServerError
                     ? "trans-btn form btn btn-danger add-vs-btn"
