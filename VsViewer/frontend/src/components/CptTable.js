@@ -52,7 +52,7 @@ const CPTTable = ({ cptTableData, cptInfo, dataIsKPa }) => {
               <th className="col-size" scope="col">
                 fs (MPa)
               </th>
-              <th className="col-size-end" scope="col">
+              <th className="col-size" scope="col">
                 u (MPa)
               </th>
             </tr>
