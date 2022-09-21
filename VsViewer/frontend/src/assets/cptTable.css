@@ -14,14 +14,6 @@
     padding: 0.6vh !important;
 }
 
-.col-size-end {
-    font-size: calc(0.55vh + 0.55vw);
-    width: 7vw;
-    height: 2vh;
-    text-align: center;
-    padding: 0.6vh !important;
-}
-
 .cpt-raw {
     margin-bottom: 0.1vw !important;
 }
