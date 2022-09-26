@@ -4,7 +4,7 @@ import "assets/fileTable.css";
 
 const FileTable = ({ files, removeFunction }) => {
   const changeLength = (key) => {
-    // Ensures length of th ekeys are not greater than 15 char
+    // Ensures length of the keys are not greater than 15 characters
     if (key.length > 15) {
       return key.substring(0, 12) + "...";
     } else {
