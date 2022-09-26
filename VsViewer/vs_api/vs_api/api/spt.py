@@ -1,3 +1,4 @@
+import json
 import flask
 from flask_cors import cross_origin
 
@@ -20,7 +21,7 @@ def create_spt():
     files = flask.request.files
     spt_dict = dict()
     for file_name, file_data in files.items():
-        form_data = eval(flask.request.form.get(f"{file_name}_formData"))
+        form_data = json.loads(flask.request.form.get(f"{file_name}_formData"))
         spt = SPT.from_byte_stream_form(file_name, file_data.stream.read(), form_data)
         for depth in spt.depth:
             if depth < 0:
