@@ -1,7 +1,5 @@
-import tempfile
-import zipfile
+import json
 import flask
-from pathlib import Path
 from flask_cors import cross_origin
 
 from vs_api import server, utils
@@ -25,7 +23,7 @@ def create_vsprofile():
     files = flask.request.files
     vs_profile_dict = dict()
     for file_name, file_data in files.items():
-        form_data = eval(flask.request.form.get(f"{file_name}_formData"))
+        form_data = json.loads(flask.request.form.get(f"{file_name}_formData"))
         vs_profile = VsProfile.from_byte_stream(
             file_name,
             form_data.get("vsProfileName"),
