@@ -46,7 +46,7 @@ export const SPT_FILE =
 export const VS_FILE =
   "CSV or XLSX file format with 3 columns labelled in order [Depth, Vs, Vs_SD]";
 export const CPT_REMOVED_ROWS =
-  "Number of rows removed during processing where Depth is > 30m or Qc or Fs is <= 0";
+  "Number of rows removed during processing where Depth is > 30m or qc or fs is <= 0";
 export const VS_REMOVED_ROWS =
   "Number of rows removed during processing where Depth is > 30m or the ending depth value is not a whole number";
 
