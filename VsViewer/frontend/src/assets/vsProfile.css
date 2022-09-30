@@ -4,10 +4,10 @@
 }
 
 .vs-file-input-section {
-    width: 15.5vw !important;
-    height: 4vh !important;
+    width: 16vw !important;
+    height: 4.5vh !important;
     margin-bottom: 5px;
-    margin-left: 8% !important;
+    margin-left: 3% !important;
     margin-top: 0.5vh !important;
     margin-bottom: 0.5vh !important;
     padding-right: 0 !important;
@@ -17,13 +17,16 @@
     align-items: right !important;
     font-size: calc(0.55vh + 0.55vw);
     margin-top: 0.5vh !important;
-    margin-left: 1.75vw !important;
+    margin-left: 2vw !important;
     padding-right: 0 !important;
     width: 11vw !important;
 }
 
 .vs-left-panel {
+    margin-left: 3.25vw;
     height: 89vh;
+    width: 17vw !important;
+    padding: 0 !important;
 }
 
 .vs-file-section {
@@ -76,6 +79,8 @@
 }
 
 .vs-table-section {
+    margin-left: 3.25vw;
+    width: 30vw !important;
     margin-top: 0.5vw !important;
     height: 88vh;
 }
@@ -92,6 +97,8 @@
 }
 
 .vs-plot-section {
+    margin-left: 3.25vw;
+    width: 40vw !important;
     margin-top: 1vh !important;
     margin-right: 0.2vw;
     height: 88vh;
@@ -116,6 +123,7 @@
 
 .vs-top {
     height: 89vh;
+    width: 100vw;
 }
 
 .vs-weights {

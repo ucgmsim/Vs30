@@ -1,20 +1,25 @@
 .process-cpt {
-    margin-top: 1vh;
+    margin-top: 5vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 25%;
-    margin-left: 24.5vw;
+    width: 17vw !important;
+}
+
+.cpt-file-manage {
+    width: 17vw !important;
+    margin-left: 3.25vw;
+    padding: 0 !important;
 }
 
 .hr {
     border-top: 1px solid silver;
-    margin-bottom: 0.75vh;
-    margin-top: 1.5vh;
+    margin-bottom: 1.25vh;
+    margin-top: 1.25vh;
 }
 
 .form-section {
-    width: 15vw;
+    width: 17vw;
 }
 
 .form {
@@ -23,15 +28,15 @@
 }
 
 .form-label {
-    font-size: calc(12px + 0.2vw);
+    font-size: calc(0.55vh + 0.55vw);
     font-weight: 500;
     margin-top: 0.5vh;
 }
 
 .form-file-input-section {
-    width: 12.5vw !important;
+    width: 16vw !important;
     height: 4.5vh !important;
-    margin-left: 8% !important;
+    margin-left: 3% !important;
     margin-top: 0.5vh !important;
     padding-right: 0 !important;
 }
@@ -41,20 +46,45 @@
     font-size: calc(0.55vh + 0.55vw);
     margin-top: 0.5vh !important;
     width: 11vw !important;
+    padding: 0 !important;
+    margin-left: 2.9vw;
+}
+
+.switch-input-section {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    height: 4vh;
+}
+
+.normal-label {
+    font-size: calc(0.55vh + 0.55vw);
+    padding-top: 1vh;
+    padding-bottom: 1vh;
+}
+
+.highlight-label {
+    font-size: calc(0.55vh + 0.55vw);
+    font-weight: 500;
+    color: #0d6efd;
+    padding-top: 1vh;
+    padding-bottom: 1vh;
 }
 
 .form-section-title {
-    font-size: calc(12px + 0.4vw);
+    font-size: calc(0.7vh + 0.7vw);
     font-weight: 700;
 }
 
 .file-section {
-    height: 20vh;
-    width: 22vw !important;
+    margin-top: 6vh;
+    height: 26vh;
+    width: 17vw !important;
 }
 
 .file-table-section {
-    height: 18vh;
+    height: 19vh;
     width: 17vw;
     margin-top: 0vh;
 }
@@ -66,7 +96,7 @@
 }
 
 .add-cpt-section {
-    margin-left: 3vw !important;
+    margin-left: 3.75vw !important;
     width: 10vw !important;
     height: 5vh !important;
     margin-top: 0.5vh !important;
@@ -100,25 +130,34 @@
 }
 
 .cpt-data {
-    padding-bottom: 15px;
-    padding-left: 1%;
     margin-right: -5%;
-    height: 74vh;
+    height: 81vh;
+}
+
+.cpt-table-section {
+    margin-top: 1vh !important;
+    height: 78vh;
+    width: 30vw !important;
+    margin-left: 3.25vw;
+    padding: 0 !important;
 }
 
 .cpt-table {
-    height: 65vh;
-    width: 100%;
+    height: 70vh;
+    width: 30vw !important;
 }
 
 .cpt-plot-section {
-    height: 70.6vh !important;
-    width: 60vw !important;
+    margin-top: 1vh !important;
+    height: 78vh !important;
+    width: 40vw !important;
+    margin-left: 3.25vw;
+    padding: 0 !important;
 }
 
 .cpt-plot {
-    height: 65vh !important;
-    width: 60vw !important;
+    height: 70vh !important;
+    width: 40vw !important;
 }
 
 .cor-section {
@@ -132,23 +171,25 @@
 }
 
 .vs-preview-section {
-    margin-right: 17vw;
-    padding-bottom: 1vh;
+    margin-left: 3.25vw;
+    margin-bottom: 1vh;
     height: 75vh;
+    width: 40vw !important;
 }
 
 .vs-preview-plot {
     height: 70vh !important;
-    width: 36vw;
+    width: 40vw;
     margin-bottom: 1vh;
 }
 
 .weights {
+    margin-left: 18.875vw;
     margin-top: 3vh !important;
     padding-top: 2vh;
-    padding-bottom: 0.5vh;
+    margin-bottom: 1vh;
     height: 70vh;
-    margin-left: 18vw;
+    width: 25vw !important;
 }
 
 .cpt-weights {
@@ -168,9 +209,20 @@
 }
 
 .select-box {
+    text-indent: 37px;
     width: 25vw;
     font-size: calc(0.6vh + 0.6vw) !important;
 }
+
+/* Select box inside */
+.css-12jo7m5 {
+    text-indent: 0 !important;
+}
+/* Select box dropdown */
+.css-26l3qy-menu {
+    text-indent: 0 !important;
+}
+
 
 .small-select-box {
     width: 20vw;
@@ -180,6 +232,10 @@
 .cpt-flash-warning {
     transition: border 1s;
     border: 2px solid #ff0000b7 !important;
+}
+
+.trans-btn {
+    transition: background-color 0.25s !important;
 }
 
 .temp-border {

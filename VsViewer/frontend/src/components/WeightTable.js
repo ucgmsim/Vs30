@@ -1,20 +1,26 @@
 import React, { memo, useState, useEffect } from "react";
 
-import * as CONSTANTS from "Constants";
-import { InfoTooltip } from "components";
-
 import "assets/weights.css";
 
 const WeightTable = ({ weights, setFunction, flashError }) => {
+  const changeLength = (key) => {
+    // Ensures length of the keys are not greater than 15 char
+    if (key.length > 15) {
+      return key.substring(0, 12) + "...";
+    } else {
+      return key;
+    }
+  };
+
   const changeWeightRows = (displayWeights) => {
     let weightRows = [];
     for (const key of Object.keys(displayWeights)) {
       weightRows.push(
         <tr key={key}>
-          <td className="bold weight-col-size">{key}</td>
+          <td className="bold weight-col-size">{changeLength(key)}</td>
           <td className="weight-col-size">
             <input
-              className="weight-col-size"
+              className="weight-value"
               value={weights[key]}
               onChange={(e) => changeWeight(e.target.value, key)}
             ></input>
@@ -42,7 +48,7 @@ const WeightTable = ({ weights, setFunction, flashError }) => {
 
   if (weights !== undefined) {
     return (
-      <div className="scroll-weights table-padding">
+      <div className="scroll-weights table-padding remove-scrollbar">
         <table
           className={
             flashError

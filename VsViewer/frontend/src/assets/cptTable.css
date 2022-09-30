@@ -1,10 +1,9 @@
 .scroll-tbl {
-    max-height: 26.3vw;
-    overflow-y: scroll;
+    max-height: 50vh;
 }
 
-::-webkit-scrollbar {
-    display: none;
+.main-row-width {
+    width: 30vw !important;
 }
 
 .col-size {

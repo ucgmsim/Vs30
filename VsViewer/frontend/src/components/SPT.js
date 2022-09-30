@@ -29,7 +29,6 @@ const SPT = () => {
     setSptWeights,
     setSptResults,
     setSptCorrelationWeights,
-    sptCorrelationWeights,
   } = useContext(GlobalContext);
 
   // SPT Plot
@@ -58,11 +57,14 @@ const SPT = () => {
   const [userSelectSoil, setUserSelectSoil] = useState(false);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [canAdd, setCanAdd] = useState(false);
   const [flashSPTWeightError, setFlashSPTWeightError] = useState(false);
   const [flashCorWeightError, setFlashCorWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
   const [flashFileUploadError, setFlashFileUploadError] = useState(false);
   const [flashNameUploadError, setFlashNameUploadError] = useState(false);
+  const [flashBoreUploadError, setFlashBoreUploadError] = useState(false);
+  const [flashEnergyUploadError, setFlashEnergyUploadError] = useState(false);
   const [flashServerError, setFlashServerError] = useState(false);
   const [uploadError, setUploadError] = useState(false);
   const [uploadErrorText, setUploadErrorText] = useState(CONSTANTS.FILE_ERROR);
@@ -80,19 +82,17 @@ const SPT = () => {
 
   // Set the Correlation Weights
   useEffect(() => {
-    if (selectedCorrelations.length > 0) {
-      let tempCorWeights = {};
-      let tempNewVsData = {};
-      selectedCorrelations.forEach((entry) => {
-        tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
-        sptOptions.forEach((object) => {
-          let key = object["label"] + "_" + entry["label"];
-          tempNewVsData[key] = vsProfileData[key];
-        });
+    let tempCorWeights = {};
+    let tempNewVsData = {};
+    selectedCorrelations.forEach((entry) => {
+      tempCorWeights[entry["label"]] = 1 / selectedCorrelations.length;
+      sptOptions.forEach((object) => {
+        let key = object["label"] + "_" + entry["label"];
+        tempNewVsData[key] = vsProfileData[key];
       });
-      setVsProfileData(tempNewVsData);
-      setCorrelationWeights(tempCorWeights);
-    }
+    });
+    setVsProfileData(tempNewVsData);
+    setCorrelationWeights(tempCorWeights);
   }, [selectedCorrelations]);
 
   // Check the user can set Weights
@@ -156,6 +156,18 @@ const SPT = () => {
       setFlashNameUploadError(true);
       await wait(1000);
       setFlashNameUploadError(false);
+    } else if (!Utils.errorCheckFloatInput(boreholeDiameter)) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.BORE_ERROR);
+      setFlashBoreUploadError(true);
+      await wait(1000);
+      setFlashBoreUploadError(false);
+    } else if (energyRatio !== "" && !Utils.errorCheckFloatInput(energyRatio)) {
+      setUploadError(true);
+      setUploadErrorText(CONSTANTS.ENERGY_ERROR);
+      setFlashEnergyUploadError(true);
+      await wait(1000);
+      setFlashEnergyUploadError(false);
     } else {
       setUploadError(false);
       setLoading(true);
@@ -384,7 +396,11 @@ const SPT = () => {
       setWeightError(true);
     }
     if (checkCor && checkSPT) {
-      setSptResults(vsProfileData);
+      let tempSPTResults = [];
+      Object.keys(vsProfileData).forEach(function (key) {
+        tempSPTResults.push({ label: key, value: vsProfileData[key] });
+      });
+      setSptResults(tempSPTResults);
       // Remove average for now
       // sendAverageRequest(vsProfileData);
       // Ensures the values are floats
@@ -469,11 +485,12 @@ const SPT = () => {
         }
       },
     });
+    setCanAdd(true);
   };
 
   return (
     <div>
-      <div className="row three-column-row center-elm spt-top">
+      <div className="row three-column-row spt-top">
         <div className="col-3 upload-section">
           <div className="center-elm spt-form-section">
             <div className="form-section-title">Upload SPT</div>
@@ -481,8 +498,8 @@ const SPT = () => {
               <div
                 className={
                   flashFileUploadError
-                    ? "cpt-flash-warning row two-colum-row form-file-input-section"
-                    : "row two-colum-row form-file-input-section temp-border"
+                    ? "cpt-flash-warning row two-colum-row spt-file-input-section"
+                    : "row two-colum-row spt-file-input-section temp-border"
                 }
               >
                 <input
@@ -508,13 +525,21 @@ const SPT = () => {
               </div>
               <div className="form-label">Borehole Diameter (mm)</div>
               <input
-                className="text-input"
+                className={
+                  flashBoreUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={boreholeDiameter}
                 onChange={(e) => setBoreholeDiameter(e.target.value)}
               />
               <div className="form-label">Energy Ratio</div>
               <input
-                className="text-input"
+                className={
+                  flashEnergyUploadError
+                    ? "cpt-flash-warning text-input"
+                    : "cpt-input text-input"
+                }
                 value={energyRatio}
                 onChange={(e) => setEnergyRatio(e.target.value)}
               />
@@ -535,16 +560,14 @@ const SPT = () => {
                 onChange={(e) => setSoilType(e)}
               />
 
-              <div
-                className={
-                  flashServerError
-                    ? "cpt-flash-warning row two-colum-row add-spt-section"
-                    : "row two-colum-row add-spt-section temp-border"
-                }
-              >
+              <div className="row two-colum-row add-spt-section">
                 <button
-                  disabled={loading}
-                  className="form btn btn-primary add-spt-btn"
+                  disabled={loading || !canAdd}
+                  className={
+                    flashServerError
+                      ? "trans-btn form btn btn-danger add-spt-btn"
+                      : "trans-btn form btn btn-primary add-spt-btn"
+                  }
                   onClick={() => sendProcessRequest()}
                 >
                   Add SPT
@@ -557,7 +580,7 @@ const SPT = () => {
               </div>
             </div>
           </div>
-          <div className="file-section center-elm">
+          <div className="spt-file-section center-elm">
             <div className="form-section-title">SPT Files</div>
             <div className="file-table-section outline form center-elm">
               {Object.keys(sptOptions).length > 0 && (
@@ -575,7 +598,7 @@ const SPT = () => {
             <div className="spt-table-title">SPT Table</div>
             <Select
               className="select-box"
-              placeholder="Select your SPT's"
+              placeholder="Select SPT"
               options={sptOptions}
               isDisabled={sptOptions.length === 0}
               value={selectedSptTable}
@@ -593,7 +616,7 @@ const SPT = () => {
             <div className="spt-plot-title">SPT Plot</div>
             <Select
               className="select-box"
-              placeholder="Select your SPT's"
+              placeholder="Select SPTs"
               isMulti={true}
               options={sptOptions}
               isDisabled={sptOptions.length === 0}
@@ -612,14 +635,14 @@ const SPT = () => {
       <div className="center-elm">
         <Select
           className="select-box"
-          placeholder="Select Correlations"
+          placeholder="Select SPT - Vs Correlations"
           isMulti={true}
           options={correlationsOptions}
           isDisabled={correlationsOptions.length === 0}
           onChange={(e) => onSelectCorrelations(e)}
         ></Select>
       </div>
-      <div className="row two-column-row center-elm cor-section">
+      <div className="row two-column-row cor-section">
         <div className="outline col-3 weights-spt center-elm">
           <div className="form-section-title">SPT Weights</div>
           <div className="outline center-elm spt-weights">

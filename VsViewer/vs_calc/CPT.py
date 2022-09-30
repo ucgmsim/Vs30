@@ -19,6 +19,9 @@ class CPT:
         fs: np.ndarray,
         u: np.ndarray,
         info: Dict = None,
+        is_kpa: bool = False,
+        ground_water_level: float = 1,
+        net_area_ratio: float = 0.8,
     ):
         self.name = name
         self.depth = depth
@@ -26,6 +29,9 @@ class CPT:
         self.Fs = fs
         self.u = u
         self.info = info
+        self.is_kpa = is_kpa
+        self.ground_water_level = ground_water_level
+        self.net_area_ratio = net_area_ratio
 
         # cpt parameter info init for lazy loading
         self._qt = None
@@ -39,9 +45,7 @@ class CPT:
         Gets the qt value and computes the value if not set
         """
         if self._qt is None:
-            # compute pore pressure corrected tip resistance
-            a = 0.8
-            self._qt = self.Qc - self.u * (1 - a)
+            self._qt = self.Qc - self.u * (1 - self.net_area_ratio)
         return self._qt
 
     @property
@@ -77,22 +81,45 @@ class CPT:
             self._Qtn, self._effStress = self.calc_cpt_params()
         return self._effStress
 
-    def calc_cpt_params(self):
-        """Compute and save Qtn and effStress CPT parameters"""
-        # assume soil unit weight (MN/m3)
-        gamma = 0.00981 * 1.9
+    @property
+    def gamma(self):
+        """
+        It estimates the soil total unit weight - in (MN/m3)
+
+        According to Robertson & Cabal (2010)
+
+        References
+        ----------
+        Robertson P.K., Cabal K.L. (2010). Estimating soil unit weight from CPT. 2nd International
+        Symposium on Cone Penetration Test, CPT'10, Huntington Beach, CA, USA.
+        """
+        default_gamma = 0.00981 * 1.9  # (MN/m3)
+        # Unit weight of water (kN/m3)
+        gamma_w = 9.80665
         # atmospheric pressure (MPa)
         pa = 0.1
-        # groundwater table depth(m)
-        gwt = 1.0
+        # Friction ratio
+        Rf = self.Fs / self.qt * 100
+        # Equation is in kN/m3, then converted back into MN/n3 (Rf and qt / pa are ratios so no need to convert)
+        gamma = (
+            (0.27 * np.log10(Rf) + 0.36 * np.log10(self.qt / pa) + 1.236) * gamma_w
+        ) / 1000
+        # If the values of qc or fs are zero, negative or non-existent, then enforce default gamma
+        gamma = np.where((self.Qc <= 0) | (self.Fs <= 0), default_gamma, gamma)
+        return gamma
+
+    def calc_cpt_params(self):
+        """Compute and save Qtn and effStress CPT parameters"""
+        # atmospheric pressure (MPa)
+        pa = 0.1
         # compute vertical stress profile
         totalStress = np.zeros(len(self.depth))
         u0 = np.zeros(len(self.depth))
         for i in range(1, len(self.depth)):
             totalStress[i] = (
-                gamma * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
+                self.gamma[i] * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
             )
-            if self.depth[i] >= gwt:
+            if self.depth[i] >= self.ground_water_level:
                 u0[i] = 0.00981 * (self.depth[i] - self.depth[i - 1]) + u0[i - 1]
         effStress = totalStress - u0
         effStress[0] = effStress[1]  # fix error caused by dividing 0
@@ -116,10 +143,13 @@ class CPT:
             "Fs": self.Fs.tolist(),
             "u": self.u.tolist(),
             "info": self.info,
-            "qt": self._qt,
-            "Ic": self._Ic,
-            "Qtn": self._Qtn,
-            "effStress": self._effStress,
+            "is_kpa": self.is_kpa,
+            "gwl": self.ground_water_level,
+            "nar": self.net_area_ratio,
+            "qt": None if self._qt is None else self._qt.tolist(),
+            "Ic": None if self._Ic is None else self._Ic.tolist(),
+            "Qtn": None if self._Qtn is None else self._Qtn.tolist(),
+            "effStress": None if self._effStress is None else self._effStress.tolist(),
         }
 
     @staticmethod
@@ -134,6 +164,9 @@ class CPT:
             np.asarray(json["Fs"]),
             np.asarray(json["u"]),
             json["info"],
+            json["is_kpa"],
+            json["gwl"],
+            json["nar"],
         )
 
     @staticmethod
@@ -147,18 +180,38 @@ class CPT:
         return CPT(cpt_ffp.stem, depth, qc, fs, u, info)
 
     @staticmethod
-    def from_byte_stream(file_name: str, stream: bytes):
+    def from_byte_stream(file_name: str, stream: bytes, form: Dict):
         """
         Creates a CPT from a file stream
         """
-        csv_data = pd.read_csv(BytesIO(stream))
-        data = np.asarray(csv_data)
-        depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(Path(file_name).stem, depth, qc, fs, u, info)
+        file_name = Path(file_name)
+        file_data = (
+            pd.read_csv(BytesIO(stream))
+            if file_name.suffix == ".csv"
+            else pd.read_excel(BytesIO(stream))
+        )
+        data = np.asarray(file_data)
+        is_kpa = form.get("iskPa") == "True"
+        depth, qc, fs, u, info = CPT.process_cpt(data, is_kpa)
+        return CPT(
+            form.get("cptName", file_name.stem),
+            depth,
+            qc,
+            fs,
+            u,
+            info,
+            is_kpa,
+            float(form.get("gwl")),
+            float(form.get("nar")),
+        )
 
     @staticmethod
-    def process_cpt(data: np.ndarray):
+    def process_cpt(data: np.ndarray, is_kpa: bool = False):
         """Process CPT data and returns depth, Qc, Fs, u, info"""
+        # Convert units to MPa if needed
+        if is_kpa:
+            data[:, [1, 2, 3]] = data[:, [1, 2, 3]] / 1000
+
         # Get CPT info
         info = dict()
         info["z_min"] = np.round(data[0, 0], 2)
