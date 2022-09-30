@@ -1,6 +1,7 @@
 import React, { memo, useState, useContext, useEffect } from "react";
 import Select from "react-select";
 import Papa from "papaparse";
+import readXlsxFile from "read-excel-file";
 import { wait } from "@testing-library/user-event/dist/utils";
 
 import { GlobalContext } from "context";
@@ -44,6 +45,7 @@ const VsProfile = () => {
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
+  const [canAdd, setCanAdd] = useState(false);
   // Errors
   const [flashWeightError, setFlashWeightError] = useState(false);
   const [weightError, setWeightError] = useState(false);
@@ -95,6 +97,23 @@ const VsProfile = () => {
           if (response.ok) {
             serverResponse = true;
             const responseData = await response.json();
+            // Set Table Data
+            let tempVsTableData = vsProfileTableData;
+            if (file.name.split(".")[1] === "xlsx") {
+              readXlsxFile(file).then((rows) => {
+                rows.shift();
+                tempVsTableData[vsProfileName] = rows;
+              });
+            } else {
+              Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function (results, file) {
+                  tempVsTableData[vsProfileName] = results.data;
+                },
+              });
+            }
+            setVsProfileTableData(tempVsTableData);
             // Add to VsProfile Select Dropdown and VsProfile Data
             let tempOptions = [];
             let tempVsData = vsProfileData;
@@ -113,16 +132,6 @@ const VsProfile = () => {
             }
             setVsProfileOptions(tempOptions);
             setVsProfileData(tempVsData);
-            // Set Table Data
-            let tempVsTableData = vsProfileTableData;
-            Papa.parse(file, {
-              header: true,
-              skipEmptyLines: true,
-              complete: function (results) {
-                tempVsTableData[vsProfileName] = results.data;
-              },
-            });
-            setVsProfileTableData(tempVsTableData);
           } else {
             setUploadErrorText(CONSTANTS.FILE_ERROR);
             setUploadError(true);
@@ -219,12 +228,17 @@ const VsProfile = () => {
   const onSetFile = (e) => {
     setFile(e);
     setVsProfileName(e.name.split(".")[0]);
+    setCanAdd(true);
   };
 
   const checkWeights = async () => {
     let check = Utils.errorCheckWeights(vsProfileWeights);
     if (check) {
-      setVsProfileResults(vsProfileData);
+      let tempVsResults = [];
+      Object.keys(vsProfileData).forEach(function (key) {
+        tempVsResults.push({ label: key, value: vsProfileData[key] });
+      });
+      setVsProfileResults(tempVsResults);
       // Remove average for now
       // sendAverageRequest();
       // Ensures the values are floats
@@ -277,7 +291,7 @@ const VsProfile = () => {
 
   return (
     <div>
-      <div className="row three-column-row center-elm vs-top">
+      <div className="row three-column-row vs-top">
         <div className="col-1 center-elm vs-left-panel">
           <div className="vs-upload-title">Upload VsProfile</div>
           <div className="outline add-vs">
@@ -317,16 +331,14 @@ const VsProfile = () => {
                 onChange={(e) => setLayered(e.target.checked)}
               />
             </div>
-            <div
-              className={
-                flashServerError
-                  ? "cpt-flash-warning row two-colum-row add-vs-btn-section"
-                  : "row two-colum-row add-vs-btn-section temp-border"
-              }
-            >
+            <div className="row two-colum-row add-vs-btn-section temp-border">
               <button
-                disabled={loading}
-                className="add-cpt-btn add-vs-btn form btn btn-primary"
+                disabled={loading || !canAdd}
+                className={
+                  flashServerError
+                    ? "trans-btn form btn btn-danger add-vs-btn"
+                    : "trans-btn add-vs-btn form btn btn-primary"
+                }
                 onClick={() => sendProcessRequest()}
               >
                 Add VsProfile
@@ -381,7 +393,7 @@ const VsProfile = () => {
             <div className="vs-table-title">VsProfile Table</div>
             <Select
               className="select-box"
-              placeholder="Select your VsProfile's"
+              placeholder="Select VsProfiles"
               options={VsProfileOptions}
               isDisabled={VsProfileOptions.length === 0}
               value={selectedVsProfileTable}
@@ -403,7 +415,7 @@ const VsProfile = () => {
             <div className="vs-plot-title">VsProfile Plot</div>
             <Select
               className="select-box"
-              placeholder="Select your VsProfile's"
+              placeholder="Select VsProfiles"
               isMulti={true}
               options={VsProfileOptions}
               isDisabled={VsProfileOptions.length === 0}

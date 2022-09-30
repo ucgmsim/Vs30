@@ -1,5 +1,10 @@
-export const roundValue = (value) => {
-  return parseFloat(parseFloat(value).toPrecision(4));
+export const roundValue = (value, dataIsKPa = false) => {
+  if (dataIsKPa) {
+    let tempValue = parseFloat(value) / 1000;
+    return parseFloat(tempValue.toPrecision(4));
+  } else {
+    return parseFloat(parseFloat(value).toPrecision(4));
+  }
 };
 
 export const errorCheckWeights = (weights) => {
@@ -17,7 +22,12 @@ export const errorCheckWeights = (weights) => {
       result = false;
     }
   } catch (e) {
-    result = false
+    result = false;
   }
   return result;
+};
+
+export const errorCheckFloatInput = (input) => {
+  let floatRegex = /^-?\d+(?:[.,]\d*?)?$/;
+  return floatRegex.test(input);
 };

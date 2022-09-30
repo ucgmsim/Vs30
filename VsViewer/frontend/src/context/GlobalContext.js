@@ -9,20 +9,20 @@ export const Provider = (props) => {
   const [cptData, setCPTData] = useState({});
   const [cptMidpointData, setCptMidpointData] = useState({});
   const [cptWeights, setCptWeights] = useState({});
-  const [cptResults, setCptResults] = useState({});
+  const [cptResults, setCptResults] = useState([]);
   const [cptCorrelationWeights, setCptCorrelationWeights] = useState({});
 
   // VsProfile
   const [vsProfileData, setVsProfileData] = useState([]);
   const [vsProfileMidpointData, setVsProfileMidpointData] = useState({});
   const [vsProfileWeights, setVsProfileWeights] = useState({});
-  const [vsProfileResults, setVsProfileResults] = useState({});
+  const [vsProfileResults, setVsProfileResults] = useState([]);
 
   // SPT Data
   const [sptData, setSPTData] = useState({});
   const [sptMidpointData, setSptMidpointData] = useState({});
   const [sptWeights, setSptWeights] = useState({});
-  const [sptResults, setSptResults] = useState({});
+  const [sptResults, setSptResults] = useState([]);
   const [sptCorrelationWeights, setSptCorrelationWeights] = useState({});
 
   // Make the context object:

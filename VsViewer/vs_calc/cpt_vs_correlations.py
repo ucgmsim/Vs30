@@ -57,6 +57,8 @@ def andrus_2007(cpt: CPT):
     ).T
     # residual standard deviation: suggests that 68% of the data fall within 24m/s.
     Vs_SD = np.log(24 / VsAnd + 1)
+    # Manages when there is a 0 depth in the CPT
+    Vs_SD[Vs_SD == np.inf] = 0
     return VsAnd, Vs_SD
 
 

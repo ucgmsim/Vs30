@@ -1,3 +1,4 @@
+import json
 import flask
 from flask_cors import cross_origin
 
@@ -13,15 +14,17 @@ from vs_calc.spt_vs_correlations import SPT_CORRELATIONS
 @utils.endpoint_exception_handling(server.app)
 def create_spt():
     """
-    Creates an spt and returns the result
+    Creates a spt and returns the result
     """
     server.app.logger.info(f"Received request at {const.SPT_CREATE_ENDPOINT}")
 
-    csvs = flask.request.files
+    files = flask.request.files
     spt_dict = dict()
-    for csv_name, csv_data in csvs.items():
-        formData = eval(flask.request.form.get(f"{csv_name}_formData"))
-        spt = SPT.from_byte_stream_form(formData["sptName"], csv_data.stream.read(), formData)
+    for file_name, file_data in files.items():
+        form_data = json.loads(flask.request.form.get(f"{file_name}_formData"))
+        spt = SPT.from_byte_stream_form(file_name, file_data.stream.read(), form_data)
+        if any(spt.depth < 0):
+            raise ValueError("Depth can't be negative")
         spt_dict[spt.name] = spt.to_json()
     return flask.jsonify(spt_dict)
 

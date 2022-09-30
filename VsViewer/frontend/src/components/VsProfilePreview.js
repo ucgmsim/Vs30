@@ -129,7 +129,7 @@ const VsProfilePreviewPlot = ({ vsProfilePlotData, average }) => {
             },
             yaxis: {
               autorange: "reversed",
-              title: {text: "Depth (m)", standoff: -15},
+              title: { text: "Depth (m)", standoff: -15 },
               titlefont: {
                 size: 16,
               },
