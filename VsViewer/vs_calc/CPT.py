@@ -38,6 +38,7 @@ class CPT:
         self._Ic = None
         self._Qtn = None
         self._effStress = None
+        self._n = None
 
     @property
     def qt(self):
@@ -48,20 +49,20 @@ class CPT:
             self._qt = self.Qc - self.u * (1 - self.net_area_ratio)
         return self._qt
 
-    @property
-    def Ic(self):
-        """
-        Gets the Ic value and computes the value if not set
-        """
-        if self._Ic is None:
-            # atmospheric pressure (MPa)
-            pa = 0.1
-            # compute non-normalised Ic based on the correlation by Robertson (2010).
-            Rf = (self.Fs / self.Qc) * 100
-            self._Ic = (
-                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
-            ) ** 0.5
-        return self._Ic
+#    @property
+#    def Ic(self):
+#        """
+#        Gets the Ic value and computes the value if not set
+#        """
+#        if self._Ic is None:
+#            # atmospheric pressure (MPa)
+#            pa = 0.1
+#            # compute non-normalised Ic based on the correlation by Robertson (2010).
+#            Rf = (self.Fs / self.Qc) * 100
+#            self._Ic = (
+#                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
+#            ) ** 0.5
+#        return self._Ic
 
     @property
     def Qtn(self):
@@ -69,7 +70,7 @@ class CPT:
         Gets the Qtn value and computes the value if not set
         """
         if self._Qtn is None:
-            self._Qtn, self._effStress = self.calc_cpt_params()
+            self._Qtn, self._effStress, self._Ic, self._n = self.calc_cpt_params()
         return self._Qtn
 
     @property
@@ -78,9 +79,27 @@ class CPT:
         Gets the effStress value and computes the value if not set
         """
         if self._effStress is None:
-            self._Qtn, self._effStress = self.calc_cpt_params()
+            self._Qtn, self._effStress, self._Ic, self._n = self.calc_cpt_params()
         return self._effStress
 
+    @property
+    def Ic(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._effStress is None:
+            self._Qtn, self._effStress, self._Ic, self._n = self.calc_cpt_params()
+        return self._Ic
+
+    @property
+    def n(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._effStress is None:
+            self._Qtn, self._effStress, self._Ic, self._n = self.calc_cpt_params()
+        return self._n
+                
     @property
     def gamma(self):
         """
@@ -124,14 +143,94 @@ class CPT:
         effStress = totalStress - u0
         effStress[0] = effStress[1]  # fix error caused by dividing 0
 
-        n = 0.381 * self.Ic + 0.05 * (effStress / pa) - 0.15
-        for i in range(0, len(n)):
-            if n[i] > 1:
-                n[i] = 1
-        Qtn = ((self.qt - totalStress) / pa) * (pa / effStress) ** n
+        Fr = (self.Fs / (self.qt - totalStress)) * 100
+        Qtn = np.zeros(len(self.depth))
+        Ic = np.zeros(len(self.depth))
+        deltan = 1.0 * np.ones(len(self.depth))
+#        print(deltan)
+        n = 0.1 * np.ones(len(self.depth)) #assumed initial value of n
+#        n = 0.381 * self.Ic + 0.05 * (effStress / pa) - 0.15
+        for i in range(0, len(n)): #loop over each depth point
+            # print(i)
 
-        return Qtn, effStress
+            wait_x = 0
+            plt_qtn = []
+            plt_ic = []
+            plt_n = []
+            plt_change_n = []
 
+            while deltan[i] >= 0.01: #iterate Qtn, Ic and n until convergence
+                wait_x += 1
+
+                n0 = n[i]
+#                print(n0)
+                Qtn[i] = ((self.qt[i] - totalStress[i]) / pa) * (pa / effStress[i]) ** n[i]
+#                print(Qtn[i])
+                Ic[i] = (
+                    (3.47 - np.log10(Qtn[i])) ** 2 + (np.log10(Fr[i]) + 1.22) ** 2
+                ) ** 0.5
+#                print(Ic[i])
+                n[i] = 0.381 * Ic[i] + 0.05 * (effStress[i] / pa) - 0.15
+#                print(n[i])
+                if n[i] > 1:
+                    n[i] = 1
+                deltan[i] = np.abs(n0 - n[i])
+                # print(deltan[i])
+
+                plt_qtn.append(Qtn[i])
+                plt_ic.append(Ic[i])
+                plt_n.append(n0)
+                plt_change_n.append(deltan[i])
+
+                if wait_x > 150:
+                    print(f"Depth {self.depth[i]} is over")
+                    deltan[i] = 0.009
+                    from matplotlib import pyplot as plt
+
+                    fig = plt.figure(figsize=(12, 9))
+
+                    # Needed to add spacing between 1st and 2nd row
+                    # Add a margin between the main title and sub-plots
+                    fig.subplots_adjust(hspace=0.4, top=0.85)
+
+                    # Add the main title
+                    fig.suptitle(f"depth={self.depth[i]}\nqt={self.qt[i]}\ntotalStress={totalStress[i]}\neffStress={effStress[i]}\nFr={Fr[i]}", fontsize=10)
+
+                    # Add the subplots
+                    ax1 = fig.add_subplot(2, 2, 1)
+                    ax2 = fig.add_subplot(2, 2, 2)
+                    ax3 = fig.add_subplot(2, 2, 3)
+                    ax4 = fig.add_subplot(2, 2, 4)
+
+                    # Add the text for each subplot
+                    ax1.title.set_text("Qtn")
+                    ax1.plot(plt_qtn)
+                    ax2.title.set_text("Ic")
+                    ax2.plot(plt_ic)
+                    ax3.title.set_text("n")
+                    ax3.plot(plt_n)
+                    ax4.title.set_text("Delta n")
+                    ax4.plot(plt_change_n)
+                    plt.show()
+                    # plt.savefig(f"/home/joel/local/Vs/calc_n_{self.depth[i]}.png")
+
+                    # plt.figure(figsize=(12, 3))
+                    # plt.subplot(141)
+                    # plt.plot(plt_qtn)
+                    # plt.subplot(142)
+                    # plt.plot(plt_ic)
+                    # plt.subplot(143)
+                    # plt.plot(plt_n)
+                    # plt.subplot(144, label="Delta N")
+                    # plt.plot(plt_change_n)
+                    # plt.suptitle('Categorical Plotting')
+                    # plt.show()
+                    print(1)
+                
+#        Qtn = ((self.qt - totalStress) / pa) * (pa / effStress) ** n
+#        print(n)
+        return Qtn, effStress, Ic, n
+        
     def to_json(self):
         """
         Creates a json response dictionary from the CPT
@@ -170,14 +269,14 @@ class CPT:
         )
 
     @staticmethod
-    def from_file(cpt_ffp: str):
+    def from_file(cpt_ffp: str, gwl, a):
         """
         Creates a CPT from a CPT file
         """
         cpt_ffp = Path(cpt_ffp)
         data = np.loadtxt(cpt_ffp, dtype=float, delimiter=",", skiprows=1)
         depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(cpt_ffp.stem, depth, qc, fs, u, info)
+        return CPT(cpt_ffp.stem, depth, qc, fs, u, info, ground_water_level=gwl, net_area_ratio=a)
 
     @staticmethod
     def from_byte_stream(file_name: str, stream: bytes, form: Dict):
@@ -219,9 +318,10 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
+        # below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
+        below_30_filter = True
         info["Removed rows"] = np.where(below_30_filter == False)[0]
-        data = data[below_30_filter.T]  # z is less than 30 m
+        # data = data[below_30_filter.T]  # z is less than 30 m
         zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
         info["Removed rows"] = np.concatenate(
             (
@@ -234,23 +334,28 @@ class CPT:
         if len(data) == 0:
             raise Exception("CPT File has no valid lines")
 
-        z_raw = data[:, 0]  # m
-        qc_raw = data[:, 1]  # MPa
-        fs_raw = data[:, 2]  # MPa
-        u_raw = data[:, 3]  # Mpa
+        # z_raw = data[:, 0]  # m
+        # qc_raw = data[:, 1]  # MPa
+        # fs_raw = data[:, 2]  # MPa
+        # u_raw = data[:, 3]  # Mpa
 
-        downsize = np.arange(z_raw[0], 30.02, 0.02)
-        z = np.array([])
-        qc = np.array([])
-        fs = np.array([])
-        u = np.array([])
-        for j in range(len(downsize)):
-            for i in range(len(z_raw)):
-                if abs(z_raw[i] - downsize[j]) < 0.001:
-                    z = np.append(z, z_raw[i])
-                    qc = np.append(qc, qc_raw[i])
-                    fs = np.append(fs, fs_raw[i])
-                    u = np.append(u, u_raw[i])
+        z = data[:, 0]  # m
+        qc = data[:, 1]  # MPa
+        fs = data[:, 2]  # MPa
+        u = data[:, 3]  # Mpa
+
+        # downsize = np.arange(z_raw[0], 30.02, 0.02)
+        # z = np.array([])
+        # qc = np.array([])
+        # fs = np.array([])
+        # u = np.array([])
+        # for j in range(len(downsize)):
+        #     for i in range(len(z_raw)):
+        #         if abs(z_raw[i] - downsize[j]) < 0.001:
+        #             z = np.append(z, z_raw[i])
+        #             qc = np.append(qc, qc_raw[i])
+        #             fs = np.append(fs, fs_raw[i])
+        #             u = np.append(u, u_raw[i])
 
         if len(u) > 50:
             while u[50] >= 10:
