@@ -38,6 +38,9 @@ class CPT:
         self._Ic = None
         self._Qtn = None
         self._effStress = None
+        self._n = None
+        self._gamma = None
+        self._totalStress = None
 
     @property
     def qt(self):
@@ -45,23 +48,23 @@ class CPT:
         Gets the qt value and computes the value if not set
         """
         if self._qt is None:
-            self._qt = self.Qc - self.u * (1 - self.net_area_ratio)
+            self._qt = self.Qc + self.u * (1 - self.net_area_ratio)
         return self._qt
 
-    @property
-    def Ic(self):
-        """
-        Gets the Ic value and computes the value if not set
-        """
-        if self._Ic is None:
-            # atmospheric pressure (MPa)
-            pa = 0.1
-            # compute non-normalised Ic based on the correlation by Robertson (2010).
-            Rf = (self.Fs / self.Qc) * 100
-            self._Ic = (
-                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
-            ) ** 0.5
-        return self._Ic
+#    @property
+#    def Ic(self):
+#        """
+#        Gets the Ic value and computes the value if not set
+#        """
+#        if self._Ic is None:
+#            # atmospheric pressure (MPa)
+#            pa = 0.1
+#            # compute non-normalised Ic based on the correlation by Robertson (2010).
+#            Rf = (self.Fs / self.Qc) * 100
+#            self._Ic = (
+#                (3.47 - np.log10(self.Qc / pa)) ** 2 + (np.log10(Rf) + 1.22) ** 2
+#            ) ** 0.5
+#        return self._Ic
 
     @property
     def Qtn(self):
@@ -69,7 +72,7 @@ class CPT:
         Gets the Qtn value and computes the value if not set
         """
         if self._Qtn is None:
-            self._Qtn, self._effStress = self.calc_cpt_params()
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
         return self._Qtn
 
     @property
@@ -78,9 +81,45 @@ class CPT:
         Gets the effStress value and computes the value if not set
         """
         if self._effStress is None:
-            self._Qtn, self._effStress = self.calc_cpt_params()
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
         return self._effStress
 
+    @property
+    def Ic(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._Ic is None:
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
+        return self._Ic
+
+    @property
+    def n(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._n is None:
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
+        return self._n
+
+    @property
+    def gam(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._gamma is None:
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
+        return self._gamma
+
+    @property
+    def totalStress(self):
+        """
+        Gets the Ic value and computes the value if not set
+        """
+        if self._totalStress is None:
+            self._Qtn, self._effStress, self._Ic, self._n, self._gamma, self._totalStress = self.calc_cpt_params()
+        return self._totalStress
+        
     @property
     def gamma(self):
         """
@@ -106,6 +145,8 @@ class CPT:
         ) / 1000
         # If the values of qc or fs are zero, negative or non-existent, then enforce default gamma
         gamma = np.where((self.Qc <= 0) | (self.Fs <= 0), default_gamma, gamma)
+        # If less than 14kN/m3, use 14kN/m3
+        gamma = np.where((gamma <= 14.0/1000), 14.0/1000, gamma)
         return gamma
 
     def calc_cpt_params(self):
@@ -115,23 +156,73 @@ class CPT:
         # compute vertical stress profile
         totalStress = np.zeros(len(self.depth))
         u0 = np.zeros(len(self.depth))
-        for i in range(1, len(self.depth)):
-            totalStress[i] = (
+        print('##########################')
+        for i in range(0, len(self.depth)):
+            if i == 0: #added this because if second depth is not near 0 then stress starts from 0 there which is wrong
+                print(self.gamma[i]*1000)
+                print(self.depth[i])
+                totalStress[i] = (
+                self.gamma[i] * (self.depth[i] - 0)
+            )
+                print(totalStress[i]*1000)
+            else:
+                totalStress[i] = (
                 self.gamma[i] * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
             )
             if self.depth[i] >= self.ground_water_level:
-                u0[i] = 0.00981 * (self.depth[i] - self.depth[i - 1]) + u0[i - 1]
+                u0[i] = 0.00981 * (self.depth[i] - self.ground_water_level)
+        
+        print(u0[0]*1000)
         effStress = totalStress - u0
-        effStress[0] = effStress[1]  # fix error caused by dividing 0
+        print(effStress[0]*1000)
+        print('##########################')
+        print(self.gamma[-1]*1000)
+        print(self.depth[-1])
+        print(totalStress[-1]*1000)
+        print(u0[-1]*1000)
+        print(effStress[-1]*1000)
+        print('##########################')
+#        effStress[0] = effStress[1]  # fix error caused by dividing 0
 
-        n = 0.381 * self.Ic + 0.05 * (effStress / pa) - 0.15
-        for i in range(0, len(n)):
-            if n[i] > 1:
-                n[i] = 1
-        Qtn = ((self.qt - totalStress) / pa) * (pa / effStress) ** n
-
-        return Qtn, effStress
-
+        Fr = (self.Fs / (self.qt - totalStress)) * 100
+        Qtn = np.zeros(len(self.depth))
+        Ic = np.zeros(len(self.depth))
+        deltan = 1.0 * np.ones(len(self.depth))
+#        print(deltan)
+        n = 0.5 * np.ones(len(self.depth)) #assumed initial value of n
+#        n = 0.381 * self.Ic + 0.05 * (effStress / pa) - 0.15
+        for i in range(0, len(n)): #loop over each depth point
+#            print(i)
+            counter = 0
+            while deltan[i] >= 0.01: #iterate Qtn, Ic and n until convergence
+                n0 = n[i]
+#                print(n0)
+                cN = (pa / effStress[i]) ** n[i]
+                if cN > 1.7:
+                    cN = 1.7
+                Qtn[i] = ((self.qt[i] - totalStress[i]) / pa) * cN
+#                print(Qtn[i])
+                Ic[i] = (
+                    (3.47 - np.log10(Qtn[i])) ** 2 + (np.log10(Fr[i]) + 1.22) ** 2
+                ) ** 0.5
+#                print(Ic[i])
+                n[i] = 0.381 * Ic[i] + 0.05 * (effStress[i] / pa) - 0.15
+#                print(n[i])
+                if n[i] > 1:
+                    n[i] = 1
+                deltan[i] = np.abs(n0 - n[i])
+#                print(deltan[i])
+                if i == len(n) - 1:
+                    counter += 1
+                    print(counter)
+                    print('Qtn = ' + str(Qtn[i]))
+                    print('Ic = ' + str(Ic[i]))
+                    print('n = ' + str(n[i]))
+                
+#        Qtn = ((self.qt - totalStress) / pa) * (pa / effStress) ** n
+#        print(n)
+        return Qtn, effStress, Ic, n, self.gamma, totalStress
+        
     def to_json(self):
         """
         Creates a json response dictionary from the CPT
@@ -170,14 +261,14 @@ class CPT:
         )
 
     @staticmethod
-    def from_file(cpt_ffp: str):
+    def from_file(cpt_ffp: str, gwl, a):
         """
         Creates a CPT from a CPT file
         """
         cpt_ffp = Path(cpt_ffp)
         data = np.loadtxt(cpt_ffp, dtype=float, delimiter=",", skiprows=1)
         depth, qc, fs, u, info = CPT.process_cpt(data)
-        return CPT(cpt_ffp.stem, depth, qc, fs, u, info)
+        return CPT(cpt_ffp.stem, depth, qc, fs, u, info, ground_water_level=gwl, net_area_ratio=a)
 
     @staticmethod
     def from_byte_stream(file_name: str, stream: bytes, form: Dict):
@@ -219,9 +310,10 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        below_30_filter = np.all(data[:, [0]] <= 30, axis=1)
+        # below_30_filter = np.all(np.round(data[:, [0]], 2) <= 30, axis=1)
+        below_30_filter = True
         info["Removed rows"] = np.where(below_30_filter == False)[0]
-        data = data[below_30_filter.T]  # z is less than 30 m
+        # data = data[below_30_filter.T]  # z is less than 30 m
         zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
         info["Removed rows"] = np.concatenate(
             (
@@ -234,23 +326,28 @@ class CPT:
         if len(data) == 0:
             raise Exception("CPT File has no valid lines")
 
-        z_raw = data[:, 0]  # m
-        qc_raw = data[:, 1]  # MPa
-        fs_raw = data[:, 2]  # MPa
-        u_raw = data[:, 3]  # Mpa
+        # z_raw = data[:, 0]  # m
+        # qc_raw = data[:, 1]  # MPa
+        # fs_raw = data[:, 2]  # MPa
+        # u_raw = data[:, 3]  # Mpa
 
-        downsize = np.arange(z_raw[0], 30.02, 0.02)
-        z = np.array([])
-        qc = np.array([])
-        fs = np.array([])
-        u = np.array([])
-        for j in range(len(downsize)):
-            for i in range(len(z_raw)):
-                if abs(z_raw[i] - downsize[j]) < 0.001:
-                    z = np.append(z, z_raw[i])
-                    qc = np.append(qc, qc_raw[i])
-                    fs = np.append(fs, fs_raw[i])
-                    u = np.append(u, u_raw[i])
+        z = data[:, 0]  # m
+        qc = data[:, 1]  # MPa
+        fs = data[:, 2]  # MPa
+        u = data[:, 3]  # Mpa
+
+        # downsize = np.arange(z_raw[0], 30.02, 0.02)
+        # z = np.array([])
+        # qc = np.array([])
+        # fs = np.array([])
+        # u = np.array([])
+        # for j in range(len(downsize)):
+        #     for i in range(len(z_raw)):
+        #         if abs(z_raw[i] - downsize[j]) < 0.001:
+        #             z = np.append(z, z_raw[i])
+        #             qc = np.append(qc, qc_raw[i])
+        #             fs = np.append(fs, fs_raw[i])
+        #             u = np.append(u, u_raw[i])
 
         if len(u) > 50:
             while u[50] >= 10:
