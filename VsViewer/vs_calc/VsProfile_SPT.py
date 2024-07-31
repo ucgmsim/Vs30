@@ -55,18 +55,10 @@ class VsProfile:
                     vs[first_remove] = vs[last_to_keep]
                     vs_sd[first_remove] = vs_sd[last_to_keep]
         self.max_depth = reduce_to
-#        self.vs = vs[int_depth_mask]
-        self.vs_sd = vs_sd[int_depth_mask]
-#        self.depth = np.append(depth[int_depth_mask],30.0)
-        self.depth = depth[int_depth_mask]
-        shal_vs_avg = np.average(vs[(depth >= 2.5) & (depth <= 3.5)])
-        vs[depth <= 3.0] = shal_vs_avg
         self.vs = vs[int_depth_mask]
-#        self.vs = np.append(vs[int_depth_mask],vs[-1])
-#        self.vs = np.append(vs[int_depth_mask],vs[int_depth_mask][-1])
-        print("shal_vs_avg = " + str(shal_vs_avg))
-#        print(vs)
-
+        self.vs_sd = vs_sd[int_depth_mask]
+        self.depth = depth[int_depth_mask]
+        self.eff_stress = eff_stress[int_depth_mask]
         self.info = {
             "z_min": min(depth),
             "z_max": max(depth),
@@ -207,8 +199,8 @@ class VsProfile:
         """
         vs_midpoint, depth_midpoint = convert_to_midpoint(self.vs, self.depth)
         time = 0
-#        print(vs_midpoint)
-#        print(depth_midpoint)
+        print(vs_midpoint)
+        print(depth_midpoint)
         for ix in range(1, len(vs_midpoint), 2):
             change_in_z = depth_midpoint[ix] - depth_midpoint[ix - 1]
             time += change_in_z / vs_midpoint[ix]
