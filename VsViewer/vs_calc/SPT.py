@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from constants import HammerType, SoilType
+from vs_calc.constants import HammerType, SoilType
 
 
 class SPT:
@@ -56,9 +56,6 @@ class SPT:
                     self.borehole_diameter,
                     self.depth[idx],
                 )
-                print(Ce)
-                print(Cb)
-                print(Cr)
                 N60 = round(N * Ce * Cb * Cr, 2)
                 N60_list.append(N60)
             self._n60 = np.asarray(N60_list)
@@ -104,7 +101,7 @@ class SPT:
         """
         spt_ffp = Path(spt_ffp)
         data = pd.read_csv(spt_ffp)
-        soil_type = data["Soil"] if "Soil" in data.columns else None
+        soil_type = None if "Soil" not in data.columns else data["Soil"].map(lambda x: SoilType[x])
         return SPT(
             spt_ffp.stem,
             data.iloc[:, 0].values,

@@ -1,6 +1,6 @@
 import numpy as np
 
-from constants import SoilType
+from vs_calc.constants import SoilType
 
 
 def brandenberg_2010(spt):
@@ -43,7 +43,7 @@ def effective_stress_brandenberg(
     water_table_depth: default set to 2 m below ground surface
     Returns stress, sigma, b0, b1, b2 factors
     """
-    if soiltype == "Sand":
+    if soiltype == SoilType.Sand:
         b0 = 4.045
         b1 = 0.096
         b2 = 0.236
@@ -58,7 +58,7 @@ def effective_stress_brandenberg(
         else:
             sigma = 0.2
         return stress, sigma, tao, b0, b1, b2
-    elif soiltype == "Silt":
+    elif soiltype == SoilType.Silt:
         b0 = 3.783
         b1 = 0.178
         b2 = 0.231
@@ -131,7 +131,7 @@ def effective_stress_kwak(
     water_table_depth: default set to 2 m below ground surface
     Returns stress, sigma, b0, b1, b2 factors
     """
-    if soiltype == "Sand":
+    if soiltype == SoilType.Sand:
         b0 = 3.913
         b1 = 0.167
         b2 = 0.216
@@ -146,7 +146,7 @@ def effective_stress_kwak(
         else:
             sigma = 0.2
         return stress, sigma, tao, b0, b1, b2
-    elif soiltype == "Silt":
+    elif soiltype == SoilType.Silt:
         b0 = 3.879
         b1 = 0.255
         b2 = 0.168
@@ -161,7 +161,7 @@ def effective_stress_kwak(
         else:
             sigma = 0.15
         return stress, sigma, tao, b0, b1, b2
-    elif soiltype == "Gravel":
+    elif soiltype == SoilType.Gravel:
         b0 = 3.840
         b1 = 0.154
         b2 = 0.285

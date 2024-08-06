@@ -5,12 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from CPT import CPT
-from SPT import SPT
-from utils import convert_to_midpoint
-from spt_vs_correlations import SPT_CORRELATIONS
-from cpt_vs_correlations import CPT_CORRELATIONS
-from vs30_correlations import VS30_CORRELATIONS
+from vs_calc import CPT, SPT, utils, spt_vs_correlations, cpt_vs_correlations, vs30_correlations
 
 
 class VsProfile:
@@ -24,10 +19,11 @@ class VsProfile:
         vs: np.ndarray,
         vs_sd: np.ndarray,
         depth: np.ndarray,
-        eff_stress: np.ndarray,
+        eff_stress: np.ndarray = None,
         vs_correlation: str = None,
         vs30_correlation: str = None,
         layered: bool = False,
+        average_vs_under_3m: bool = False
     ):
         self.name = name
         self.vs_correlation = vs_correlation
@@ -55,17 +51,13 @@ class VsProfile:
                     vs[first_remove] = vs[last_to_keep]
                     vs_sd[first_remove] = vs_sd[last_to_keep]
         self.max_depth = reduce_to
-#        self.vs = vs[int_depth_mask]
-        self.vs_sd = vs_sd[int_depth_mask]
-#        self.depth = np.append(depth[int_depth_mask],30.0)
-        self.depth = depth[int_depth_mask]
-        shal_vs_avg = np.average(vs[(depth >= 2.5) & (depth <= 3.5)])
-        vs[depth <= 3.0] = shal_vs_avg
+        if average_vs_under_3m:
+            shal_vs_avg = np.average(vs[(depth >= 2.5) & (depth <= 3.5)])
+            vs[depth <= 3.0] = shal_vs_avg
         self.vs = vs[int_depth_mask]
-#        self.vs = np.append(vs[int_depth_mask],vs[-1])
-#        self.vs = np.append(vs[int_depth_mask],vs[int_depth_mask][-1])
-        print("shal_vs_avg = " + str(shal_vs_avg))
-#        print(vs)
+        self.vs_sd = vs_sd[int_depth_mask]
+        self.depth = depth[int_depth_mask]
+        self.eff_stress = None if eff_stress is None else eff_stress[int_depth_mask]
 
         self.info = {
             "z_min": min(depth),
@@ -80,7 +72,7 @@ class VsProfile:
         self._vs30_sd = None
 
     @staticmethod
-    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes):
+    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes, vs30_correlation: str = None):
         """
         Creates a VsProfile from a file stream
         """
@@ -97,37 +89,38 @@ class VsProfile:
             np.asarray(file_data["Depth"]),
             None,
             None,
+            vs30_correlation,
             layered
         )
 
     @staticmethod
-    def from_cpt(cpt: CPT, correlation: str):
+    def from_cpt(cpt: CPT, cpt_correlation: str, vs30_correlation: str = None):
         """
         Creates a VsProfile from a CPT and correlation
         """
         # Check Correlation string
-        if correlation not in CPT_CORRELATIONS.keys():
+        if cpt_correlation not in cpt_vs_correlations.CPT_CORRELATIONS.keys():
             raise KeyError(
-                f"{correlation} not found in set of correlations {CPT_CORRELATIONS.keys()}"
+                f"{cpt_correlation} not found in set of correlations {cpt_vs_correlations.CPT_CORRELATIONS.keys()}"
             )
-        vs, vs_sd = CPT_CORRELATIONS[correlation](cpt)
+        vs, vs_sd = cpt_vs_correlations.CPT_CORRELATIONS[cpt_correlation](cpt)
         return VsProfile(
-            cpt.name, vs.squeeze(), vs_sd.squeeze(), cpt.depth, correlation, None
+            cpt.name, vs.squeeze(), vs_sd.squeeze(), cpt.depth, cpt.effStress.squeeze(), cpt_correlation, vs30_correlation
         )
 
     @staticmethod
-    def from_spt(spt: SPT, correlation: str):
+    def from_spt(spt: SPT, spt_correlation: str, vs30_correlation: str = None):
         """
         Creates a VsProfile from an SPT and correlation
         """
         # Check Correlation string
-        if correlation not in SPT_CORRELATIONS.keys():
+        if spt_correlation not in spt_vs_correlations.SPT_CORRELATIONS.keys():
             raise KeyError(
-                f"{correlation} not found in set of correlations {SPT_CORRELATIONS.keys()}"
+                f"{spt_correlation} not found in set of correlations {spt_vs_correlations.SPT_CORRELATIONS.keys()}"
             )
-        vs, vs_sd, depth, eff_stress = SPT_CORRELATIONS[correlation](spt)
+        vs, vs_sd, depth, eff_stress = spt_vs_correlations.SPT_CORRELATIONS[spt_correlation](spt)
         return VsProfile(
-            spt.name, vs.squeeze(), vs_sd.squeeze(), depth, eff_stress.squeeze(), correlation, None
+            spt.name, vs.squeeze(), vs_sd.squeeze(), depth, eff_stress.squeeze(), spt_correlation, vs30_correlation
         )
 
     @staticmethod
@@ -140,6 +133,7 @@ class VsProfile:
             np.asarray(json["vs"]),
             np.asarray(json["vs_sd"]),
             np.asarray(json["depth"]),
+            None,
             None if json["vs_correlation"] == "" else json["vs_correlation"],
             None if json["vs30_correlation"] == "" else json["vs30_correlation"],
             json["layered"] == "True",
@@ -205,10 +199,8 @@ class VsProfile:
         """
         Calculates the average Vs at the max Z depth for the given VsProfile
         """
-        vs_midpoint, depth_midpoint = convert_to_midpoint(self.vs, self.depth)
+        vs_midpoint, depth_midpoint = utils.convert_to_midpoint(self.vs, self.depth)
         time = 0
-#        print(vs_midpoint)
-#        print(depth_midpoint)
         for ix in range(1, len(vs_midpoint), 2):
             change_in_z = depth_midpoint[ix] - depth_midpoint[ix - 1]
             time += change_in_z / vs_midpoint[ix]
@@ -223,9 +215,9 @@ class VsProfile:
             # Set Vs30 to VsZ as Z is 30
             vs30, vs30_sd = self.vsz, 0
         else:
-            if self.vs30_correlation not in VS30_CORRELATIONS.keys():
+            if self.vs30_correlation not in vs30_correlations.VS30_CORRELATIONS.keys():
                 raise KeyError(
-                    f"{self.vs30_correlation} not found in set of correlations {VS30_CORRELATIONS.keys()}"
+                    f"{self.vs30_correlation} not found in set of correlations {vs30_correlations.VS30_CORRELATIONS.keys()}"
                 )
-            vs30, vs30_sd = VS30_CORRELATIONS[self.vs30_correlation](self)
+            vs30, vs30_sd = vs30_correlations.VS30_CORRELATIONS[self.vs30_correlation](self)
         return vs30, vs30_sd
