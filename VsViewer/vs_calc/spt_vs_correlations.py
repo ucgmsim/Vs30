@@ -1,11 +1,28 @@
 import numpy as np
 
 from vs_calc.constants import SoilType
+from vs_calc import SPT
 
 
-def brandenberg_2010(spt):
+def brandenberg_2010(spt: SPT):
     """
     SPT-Vs correlation developed by Brandenberg et al. (2010).
+
+    Parameters
+    ----------
+    spt : SPT
+        The SPT object to use for the correlation.
+
+    Returns
+    -------
+    vs : np.ndarray
+        The Vs values for the given SPT object.
+    vs_sd : np.ndarray
+        The standard deviation of the Vs values for the given SPT object.
+    depth_values : np.ndarray
+        The depth values for the Vs values.
+    eff_stress : np.ndarray
+        The effective stress values for the Vs values.
     """
     # Ensures N60 is calculated before trying to get Vs
     N60 = spt.N60
@@ -37,11 +54,34 @@ def brandenberg_2010(spt):
 
 
 def effective_stress_brandenberg(
-    depth: np.ndarray, soiltype: SoilType = SoilType.Clay, water_table_depth=2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth=2
 ):
     """
-    water_table_depth: default set to 2 m below ground surface
-    Returns stress, sigma, b0, b1, b2 factors
+    Gets the effective stress for the given depth and soil type.
+
+    Parameters
+    ----------
+    depth : float
+        The depth to get the effective stress for.
+    soiltype : SoilType
+        The soil type to use for the effective stress calculation.
+    water_table_depth : float
+        The depth of the water table, default is 2 m below the ground surface.
+
+    Returns
+    -------
+    stress : float
+        The effective stress for the given depth / soil type.
+    sigma : float
+        The sigma value for the given depth / soil type.
+    tao : float
+        The tao value for the given depth / soil type.
+    b0 : float
+        The b0 value for the given depth / soil type.
+    b1 : float
+        The b1 value for the given depth / soil type.
+    b2 : float
+        The b2 value for the given depth / soil type.
     """
     if soiltype == SoilType.Sand:
         b0 = 4.045
@@ -91,9 +131,25 @@ def effective_stress_brandenberg(
         return stress, sigma, tao, b0, b1, b2
 
 
-def kwak_2015(spt):
+def kwak_2015(spt: SPT):
     """
     Baseline SPT-Vs correlation developed by Kwak et al. (2015).
+
+    Parameters
+    ----------
+    spt : SPT
+        The SPT object to use for the correlation.
+
+    Returns
+    -------
+    vs : np.ndarray
+        The Vs values for the given SPT object.
+    vs_sd : np.ndarray
+        The standard deviation of the Vs values for the given SPT object.
+    depth_values : np.ndarray
+        The depth values for the Vs values.
+    eff_stress : np.ndarray
+        The effective stress values for the Vs values.
     """
     # Ensures N60 is calculated before trying to get Vs
     N60 = spt.N60
@@ -125,11 +181,34 @@ def kwak_2015(spt):
 
 
 def effective_stress_kwak(
-    depth: np.ndarray, soiltype: SoilType = SoilType.Clay, water_table_depth=2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth=2
 ):
     """
-    water_table_depth: default set to 2 m below ground surface
-    Returns stress, sigma, b0, b1, b2 factors
+    Gets the effective stress for the given depth and soil type.
+
+    Parameters
+    ----------
+    depth : float
+        The depth to get the effective stress for.
+    soiltype : SoilType
+        The soil type to use for the effective stress calculation.
+    water_table_depth : float
+        The depth of the water table, default is 2 m below the ground surface.
+
+    Returns
+    -------
+    stress : float
+        The effective stress for the given depth / soil type.
+    sigma : float
+        The sigma value for the given depth / soil type.
+    tao : float
+        The tao value for the given depth / soil type.
+    b0 : float
+        The b0 value for the given depth / soil type.
+    b1 : float
+        The b1 value for the given depth / soil type.
+    b2 : float
+        The b2 value for the given depth / soil type.
     """
     if soiltype == SoilType.Sand:
         b0 = 3.913

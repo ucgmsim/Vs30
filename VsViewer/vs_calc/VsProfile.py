@@ -75,6 +75,19 @@ class VsProfile:
     def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes, vs30_correlation: str = None):
         """
         Creates a VsProfile from a file stream
+
+        Parameters
+        ----------
+        file_name : str
+            The name of the file
+        name : str
+            The name of the VsProfile
+        layered : bool
+            Whether the VsProfile is layered
+        stream : bytes
+            The file stream
+        vs30_correlation : str
+            The Vs30 correlation to use
         """
         file_name = Path(file_name)
         file_data = (
@@ -97,6 +110,15 @@ class VsProfile:
     def from_cpt(cpt: CPT, cpt_correlation: str, vs30_correlation: str = None):
         """
         Creates a VsProfile from a CPT and correlation
+
+        Parameters
+        ----------
+        cpt : CPT
+            The CPT to use
+        cpt_correlation : str
+            The correlation to use for CPT to Vs
+        vs30_correlation : str
+            The correlation to use for Vs30
         """
         # Check Correlation string
         if cpt_correlation not in cpt_vs_correlations.CPT_CORRELATIONS.keys():
@@ -112,6 +134,15 @@ class VsProfile:
     def from_spt(spt: SPT, spt_correlation: str, vs30_correlation: str = None):
         """
         Creates a VsProfile from an SPT and correlation
+
+        Parameters
+        ----------
+        spt : SPT
+            The SPT to use
+        spt_correlation : str
+            The correlation to use for SPT to Vs
+        vs30_correlation : str
+            The correlation to use for Vs30
         """
         # Check Correlation string
         if spt_correlation not in spt_vs_correlations.SPT_CORRELATIONS.keys():

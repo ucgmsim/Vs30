@@ -242,6 +242,15 @@ class CPT:
     def from_file(cpt_ffp: str, gwl: float = 1, nar: float = 0.8):
         """
         Creates a CPT from a CPT file
+
+        Parameters
+        ----------
+        cpt_ffp : str
+            The file path to the CPT file
+        gwl : float, optional
+            The groundwater level, by default 1
+        nar : float, optional
+            The net area ratio, by default 0.8
         """
         cpt_ffp = Path(cpt_ffp)
         data = np.loadtxt(cpt_ffp, dtype=float, delimiter=",", skiprows=1)
@@ -297,10 +306,8 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        # below_30_filter = np.all(np.round(data[:, [0]], 2) <= 30, axis=1)
         below_30_filter = True
         info["Removed rows"] = np.where(below_30_filter == False)[0]
-        # data = data[below_30_filter.T]  # z is less than 30 m
         zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
         info["Removed rows"] = np.concatenate(
             (
