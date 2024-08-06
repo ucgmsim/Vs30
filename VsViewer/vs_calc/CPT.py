@@ -306,15 +306,8 @@ class CPT:
         info["z_spread"] = np.round(data[-1, 0] - data[0, 0], 2)
 
         # Filtering
-        below_30_filter = True
-        info["Removed rows"] = np.where(below_30_filter == False)[0]
         zero_filter = np.all(data[:, [1, 2]] > 0, axis=1)
-        info["Removed rows"] = np.concatenate(
-            (
-                (np.where(zero_filter == False)[0]),
-                info["Removed rows"],
-            )
-        ).tolist()
+        info["Removed rows"] = np.where(zero_filter == False)[0].tolist()
         data = data[zero_filter]  # delete rows with zero qc, fs
 
         if len(data) == 0:
