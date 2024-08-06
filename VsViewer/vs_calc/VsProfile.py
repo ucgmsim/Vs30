@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict
+from typing import Dict, Optional
 from pathlib import Path
 
 import numpy as np
@@ -19,11 +19,11 @@ class VsProfile:
         vs: np.ndarray,
         vs_sd: np.ndarray,
         depth: np.ndarray,
-        eff_stress: np.ndarray = None,
-        vs_correlation: str = None,
-        vs30_correlation: str = None,
-        layered: bool = False,
-        average_vs_under_3m: bool = False
+        eff_stress: Optional[np.ndarray] = None,
+        vs_correlation: Optional[str] = None,
+        vs30_correlation: Optional[str] = None,
+        layered: Optional[bool] = False,
+        average_vs_under_3m: Optional[bool] = False
     ):
         self.name = name
         self.vs_correlation = vs_correlation
@@ -72,7 +72,7 @@ class VsProfile:
         self._vs30_sd = None
 
     @staticmethod
-    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes, vs30_correlation: str = None):
+    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes, vs30_correlation: Optional[str] = None):
         """
         Creates a VsProfile from a file stream
 
@@ -107,7 +107,7 @@ class VsProfile:
         )
 
     @staticmethod
-    def from_cpt(cpt: CPT, cpt_correlation: str, vs30_correlation: str = None):
+    def from_cpt(cpt: CPT, cpt_correlation: str, vs30_correlation: Optional[str] = None):
         """
         Creates a VsProfile from a CPT and correlation
 
@@ -131,7 +131,7 @@ class VsProfile:
         )
 
     @staticmethod
-    def from_spt(spt: SPT, spt_correlation: str, vs30_correlation: str = None):
+    def from_spt(spt: SPT, spt_correlation: str, vs30_correlation: Optional[str] = None):
         """
         Creates a VsProfile from an SPT and correlation
 
