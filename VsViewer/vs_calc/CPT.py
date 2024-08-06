@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict
+from typing import Dict, Optional
 from pathlib import Path
 
 import numpy as np
@@ -152,7 +152,7 @@ class CPT:
         # If the values of qc or fs are zero, negative or non-existent, then enforce default gamma
         gamma = np.where((self.Qc <= 0) | (self.Fs <= 0), default_gamma, gamma)
         # If less than 14kN/m3, use 14kN/m3
-        gamma = np.where((gamma <= 14.0 / 1000), 14.0 / 1000, gamma)
+        gamma = np.maximum(14.0 / 1000, gamma)
         return gamma
 
     def calc_cpt_params(self):
@@ -239,7 +239,7 @@ class CPT:
         )
 
     @staticmethod
-    def from_file(cpt_ffp: str, gwl: float = 1, nar: float = 0.8):
+    def from_file(cpt_ffp: str, gwl: Optional[float] = 1, nar: Optional[float] = 0.8):
         """
         Creates a CPT from a CPT file
 
@@ -293,7 +293,7 @@ class CPT:
         )
 
     @staticmethod
-    def process_cpt(data: np.ndarray, is_kpa: bool = False):
+    def process_cpt(data: np.ndarray, is_kpa: Optional[bool] = False):
         """Process CPT data and returns depth, Qc, Fs, u, info"""
         # Convert units to MPa if needed
         if is_kpa:

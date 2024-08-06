@@ -1,7 +1,9 @@
+from typing import Optional
+
 import numpy as np
 
-from vs_calc.constants import SoilType
 from vs_calc import SPT
+from vs_calc.constants import SoilType
 
 
 def brandenberg_2010(spt: SPT):
@@ -54,7 +56,7 @@ def brandenberg_2010(spt: SPT):
 
 
 def effective_stress_brandenberg(
-    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth=2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: Optional[float] = 2
 ):
     """
     Gets the effective stress for the given depth and soil type.
@@ -181,7 +183,7 @@ def kwak_2015(spt: SPT):
 
 
 def effective_stress_kwak(
-    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth=2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: Optional[float] = 2
 ):
     """
     Gets the effective stress for the given depth and soil type.
