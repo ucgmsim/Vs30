@@ -1,11 +1,11 @@
 from io import BytesIO
-from typing import Dict, Optional
 from pathlib import Path
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
-
-from vs_calc import CPT, SPT, utils, spt_vs_correlations, cpt_vs_correlations, vs30_correlations
+from vs_calc import (CPT, SPT, cpt_vs_correlations, spt_vs_correlations, utils,
+                     vs30_correlations)
 
 
 class VsProfile:
@@ -22,8 +22,8 @@ class VsProfile:
         eff_stress: Optional[np.ndarray] = None,
         vs_correlation: Optional[str] = None,
         vs30_correlation: Optional[str] = None,
-        layered: Optional[bool] = False,
-        average_vs_under_3m: Optional[bool] = False
+        layered: bool = False,
+        average_vs_under_3m: bool = False,
     ):
         self.name = name
         self.vs_correlation = vs_correlation
@@ -72,7 +72,13 @@ class VsProfile:
         self._vs30_sd = None
 
     @staticmethod
-    def from_byte_stream(file_name: str, name: str, layered: bool, stream: bytes, vs30_correlation: Optional[str] = None):
+    def from_byte_stream(
+        file_name: str,
+        name: str,
+        layered: bool,
+        stream: bytes,
+        vs30_correlation: Optional[str] = None,
+    ):
         """
         Creates a VsProfile from a file stream
 
@@ -86,7 +92,7 @@ class VsProfile:
             Whether the VsProfile is layered
         stream : bytes
             The file stream
-        vs30_correlation : str
+        vs30_correlation : str (optional) default None
             The Vs30 correlation to use
         """
         file_name = Path(file_name)
@@ -103,11 +109,13 @@ class VsProfile:
             None,
             None,
             vs30_correlation,
-            layered
+            layered,
         )
 
     @staticmethod
-    def from_cpt(cpt: CPT, cpt_correlation: str, vs30_correlation: Optional[str] = None):
+    def from_cpt(
+        cpt: CPT, cpt_correlation: str, vs30_correlation: Optional[str] = None
+    ):
         """
         Creates a VsProfile from a CPT and correlation
 
@@ -117,7 +125,7 @@ class VsProfile:
             The CPT to use
         cpt_correlation : str
             The correlation to use for CPT to Vs
-        vs30_correlation : str
+        vs30_correlation : str (optional) default None
             The correlation to use for Vs30
         """
         # Check Correlation string
@@ -127,11 +135,19 @@ class VsProfile:
             )
         vs, vs_sd = cpt_vs_correlations.CPT_CORRELATIONS[cpt_correlation](cpt)
         return VsProfile(
-            cpt.name, vs.squeeze(), vs_sd.squeeze(), cpt.depth, cpt.effStress.squeeze(), cpt_correlation, vs30_correlation
+            cpt.name,
+            vs.squeeze(),
+            vs_sd.squeeze(),
+            cpt.depth,
+            cpt.effStress.squeeze(),
+            cpt_correlation,
+            vs30_correlation,
         )
 
     @staticmethod
-    def from_spt(spt: SPT, spt_correlation: str, vs30_correlation: Optional[str] = None):
+    def from_spt(
+        spt: SPT, spt_correlation: str, vs30_correlation: Optional[str] = None
+    ):
         """
         Creates a VsProfile from an SPT and correlation
 
@@ -141,7 +157,7 @@ class VsProfile:
             The SPT to use
         spt_correlation : str
             The correlation to use for SPT to Vs
-        vs30_correlation : str
+        vs30_correlation : str (optional) default None
             The correlation to use for Vs30
         """
         # Check Correlation string
@@ -149,9 +165,17 @@ class VsProfile:
             raise KeyError(
                 f"{spt_correlation} not found in set of correlations {spt_vs_correlations.SPT_CORRELATIONS.keys()}"
             )
-        vs, vs_sd, depth, eff_stress = spt_vs_correlations.SPT_CORRELATIONS[spt_correlation](spt)
+        vs, vs_sd, depth, eff_stress = spt_vs_correlations.SPT_CORRELATIONS[
+            spt_correlation
+        ](spt)
         return VsProfile(
-            spt.name, vs.squeeze(), vs_sd.squeeze(), depth, eff_stress.squeeze(), spt_correlation, vs30_correlation
+            spt.name,
+            vs.squeeze(),
+            vs_sd.squeeze(),
+            depth,
+            eff_stress.squeeze(),
+            spt_correlation,
+            vs30_correlation,
         )
 
     @staticmethod
@@ -193,7 +217,10 @@ class VsProfile:
         """
         Turns the VsProfile into a dataframe for download
         """
-        return pd.DataFrame(np.column_stack([self.depth, self.vs, self.vs_sd]), columns=["Depth", "Vs", "Vs_SD"])
+        return pd.DataFrame(
+            np.column_stack([self.depth, self.vs, self.vs_sd]),
+            columns=["Depth", "Vs", "Vs_SD"],
+        )
 
     @property
     def vsz(self):
@@ -250,5 +277,7 @@ class VsProfile:
                 raise KeyError(
                     f"{self.vs30_correlation} not found in set of correlations {vs30_correlations.VS30_CORRELATIONS.keys()}"
                 )
-            vs30, vs30_sd = vs30_correlations.VS30_CORRELATIONS[self.vs30_correlation](self)
+            vs30, vs30_sd = vs30_correlations.VS30_CORRELATIONS[self.vs30_correlation](
+                self
+            )
         return vs30, vs30_sd
