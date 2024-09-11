@@ -1,6 +1,6 @@
 from io import BytesIO
-from typing import Dict, Optional
 from pathlib import Path
+from typing import Dict
 
 import numpy as np
 import pandas as pd
@@ -156,7 +156,27 @@ class CPT:
         return gamma
 
     def calc_cpt_params(self):
-        """Compute and save Qtn and effStress CPT parameters"""
+        """
+        Compute and save Qtn, Ic, n, effStress and totalStress CPT parameters
+
+        Returns
+        -------
+        Qtn : np.ndarray
+            Normalized cone tip resistance
+        effStress : np.ndarray
+            Effective stress
+        Ic : np.ndarray
+            Cone resistance factor
+        n : np.ndarray
+            Cone resistance factor exponent
+        totalStress : np.ndarray
+            Total stress
+
+        References
+        ----------
+        P.K. Robertson (1990, 2009, 2010)
+        Robertson and Wride (1998)
+        """
         # atmospheric pressure (MPa)
         pa = 0.1
         # compute vertical stress profile
@@ -239,7 +259,7 @@ class CPT:
         )
 
     @staticmethod
-    def from_file(cpt_ffp: str, gwl: Optional[float] = 1, nar: Optional[float] = 0.8):
+    def from_file(cpt_ffp: str, gwl: float = 1, nar: float = 0.8):
         """
         Creates a CPT from a CPT file
 
@@ -293,7 +313,7 @@ class CPT:
         )
 
     @staticmethod
-    def process_cpt(data: np.ndarray, is_kpa: Optional[bool] = False):
+    def process_cpt(data: np.ndarray, is_kpa: bool = False):
         """Process CPT data and returns depth, Qc, Fs, u, info"""
         # Convert units to MPa if needed
         if is_kpa:

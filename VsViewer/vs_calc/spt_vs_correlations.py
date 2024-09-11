@@ -1,7 +1,4 @@
-from typing import Optional
-
 import numpy as np
-
 from vs_calc import SPT
 from vs_calc.constants import SoilType
 
@@ -52,11 +49,16 @@ def brandenberg_2010(spt: SPT):
             vs_sd.append(total_std)
             depth_values.append(depth)
             eff_stress.append(stress)
-    return np.asarray(vs), np.asarray(vs_sd), np.asarray(depth_values), np.asarray(eff_stress)
+    return (
+        np.asarray(vs),
+        np.asarray(vs_sd),
+        np.asarray(depth_values),
+        np.asarray(eff_stress),
+    )
 
 
 def effective_stress_brandenberg(
-    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: Optional[float] = 2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: float = 2
 ):
     """
     Gets the effective stress for the given depth and soil type.
@@ -67,7 +69,7 @@ def effective_stress_brandenberg(
         The depth to get the effective stress for.
     soiltype : SoilType
         The soil type to use for the effective stress calculation.
-    water_table_depth : float
+    water_table_depth : float (optional) default 2
         The depth of the water table, default is 2 m below the ground surface.
 
     Returns
@@ -162,28 +164,33 @@ def kwak_2015(spt: SPT):
     for depth_idx, depth in enumerate(spt.depth):
         true_d = (
             depth + 0.3048
-        )  # Spt testing driven a pile 18 inches into the ground in 3 incremental steps. the
-        # number of blows is ignored and only consider the total of the second and third increments. We interests
-        # in the vertical effective stress after second increments hence add 12 inches(0.3 m) on top of the start
+        )  # Spt testing drives a pile 18 inches into the ground in 3 incremental steps. The
+        # number of blows is ignored and we only consider the total of the second and third increments. We are interested
+        # in the vertical effective stress after the second increment, hence we add 12 inches (0.3 m) on top of the start
         # depth given
         cur_N60 = N60[depth_idx]
         if cur_N60 > 0:
             stress, sigma, tao, b0, b1, b2 = effective_stress_kwak(
                 true_d, spt.soil_type[depth_idx]
             )
-            lnVs = (
-                b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)
-            )  # (Kwak et al, 2015)
-            total_std = np.sqrt(tao**2 + sigma**2) #NOTE I HAVE NOT CODED THE CORRECT STDEV YET, THIS IS STILL BRANDENBERG
+            lnVs = b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)  # (Kwak et al, 2015)
+            total_std = np.sqrt(
+                tao**2 + sigma**2
+            )  # NOTE I HAVE NOT CODED THE CORRECT STDEV YET, THIS IS STILL BRANDENBERG
             vs.append(np.exp(lnVs))
             vs_sd.append(total_std)
             depth_values.append(depth)
             eff_stress.append(stress)
-    return np.asarray(vs), np.asarray(vs_sd), np.asarray(depth_values), np.asarray(eff_stress)
+    return (
+        np.asarray(vs),
+        np.asarray(vs_sd),
+        np.asarray(depth_values),
+        np.asarray(eff_stress),
+    )
 
 
 def effective_stress_kwak(
-    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: Optional[float] = 2
+    depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: float = 2
 ):
     """
     Gets the effective stress for the given depth and soil type.
@@ -194,7 +201,7 @@ def effective_stress_kwak(
         The depth to get the effective stress for.
     soiltype : SoilType
         The soil type to use for the effective stress calculation.
-    water_table_depth : float
+    water_table_depth : float  (optional) default 2
         The depth of the water table, default is 2 m below the ground surface.
 
     Returns
@@ -273,7 +280,6 @@ def effective_stress_kwak(
         else:
             sigma = 0.16
         return stress, sigma, tao, b0, b1, b2
-
 
 
 SPT_CORRELATIONS = {
