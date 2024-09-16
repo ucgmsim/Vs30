@@ -109,6 +109,7 @@ def effective_stress_brandenberg(
         tao = 0.227
         # (Brandendberg et al, 2010)
         if depth > water_table_depth:
+            # TODO Ensure correct method is used to calculate effective stress
             stress = water_table_depth * 17 + (depth - water_table_depth) * (19 - 9.81)
         else:
             stress = depth * 17
@@ -174,9 +175,8 @@ def kwak_2015(spt: SPT):
                 true_d, spt.soil_type[depth_idx]
             )
             lnVs = b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)  # (Kwak et al, 2015)
-            total_std = np.sqrt(
-                tao**2 + sigma**2
-            )  # NOTE I HAVE NOT CODED THE CORRECT STDEV YET, THIS IS STILL BRANDENBERG
+            # TODO Calculate the correct standard deviation (Currently using Brandenberg)
+            total_std = np.sqrt(tao**2 + sigma**2)
             vs.append(np.exp(lnVs))
             vs_sd.append(total_std)
             depth_values.append(depth)
