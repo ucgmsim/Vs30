@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .constants import HammerType, SoilType
+from vs_calc.constants import HammerType, SoilType
 
 
 class SPT:
@@ -101,7 +101,7 @@ class SPT:
         """
         spt_ffp = Path(spt_ffp)
         data = pd.read_csv(spt_ffp)
-        soil_type = None if "Soil" in data.columns else data["Soil"]
+        soil_type = None if "Soil" not in data.columns else data["Soil"].map(lambda x: SoilType[x])
         return SPT(
             spt_ffp.stem,
             data.iloc[:, 0].values,
@@ -186,4 +186,4 @@ class SPT:
         else:
             Cb = 1.05
 
-        return Ce, Cr, Cb
+        return Ce, Cb, Cr
