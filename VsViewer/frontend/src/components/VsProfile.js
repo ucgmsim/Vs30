@@ -41,7 +41,7 @@ const VsProfile = () => {
   // Form variables
   const [file, setFile] = useState("");
   const [vsProfileName, setVsProfileName] = useState("");
-  const [layered, setLayered] = useState(false);
+  const [layered, setLayered] = useState(true);
   const [VsProfileOptions, setVsProfileOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [canSet, setCanSet] = useState(false);
@@ -328,6 +328,7 @@ const VsProfile = () => {
               <input
                 className="col-1 vs-checkbox"
                 type="checkbox"
+                checked={layered}
                 onChange={(e) => setLayered(e.target.checked)}
               />
             </div>
