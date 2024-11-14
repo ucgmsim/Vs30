@@ -202,7 +202,11 @@ class CPT:
         for i in range(0, len(n)):
             deltan = 1
             # iterate Qtn, Ic and n until convergence
+            iteration_counter = 0
             while deltan >= 0.01:
+                iteration_counter += 1
+                if iteration_counter > 1e6:
+                    raise ValueError("CPT params calculation could not converge")
                 n0 = n[i]
                 cN = (pa / effStress[i]) ** n[i]
                 if cN > 1.7:
