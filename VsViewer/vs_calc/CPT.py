@@ -211,8 +211,8 @@ class CPT:
             while deltan >= 0.01:
                 iteration_counter += 1
                 if iteration_counter > max_iterations:
-                    raise ExceededMaxIterations(f"Exceeded the maximum number of iterations of {max_iterations:.1e}"
-                                                f"for {self.name}")
+                    raise ExceededMaxIterations(f"Exceeded the maximum number of iterations ({max_iterations:.1e}) "
+                                                f"for {self.name} without converging to a numerical solution.")
                 n0 = n[i]
                 cN = (pa / effStress[i]) ** n[i]
                 if cN > 1.7:
