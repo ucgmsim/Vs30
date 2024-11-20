@@ -5,6 +5,8 @@ from typing import Dict
 import numpy as np
 import pandas as pd
 
+class ExceededMaxIterations(Exception):
+    pass
 
 class CPT:
     """
@@ -155,7 +157,7 @@ class CPT:
         gamma = np.maximum(14.0 / 1000, gamma)
         return gamma
 
-    def calc_cpt_params(self):
+    def calc_cpt_params(self, max_iterations: int = 1e6):
         """
         Compute and save Qtn, Ic, n, effStress and totalStress CPT parameters
 
@@ -171,6 +173,9 @@ class CPT:
             Cone resistance factor exponent
         totalStress : np.ndarray
             Total stress
+        max_iterations : int
+            Maximum number of allowed iterations
+
 
         References
         ----------
@@ -205,8 +210,9 @@ class CPT:
             iteration_counter = 0
             while deltan >= 0.01:
                 iteration_counter += 1
-                if iteration_counter > 1e6:
-                    raise ValueError("CPT params calculation could not converge")
+                if iteration_counter > max_iterations:
+                    raise ExceededMaxIterations(f"Exceeded the maximum number of iterations of {max_iterations:.1e}"
+                                                f"for {self.name}")
                 n0 = n[i]
                 cN = (pa / effStress[i]) ** n[i]
                 if cN > 1.7:
