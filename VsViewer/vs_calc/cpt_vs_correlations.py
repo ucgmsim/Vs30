@@ -45,18 +45,55 @@ def mcgann_2018(cpt: CPT):
     return VsMcGann2, Vs_SD
 
 
-def andrus_2007(cpt: CPT):
+def andrus_2007_holocene(cpt: CPT):
     """
-    CPT-Vs correlation developed by Andrus et al. (2007).
-    qt in kPa
+    CPT-Vs correlation developed by Andrus et al. (2007) for Holocene-age soils (Equation 5).
+    qt in kPa.
     """
     # Holocene-Age Soils, where ASF = 1
     cpt.qt[cpt.qt <= 0] = 0.0001  # adjust for possible negative qt
     VsAnd = np.array(
         [2.27 * ((cpt.qt * 1000) ** 0.412) * (cpt.Ic**0.989) * (cpt.depth**0.033)]
     ).T
-    # residual standard deviation: suggests that 68% of the data fall within 24m/s.
-    Vs_SD = np.log(24 / VsAnd + 1)
+    # residual standard deviation: suggests that 68% of the data fall within 22m/s of the model
+    # (see Table 2 for statistics of Equation 6).
+
+    Vs_SD = np.log(22 / VsAnd + 1)
+    # Manages when there is a 0 depth in the CPT
+    Vs_SD[Vs_SD == np.inf] = 0
+    return VsAnd, Vs_SD
+
+
+def andrus_2007_pleistocene(cpt: CPT):
+    """
+    CPT-Vs correlation developed by Andrus et al. (2007) for Pleistocene-age soils (Equation 7).
+    qt in kPa.
+    """
+    # Pleistocene-Age Soils, where SF = 1 in
+    cpt.qt[cpt.qt <= 0] = 0.0001  # adjust for possible negative qt
+    VsAnd = np.array(
+        [2.62 * ((cpt.qt * 1000) ** 0.395) * (cpt.Ic**0.912) * (cpt.depth**0.124)*1.12]
+    ).T
+    # residual standard deviation suggests that 68% of the data fall within 45m/s of the model
+    # (see Table 2 for statistics for Equation 7).
+    Vs_SD = np.log(45 / VsAnd + 1)
+    # Manages when there is a 0 depth in the CPT
+    Vs_SD[Vs_SD == np.inf] = 0
+    return VsAnd, Vs_SD
+
+
+def andrus_2007_tertiary_age_cooper_marl(cpt: CPT):
+    """
+    CPT-Vs correlation developed by Andrus et al. (2007) for Tertiary-Age Cooper Marl deposits (Equation 9).
+    qt in kPa.
+    """
+    cpt.qt[cpt.qt <= 0] = 0.0001  # adjust for possible negative qt
+    VsAnd = np.array(
+        [13.0 * ((cpt.qt * 1000) ** 0.382) * (cpt.depth**0.099)]
+    ).T
+    # residual standard deviation suggests that 68% of the data fall within 67m/s of the model
+    # (see Table 2 for statistics for Equation 9).
+    Vs_SD = np.log(67 / VsAnd + 1)
     # Manages when there is a 0 depth in the CPT
     Vs_SD[Vs_SD == np.inf] = 0
     return VsAnd, Vs_SD
@@ -90,7 +127,9 @@ def hegazy_2006(cpt: CPT):
 
 
 CPT_CORRELATIONS = {
-    "andrus_2007": andrus_2007,
+    "andrus_2007_holocene": andrus_2007_holocene,
+    "andrus_2007_pleistocene": andrus_2007_pleistocene,
+    "andrus_2007_tertiary_age_cooper_marl": andrus_2007_tertiary_age_cooper_marl,
     "robertson_2009": robertson_2009,
     "hegazy_2006": hegazy_2006,
     "mcgann_2015": mcgann_2015,
