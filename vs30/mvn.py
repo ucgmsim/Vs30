@@ -2,6 +2,7 @@
 MVN (multivariate normal distribution)
 for modifying vs30 values based on proximity to measured values.
 """
+
 from functools import partial
 from multiprocessing import Pool
 import os
@@ -91,13 +92,13 @@ def _mvn(
     # Wea equation 33, 40, 41
     if noisy:
         omega_obs = np.sqrt(
-            obs_model_stdv ** 2 / (obs_model_stdv ** 2 + sites.uncertainty.values ** 2)
+            obs_model_stdv**2 / (obs_model_stdv**2 + sites.uncertainty.values**2)
         )
         obs_residuals *= omega_obs
 
     # default outputs if no sites closeby
     pred = np.log(model_vs30)
-    var = model_stdv ** 2 * _corr_func(0, model_name)
+    var = model_stdv**2 * _corr_func(0, model_name)
 
     # model point to observations
     for i, model_loc in enumerate(model_locs):
@@ -200,11 +201,9 @@ def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_
     # coordinates for tif data
     locs = np.vstack(
         np.mgrid[
-            tif_trans[0]
-            + (x_offset + 0.5) * tif_trans[1] : tif_trans[0]
+            tif_trans[0] + (x_offset + 0.5) * tif_trans[1] : tif_trans[0]
             + (x_offset + 0.5 + x_size) * tif_trans[1] : tif_trans[1],
-            tif_trans[3]
-            + (y_offset + 0.5) * tif_trans[5] : tif_trans[3]
+            tif_trans[3] + (y_offset + 0.5) * tif_trans[5] : tif_trans[3]
             + (y_offset + 0.5 + y_size) * tif_trans[5] : tif_trans[5],
         ].T
     ).astype(np.float32)
