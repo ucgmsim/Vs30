@@ -4,8 +4,14 @@ from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
-from vs_calc import (CPT, SPT, cpt_vs_correlations, spt_vs_correlations, utils,
-                     vs30_correlations)
+from vs_calc import (
+    CPT,
+    SPT,
+    cpt_vs_correlations,
+    spt_vs_correlations,
+    utils,
+    vs30_correlations,
+)
 
 
 class VsProfile:
@@ -257,7 +263,9 @@ class VsProfile:
         """
         Calculates the average Vs at the max Z depth for the given VsProfile
         """
-        vs_midpoint, depth_midpoint = utils.convert_to_midpoint(self.vs, self.depth, self.layered)
+        vs_midpoint, depth_midpoint = utils.convert_to_midpoint(
+            self.vs, self.depth, self.layered
+        )
         time = 0
         for ix in range(1, len(vs_midpoint), 2):
             change_in_z = depth_midpoint[ix] - depth_midpoint[ix - 1]
