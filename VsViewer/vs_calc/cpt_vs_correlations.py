@@ -9,12 +9,7 @@ def mcgann_2015(cpt: CPT):
     qc, fs in kPa
     """
     VsMcGann = np.array(
-        [
-            18.4
-            * (cpt.Qc * 1000) ** 0.144
-            * (cpt.Fs * 1000) ** 0.083
-            * cpt.depth**0.278
-        ]
+        [18.4 * (cpt.Qc * 1000) ** 0.144 * (cpt.Fs * 1000) ** 0.083 * cpt.depth**0.278]
     ).T
     # standard deviation
     Vs_SD = np.zeros([len(cpt.depth), 1])
@@ -72,7 +67,13 @@ def andrus_2007_pleistocene(cpt: CPT):
     # Pleistocene-Age Soils, where SF = 1 in
     cpt.qt[cpt.qt <= 0] = 0.0001  # adjust for possible negative qt
     VsAnd = np.array(
-        [2.62 * ((cpt.qt * 1000) ** 0.395) * (cpt.Ic**0.912) * (cpt.depth**0.124)*1.12]
+        [
+            2.62
+            * ((cpt.qt * 1000) ** 0.395)
+            * (cpt.Ic**0.912)
+            * (cpt.depth**0.124)
+            * 1.12
+        ]
     ).T
     # residual standard deviation suggests that 68% of the data fall within 45m/s of the model
     # (see Table 2 for statistics for Equation 7).
@@ -88,9 +89,7 @@ def andrus_2007_tertiary_age_cooper_marl(cpt: CPT):
     qt in kPa.
     """
     cpt.qt[cpt.qt <= 0] = 0.0001  # adjust for possible negative qt
-    VsAnd = np.array(
-        [13.0 * ((cpt.qt * 1000) ** 0.382) * (cpt.depth**0.099)]
-    ).T
+    VsAnd = np.array([13.0 * ((cpt.qt * 1000) ** 0.382) * (cpt.depth**0.099)]).T
     # residual standard deviation suggests that 68% of the data fall within 67m/s of the model
     # (see Table 2 for statistics for Equation 9).
     Vs_SD = np.log(67 / VsAnd + 1)
