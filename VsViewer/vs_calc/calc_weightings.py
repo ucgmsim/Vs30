@@ -38,7 +38,12 @@ def calculate_weighted_vs30(
     Calculates the weighted Vs30 by combining each of the Vs30Profiles
     with set weights for the VsProfile's and the Correlations
     """
-    vs_weights, vs_correlation_weights, spt_vs_correlation_weights, vs30_correlation_weights = (
+    (
+        vs_weights,
+        vs_correlation_weights,
+        spt_vs_correlation_weights,
+        vs30_correlation_weights,
+    ) = (
         normalise_weights(vs_weights),
         normalise_weights(cpt_vs_correlation_weights),
         normalise_weights(spt_vs_correlation_weights),
@@ -61,7 +66,9 @@ def calculate_weighted_vs30(
         )
         average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
         average_vs30_variance += weight * np.square(vs_profile.vs30 - average_vs30)
-    average_vs30_sd = 0 if average_vs30_variance == 0 else np.log(np.sqrt(average_vs30_variance))
+    average_vs30_sd = (
+        0 if average_vs30_variance == 0 else np.log(np.sqrt(average_vs30_variance))
+    )
     return average_vs30, average_vs30_sd
 
 

@@ -16,7 +16,7 @@ def plot_vs_profiles(vs_profiles: List[VsProfile], output_ffp: str):
     default_colours = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     for ix, vs_profile in enumerate(vs_profiles):
-        ax.set_xlabel(f"Vs (m/s)", size=20)
+        ax.set_xlabel("Vs (m/s)", size=20)
         ax.set_ylabel("Depth (m)", size=20)
         ax.plot(
             *utils.convert_to_midpoint(vs_profile.vs, vs_profile.depth),

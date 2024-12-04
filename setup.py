@@ -3,6 +3,7 @@ Install script for the vs30 package.
 recommended install method:
 pip install --user .
 """
+
 import os
 from shutil import rmtree
 import tarfile
@@ -37,6 +38,14 @@ setup(
             "data/qmap/*",
         ]
     },
-    install_requires=["GDAL", "numpy", "pandas", "pyproj", "scikit-learn", "scipy", "matplotlib"],
+    install_requires=[
+        "GDAL",
+        "numpy",
+        "pandas",
+        "pyproj",
+        "scikit-learn",
+        "scipy",
+        "matplotlib",
+    ],
     scripts=["vs30calc.py"],
 )

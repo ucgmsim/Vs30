@@ -1,6 +1,7 @@
 """
 Shared model functions for processing GIS data and processing/combining models.
 """
+
 from math import exp, log, sqrt
 import os
 
@@ -60,8 +61,8 @@ def combine_models(opts, vs30a, stdva, vs30b, stdvb):
     Combine 2 models.
     """
     if opts.stdv_weight:
-        m_a = (stdva ** 2) ** -opts.k
-        m_b = (stdvb ** 2) ** -opts.k
+        m_a = (stdva**2) ** -opts.k
+        m_b = (stdvb**2) ** -opts.k
         w_a = m_a / (m_a + m_b)
         w_b = m_b / (m_a + m_b)
     else:
@@ -70,8 +71,8 @@ def combine_models(opts, vs30a, stdva, vs30b, stdvb):
 
     log_ab = np.log(vs30a) * w_a + np.log(vs30b) * w_b
     stdv = np.sqrt(
-        w_a * ((np.log(vs30a) - log_ab) ** 2 + stdva ** 2)
-        + w_b * ((np.log(vs30b) - log_ab) ** 2 + stdvb ** 2)
+        w_a * ((np.log(vs30a) - log_ab) ** 2 + stdva**2)
+        + w_b * ((np.log(vs30b) - log_ab) ** 2 + stdvb**2)
     )
 
     return np.exp(log_ab), stdv

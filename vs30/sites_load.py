@@ -1,6 +1,7 @@
 """
 Loads measured sites.
 """
+
 from math import sqrt
 import os
 
@@ -25,7 +26,7 @@ def downsample_mcg(sites_df, res=1000):
     res: grid resolution (m)
     """
 
-    max_dist = sqrt(res ** 2 * 2) / 2
+    max_dist = sqrt(res**2 * 2) / 2
     x = sites_df["easting"].values
     y = sites_df["northing"].values
 

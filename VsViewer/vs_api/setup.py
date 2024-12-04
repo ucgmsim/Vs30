@@ -1,6 +1,7 @@
 """
 Install script for the vs_api package.
 """
+
 from setuptools import setup, find_packages
 
 setup(

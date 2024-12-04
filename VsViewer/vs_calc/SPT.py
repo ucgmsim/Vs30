@@ -101,7 +101,11 @@ class SPT:
         """
         spt_ffp = Path(spt_ffp)
         data = pd.read_csv(spt_ffp)
-        soil_type = None if "Soil" not in data.columns else data["Soil"].map(lambda x: SoilType[x])
+        soil_type = (
+            None
+            if "Soil" not in data.columns
+            else data["Soil"].map(lambda x: SoilType[x])
+        )
         return SPT(
             spt_ffp.stem,
             data.iloc[:, 0].values,
@@ -124,7 +128,11 @@ class SPT:
         soil_type = (
             file_data["Soil"]
             if "Soil" in file_data.columns
-            else (None if form["soilType"] == "" else np.repeat(form["soilType"], len(file_data.values)))
+            else (
+                None
+                if form["soilType"] == ""
+                else np.repeat(form["soilType"], len(file_data.values))
+            )
         )
         return SPT(
             form.get("sptName", file_name.stem),
@@ -135,7 +143,9 @@ class SPT:
             else HammerType[form["hammerType"]],
             form["boreholeDiameter"],
             None if form["energyRatio"] == "" else form["energyRatio"],
-            None if soil_type is None else np.asarray([SoilType[soil] for soil in soil_type]),
+            None
+            if soil_type is None
+            else np.asarray([SoilType[soil] for soil in soil_type]),
         )
 
     @staticmethod
