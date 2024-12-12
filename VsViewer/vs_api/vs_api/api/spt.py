@@ -60,4 +60,3 @@ def get_soil_types():
     """
     server.app.logger.info(f"Received request at {const.GET_SOIL_TYPES_ENDPOINT}")
     return flask.jsonify([x.name for x in vs_calc_constants.SoilType])
-

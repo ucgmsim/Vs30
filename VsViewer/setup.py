@@ -1,6 +1,7 @@
 """
 Install script for the VsViewer package.
 """
+
 from setuptools import setup
 
 setup(
