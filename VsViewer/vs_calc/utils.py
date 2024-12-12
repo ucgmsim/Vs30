@@ -1,7 +1,9 @@
 import numpy as np
 
 
-def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray, layered: bool = False):
+def convert_to_midpoint(
+    measures: np.ndarray, depths: np.ndarray, layered: bool = False
+):
     """
     Converts the given values using the midpoint method
     Useful for a staggered line plot and integration
@@ -14,9 +16,13 @@ def convert_to_midpoint(measures: np.ndarray, depths: np.ndarray, layered: bool 
             new_measures.append(float(measures[1]) if measure == 0 else float(measure))
         else:
             if prev_depth is not None:
-                new_depths.append(float(prev_depth) if layered else float((depth + prev_depth) / 2))
+                new_depths.append(
+                    float(prev_depth) if layered else float((depth + prev_depth) / 2)
+                )
                 new_measures.append(float(prev_measure))
-                new_depths.append(float(prev_depth) if layered else float((depth + prev_depth) / 2))
+                new_depths.append(
+                    float(prev_depth) if layered else float((depth + prev_depth) / 2)
+                )
                 new_measures.append(float(measure))
         if ix == len(depths) - 1:
             # Add extra depth for last value in array
