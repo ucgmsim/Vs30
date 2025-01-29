@@ -243,9 +243,7 @@ def mvn_tiff(out_dir, model_name, sites, nproc=1):
     nxb = (int)((nx + block[0] - 1) / block[0])
     nyb = (int)((ny + block[1] - 1) / block[1])
 
-    # asynchronously append jobs to queue
-    pool = Pool(nproc)
-    jobs = []
+    job_args = []
     for x in range(nxb):
         xoff = x * block[0]
         # last block may be smaller
@@ -260,32 +258,13 @@ def mvn_tiff(out_dir, model_name, sites, nproc=1):
             if y == nyb - 1:
                 block_y = ny - y * block[1]
 
-            jobs.append(
-                pool.apply_async(
-                    partial(
-                        _mvn_tiff_worker,
-                        in_tiff,
-                        xoff,
-                        yoff,
-                        block[0],
-                        block_y,
-                        sites,
-                        model_name,
-                    ),
-                    (),
-                )
-            )
+            job_args.append((in_tiff, xoff, yoff, block[0], block_y, sites, model_name))
 
-    # collect jobs
-    for job in jobs:
-        xoff, yoff, vs30_mvn, stdv_mvn = job.get()
-        # write results
+    with Pool(nproc) as pool:
+        results = pool.map(_mvn_tiff_worker, job_args)
+
+    for xoff, yoff, vs30_mvn, stdv_mvn in results:
         vs30_band.WriteArray(vs30_mvn, xoff=xoff, yoff=yoff)
         stdv_band.WriteArray(stdv_mvn, xoff=xoff, yoff=yoff)
-    # close
-    pool.close()
-    pool.join()
-    vs30_band = None
-    stdv_band = None
-    tif_ds = None
+
     return out_tiff
