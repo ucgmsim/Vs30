@@ -1,6 +1,148 @@
+from typing import List, Dict
 import numpy as np
 from vs_calc import SPT
 from vs_calc.constants import SoilType
+
+
+def divide_layers_by_depth(layers: List[Dict], depths: List[float]) -> List[Dict]:
+    """
+    Divide the layers by depth based on the numbers in the depths list.
+
+    Parameters:
+    layers (list of dict): Each dict contains 'thickness', 'unit_weight', and 'saturated_unit_weight' for a layer.
+    depths (list of float): Depths at which to divide the layers.
+
+    Returns:
+    list of dict: Sublayers divided by the specified depths.
+    """
+    sublayers = []
+    cumulative_depth = 0
+
+    for layer in layers:
+        thickness = layer["thickness"]
+        unit_weight = layer["unit_weight"]
+        saturated_unit_weight = layer["saturated_unit_weight"]
+
+        while thickness > 0 and depths:
+            if cumulative_depth + thickness > depths[0]:
+                sublayer_thickness = depths[0] - cumulative_depth
+                depths.pop(0)
+            else:
+                sublayer_thickness = thickness
+
+            if sublayer_thickness > 0:
+                sublayers.append(
+                    {
+                        "thickness": sublayer_thickness,
+                        "unit_weight": unit_weight,
+                        "saturated_unit_weight": saturated_unit_weight,
+                    }
+                )
+
+            cumulative_depth += sublayer_thickness
+            thickness -= sublayer_thickness
+
+    return sublayers
+
+
+def jaehwi_calculate_effective_stress(layers: List[Dict], groundwater_level: float) -> List[float]:
+    """
+    Calculate the effective stress for multiple soil layers using the improved Jaehwi method.
+
+    Parameters:
+    layers (list of dict): Each dict contains 'thickness', 'unit_weight', and 'saturated_unit_weight' for a layer.
+    groundwater_level (float): Depth of the groundwater level from the surface.
+
+    Returns:
+    list of float: Effective stress at the bottom of each layer.
+    """
+    total_stress = 0
+    effective_stress = []
+    cumulative_pore_water_pressure = 0
+
+    for i, layer in enumerate(layers):
+        thickness = layer["thickness"]
+        unit_weight = layer["unit_weight"]
+        saturated_unit_weight = layer["saturated_unit_weight"]
+
+        # Step 1: Calculate total stress
+        if groundwater_level > 0:
+            if thickness <= groundwater_level:
+                total_stress += thickness * unit_weight
+                groundwater_level -= thickness
+            else:
+                total_stress += (
+                    groundwater_level * unit_weight
+                    + (thickness - groundwater_level) * saturated_unit_weight
+                )
+                cumulative_pore_water_pressure += (thickness - groundwater_level) * 9.81
+                groundwater_level = 0
+        else:
+            total_stress += thickness * saturated_unit_weight
+            cumulative_pore_water_pressure += thickness * 9.81
+
+        # Step 2: Calculate pore pressure
+        pore_water_pressure = cumulative_pore_water_pressure
+
+        # Step 3: Calculate effective stress
+        effective_stress_value = total_stress - pore_water_pressure
+        effective_stress.append(effective_stress_value)
+
+    return effective_stress
+
+
+def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT):
+    """
+    Unified effective stress dispatcher that chooses between simple and advanced calculations.
+    
+    Parameters
+    ----------
+    depth : float
+        The depth to calculate effective stress for
+    soil_type : SoilType
+        The soil type at the measurement point
+    spt : SPT
+        The SPT object containing layer data and groundwater level
+        
+    Returns
+    -------
+    stress : float
+        The effective stress value
+    sigma : float
+        The sigma value for the correlation
+    tao : float
+        The tao value for the correlation
+    b0 : float
+        The b0 coefficient
+    b1 : float
+        The b1 coefficient
+    b2 : float
+        The b2 coefficient
+    """
+    if spt.layers is not None:
+        # Use improved Jaehwi calculation with layer data
+        # Calculate effective stress using the layer-based method
+        effective_stresses = jaehwi_calculate_effective_stress(spt.layers, spt.groundwater_level)
+        
+        # For now, return the simple method coefficients but with improved stress
+        # TODO: This could be enhanced to use layer-specific coefficients
+        stress, sigma, tao, b0, b1, b2 = effective_stress_brandenberg(depth, soil_type, spt.groundwater_level)
+        
+        # Replace the stress value with the improved calculation
+        # Find the appropriate stress value for this depth
+        cumulative_depth = 0
+        for i, layer in enumerate(spt.layers):
+            if depth <= cumulative_depth + layer["thickness"]:
+                # This depth falls within this layer
+                if i < len(effective_stresses):
+                    stress = effective_stresses[i]
+                break
+            cumulative_depth += layer["thickness"]
+        
+        return stress, sigma, tao, b0, b1, b2
+    else:
+        # Use existing simple calculation (backward compatibility)
+        return effective_stress_brandenberg(depth, soil_type)
 
 
 def brandenberg_2010(spt: SPT):
@@ -38,8 +180,8 @@ def brandenberg_2010(spt: SPT):
         # depth given
         cur_N60 = N60[depth_idx]
         if cur_N60 > 0:
-            stress, sigma, tao, b0, b1, b2 = effective_stress_brandenberg(
-                true_d, spt.soil_type[depth_idx]
+            stress, sigma, tao, b0, b1, b2 = calculate_effective_stress(
+                true_d, spt.soil_type[depth_idx], spt
             )
             lnVs = (
                 b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)
@@ -171,8 +313,8 @@ def kwak_2015(spt: SPT):
         # depth given
         cur_N60 = N60[depth_idx]
         if cur_N60 > 0:
-            stress, sigma, tao, b0, b1, b2 = effective_stress_kwak(
-                true_d, spt.soil_type[depth_idx]
+            stress, sigma, tao, b0, b1, b2 = calculate_effective_stress(
+                true_d, spt.soil_type[depth_idx], spt
             )
             lnVs = b0 + b1 * np.log(cur_N60) + b2 * np.log(stress)  # (Kwak et al, 2015)
             # TODO Calculate the correct standard deviation (Currently using Brandenberg)

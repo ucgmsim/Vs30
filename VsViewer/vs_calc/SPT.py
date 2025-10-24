@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict
+from typing import Dict, List, Optional
 from pathlib import Path
 
 import numpy as np
@@ -22,6 +22,8 @@ class SPT:
         borehole_diameter: float = 150,
         energy_ratio: float = None,
         soil_type: np.ndarray = None,
+        layers: Optional[List[Dict]] = None,
+        groundwater_level: float = 2.0,
     ):
         self.name = name
         self.depth = depth
@@ -32,6 +34,8 @@ class SPT:
         self.soil_type = (
             np.repeat(SoilType.Clay, len(depth)) if soil_type is None else soil_type
         )
+        self.layers = layers
+        self.groundwater_level = groundwater_level
         self.info = {
             "z_min": depth[0],
             "z_max": depth[-1],
@@ -73,6 +77,8 @@ class SPT:
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
             "soil_type": [soil_type.name for soil_type in self.soil_type],
+            "layers": self.layers,
+            "groundwater_level": self.groundwater_level,
             "info": self.info,
             "N60": self.N60.tolist(),
         }
@@ -90,6 +96,8 @@ class SPT:
             float(json["borehole_diameter"]),
             None if json["energy_ratio"] is None else float(json["energy_ratio"]),
             [SoilType[soil_type] for soil_type in json["soil_type"]],
+            json.get("layers"),
+            json.get("groundwater_level", 2.0),
         )
         spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
         return spt
