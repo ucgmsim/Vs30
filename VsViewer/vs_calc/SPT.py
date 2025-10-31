@@ -7,6 +7,7 @@ import pandas as pd
 
 from vs_calc.constants import HammerType, SoilType
 
+from nzgd.constants import DEFAULT_BOREHOLE_DIAMETER_mm, DEFAULT_GROUNDWATER_LEVEL_m
 
 class SPT:
     """
@@ -19,11 +20,11 @@ class SPT:
         depth: np.ndarray,
         n: np.ndarray,
         hammer_type: HammerType = HammerType.Auto,
-        borehole_diameter: float = 150,
+        borehole_diameter: float = DEFAULT_BOREHOLE_DIAMETER_mm,
         energy_ratio: float = None,
         soil_type: np.ndarray = None,
-        layers: Optional[np.ndarray] = None,
-        groundwater_level: float = 2.0,
+        layers: Optional[pd.DataFrame] = None,
+        groundwater_level: float = DEFAULT_GROUNDWATER_LEVEL_m,
     ):
         self.name = name
         self.depth = depth
@@ -77,7 +78,7 @@ class SPT:
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
             "soil_type": [soil_type.name for soil_type in self.soil_type],
-            "layers": self.layers.tolist() if self.layers is not None else None,
+            "layers": self.layers.to_dict('records') if self.layers is not None else None,
             "groundwater_level": self.groundwater_level,
             "info": self.info,
             "N60": self.N60.tolist(),
@@ -96,8 +97,8 @@ class SPT:
             float(json["borehole_diameter"]),
             None if json["energy_ratio"] is None else float(json["energy_ratio"]),
             [SoilType[soil_type] for soil_type in json["soil_type"]],
-            np.asarray(json.get("layers")) if json.get("layers") is not None else None,
-            json.get("groundwater_level", 2.0),
+            pd.DataFrame(json.get("layers")) if json.get("layers") is not None else None,
+            json.get("groundwater_level", DEFAULT_GROUNDWATER_LEVEL_m),
         )
         spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
         return spt
@@ -174,13 +175,13 @@ class SPT:
         if energy_ratio is not None:
             Ce = energy_ratio / 60
         else:
-            if hammer_type == HammerType.Auto:
+            if hammer_type == constants.HammerType.Auto:
                 # range 0.8 to 1.3
                 Ce = 0.8
-            elif hammer_type == HammerType.Safety:
+            elif hammer_type == constants.HammerType.Safety:
                 # safety hammer, it has range of 0.7 to 1.2
                 Ce = 0.7
-            elif hammer_type == HammerType.Standard:
+            elif hammer_type == constants.HammerType.Standard:
                 # for doughnut hammer range 0.5 to 1.0
                 Ce = 0.5
 
