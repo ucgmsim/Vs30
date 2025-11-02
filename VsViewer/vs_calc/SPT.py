@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from vs_calc.constants import HammerType, SoilType
+from vs_calc.utils import effective_stress_from_layers, split_layer_at_groundwater_level
 
 from nzgd.constants import DEFAULT_BOREHOLE_DIAMETER_mm, DEFAULT_GROUNDWATER_LEVEL_m
 
@@ -46,6 +47,16 @@ class SPT:
 
         # spt parameter info init for lazy loading
         self._n60 = None
+        
+        # Pre-compute effective stresses and layer bottom depths if layers are provided
+        self._effective_stresses = None
+        self._layer_bottoms = None
+        if layers is not None and len(layers) > 0:
+            self._effective_stresses = effective_stress_from_layers(layers, groundwater_level)
+            
+            # Also pre-compute the split layer bottoms for efficient depth lookup
+            split_layers = split_layer_at_groundwater_level(layers, groundwater_level)
+            self._layer_bottoms = np.cumsum(split_layers["layer_thickness_m"].to_numpy(dtype=float))
 
     @property
     def N60(self):
@@ -175,13 +186,13 @@ class SPT:
         if energy_ratio is not None:
             Ce = energy_ratio / 60
         else:
-            if hammer_type == constants.HammerType.Auto:
+            if hammer_type == HammerType.Auto:
                 # range 0.8 to 1.3
                 Ce = 0.8
-            elif hammer_type == constants.HammerType.Safety:
+            elif hammer_type == HammerType.Safety:
                 # safety hammer, it has range of 0.7 to 1.2
                 Ce = 0.7
-            elif hammer_type == constants.HammerType.Standard:
+            elif hammer_type == HammerType.Standard:
                 # for doughnut hammer range 0.5 to 1.0
                 Ce = 0.5
 
