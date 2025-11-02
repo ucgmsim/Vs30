@@ -2,126 +2,7 @@ import numpy as np
 import pandas as pd
 from vs_calc import SPT
 from vs_calc.constants import SoilType
-from nzgd.constants import WATER_UNIT_WEIGHT_kN_m3
-
-def split_layer_at_groundwater_level(layers: pd.DataFrame, groundwater_level: float) -> pd.DataFrame:
-    """
-    Split the layer containing the groundwater level into two parts: one above the groundwater level and one below.
-
-    Parameters
-    ----------
-    layers : pandas.DataFrame
-        DataFrame with columns: ['layer_thickness_m', 'unsaturated_unit_weight_kN/m3', 'saturated_unit_weight_kN/m3']
-    groundwater_level : float
-        Depth to groundwater level from surface in meters.
-
-    Returns
-    -------
-    pandas.DataFrame
-        DataFrame with the same columns, where any layer intersected by the groundwater level is
-        split into two sublayers, retaining original unsaturated and saturated unit weights for later selection.
-    """
-    if layers.empty:
-        return layers
-
-    sublayers = []
-    cumulative_depth = 0.0
-
-    print()
-
-    for _, row in layers.iterrows():
-        print()
-        thickness = float(row["layer_thickness_m"])
-        unsat_w = float(row["unsaturated_unit_weight_kN/m3"])
-        sat_w = float(row["saturated_unit_weight_kN/m3"])
-
-        top = cumulative_depth
-        bottom = cumulative_depth + thickness
-
-        if groundwater_level <= top or groundwater_level >= bottom:
-            # Entirely above or below; keep as-is
-            sublayers.append({
-                "layer_thickness_m": thickness,
-                "unsaturated_unit_weight_kN/m3": unsat_w,
-                "saturated_unit_weight_kN/m3": sat_w,
-            })
-        else:
-            # Groundwater intersects this layer; split into two
-            above_thk = groundwater_level - top
-            below_thk = bottom - groundwater_level
-            if above_thk > 0:
-                sublayers.append({
-                    "layer_thickness_m": above_thk,
-                    "unsaturated_unit_weight_kN/m3": unsat_w,
-                    "saturated_unit_weight_kN/m3": sat_w,
-                })
-            if below_thk > 0:
-                sublayers.append({
-                    "layer_thickness_m": below_thk,
-                    "unsaturated_unit_weight_kN/m3": unsat_w,
-                    "saturated_unit_weight_kN/m3": sat_w,
-                })
-
-        cumulative_depth = bottom
-
-    return pd.DataFrame(sublayers, columns=[
-        "layer_thickness_m", "unsaturated_unit_weight_kN/m3", "saturated_unit_weight_kN/m3"
-    ])
-
-
-def effective_stress_from_layers(
-    layers: pd.DataFrame, groundwater_level: float
-) -> np.ndarray:
-    """
-    Calculate effective stress using 3-column layer input with groundwater splitting.
-
-    Parameters
-    ----------
-    layers : pandas.DataFrame
-        DataFrame with columns: ['layer_thickness_m', 'unsaturated_unit_weight_kN/m3', 'saturated_unit_weight_kN/m3'].
-    groundwater_level : float
-        Depth to groundwater level from surface in meters.
-
-    Returns
-    -------
-    np.ndarray
-        Effective stress at the bottom of each resulting sublayer (kPa), after splitting
-        the groundwater-intersected layer. Unit weights are chosen here based on position
-        relative to groundwater level (unsaturated above, saturated below).
-    """
-    if layers is None or len(layers) == 0:
-        return np.array([])
-
-    # Split by groundwater without selecting weights
-    layers_df = split_layer_at_groundwater_level(layers, groundwater_level)
-
-    # Compute cumulative bottom depths and top depths
-    bottoms = np.cumsum(layers_df["layer_thickness_m"].to_numpy(dtype=float))
-
-    # Mask for layers entirely above groundwater (bottom <= gwl)
-    above_mask = bottoms <= groundwater_level
-
-    # Choose unit weights in two steps for clarity: 
-    # 1) select saturated unit weights for all layers
-    # 2) override above groundwater level layers with unsaturated unit weights
-    unit_w = layers_df["saturated_unit_weight_kN/m3"].to_numpy(dtype=float)
-    unsat_arr = layers_df["unsaturated_unit_weight_kN/m3"].to_numpy(dtype=float)
-    unit_w[above_mask] = unsat_arr[above_mask]
-
-    # Layer stresses and cumulative total stress
-    layer_stress = layers_df["layer_thickness_m"].to_numpy(dtype=float) * unit_w
-    total_stress = np.cumsum(layer_stress)
-
-    # Pore water pressure at layer bottoms given by 9.81 * depth_below_gwl.
-    # Set to zero above the groundwater level.
-    depth_below_gwl = bottoms - groundwater_level
-    depth_below_gwl[above_mask] = 0.0
-    pore_water_pressure = WATER_UNIT_WEIGHT_kN_m3 * depth_below_gwl
-
-    # Effective stress at bottoms
-    effective_stresses = total_stress - pore_water_pressure
-
-    return effective_stresses
+from vs_calc.utils import split_layer_at_groundwater_level, effective_stress_from_layers
 
 
 def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, correlation_func):
@@ -139,7 +20,7 @@ def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, corr
     correlation_func : callable
         The correlation-specific effective stress function to use (e.g., effective_stress_brandenberg)
         
-    Returns
+    Returns 
     -------
     stress : float
         The effective stress value
@@ -154,30 +35,25 @@ def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, corr
     b2 : float
         The b2 coefficient
     """
-    if spt.layers is not None:
-        # Use improved Jaehwi calculation with layer data
-        # Calculate effective stress using the refactored layer-based method
-        effective_stresses = effective_stress_from_layers(spt.layers, spt.groundwater_level)
-        
+
+    if spt.layers is not None:        
         # Get the correlation-specific coefficients using the provided function
         stress, sigma, tao, b0, b1, b2 = correlation_func(depth, soil_type, spt.groundwater_level)
         
-        # Replace the stress value with the improved calculation
-        # Find the appropriate stress value for this depth using the split sublayers
-        # (must use split layers to match the effective_stresses array length)
-        split_layers = split_layer_at_groundwater_level(spt.layers, spt.groundwater_level)
-        bottoms = np.cumsum(split_layers["layer_thickness_m"].to_numpy(dtype=float))
-        layer_index = int(np.searchsorted(bottoms, depth, side="right") - 1)
-        if 0 <= layer_index < len(effective_stresses):
-            stress = effective_stresses[layer_index]
-        
+        # Correct the inaccurate effective stress values by replacing the 
+        # effective stress value at this depth with the result of the 
+        # layer-based effective stress calculation
+        layer_index = int(np.searchsorted(spt._layer_bottoms, depth, side="right"))
+
+        if 0 <= layer_index < len(spt._effective_stresses):
+            stress = spt._effective_stresses[layer_index]
         return stress, sigma, tao, b0, b1, b2
     else:
-        # Use existing simple calculation (backward compatibility)
+        # If layers are not provided, just return the 
         return correlation_func(depth, soil_type)
 
 
-def brandenberg_2010(spt: SPT):
+def brandenberg_2010_using_bad_effective_stress(spt: SPT):
     """
     SPT-Vs correlation developed by Brandenberg et al. (2010).
 
@@ -310,7 +186,7 @@ def effective_stress_brandenberg(
         return stress, sigma, tao, b0, b1, b2
 
 
-def kwak_2015(spt: SPT):
+def kwak_2015_using_bad_effective_stress(spt: SPT):
     """
     Baseline SPT-Vs correlation developed by Kwak et al. (2015).
 
@@ -456,7 +332,7 @@ def effective_stress_kwak(
         return stress, sigma, tao, b0, b1, b2
 
 
-def brandenberg_2010_layered(spt: SPT):
+def brandenberg_2010_layered_effective_stress(spt: SPT):
     """
     SPT-Vs correlation using Brandenberg et al. (2010) with layer-based effective stress.
     
@@ -485,12 +361,12 @@ def brandenberg_2010_layered(spt: SPT):
         If spt.layers is None.
     """
     if spt.layers is None:
-        raise ValueError("brandenberg_2010_layered requires layer data in SPT object")
+        raise ValueError("brandenberg_2010_layered_effective_stress requires layer data in SPT object")
     
-    return brandenberg_2010(spt)
+    return brandenberg_2010_using_bad_effective_stress(spt)
 
 
-def kwak_2015_layered(spt: SPT):
+def kwak_2015_layered_effective_stress(spt: SPT):
     """
     SPT-Vs correlation using Kwak et al. (2015) with layer-based effective stress.
     
@@ -519,14 +395,14 @@ def kwak_2015_layered(spt: SPT):
         If spt.layers is None.
     """
     if spt.layers is None:
-        raise ValueError("kwak_2015_layered requires layer data in SPT object")
+        raise ValueError("kwak_2015_layered_effective_stress requires layer data in SPT object")
     
-    return kwak_2015(spt)
+    return kwak_2015_using_bad_effective_stress(spt)
 
 
 SPT_CORRELATIONS = {
-    "brandenberg_2010": brandenberg_2010,
-    "kwak_2015": kwak_2015,
-    "brandenberg_2010_layered": brandenberg_2010_layered,
-    "kwak_2015_layered": kwak_2015_layered,
+    # "brandenberg_2010_using_bad_effective_stress": brandenberg_2010_using_bad_effective_stress,
+    # "kwak_2015_using_bad_effective_stress": kwak_2015_using_bad_effective_stress,
+    "brandenberg_2010_layered_effective_stress": brandenberg_2010_layered_effective_stress,
+    "kwak_2015_layered_effective_stress": kwak_2015_layered_effective_stress,
 }
