@@ -47,5 +47,5 @@ setup(
         "scipy",
         "matplotlib",
     ],
-    scripts=["vs30calc.py"],
+    scripts=["run_vs30calc.py"],
 )

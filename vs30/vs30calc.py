@@ -1,9 +1,6 @@
-#!/usr/bin/env python
-"""
-Calculate Vs30 over a region (default) or specify points at which to output for instead.
-"""
 from pathlib import Path
 from functools import partial
+import logging
 import math
 from multiprocessing import Pool
 import os
@@ -13,8 +10,6 @@ from time import time
 
 import numpy as np
 import pandas as pd
-
-# os.environ['PROJ_LIB'] = '/home/cbs51/dev/miniconda3/envs/vs30-foster/share/proj'
 
 from pyproj import Transformer
 
@@ -28,38 +23,49 @@ from vs30 import (
     sites_load,
 )
 
+WGS2NZTM = Transformer.from_crs(4326, 2193, always_xy=True)
 
-if __name__ == "__main__":
-    # work on ~50 points per process
-    SPLIT_SIZE = 50
-    MODEL_MAPPING = {"geology": model_geology, "terrain": model_terrain}
-    wgs2nztm = Transformer.from_crs(4326, 2193, always_xy=True)
-    p_paths, p_sites, p_grid, p_ll, p_geol, p_terr, p_comb, nproc = params.load_args()
+# work on ~50 points per process
+PROCESS_CHUNK_SIZE = 50
+
+def array_split(
+    array: np.ndarray, n_proc: int, chunk_size: int = 50
+) -> list[np.ndarray]:
+    """
+    Split dataframes and numpy arrays for multiprocessing.Pool.map
+    """
+    n_chunks = math.ceil(max(n_proc, len(array) / chunk_size))
+
+    return np.array_split(array, n_chunks)
+
+
+def run_vs30calc(
+    p_paths: params.PathsParams,
+    p_sites: params.SitesParams,
+    p_grid: params.GridParams | None,
+    p_ll: params.LLFileParams | None,
+    p_geol: params.GeologyParams,
+    p_terr: params.TerrainParams,
+    p_comb: params.CombinationParams,
+    n_procs: int,
+):
+    logging.basicConfig(
+        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+        level=logging.INFO
+    )
+    logger = logging.getLogger(__name__)
 
     # working directory/output setup
-
-
     if os.path.exists(p_paths.out):
         if p_paths.overwrite:
             rmtree(p_paths.out)
         else:
             sys.exit("output exists")
     os.makedirs(p_paths.out)
-    # Path(p_paths.out).mkdir(exist_ok=True)
-
-
-    def array_split(array):
-        """
-        Split dataframes and numpy arrays for multiprocessing.Pool.map
-        """
-        n_chunks = math.ceil(max(nproc, len(array) / SPLIT_SIZE))
-
-        return np.array_split(array, n_chunks)
-
 
     # input locations
     if p_ll is not None:
-        print("loading locations...")
+        logger.info("loading locations...")
         table = pd.read_csv(
             p_ll.ll_path,
             usecols=(p_ll.lon_col_ix, p_ll.lat_col_ix),
@@ -69,15 +75,19 @@ if __name__ == "__main__":
             dtype=np.float64,
             sep=p_ll.col_sep,
         )
-        table["easting"], table["northing"] = wgs2nztm.transform(
+        table["easting"], table["northing"] = WGS2NZTM.transform(
             table.longitude.values, table.latitude.values
         )
         table_points = table[["easting", "northing"]].values
 
     # measured sites
-    print("loading measured sites...")
-    sites = sites_load.load_vs(source=p_sites.source)
-    sites_points = np.column_stack((sites.easting.values, sites.northing.values))
+    logger.info("loading measured sites...")
+    measured_sites = sites_load.load_vs(source=p_sites.source)
+    measured_sites_points = np.column_stack(
+        (measured_sites.easting.values, measured_sites.northing.values)
+    )
+
+    MODEL_MAPPING = {"geology": model_geology, "terrain": model_terrain}
 
     # model loop
     tiffs = []
@@ -85,14 +95,14 @@ if __name__ == "__main__":
     for model_setup in [p_geol, p_terr]:
         if model_setup.update == "off":
             continue
-        print(model_setup.name, "model...")
+        logger.info(f"{model_setup.name} model...")
         t = time()
         model_module = MODEL_MAPPING[model_setup.name]
 
-        print("    model measured update...")
-        with Pool(nproc) as pool:
-            sites[f"{model_setup.letter}id"] = np.concatenate(
-                pool.map(model_module.model_id, array_split(sites_points))
+        logger.info("    model measured update...")
+        with Pool(n_procs) as pool:
+            measured_sites[f"{model_setup.letter}id"] = np.concatenate(
+                pool.map(model_module.model_id, array_split(measured_sites_points, n_procs))
             )
         if model_setup.update == "prior":
             model_table = model_module.model_prior()
@@ -101,29 +111,35 @@ if __name__ == "__main__":
         elif model_setup.update == "posterior":
             model_table = model_module.model_prior()
             if p_sites.source == "cpt":
-                sites = sites_cluster.cluster(sites, model_setup.letter, nproc=nproc)
-                model_table = model.cluster_update(model_table, sites, model_setup.letter)
+                measured_sites = sites_cluster.cluster(
+                    measured_sites, model_setup.letter, nproc=n_procs
+                )
+                model_table = model.cluster_update(
+                    model_table, measured_sites, model_setup.letter
+                )
             else:
-                model_table = model.posterior(model_table, sites, f"{model_setup.letter}id")
+                model_table = model.posterior(
+                    model_table, measured_sites, f"{model_setup.letter}id"
+                )
 
-        print("    model at measured sites...")
+        logger.info("    model at measured sites...")
         (
-            sites[f"{model_setup.name}_vs30"],
-            sites[f"{model_setup.name}_stdv"],
+            measured_sites[f"{model_setup.name}_vs30"],
+            measured_sites[f"{model_setup.name}_stdv"],
         ) = model_module.model_val(
-            sites[f"{model_setup.letter}id"].values,
+            measured_sites[f"{model_setup.letter}id"].values,
             model_table,
             model_setup,
             paths=p_paths,
-            points=sites_points,
+            points=measured_sites_points,
             grid=p_grid,
         ).T
 
         if p_ll is not None:
-            print("    model points...")
-            with Pool(nproc) as pool:
+            logger.info("    model points...")
+            with Pool(n_procs) as pool:
                 table[f"{model_setup.letter}id"] = np.concatenate(
-                    pool.map(model_module.model_id, array_split(table_points))
+                    pool.map(model_module.model_id, array_split(table_points, n_procs))
                 )
             (
                 table[f"{model_setup.name}_vs30"],
@@ -136,30 +152,36 @@ if __name__ == "__main__":
                 points=table_points,
                 grid=p_grid,
             ).T
-            print("    measured mvn...")
-            with Pool(nproc) as pool:
+            logger.info("    measured mvn...")
+            with Pool(n_procs) as pool:
                 (
                     table[f"{model_setup.name}_mvn_vs30"],
                     table[f"{model_setup.name}_mvn_stdv"],
                 ) = np.concatenate(
                     pool.map(
-                        partial(mvn.mvn_table, sites=sites, model_name=model_setup.name),
-                        array_split(table),
+                        partial(
+                            mvn.mvn_table,
+                            sites=measured_sites,
+                            model_name=model_setup.name,
+                        ),
+                        array_split(table, n_procs),
                     )
                 ).T
         else:
-            print("    model map...")
+            logger.info("    model map...")
             tiffs.append(
                 model_module.model_val_map(p_paths, p_grid, model_table, model_setup)
             )
-            print("    measured mvn...")
-            tiffs_mvn.append(mvn.mvn_tiff(p_paths.out, model_setup.name, sites, nproc))
+            logger.info("    measured mvn...")
+            tiffs_mvn.append(
+                mvn.mvn_tiff(p_paths.out, model_setup.name, measured_sites, n_procs)
+            )
 
-        print(f"{time()-t:.2f}s")
+        logger.info(f"{time()-t:.2f}s")
 
     if p_geol.update != "off" and p_terr.update != "off":
         # combined model
-        print("combining geology and terrain...")
+        logger.info("combining geology and terrain...")
         t = time()
         if p_ll is not None:
             for prefix in ["", "mvn_"]:
@@ -172,13 +194,19 @@ if __name__ == "__main__":
                 )
         else:
             model.combine_tiff(p_paths.out, "combined.tif", p_grid, p_comb, *tiffs)
-            model.combine_tiff(p_paths.out, "combined_mvn.tif", p_grid, p_comb, *tiffs_mvn)
-        print(f"{time()-t:.2f}s")
+            model.combine_tiff(
+                p_paths.out, "combined_mvn.tif", p_grid, p_comb, *tiffs_mvn
+            )
+        logger.info(f"{time()-t:.2f}s")
 
     # save point based data and copy qgis project files
-    sites.to_csv(os.path.join(p_paths.out, "measured_sites.csv"), na_rep="NA", index=False)
+    measured_sites.to_csv(
+        os.path.join(p_paths.out, "measured_sites.csv"), na_rep="NA", index=False
+    )
     if p_ll is not None:
-        table.to_csv(os.path.join(p_paths.out, "vs30points.csv"), na_rep="NA", index=False)
+        table.to_csv(
+            os.path.join(p_paths.out, "vs30points.csv"), na_rep="NA", index=False
+        )
         copyfile(
             os.path.join(sites_load.data, "qgis_points.qgz"),
             os.path.join(p_paths.out, "qgis.qgz"),
@@ -189,4 +217,4 @@ if __name__ == "__main__":
             os.path.join(p_paths.out, "qgis.qgz"),
         )
 
-    print("complete.")
+    logger.info("complete.")
