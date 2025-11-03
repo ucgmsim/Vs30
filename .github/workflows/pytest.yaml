@@ -26,7 +26,9 @@ jobs:
       - name: Install the project
         run: uv sync --all-extras --dev
       - name: Install GDAL python package
-        run: pip install gdal==(gdal-config --version)
+        run: |
+          GDAL_VERSION=$(gdal-config --version)
+          .venv/bin/pip install gdal==$GDAL_VERSION
 
       - name: Run tests
         run: |
