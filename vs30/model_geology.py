@@ -7,6 +7,8 @@ import os
 
 import numpy as np
 from osgeo import gdal, ogr, osr
+import geopandas as gpd
+import shapely
 
 from vs30.model import ID_NODATA, interpolate_raster, resample_raster
 
@@ -91,26 +93,28 @@ def model_posterior_paper():
                      [690.974348966211, 0.446036993981441]], dtype=np.float32)
     # fmt: on
 
-
-def model_id(points):
+def model_id(points: np.ndarray) -> np.ndarray:
     """
     Returns the category ID index (including 0 for water) for given locations.
     points: 2D numpy array of NZTM coords
-    """
-    shp = ogr.Open(QMAP, gdal.GA_ReadOnly)
-    lay = shp.GetLayer(0)
-    col = lay.GetLayerDefn().GetFieldIndex("gid")
 
-    # ocean is NaN while water polygons are 0
+    Uses geopandas/shapely spatial join.
+    """
+    # load QMAP polygons (keeps CRS from file)
+    gdf = gpd.read_file(QMAP)[["gid", "geometry"]]
+
+    # Build point GeoDataFrame (ensure float64)
+    # pts = [Point(float(x), float(y)) for x, y in points.astype(np.float64)]
+    points = shapely.points(points)
+    points_gdf = gpd.GeoDataFrame(geometry=points, crs=gdf.crs)
+
+    # Spatial join
+    joined = gpd.sjoin(points_gdf, gdf, how="left", predicate="within")
+
+    # Default to ID_NODATA, fill with gid where available
     values = np.full(len(points), ID_NODATA, dtype=np.uint8)
-    pt = ogr.Geometry(ogr.wkbPoint)
-    # pt.AddPoint_2D will not work with float32, float64 is fine
-    for i, p in enumerate(points.astype(np.float64)):
-        pt.AddPoint_2D(p[0], p[1])
-        lay.SetSpatialFilter(pt)
-        f = lay.GetNextFeature()
-        if f is not None:
-            values[i] = f.GetField(col)
+    value_mask = ~joined["gid"].isna()
+    values[value_mask] = joined.loc[value_mask, "gid"].values
 
     return values
 

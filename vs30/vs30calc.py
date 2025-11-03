@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from functools import partial
 import logging
@@ -6,7 +7,6 @@ from multiprocessing import Pool
 import os
 from shutil import copyfile, rmtree
 import sys
-from time import time
 
 import numpy as np
 import pandas as pd
@@ -25,8 +25,6 @@ from vs30 import (
 
 WGS2NZTM = Transformer.from_crs(4326, 2193, always_xy=True)
 
-# work on ~50 points per process
-PROCESS_CHUNK_SIZE = 50
 
 def array_split(
     array: np.ndarray, n_proc: int, chunk_size: int = 50
@@ -35,7 +33,6 @@ def array_split(
     Split dataframes and numpy arrays for multiprocessing.Pool.map
     """
     n_chunks = math.ceil(max(n_proc, len(array) / chunk_size))
-
     return np.array_split(array, n_chunks)
 
 
@@ -50,10 +47,11 @@ def run_vs30calc(
     n_procs: int,
 ):
     logging.basicConfig(
-        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-        level=logging.INFO
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level=logging.INFO,
     )
     logger = logging.getLogger(__name__)
+    logger.info(f"Running Vs30Calc with {n_procs} processes")
 
     # working directory/output setup
     if os.path.exists(p_paths.out):
@@ -96,14 +94,11 @@ def run_vs30calc(
         if model_setup.update == "off":
             continue
         logger.info(f"{model_setup.name} model...")
-        t = time()
         model_module = MODEL_MAPPING[model_setup.name]
 
         logger.info("    model measured update...")
-        with Pool(n_procs) as pool:
-            measured_sites[f"{model_setup.letter}id"] = np.concatenate(
-                pool.map(model_module.model_id, array_split(measured_sites_points, n_procs))
-            )
+        start_time = time.time()
+        measured_sites[f"{model_setup.letter}id"] = model_module.model_id(measured_sites_points)
         if model_setup.update == "prior":
             model_table = model_module.model_prior()
         elif model_setup.update == "posterior_paper":
@@ -121,8 +116,10 @@ def run_vs30calc(
                 model_table = model.posterior(
                     model_table, measured_sites, f"{model_setup.letter}id"
                 )
+        logger.info(f"    took: {time.time()-start_time:.2f}s")
 
         logger.info("    model at measured sites...")
+        start_time = time.time()
         (
             measured_sites[f"{model_setup.name}_vs30"],
             measured_sites[f"{model_setup.name}_stdv"],
@@ -134,13 +131,16 @@ def run_vs30calc(
             points=measured_sites_points,
             grid=p_grid,
         ).T
+        logger.info(f"    took: {time.time()-start_time:.2f}s")
 
         if p_ll is not None:
             logger.info("    model points...")
-            with Pool(n_procs) as pool:
-                table[f"{model_setup.letter}id"] = np.concatenate(
-                    pool.map(model_module.model_id, array_split(table_points, n_procs))
-                )
+            # if n_procs == 1:
+            start = time.time()
+            table[f"{model_setup.letter}id"] = model_module.model_id(
+                table_points
+            )
+            logger.info(f"    took: {time.time() - start} ")
             (
                 table[f"{model_setup.name}_vs30"],
                 table[f"{model_setup.name}_stdv"],
@@ -152,21 +152,35 @@ def run_vs30calc(
                 points=table_points,
                 grid=p_grid,
             ).T
+
             logger.info("    measured mvn...")
-            with Pool(n_procs) as pool:
+            start_time = time.time()
+            if n_procs == 1:
                 (
                     table[f"{model_setup.name}_mvn_vs30"],
                     table[f"{model_setup.name}_mvn_stdv"],
-                ) = np.concatenate(
-                    pool.map(
-                        partial(
-                            mvn.mvn_table,
-                            sites=measured_sites,
-                            model_name=model_setup.name,
-                        ),
-                        array_split(table, n_procs),
-                    )
+                ) = mvn.mvn_table(
+                    table,
+                    sites=measured_sites,
+                    model_name=model_setup.name,
                 ).T
+            else:
+                with Pool(n_procs) as pool:
+                    result = pool.map(
+                            partial(
+                                mvn.mvn_table,
+                                sites=measured_sites,
+                                model_name=model_setup.name,
+                            ),
+                            array_split(table, n_procs, 10_000),
+                        )
+                    (
+                        table[f"{model_setup.name}_mvn_vs30"],
+                        table[f"{model_setup.name}_mvn_stdv"],
+                    ) = np.concatenate(
+                        result,
+                    ).T
+            logger.info(f"    took: {time.time()-start_time:.2f}s")
         else:
             logger.info("    model map...")
             tiffs.append(
@@ -177,12 +191,10 @@ def run_vs30calc(
                 mvn.mvn_tiff(p_paths.out, model_setup.name, measured_sites, n_procs)
             )
 
-        logger.info(f"{time()-t:.2f}s")
-
     if p_geol.update != "off" and p_terr.update != "off":
         # combined model
         logger.info("combining geology and terrain...")
-        t = time()
+        start_time = time.time()
         if p_ll is not None:
             for prefix in ["", "mvn_"]:
                 table[f"{prefix}vs30"], table[f"{prefix}stdv"] = model.combine_models(
@@ -197,7 +209,7 @@ def run_vs30calc(
             model.combine_tiff(
                 p_paths.out, "combined_mvn.tif", p_grid, p_comb, *tiffs_mvn
             )
-        logger.info(f"{time()-t:.2f}s")
+        logger.info(f"{time.time()-start_time:.2f}s")
 
     # save point based data and copy qgis project files
     measured_sites.to_csv(
