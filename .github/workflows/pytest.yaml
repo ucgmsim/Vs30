@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install GDAL
-        run: sudo apt-get update && sudo apt-get install -y gdal-bin python3-gdal
+        run: sudo apt-get update && sudo apt-get install -y libgdal-dev
 
       - name: Define a cache dependency glob
         uses: astral-sh/setup-uv@v5
