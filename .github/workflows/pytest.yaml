@@ -10,27 +10,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Mambaforge
+        uses: conda-incubator/setup-miniconda@v3
         with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          activate-environment: test-env
           python-version: "3.12"
-      - name: Install GDAL
-        run: sudo apt-get update && sudo apt-get install -y libgdal-dev
+          use-mamba: true
 
-
-      - name: Define a cache dependency glob
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Install the project
-        run: uv sync --all-extras --dev
-      - name: Install GDAL python package
+      - name: Install gdal with mamba
+        shell: bash -el {0}
         run: |
-          GDAL_VERSION=$(gdal-config --version)
-          uv pip install --no-binary gdal gdal==$GDAL_VERSION
+          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib pytest geopandas
+
+      - name: Install project in dev mode
+        shell: bash -el {0}
+        run: pip install -e .
 
       - name: Run tests
-        run: uv run pytest 
-
+        shell: bash -el {0}
+        run: pytest
 
