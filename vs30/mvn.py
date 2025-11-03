@@ -2,6 +2,8 @@
 MVN (multivariate normal distribution)
 for modifying vs30 values based on proximity to measured values.
 """
+import os
+import logging
 
 from functools import partial
 from multiprocessing import Pool
@@ -10,6 +12,9 @@ from shutil import copyfile
 
 import numpy as np
 from osgeo import gdal
+
+
+logger = logging.getLogger(__name__)
 
 
 def _corr_func(distances, model):
@@ -166,7 +171,9 @@ def mvn_table(table, sites, model_name):
     """
     # reset indexes for this instance to prevent index errors with split table
     ix0_table = table.reset_index(drop=True)
-    return np.column_stack(
+    logger.debug(f"Running MVN on {len(ix0_table)} points for "
+                 f"model {model_name} on process {os.getpid()}")
+    result =  np.column_stack(
         _mvn(
             ix0_table[["easting", "northing"]].values,
             ix0_table[f"{model_name}_vs30"],
@@ -175,6 +182,9 @@ def mvn_table(table, sites, model_name):
             model_name,
         )
     )
+    logger.debug(f"Completed MVN on {len(ix0_table)} points for "
+                 f"model {model_name} on process {os.getpid()}")
+    return result
 
 
 def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_name):

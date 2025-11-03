@@ -2,6 +2,7 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
 import pandas as pd
 
 from vs30 import params, vs30calc
@@ -9,7 +10,8 @@ from vs30 import params, vs30calc
 INPUT_SITE_FILE = Path(__file__).parent / "resources"/ "test_sites.csv"
 EXPECTED_OUTPUT_DIR = Path(__file__).parent / "expected_location_results"
 
-def test_vs30calc_regression():
+@pytest.mark.parametrize("n_procs", [1, os.cpu_count()])
+def test_vs30calc_regression(n_procs: int):
     with tempfile.TemporaryDirectory() as tmpdir:
         p_paths = params.PathsParams(
             out=tmpdir,
@@ -30,7 +32,7 @@ def test_vs30calc_regression():
             p_geol=params.GeologyParams(),
             p_terr=params.TerrainParams(),
             p_comb=params.CombinationParams(),
-            n_procs=os.cpu_count(),
+            n_procs=n_procs,
         )
 
         expected_vs30_df = pd.read_csv(
