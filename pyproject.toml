@@ -16,7 +16,6 @@ dependencies = [
     "matplotlib",
     "pytest",
     "geopandas",
-    "gdal",
 ]
 
 [project.urls]
