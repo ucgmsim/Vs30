@@ -1,14 +1,12 @@
 from io import BytesIO
-from typing import Dict, List, Optional
 from pathlib import Path
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 
-from vs_calc.constants import HammerType, SoilType
-from vs_calc.utils import effective_stress_from_layers, split_layer_at_groundwater_level
+from vs_calc import constants, utils
 
-from nzgd.constants import DEFAULT_BOREHOLE_DIAMETER_mm, DEFAULT_GROUNDWATER_LEVEL_m
 
 class SPT:
     """
@@ -20,12 +18,12 @@ class SPT:
         name: str,
         depth: np.ndarray,
         n: np.ndarray,
-        hammer_type: HammerType = HammerType.Auto,
-        borehole_diameter: float = DEFAULT_BOREHOLE_DIAMETER_mm,
+        hammer_type: constants.HammerType = constants.HammerType.Auto,
+        borehole_diameter: float = None,
         energy_ratio: float = None,
         soil_type: np.ndarray = None,
         layers: Optional[pd.DataFrame] = None,
-        groundwater_level: float = DEFAULT_GROUNDWATER_LEVEL_m,
+        groundwater_level: float = None,
     ):
         self.name = name
         self.depth = depth
@@ -34,10 +32,17 @@ class SPT:
         self.borehole_diameter = borehole_diameter
         self.energy_ratio = energy_ratio
         self.soil_type = (
-            np.repeat(SoilType.Clay, len(depth)) if soil_type is None else soil_type
+            np.repeat(constants.SoilType.Clay, len(depth))
+            if soil_type is None
+            else soil_type
         )
-        self.layers = layers
         self.groundwater_level = groundwater_level
+        depths_to_split_at = (
+            np.append(depth, groundwater_level)
+            if groundwater_level is not None
+            else depth
+        )
+        self.layers = utils.split_layers_at_depths(layers, depths_to_split_at)
         self.info = {
             "z_min": depth[0],
             "z_max": depth[-1],
@@ -47,16 +52,17 @@ class SPT:
 
         # spt parameter info init for lazy loading
         self._n60 = None
-        
+
         # Pre-compute effective stresses and layer bottom depths if layers are provided
         self._effective_stresses = None
         self._layer_bottoms = None
-        if layers is not None and len(layers) > 0:
-            self._effective_stresses = effective_stress_from_layers(layers, groundwater_level)
-            
-            # Also pre-compute the split layer bottoms for efficient depth lookup
-            split_layers = split_layer_at_groundwater_level(layers, groundwater_level)
-            self._layer_bottoms = np.cumsum(split_layers["layer_thickness_m"].to_numpy(dtype=float))
+        if self.layers is not None and len(self.layers) > 0:
+            self._effective_stresses = utils.effective_stress_from_layers(
+                self.layers, groundwater_level
+            )
+            self._layer_bottoms = np.cumsum(
+                self.layers["layer_thickness_m"].to_numpy(dtype=float)
+            )
 
     @property
     def N60(self):
@@ -89,7 +95,9 @@ class SPT:
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
             "soil_type": [soil_type.name for soil_type in self.soil_type],
-            "layers": self.layers.to_dict('records') if self.layers is not None else None,
+            "layers": self.layers.to_dict("records")
+            if self.layers is not None
+            else None,
             "groundwater_level": self.groundwater_level,
             "info": self.info,
             "N60": self.N60.tolist(),
@@ -104,12 +112,14 @@ class SPT:
             json["name"],
             np.asarray(json["depth"]),
             np.asarray(json["N"]),
-            HammerType[json["hammer_type"]],
+            constants.HammerType[json["hammer_type"]],
             float(json["borehole_diameter"]),
             None if json["energy_ratio"] is None else float(json["energy_ratio"]),
-            [SoilType[soil_type] for soil_type in json["soil_type"]],
-            pd.DataFrame(json.get("layers")) if json.get("layers") is not None else None,
-            json.get("groundwater_level", DEFAULT_GROUNDWATER_LEVEL_m),
+            [constants.SoilType[soil_type] for soil_type in json["soil_type"]],
+            pd.DataFrame(json.get("layers"))
+            if json.get("layers") is not None
+            else None,
+            json.get("groundwater_level"),
         )
         spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
         return spt
@@ -124,7 +134,7 @@ class SPT:
         soil_type = (
             None
             if "Soil" not in data.columns
-            else data["Soil"].map(lambda x: SoilType[x])
+            else data["Soil"].map(lambda x: constants.SoilType[x])
         )
         return SPT(
             spt_ffp.stem,
@@ -158,20 +168,20 @@ class SPT:
             form.get("sptName", file_name.stem),
             np.asarray(file_data["Depth"]),
             np.asarray(file_data["NValue"]),
-            HammerType.Auto
+            constants.HammerType.Auto
             if form["hammerType"] == ""
-            else HammerType[form["hammerType"]],
+            else constants.HammerType[form["hammerType"]],
             form["boreholeDiameter"],
             None if form["energyRatio"] == "" else form["energyRatio"],
             None
             if soil_type is None
-            else np.asarray([SoilType[soil] for soil in soil_type]),
+            else np.asarray([constants.SoilType[soil] for soil in soil_type]),
         )
 
     @staticmethod
     def calc_n60_variables(
         energy_ratio: float,
-        hammer_type: HammerType,
+        hammer_type: constants.HammerType,
         borehole_diameter: float,
         rod_length: float,
     ):
@@ -186,13 +196,13 @@ class SPT:
         if energy_ratio is not None:
             Ce = energy_ratio / 60
         else:
-            if hammer_type == HammerType.Auto:
+            if hammer_type == constants.HammerType.Auto:
                 # range 0.8 to 1.3
                 Ce = 0.8
-            elif hammer_type == HammerType.Safety:
+            elif hammer_type == constants.HammerType.Safety:
                 # safety hammer, it has range of 0.7 to 1.2
                 Ce = 0.7
-            elif hammer_type == HammerType.Standard:
+            elif hammer_type == constants.HammerType.Standard:
                 # for doughnut hammer range 0.5 to 1.0
                 Ce = 0.5
 
