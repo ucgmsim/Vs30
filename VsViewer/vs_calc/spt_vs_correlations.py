@@ -1,14 +1,15 @@
 import numpy as np
-import pandas as pd
+
 from vs_calc import SPT
 from vs_calc.constants import SoilType
-from vs_calc.utils import split_layer_at_groundwater_level, effective_stress_from_layers
 
 
-def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, correlation_func):
+def calculate_effective_stress(
+    depth: float, soil_type: SoilType, spt: SPT, correlation_func
+):
     """
     Unified effective stress dispatcher that chooses between simple and advanced calculations.
-    
+
     Parameters
     ----------
     depth : float
@@ -19,8 +20,8 @@ def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, corr
         The SPT object containing layer data and groundwater level
     correlation_func : callable
         The correlation-specific effective stress function to use (e.g., effective_stress_brandenberg)
-        
-    Returns 
+
+    Returns
     -------
     stress : float
         The effective stress value
@@ -36,12 +37,14 @@ def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, corr
         The b2 coefficient
     """
 
-    if spt.layers is not None:        
+    if spt.layers is not None:
         # Get the correlation-specific coefficients using the provided function
-        stress, sigma, tao, b0, b1, b2 = correlation_func(depth, soil_type, spt.groundwater_level)
-        
-        # Correct the inaccurate effective stress values by replacing the 
-        # effective stress value at this depth with the result of the 
+        stress, sigma, tao, b0, b1, b2 = correlation_func(
+            depth, soil_type, spt.groundwater_level
+        )
+
+        # Correct the inaccurate effective stress values by replacing the
+        # effective stress value at this depth with the result of the
         # layer-based effective stress calculation
         layer_index = int(np.searchsorted(spt._layer_bottoms, depth, side="right"))
 
@@ -49,13 +52,16 @@ def calculate_effective_stress(depth: float, soil_type: SoilType, spt: SPT, corr
             stress = spt._effective_stresses[layer_index]
         return stress, sigma, tao, b0, b1, b2
     else:
-        # If layers are not provided, just return the 
+        # If layers are not provided, just return the
         return correlation_func(depth, soil_type)
 
 
-def brandenberg_2010_using_bad_effective_stress(spt: SPT):
+def brandenberg_2010(spt: SPT):
     """
     SPT-Vs correlation developed by Brandenberg et al. (2010).
+
+    Uses the equation: lnVs = b0 + b1*log(N60) + b2*log(stress)
+    This correlation supports Sand, Silt, and Clay soil types only (no Gravel support).
 
     Parameters
     ----------
@@ -111,7 +117,11 @@ def effective_stress_brandenberg(
     depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: float = 2
 ):
     """
-    Gets the effective stress for the given depth and soil type.
+    Gets the effective stress and regression coefficients for Brandenberg et al. (2010) correlation.
+
+    The effective stress and sigma calculation formulas are the same as in effective_stress_kwak,
+    but the regression coefficients (b0, b1, b2, tao) are specific to Brandenberg et al. (2010).
+    This function supports Sand, Silt, and Clay soil types only (no Gravel support).
 
     Parameters
     ----------
@@ -186,9 +196,13 @@ def effective_stress_brandenberg(
         return stress, sigma, tao, b0, b1, b2
 
 
-def kwak_2015_using_bad_effective_stress(spt: SPT):
+def kwak_2015(spt: SPT):
     """
     Baseline SPT-Vs correlation developed by Kwak et al. (2015).
+
+    Uses the same equation as brandenberg_2010 (lnVs = b0 + b1*log(N60) + b2*log(stress)),
+    but with different regression coefficients (b0, b1, b2, tao) specific to Kwak et al. (2015).
+    The main difference from brandenberg_2010 is the coefficient values and support for Gravel soil type.
 
     Parameters
     ----------
@@ -243,7 +257,11 @@ def effective_stress_kwak(
     depth: float, soiltype: SoilType = SoilType.Clay, water_table_depth: float = 2
 ):
     """
-    Gets the effective stress for the given depth and soil type.
+    Gets the effective stress and regression coefficients for Kwak et al. (2015) correlation.
+
+    The effective stress and sigma calculation formulas are the same as in effective_stress_brandenberg,
+    but the regression coefficients (b0, b1, b2, tao) are specific to Kwak et al. (2015).
+    This function supports Sand, Silt, Clay, and Gravel soil types (Gravel is not supported by Brandenberg).
 
     Parameters
     ----------
@@ -274,7 +292,7 @@ def effective_stress_kwak(
         b1 = 0.167
         b2 = 0.216
         tao = 0.217
-        # (Brandendberg et al, 2010)
+        # (Kwak et al, 2015)
         if depth > water_table_depth:
             stress = water_table_depth * 18 + (depth - water_table_depth) * (20 - 9.81)
         else:
@@ -289,7 +307,7 @@ def effective_stress_kwak(
         b1 = 0.255
         b2 = 0.168
         tao = 0.227
-        # (Brandendberg et al, 2010)
+        # (Kwak et al, 2015)
         if depth > water_table_depth:
             stress = water_table_depth * 17 + (depth - water_table_depth) * (19 - 9.81)
         else:
@@ -304,7 +322,7 @@ def effective_stress_kwak(
         b1 = 0.154
         b2 = 0.285
         tao = 0.369
-        # (Brandendberg et al, 2010)
+        # (Kwak et al, 2015)
         if depth > water_table_depth:
             stress = water_table_depth * 19 + (depth - water_table_depth) * (21 - 9.81)
         else:
@@ -320,7 +338,7 @@ def effective_stress_kwak(
         b1 = 0.209
         b2 = 0.165
         tao = 0.227
-        # (Brandendberg et al, 2010)
+        # (Kwak et al, 2015)
         if depth > water_table_depth:
             stress = water_table_depth * 16 + (depth - water_table_depth) * (18 - 9.81)
         else:
@@ -332,77 +350,7 @@ def effective_stress_kwak(
         return stress, sigma, tao, b0, b1, b2
 
 
-def brandenberg_2010_layered_effective_stress(spt: SPT):
-    """
-    SPT-Vs correlation using Brandenberg et al. (2010) with layer-based effective stress.
-    
-    This variant requires layer data to be provided in the SPT object. It uses the improved
-    Jaehwi effective stress calculation method that accounts for heterogeneous soil layers.
-    
-    Parameters
-    ----------
-    spt : SPT
-        The SPT object to use for the correlation. Must have spt.layers defined.
-        
-    Returns
-    -------
-    vs : np.ndarray
-        The Vs values for the given SPT object.
-    vs_sd : np.ndarray
-        The standard deviation of the Vs values for the given SPT object.
-    depth_values : np.ndarray
-        The depth values for the Vs values.
-    eff_stress : np.ndarray
-        The effective stress values for the Vs values.
-        
-    Raises
-    ------
-    ValueError
-        If spt.layers is None.
-    """
-    if spt.layers is None:
-        raise ValueError("brandenberg_2010_layered_effective_stress requires layer data in SPT object")
-    
-    return brandenberg_2010_using_bad_effective_stress(spt)
-
-
-def kwak_2015_layered_effective_stress(spt: SPT):
-    """
-    SPT-Vs correlation using Kwak et al. (2015) with layer-based effective stress.
-    
-    This variant requires layer data to be provided in the SPT object. It uses the improved
-    Jaehwi effective stress calculation method that accounts for heterogeneous soil layers.
-    
-    Parameters
-    ----------
-    spt : SPT
-        The SPT object to use for the correlation. Must have spt.layers defined.
-        
-    Returns
-    -------
-    vs : np.ndarray
-        The Vs values for the given SPT object.
-    vs_sd : np.ndarray
-        The standard deviation of the Vs values for the given SPT object.
-    depth_values : np.ndarray
-        The depth values for the Vs values.
-    eff_stress : np.ndarray
-        The effective stress values for the Vs values.
-        
-    Raises
-    ------
-    ValueError
-        If spt.layers is None.
-    """
-    if spt.layers is None:
-        raise ValueError("kwak_2015_layered_effective_stress requires layer data in SPT object")
-    
-    return kwak_2015_using_bad_effective_stress(spt)
-
-
 SPT_CORRELATIONS = {
-    # "brandenberg_2010_using_bad_effective_stress": brandenberg_2010_using_bad_effective_stress,
-    # "kwak_2015_using_bad_effective_stress": kwak_2015_using_bad_effective_stress,
-    "brandenberg_2010_layered_effective_stress": brandenberg_2010_layered_effective_stress,
-    "kwak_2015_layered_effective_stress": kwak_2015_layered_effective_stress,
+    "brandenberg_2010": brandenberg_2010,
+    "kwak_2015": kwak_2015,
 }
