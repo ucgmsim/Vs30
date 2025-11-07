@@ -46,6 +46,29 @@ def run_vs30calc(
     p_comb: params.CombinationParams,
     n_procs: int,
 ):
+    """
+    Run the Vs30 calculation for the specified parameters.
+    For details on the parameters, see params.py.
+
+    Parameters
+    ----------
+    p_paths : params.PathsParams
+        Paths parameters.
+    p_sites : params.SitesParams
+        Sites parameters.
+    p_grid : params.GridParams | None
+        Grid parameters.
+    p_ll : params.LLFileParams | None
+        Latitude/longitude file parameters.
+    p_geol : params.GeologyParams
+        Geology model parameters.
+    p_terr : params.TerrainParams
+        Terrain model parameters.
+    p_comb : params.CombinationParams
+        Combined model parameters.
+    n_procs : int
+        Number of processes to use.
+    """
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level=logging.INFO,
