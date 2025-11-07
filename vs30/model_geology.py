@@ -104,7 +104,6 @@ def model_id(points: np.ndarray) -> np.ndarray:
     gdf = gpd.read_file(QMAP)[["gid", "geometry"]]
 
     # Build point GeoDataFrame (ensure float64)
-    # pts = [Point(float(x), float(y)) for x, y in points.astype(np.float64)]
     points = shapely.points(points)
     points_gdf = gpd.GeoDataFrame(geometry=points, crs=gdf.crs)
 
