@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Vs30"
+version = "2.0"
+description = "NZ Vs30 Calculation"
+requires-python = ">=3.7"
+dependencies = [
+    "numpy",
+    "pandas",
+    "pyproj",
+    "scikit-learn",
+    "scipy",
+    "matplotlib",
+    "pytest",
+    "geopandas",
+]
+
+[project.urls]
+Repository = "https://github.com/ucgmsim/Vs30"
+
+[project.scripts]
+run-vs30calc = "run_vs30calc:main"
+
+[tool.setuptools]
+packages = ["vs30", "VsViewer"]
+
+[tool.setuptools.package-data]
+vs30 = [
+    "data/*.csv",
+    "data/*.ll",
+    "data/*.ssv",
+    "data/*.tif",
+    "data/*.qgz",
+    "data/coast/*",
+    "data/qmap/*",
+]
