@@ -1,0 +1,34 @@
+name: Pytest Check
+
+on: [pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: test-env
+          python-version: "3.12"
+          use-mamba: true
+
+      - name: Install dependencies with mamba
+        shell: bash -el {0}
+        run: |
+          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib pytest geopandas
+
+      - name: Install project in dev mode
+        shell: bash -el {0}
+        run: pip install -e .
+
+      - name: Run tests
+        shell: bash -el {0}
+        run: pytest
+
