@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     max_dist = 10000
     max_points = 500
-    total_memory_gb = 10  # Total available memory in GB
+    total_memory_gb = 3  # Total available memory in GB
 
     base_path = Path(__file__).parent
 
@@ -123,27 +123,49 @@ if __name__ == "__main__":
 
         # Get metadata
         transform = src.transform
-        # crs = src.crs
+        crs = src.crs
+        raster_shape = median_vs30.shape  # Store original raster shape
 
-    # Get NZTM coordinates for each grid point
-    # Format: (N, 2) array where each row is [easting, northing]
+        # Create mask of valid (non-NoData) pixels
+        nodata = src.nodatavals[0] if src.nodatavals else None
+        if nodata is not None:
+            valid_mask = median_vs30 != nodata
+        else:
+            valid_mask = ~np.isnan(median_vs30)
+
+        # Get flat indices of valid pixels (for mapping back to full raster)
+        valid_flat_indices = np.where(valid_mask.flatten())[0]
+        n_valid = len(valid_flat_indices)
+        n_total_pixels = valid_mask.size
+
+        print("\nFiltering valid pixels:")
+        print(f"  Total pixels: {n_total_pixels:,}")
+        print(f"  Valid pixels: {n_valid:,} ({100 * n_valid / n_total_pixels:.2f}%)")
+        print(
+            f"  NoData pixels: {n_total_pixels - n_valid:,} ({100 * (n_total_pixels - n_valid) / n_total_pixels:.2f}%)"
+        )
+        print(f"  Excluding {n_total_pixels - n_valid:,} NoData pixels from processing")
+
+    # Get NZTM coordinates for VALID grid points only
+    # Format: (N_valid, 2) array where each row is [easting, northing]
     # Use rasterio's transform.xy to correctly convert row/col to coordinates
-    rows = np.arange(median_vs30.shape[0]) + 0.5  # Add 0.5 to get pixel center
-    cols = np.arange(median_vs30.shape[1]) + 0.5
-
-    # Create meshgrid of all row/col combinations
-    row_grid, col_grid = np.meshgrid(rows, cols, indexing="ij")
+    # Only process valid pixels to reduce computation by ~84%
+    valid_rows, valid_cols = np.where(valid_mask)
+    rows_valid = valid_rows.astype(float) + 0.5  # Add 0.5 to get pixel center
+    cols_valid = valid_cols.astype(float) + 0.5
 
     # Use rasterio's transform.xy which correctly handles the transform
     # It accepts arrays and returns arrays
-    xs, ys = rasterio_transform.xy(transform, row_grid, col_grid)
+    xs_valid, ys_valid = rasterio_transform.xy(transform, rows_valid, cols_valid)
 
-    # Flatten to get (N, 2) array: [[easting1, northing1], [easting2, northing2], ...]
-    grid_locs = np.column_stack(
-        (np.array(xs).flatten(), np.array(ys).flatten())
-    ).astype(np.float64)
+    # Create (N_valid, 2) array: [[easting1, northing1], [easting2, northing2], ...]
+    # Only for valid pixels - this reduces array size from 161M to ~26M
+    grid_locs = np.column_stack((np.array(xs_valid), np.array(ys_valid))).astype(
+        np.float64
+    )
 
-    # grid_locs = grid_locs[0:500000, :]
+    # valid_flat_indices maps: position in grid_locs -> flat index in full raster
+    # This is needed to map results back to full raster indices
 
     # Load observed Vs30 data
     print()
@@ -155,10 +177,10 @@ if __name__ == "__main__":
     obs_locs = observed_vs30[["easting", "northing"]].values
 
     print(f"Loaded {len(observed_vs30)} observations")
-    print(f"Grid has {len(grid_locs):,} points")
+    print(f"Grid has {len(grid_locs):,} valid points (after filtering NoData)")
 
-    # Diagnostic: Check coordinate ranges
-    print("\nGrid coordinate ranges:")
+    # Diagnostic: Check coordinate ranges (only valid points)
+    print("\nValid grid coordinate ranges:")
     print(f"  Easting: {grid_locs[:, 0].min():.2f} to {grid_locs[:, 0].max():.2f}")
     print(f"  Northing: {grid_locs[:, 1].min():.2f} to {grid_locs[:, 1].max():.2f}")
     print("\nObservation coordinate ranges:")
@@ -200,7 +222,8 @@ if __name__ == "__main__":
 
     print(f"\nFinding active grid points within {max_dist}m of observations...")
     print(
-        f"Processing in {n_chunks} chunks (chunk size: {chunk_size:,} grid points, "
+        f"Processing {len(grid_locs):,} valid points in {n_chunks} chunks "
+        f"(chunk size: {chunk_size:,} grid points, "
         f"max memory: {total_memory_gb} GB)"
     )
 
@@ -213,15 +236,15 @@ if __name__ == "__main__":
     obs_northings_min = obs_northings - max_dist
     obs_northings_max = obs_northings + max_dist
 
-    # Initialize collapsed boolean mask: (n_grid,)
+    # Initialize collapsed boolean mask for VALID points only: (n_valid,)
     # True means grid point is affected by any observation
-    grid_points_in_bbox_of_any_obs_mask = np.zeros(len(grid_locs), dtype=bool)
+    valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
 
     # Initialize list to store grid indices for each observation
-    # obs_to_grid_indices[i] will contain grid point indices within observation i's radius
+    # obs_to_grid_indices[i] will contain FULL RASTER indices within observation i's radius
     obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(len(obs_locs))]
 
-    # Process each chunk sequentially
+    # Process each chunk sequentially (only valid points)
     for chunk_idx in tqdm(range(n_chunks), desc="Processing chunks"):
         start_idx = chunk_idx * chunk_size
         end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
@@ -229,6 +252,7 @@ if __name__ == "__main__":
 
         # Process this chunk with precomputed bounds
         # Returns collapsed mask and per-observation grid indices
+        # Note: indices returned are relative to grid_locs (valid points only)
         chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
             grid_locs=grid_locs_chunk,
             obs_eastings_min=obs_eastings_min,
@@ -238,21 +262,41 @@ if __name__ == "__main__":
             start_grid_idx=start_idx,
         )
 
-        # Store collapsed mask results
-        grid_points_in_bbox_of_any_obs_mask[start_idx:end_idx] = chunk_mask
+        # Store collapsed mask results (for valid points)
+        valid_points_in_bbox_mask[start_idx:end_idx] = chunk_mask
 
         # Accumulate grid indices for each observation
-        for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
-            if len(grid_indices) > 0:
+        # Convert from valid-point indices to full raster indices
+        for obs_idx, valid_indices in enumerate(chunk_obs_to_grid):
+            if len(valid_indices) > 0:
+                # Map valid point indices back to full raster indices
+                full_raster_indices = valid_flat_indices[valid_indices]
                 obs_to_grid_indices[obs_idx] = np.concatenate(
-                    [obs_to_grid_indices[obs_idx], grid_indices]
+                    [obs_to_grid_indices[obs_idx], full_raster_indices]
                 )
 
-    n_affected = np.sum(grid_points_in_bbox_of_any_obs_mask)
-    print(f"\nGrid points affected by any observation: {n_affected:,}")
+    # Create full-size mask (for all pixels, including NoData)
+    # Initialize all False, then set True only for valid points that are in bbox
+    grid_points_in_bbox_of_any_obs_mask = np.zeros(n_total_pixels, dtype=bool)
+
+    # Map valid points mask back to full raster indices
+    grid_points_in_bbox_of_any_obs_mask[valid_flat_indices] = valid_points_in_bbox_mask
+
+    n_affected = np.sum(valid_points_in_bbox_mask)  # Count of affected valid points
+    n_total = n_total_pixels  # Total includes NoData
+    n_valid_total = len(valid_points_in_bbox_mask)  # Total valid points
+    percentage_valid = 100 * n_affected / n_valid_total if n_valid_total > 0 else 0
+    percentage_total = 100 * n_affected / n_total if n_total > 0 else 0
+
+    print("\nGrid points affected by any observation:")
+    print(f"  Affected valid points: {n_affected:,}")
+    print(f"  Total valid points: {n_valid_total:,}")
+    print(f"  Percentage of valid points in mask: {percentage_valid:.2f}%")
+    print(f"  Total grid points (including NoData): {n_total:,}")
+    print(f"  Percentage of all grid points in mask: {percentage_total:.2f}%")
 
     if n_affected == 0:
-        print("\n⚠️  WARNING: No grid points found within bounding boxes!")
+        print("\n⚠️  WARNING: No valid grid points found within bounding boxes!")
         print("   Checking a sample observation...")
         if len(obs_locs) > 0:
             sample_obs_idx = 0
@@ -265,7 +309,7 @@ if __name__ == "__main__":
                 f"northing [{sample_obs[1] - max_dist:.2f}, {sample_obs[1] + max_dist:.2f}]"
             )
 
-            # Check if any grid points are close
+            # Check if any valid grid points are close
             distances = np.sqrt(
                 (grid_locs[:, 0] - sample_obs[0]) ** 2
                 + (grid_locs[:, 1] - sample_obs[1]) ** 2
@@ -274,22 +318,60 @@ if __name__ == "__main__":
             closest_idx = np.argmin(distances)
             closest_point = grid_locs[closest_idx]
             print(
-                f"   Closest grid point: easting={closest_point[0]:.2f}, northing={closest_point[1]:.2f}"
+                f"   Closest valid grid point: easting={closest_point[0]:.2f}, northing={closest_point[1]:.2f}"
             )
-            print(f"   Distance to closest grid point: {min_dist:.2f} m")
+            print(f"   Distance to closest valid grid point: {min_dist:.2f} m")
 
             if min_dist > max_dist:
                 print(
-                    f"   ⚠️  Closest grid point is {min_dist:.2f} m away, but max_dist is {max_dist} m"
+                    f"   ⚠️  Closest valid grid point is {min_dist:.2f} m away, but max_dist is {max_dist} m"
                 )
             else:
                 print(
-                    "   ✓ Closest grid point is within max_dist, but wasn't found by bounding box check"
+                    "   ✓ Closest valid grid point is within max_dist, but wasn't found by bounding box check"
                 )
                 print("   This suggests the bounding box logic may have an issue")
 
+    # Save the boolean mask in efficient formats
+    print("\nSaving boolean mask...")
+
+    # Save as NumPy binary format (.npy) - efficient for programmatic reading
+    mask_npy_path = base_path / "resources" / "data" / "grid_points_in_bbox_mask.npy"
+    mask_npy_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(mask_npy_path, grid_points_in_bbox_of_any_obs_mask)
+    print(f"  ✓ Saved flattened mask to {mask_npy_path}")
+    print(
+        f"    Shape: {grid_points_in_bbox_of_any_obs_mask.shape}, dtype: {grid_points_in_bbox_of_any_obs_mask.dtype}"
+    )
+
+    # Save as GeoTIFF raster - good for visualization and GIS tools
+    # Commented out for now, but may be useful later
+    # # Reshape mask back to original raster dimensions
+    # mask_2d = grid_points_in_bbox_of_any_obs_mask.reshape(raster_shape)
+    # mask_tif_path = base_path.parent / "vs30map" / "grid_points_in_bbox_mask.tif"
+    #
+    # with rasterio.open(
+    #     mask_tif_path,
+    #     "w",
+    #     driver="GTiff",
+    #     height=raster_shape[0],
+    #     width=raster_shape[1],
+    #     count=1,
+    #     dtype=mask_2d.dtype,
+    #     crs=crs,
+    #     transform=transform,
+    #     compress="lzw",  # Compression for efficiency
+    # ) as dst:
+    #     dst.write(mask_2d, 1)
+    #
+    # print(f"  ✓ Saved 2D raster mask to {mask_tif_path}")
+    # print(f"    Shape: {mask_2d.shape}, dtype: {mask_2d.dtype}")
+    # print(
+    #     f"    True values: {np.sum(mask_2d):,} ({100 * np.sum(mask_2d) / mask_2d.size:.2f}%)"
+    # )
+
     end_time = time.time()
-    print(f"Time taken: {end_time - start_time:.2f} seconds")
+    print(f"\nTime taken: {end_time - start_time:.2f} seconds")
 
     print()
 
