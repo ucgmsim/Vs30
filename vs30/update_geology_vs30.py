@@ -1,8 +1,10 @@
+import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio import transform as rasterio_transform
 from tqdm import tqdm
 
 
@@ -12,12 +14,13 @@ def grid_points_in_bbox(
     obs_eastings_max,  # (n_obs, 1) precomputed obs_eastings + max_dist
     obs_northings_min,  # (n_obs, 1) precomputed obs_northings - max_dist
     obs_northings_max,  # (n_obs, 1) precomputed obs_northings + max_dist
+    start_grid_idx=0,  # Starting index of grid_locs in the full grid
 ):
     """
-    Find active grid points within bounding boxes of observations using fully vectorized NumPy.
+    Find grid points within bounding boxes of observations using fully vectorized NumPy.
 
     Uses broadcasting to compute all observation-grid pairs simultaneously.
-    This leverages BLAS/LAPACK multithreading for maximum performance.
+    Returns collapsed mask and per-observation grid indices.
 
     Parameters
     ----------
@@ -31,12 +34,18 @@ def grid_points_in_bbox(
         Precomputed obs_northings - max_dist.
     obs_northings_max : ndarray, shape (N, 1)
         Precomputed obs_northings + max_dist.
+    start_grid_idx : int, optional
+        Starting index of grid_locs in the full grid (for offsetting indices).
+        Default is 0.
 
     Returns
     -------
-    active_mask : ndarray, shape (M,), dtype=bool
-        Boolean array indicating which grid points are active (within bounding box
-        of at least one observation).
+    chunk_mask : ndarray, shape (M,), dtype=bool
+        Boolean array indicating which grid points in this chunk are affected
+        by any observation (collapsed with np.any(axis=0)).
+    obs_to_grid_indices : list of ndarray
+        List of length n_obs. Each element is an array of grid point indices
+        (in the full grid) that are within that observation's bounding box.
     """
     # Extract coordinates
     grid_eastings = grid_locs[:, 0]  # (n_grid,)
@@ -52,12 +61,22 @@ def grid_points_in_bbox(
         & (grid_northings <= obs_northings_max)
     )
 
-    # The OR operation across observations can be done with any(axis=0)
-    # because (n_obs, n_grid) -> (n_grid,)
-    # A grid point is true if it's in the bounding box of ANY observation
-    in_bbox_mask = np.any(in_bbox, axis=0)
+    # Collapse to single mask: which grid points are affected by any observation
+    chunk_mask = np.any(in_bbox, axis=0)
 
-    return in_bbox_mask
+    # For each observation, get the grid point indices within its bounding box
+    # in_bbox shape: (n_obs, n_grid_chunk)
+    n_obs = in_bbox.shape[0]
+    obs_to_grid_indices = []
+
+    for obs_idx in range(n_obs):
+        # Get grid indices within this observation's bounding box
+        grid_indices_in_chunk = np.where(in_bbox[obs_idx])[0]
+        # Convert to full grid indices by adding start_grid_idx
+        full_grid_indices = grid_indices_in_chunk + start_grid_idx
+        obs_to_grid_indices.append(full_grid_indices)
+
+    return chunk_mask, obs_to_grid_indices
 
 
 def calculate_chunk_size(n_obs, total_memory_gb):
@@ -89,6 +108,8 @@ def calculate_chunk_size(n_obs, total_memory_gb):
 
 
 if __name__ == "__main__":
+    start_time = time.time()
+
     max_dist = 10000
     max_points = 500
     total_memory_gb = 10  # Total available memory in GB
@@ -106,26 +127,23 @@ if __name__ == "__main__":
 
     # Get NZTM coordinates for each grid point
     # Format: (N, 2) array where each row is [easting, northing]
-    # Compatible with precompute_active_grid_points_with_obs_mapping()
+    # Use rasterio's transform.xy to correctly convert row/col to coordinates
+    rows = np.arange(median_vs30.shape[0]) + 0.5  # Add 0.5 to get pixel center
+    cols = np.arange(median_vs30.shape[1]) + 0.5
 
-    # Direct calculation from transform
-    # Transform: [a, b, c, d, e, f] where:
-    #   x = a + b*col + c*row
-    #   y = d + e*col + f*row
-    # Add 0.5 to get pixel center coordinates
-    rows = (np.arange(median_vs30.shape[0]) + 0.5)[:, None]  # Shape: (height, 1)
-    cols = (np.arange(median_vs30.shape[1]) + 0.5)[None, :]  # Shape: (1, width)
+    # Create meshgrid of all row/col combinations
+    row_grid, col_grid = np.meshgrid(rows, cols, indexing="ij")
 
-    # Apply transform with broadcasting
-    easting = transform[0] + transform[1] * cols + transform[2] * rows
-    northing = transform[3] + transform[4] * cols + transform[5] * rows
+    # Use rasterio's transform.xy which correctly handles the transform
+    # It accepts arrays and returns arrays
+    xs, ys = rasterio_transform.xy(transform, row_grid, col_grid)
 
     # Flatten to get (N, 2) array: [[easting1, northing1], [easting2, northing2], ...]
-    grid_locs = np.column_stack((easting.flatten(), northing.flatten())).astype(
-        np.float64
-    )
+    grid_locs = np.column_stack(
+        (np.array(xs).flatten(), np.array(ys).flatten())
+    ).astype(np.float64)
 
-    grid_locs = grid_locs[0:500000, :]
+    # grid_locs = grid_locs[0:500000, :]
 
     # Load observed Vs30 data
     print()
@@ -138,6 +156,39 @@ if __name__ == "__main__":
 
     print(f"Loaded {len(observed_vs30)} observations")
     print(f"Grid has {len(grid_locs):,} points")
+
+    # Diagnostic: Check coordinate ranges
+    print("\nGrid coordinate ranges:")
+    print(f"  Easting: {grid_locs[:, 0].min():.2f} to {grid_locs[:, 0].max():.2f}")
+    print(f"  Northing: {grid_locs[:, 1].min():.2f} to {grid_locs[:, 1].max():.2f}")
+    print("\nObservation coordinate ranges:")
+    print(f"  Easting: {obs_locs[:, 0].min():.2f} to {obs_locs[:, 0].max():.2f}")
+    print(f"  Northing: {obs_locs[:, 1].min():.2f} to {obs_locs[:, 1].max():.2f}")
+
+    # Check if coordinates overlap
+    grid_east_range = (grid_locs[:, 0].min(), grid_locs[:, 0].max())
+    grid_north_range = (grid_locs[:, 1].min(), grid_locs[:, 1].max())
+    obs_east_range = (obs_locs[:, 0].min(), obs_locs[:, 0].max())
+    obs_north_range = (obs_locs[:, 1].min(), obs_locs[:, 1].max())
+
+    east_overlap = not (
+        grid_east_range[1] < obs_east_range[0] or obs_east_range[1] < grid_east_range[0]
+    )
+    north_overlap = not (
+        grid_north_range[1] < obs_north_range[0]
+        or obs_north_range[1] < grid_north_range[0]
+    )
+
+    print("\nCoordinate overlap check:")
+    print(f"  Easting overlap: {east_overlap}")
+    print(f"  Northing overlap: {north_overlap}")
+
+    if not east_overlap or not north_overlap:
+        print("\n⚠️  WARNING: Grid and observation coordinates do not overlap!")
+        print("   This suggests a coordinate system mismatch.")
+        print("   Expected NZTM (EPSG:2193) coordinates.")
+        print("   NZTM eastings are typically 1,000,000 - 2,000,000")
+        print("   NZTM northings are typically 4,000,000 - 7,000,000")
 
     # Get CRS as string for compatibility
     # NZTM is EPSG:2193
@@ -162,8 +213,13 @@ if __name__ == "__main__":
     obs_northings_min = obs_northings - max_dist
     obs_northings_max = obs_northings + max_dist
 
-    # Initialize the result mask
-    in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
+    # Initialize collapsed boolean mask: (n_grid,)
+    # True means grid point is affected by any observation
+    grid_points_in_bbox_of_any_obs_mask = np.zeros(len(grid_locs), dtype=bool)
+
+    # Initialize list to store grid indices for each observation
+    # obs_to_grid_indices[i] will contain grid point indices within observation i's radius
+    obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(len(obs_locs))]
 
     # Process each chunk sequentially
     for chunk_idx in tqdm(range(n_chunks), desc="Processing chunks"):
@@ -172,25 +228,70 @@ if __name__ == "__main__":
         grid_locs_chunk = grid_locs[start_idx:end_idx]
 
         # Process this chunk with precomputed bounds
-        chunk_mask = grid_points_in_bbox(
+        # Returns collapsed mask and per-observation grid indices
+        chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
             grid_locs=grid_locs_chunk,
             obs_eastings_min=obs_eastings_min,
             obs_eastings_max=obs_eastings_max,
             obs_northings_min=obs_northings_min,
             obs_northings_max=obs_northings_max,
+            start_grid_idx=start_idx,
         )
 
-        # Store results in the appropriate positions
-        in_bbox_mask[start_idx:end_idx] = chunk_mask
+        # Store collapsed mask results
+        grid_points_in_bbox_of_any_obs_mask[start_idx:end_idx] = chunk_mask
+
+        # Accumulate grid indices for each observation
+        for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
+            if len(grid_indices) > 0:
+                obs_to_grid_indices[obs_idx] = np.concatenate(
+                    [obs_to_grid_indices[obs_idx], grid_indices]
+                )
+
+    n_affected = np.sum(grid_points_in_bbox_of_any_obs_mask)
+    print(f"\nGrid points affected by any observation: {n_affected:,}")
+
+    if n_affected == 0:
+        print("\n⚠️  WARNING: No grid points found within bounding boxes!")
+        print("   Checking a sample observation...")
+        if len(obs_locs) > 0:
+            sample_obs_idx = 0
+            sample_obs = obs_locs[sample_obs_idx]
+            print(
+                f"   Sample observation {sample_obs_idx}: easting={sample_obs[0]:.2f}, northing={sample_obs[1]:.2f}"
+            )
+            print(
+                f"   Bounding box: easting [{sample_obs[0] - max_dist:.2f}, {sample_obs[0] + max_dist:.2f}], "
+                f"northing [{sample_obs[1] - max_dist:.2f}, {sample_obs[1] + max_dist:.2f}]"
+            )
+
+            # Check if any grid points are close
+            distances = np.sqrt(
+                (grid_locs[:, 0] - sample_obs[0]) ** 2
+                + (grid_locs[:, 1] - sample_obs[1]) ** 2
+            )
+            min_dist = np.min(distances)
+            closest_idx = np.argmin(distances)
+            closest_point = grid_locs[closest_idx]
+            print(
+                f"   Closest grid point: easting={closest_point[0]:.2f}, northing={closest_point[1]:.2f}"
+            )
+            print(f"   Distance to closest grid point: {min_dist:.2f} m")
+
+            if min_dist > max_dist:
+                print(
+                    f"   ⚠️  Closest grid point is {min_dist:.2f} m away, but max_dist is {max_dist} m"
+                )
+            else:
+                print(
+                    "   ✓ Closest grid point is within max_dist, but wasn't found by bounding box check"
+                )
+                print("   This suggests the bounding box logic may have an issue")
+
+    end_time = time.time()
+    print(f"Time taken: {end_time - start_time:.2f} seconds")
 
     print()
-
-    # print()
-
-    # n_active = np.sum(in_bbox_mask)
-    # print(
-    #     f"\n  Active grid points: {n_active:,}/{len(grid_locs):,} ({100 * n_active / len(grid_locs):.1f}%)"
-    # )
 
     # # Create reverse mapping: for each observation, which grid points are active
     # # Convert grid_to_obs (grid_idx -> [obs_indices]) to obs_to_grid (obs_idx -> [grid_indices])
