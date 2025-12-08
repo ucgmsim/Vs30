@@ -1,0 +1,37 @@
+# MVN Configuration File
+# All constants and magic numbers are defined here
+
+# Models to process: can be ["geology"], ["terrain"], or ["geology", "terrain"]
+models_to_process:
+  - geology
+
+# Maximum distance in meters for considering observations
+max_dist_m: 10000
+
+# Maximum number of observations to consider per pixel
+max_points: 500
+
+# Covariance reduction factor
+cov_reduc: 1.5
+
+# Whether measurements are noisy (affects noise weighting)
+noisy: true
+
+# Correlation length parameters (in meters)
+phi_geology: 1407
+phi_terrain: 993
+
+# Total available memory in GB for chunking
+total_memory_gb: 3
+
+# Update mode for categorical priors:
+#   "prior": use prior values unchanged (bypasses Bayesian update)
+#   "posterior_paper": use hardcoded posterior values from paper
+#   "computed": compute Bayesian update from observations
+#   "custom": use custom values (if provided)
+update_mode: computed
+
+# Parameters for Bayesian updates
+n_prior: 3  # Assume prior model made up of n_prior measurements
+min_sigma: 0.5  # Minimum standard deviation allowed
+
