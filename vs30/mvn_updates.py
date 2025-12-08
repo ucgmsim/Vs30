@@ -12,8 +12,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio
-from rasterio import transform as rasterio_transform
 from scipy.spatial.distance import cdist, euclidean
 from tqdm import tqdm
 
@@ -343,6 +341,12 @@ def update_categorical_priors(
         return model_module.model_posterior_paper()
     elif mvn_config.update_mode == "computed":
         # Compute batch Bayesian update using observations
+        # First, compute model IDs from observation locations and add to DataFrame
+        obs_locs = observations[["easting", "northing"]].values
+        model_ids = model_module.model_id(obs_locs)
+        observations = observations.copy()  # Avoid modifying original
+        observations[model_config.id_column] = model_ids
+
         category_stats = compute_category_statistics(
             observations, model_config.id_column
         )
@@ -708,6 +712,8 @@ def compute_mvn_update_for_pixel(
     cov_matrix = build_covariance_matrix(pixel, selected_obs, model_config, mvn_config)
 
     # Invert covariance matrix (observations only)
+    # Note: This uses BLAS/LAPACK and can cause CPU spikes when many observations
+    # are present (up to max_points=500, resulting in 500x500 matrix inversion)
     inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
 
     # Calculate prediction update
@@ -788,7 +794,12 @@ def find_affected_pixels(
     ]
 
     # Process each chunk
-    for chunk_idx in tqdm(range(n_chunks), desc="Finding affected pixels"):
+    logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
+    for chunk_idx in tqdm(
+        range(n_chunks),
+        desc="Finding affected pixels",
+        unit="chunk",
+    ):
         start_idx = chunk_idx * chunk_size
         end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
         grid_locs_chunk = grid_locs[start_idx:end_idx]
@@ -816,10 +827,16 @@ def find_affected_pixels(
     grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
     grid_points_in_bbox_mask[raster_data.valid_flat_indices] = valid_points_in_bbox_mask
 
+    n_affected = np.sum(valid_points_in_bbox_mask)
+    logger.info(
+        f"Bounding box search complete: {n_affected:,} pixels affected "
+        f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
+    )
+
     return BoundingBoxResult(
         mask=grid_points_in_bbox_mask,
         obs_to_grid_indices=obs_to_grid_indices,
-        n_affected_pixels=np.sum(valid_points_in_bbox_mask),
+        n_affected_pixels=n_affected,
     )
 
 
@@ -878,7 +895,24 @@ def compute_mvn_updates(
 
     all_updates = []
 
-    for chunk_idx in tqdm(range(n_chunks), desc="Computing MVN updates"):
+    logger.info(
+        f"Processing {n_chunks} chunks of up to {chunk_size:,} pixels each "
+        f"({len(affected_flat_indices):,} total pixels to update)"
+    )
+
+    # Create a single progress bar that tracks pixels across all chunks
+    total_pixels = len(affected_flat_indices)
+    pixel_pbar = tqdm(
+        total=total_pixels,
+        desc="Computing MVN updates",
+        unit="pixel",
+        mininterval=0.1,  # Update at least every 0.1 seconds for responsiveness
+        maxinterval=1.0,  # But don't update more than once per second
+    )
+
+    pixels_processed = 0
+
+    for chunk_idx in range(n_chunks):
         start_idx = chunk_idx * chunk_size
         end_idx = min((chunk_idx + 1) * chunk_size, len(affected_flat_indices))
 
@@ -887,6 +921,9 @@ def compute_mvn_updates(
 
         # Build chunk cache: reverse mapping from grid pixels to observations
         # Use set for faster lookup
+        pixel_pbar.set_postfix(
+            {"status": "building cache", "chunk": f"{chunk_idx + 1}/{n_chunks}"}
+        )
         chunk_flat_indices_set = set(chunk_flat_indices)
         chunk_grid_to_obs: dict[int, list[int]] = {}
         for obs_idx, grid_indices in enumerate(bbox_result.obs_to_grid_indices):
@@ -900,6 +937,14 @@ def compute_mvn_updates(
         chunk_affected_locs = affected_locs[start_idx:end_idx]
         chunk_affected_vs30 = affected_vs30[start_idx:end_idx]
         chunk_affected_stdv = affected_stdv[start_idx:end_idx]
+
+        pixel_pbar.set_postfix(
+            {
+                "status": "processing",
+                "chunk": f"{chunk_idx + 1}/{n_chunks}",
+                "updated": len(all_updates),
+            }
+        )
 
         for i, (flat_idx, valid_idx) in enumerate(
             zip(chunk_flat_indices, chunk_valid_indices)
@@ -922,6 +967,25 @@ def compute_mvn_updates(
 
             if update_result is not None:
                 all_updates.append(update_result)
+
+            pixels_processed += 1
+            pixel_pbar.update(1)
+
+            # Update progress bar with stats every 1000 pixels
+            if pixels_processed % 1000 == 0:
+                rate = pixel_pbar.format_dict.get("rate", 0)
+                pixel_pbar.set_postfix(
+                    {
+                        "status": "processing",
+                        "chunk": f"{chunk_idx + 1}/{n_chunks}",
+                        "updated": f"{len(all_updates):,}",
+                        "rate": f"{rate:.0f} pix/s" if rate else "calculating...",
+                    }
+                )
+
+    pixel_pbar.close()
+
+    logger.info(f"Completed processing all chunks: {len(all_updates):,} pixels updated")
 
     return all_updates
 
@@ -969,7 +1033,10 @@ def apply_and_write_updates(
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
 
-    logger.info(f"Wrote updated raster to {output_path}")
+    logger.info(
+        f"Wrote updated raster to {output_path} "
+        f"({len(updates):,} pixels updated out of {np.sum(raster_data.valid_mask):,} valid)"
+    )
 
 
 # ============================================================================
@@ -1040,7 +1107,13 @@ def load_observations(base_path: Path) -> pd.DataFrame:
     DataFrame
         Observations with vs30, uncertainty, easting, northing.
     """
-    obs_path = base_path / "resources" / "data" / "measured_vs30_original_filtered.csv"
+    obs_path = (
+        base_path
+        / "vs30"
+        / "resources"
+        / "data"
+        / "measured_vs30_original_filtered.csv"
+    )
     return pd.read_csv(obs_path)
 
 
@@ -1073,29 +1146,79 @@ def process_model_updates(config: MVNConfig, base_path: Path) -> None:
         validate_raster_data(raster_data)
 
         # Stage 2: Load observations
+        logger.info("Loading observations...")
         observations = load_observations(base_path)
         validate_observations(observations)
+        logger.info(f"Loaded {len(observations)} observations")
 
         # Stage 3: Bayesian update (optional)
+        logger.info(f"Updating categorical priors (mode: {config.update_mode})...")
+        start_time_stage = time.time()
         updated_model_table = update_categorical_priors(
             model_config, observations, config
         )
+        logger.info(
+            f"Updated categorical priors in {time.time() - start_time_stage:.2f}s"
+        )
 
         # Stage 4: Prepare observation data for MVN
+        logger.info("Preparing observation data for MVN processing...")
+        start_time_stage = time.time()
         obs_data = prepare_observation_data(
             observations, raster_data, updated_model_table, model_config, config
         )
+        logger.info(
+            f"Prepared {len(obs_data.locations)} valid observations "
+            f"(filtered from {len(observations)}) in {time.time() - start_time_stage:.2f}s"
+        )
 
         # Stage 5: Find affected pixels
+        logger.info("Finding pixels affected by observations...")
+        start_time_stage = time.time()
         bbox_result = find_affected_pixels(raster_data, obs_data, config)
+        logger.info(
+            f"Found {bbox_result.n_affected_pixels:,} affected pixels "
+            f"(out of {np.sum(raster_data.valid_mask):,} valid pixels) "
+            f"in {time.time() - start_time_stage:.2f}s"
+        )
 
         # Stage 6: Compute MVN updates
+        logger.info("Computing MVN updates for affected pixels...")
+        start_time_stage = time.time()
         updates = compute_mvn_updates(
             raster_data, obs_data, bbox_result, model_config, config
         )
+        elapsed_stage = time.time() - start_time_stage
+        if len(updates) > 0:
+            logger.info(
+                f"Computed {len(updates):,} MVN updates in {elapsed_stage:.2f}s "
+                f"({elapsed_stage / len(updates) * 1000:.2f}ms per pixel)"
+            )
+        else:
+            logger.info(
+                f"Computed {len(updates):,} MVN updates in {elapsed_stage:.2f}s"
+            )
+
+        # Log statistics about updates
+        if len(updates) > 0:
+            n_obs_used = [u.n_observations_used for u in updates]
+            min_dists = [u.min_distance for u in updates if u.min_distance != np.inf]
+            stats_parts = [
+                f"avg observations used: {np.mean(n_obs_used):.1f} "
+                f"(min: {np.min(n_obs_used)}, max: {np.max(n_obs_used)})"
+            ]
+            if len(min_dists) > 0:
+                stats_parts.append(
+                    f"avg min distance: {np.mean(min_dists):.1f}m "
+                    f"(min: {np.min(min_dists):.1f}m, max: {np.max(min_dists):.1f}m)"
+                )
+            logger.info(f"Update statistics: {', '.join(stats_parts)}")
 
         # Stage 7: Apply updates and write output
+        logger.info("Applying updates and writing output raster...")
+        start_time_stage = time.time()
         apply_and_write_updates(raster_data, updates, model_config, config, base_path)
+        logger.info(f"Wrote output raster in {time.time() - start_time_stage:.2f}s")
 
         logger.info(f"Completed processing {model_name} model")
 
@@ -1115,305 +1238,7 @@ if __name__ == "__main__":
     # Run main pipeline
     process_model_updates(config, base_path.parent)
 
-    # Open the geology.tif file
-    with rasterio.open(base_path.parent / "vs30map" / "geology.tif") as src:
-        median_vs30 = src.read(1)
-        std_vs30 = src.read(2)
-
-        # Get metadata
-        transform = src.transform
-        crs = src.crs
-        raster_shape = median_vs30.shape  # Store original raster shape
-
-        # Create mask of valid (non-NoData) pixels
-        nodata = src.nodatavals[0] if src.nodatavals else None
-        if nodata is not None:
-            valid_mask = median_vs30 != nodata
-        else:
-            valid_mask = ~np.isnan(median_vs30)
-
-        # Get flat indices of valid pixels (for mapping back to full raster)
-        valid_flat_indices = np.where(valid_mask.flatten())[0]
-        n_valid = len(valid_flat_indices)
-        n_total_pixels = valid_mask.size
-
-        print("\nFiltering valid pixels:")
-        print(f"  Total pixels: {n_total_pixels:,}")
-        print(f"  Valid pixels: {n_valid:,} ({100 * n_valid / n_total_pixels:.2f}%)")
-        print(
-            f"  NoData pixels: {n_total_pixels - n_valid:,} ({100 * (n_total_pixels - n_valid) / n_total_pixels:.2f}%)"
-        )
-        print(f"  Excluding {n_total_pixels - n_valid:,} NoData pixels from processing")
-
-    # Get NZTM coordinates for VALID grid points only
-    # Format: (N_valid, 2) array where each row is [easting, northing]
-    # Use rasterio's transform.xy to correctly convert row/col to coordinates
-    # Only process valid pixels to reduce computation by ~84%
-    valid_rows, valid_cols = np.where(valid_mask)
-    rows_valid = valid_rows.astype(float) + 0.5  # Add 0.5 to get pixel center
-    cols_valid = valid_cols.astype(float) + 0.5
-
-    # Use rasterio's transform.xy which correctly handles the transform
-    # It accepts arrays and returns arrays
-    xs_valid, ys_valid = rasterio_transform.xy(transform, rows_valid, cols_valid)
-
-    # Create (N_valid, 2) array: [[easting1, northing1], [easting2, northing2], ...]
-    # Only for valid pixels - this reduces array size from 161M to ~26M
-    grid_locs = np.column_stack((np.array(xs_valid), np.array(ys_valid))).astype(
-        np.float64
+    elapsed_total = time.time() - start_time
+    logger.info(
+        f"Total processing time: {elapsed_total:.2f}s ({elapsed_total / 60:.1f} minutes)"
     )
-
-    # valid_flat_indices maps: position in grid_locs -> flat index in full raster
-    # This is needed to map results back to full raster indices
-
-    # Load observed Vs30 data
-    print()
-    observed_vs30 = pd.read_csv(
-        base_path / "resources/data/measured_vs30_original_filtered.csv"
-    )
-
-    # Extract observation locations (all observations, not just first 2)
-    obs_locs = observed_vs30[["easting", "northing"]].values
-
-    print(f"Loaded {len(observed_vs30)} observations")
-    print(f"Grid has {len(grid_locs):,} valid points (after filtering NoData)")
-
-    # Diagnostic: Check coordinate ranges (only valid points)
-    print("\nValid grid coordinate ranges:")
-    print(f"  Easting: {grid_locs[:, 0].min():.2f} to {grid_locs[:, 0].max():.2f}")
-    print(f"  Northing: {grid_locs[:, 1].min():.2f} to {grid_locs[:, 1].max():.2f}")
-    print("\nObservation coordinate ranges:")
-    print(f"  Easting: {obs_locs[:, 0].min():.2f} to {obs_locs[:, 0].max():.2f}")
-    print(f"  Northing: {obs_locs[:, 1].min():.2f} to {obs_locs[:, 1].max():.2f}")
-
-    # Check if coordinates overlap
-    grid_east_range = (grid_locs[:, 0].min(), grid_locs[:, 0].max())
-    grid_north_range = (grid_locs[:, 1].min(), grid_locs[:, 1].max())
-    obs_east_range = (obs_locs[:, 0].min(), obs_locs[:, 0].max())
-    obs_north_range = (obs_locs[:, 1].min(), obs_locs[:, 1].max())
-
-    east_overlap = not (
-        grid_east_range[1] < obs_east_range[0] or obs_east_range[1] < grid_east_range[0]
-    )
-    north_overlap = not (
-        grid_north_range[1] < obs_north_range[0]
-        or obs_north_range[1] < grid_north_range[0]
-    )
-
-    print("\nCoordinate overlap check:")
-    print(f"  Easting overlap: {east_overlap}")
-    print(f"  Northing overlap: {north_overlap}")
-
-    if not east_overlap or not north_overlap:
-        print("\n⚠️  WARNING: Grid and observation coordinates do not overlap!")
-        print("   This suggests a coordinate system mismatch.")
-        print("   Expected NZTM (EPSG:2193) coordinates.")
-        print("   NZTM eastings are typically 1,000,000 - 2,000,000")
-        print("   NZTM northings are typically 4,000,000 - 7,000,000")
-
-    # Get CRS as string for compatibility
-    # NZTM is EPSG:2193
-    crs_str = "EPSG:2193"
-
-    # Calculate chunk size based on total memory
-    chunk_size = calculate_chunk_size(len(obs_locs), total_memory_gb)
-    n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
-
-    print(f"\nFinding active grid points within {max_dist}m of observations...")
-    print(
-        f"Processing {len(grid_locs):,} valid points in {n_chunks} chunks "
-        f"(chunk size: {chunk_size:,} grid points, "
-        f"max memory: {total_memory_gb} GB)"
-    )
-
-    # Precompute observation bounds once (before chunking loop)
-    # Shape: (n_obs, 1) for observations - keep dim for broadcasting
-    obs_eastings = obs_locs[:, 0:1]  # (n_obs, 1)
-    obs_northings = obs_locs[:, 1:2]  # (n_obs, 1)
-    obs_eastings_min = obs_eastings - max_dist
-    obs_eastings_max = obs_eastings + max_dist
-    obs_northings_min = obs_northings - max_dist
-    obs_northings_max = obs_northings + max_dist
-
-    # Initialize collapsed boolean mask for VALID points only: (n_valid,)
-    # True means grid point is affected by any observation
-    valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
-
-    # Initialize list to store grid indices for each observation
-    # obs_to_grid_indices[i] will contain FULL RASTER indices within observation i's radius
-    obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(len(obs_locs))]
-
-    # Process each chunk sequentially (only valid points)
-    for chunk_idx in tqdm(range(n_chunks), desc="Processing chunks"):
-        start_idx = chunk_idx * chunk_size
-        end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
-        grid_locs_chunk = grid_locs[start_idx:end_idx]
-
-        # Process this chunk with precomputed bounds
-        # Returns collapsed mask and per-observation grid indices
-        # Note: indices returned are relative to grid_locs (valid points only)
-        chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
-            grid_locs=grid_locs_chunk,
-            obs_eastings_min=obs_eastings_min,
-            obs_eastings_max=obs_eastings_max,
-            obs_northings_min=obs_northings_min,
-            obs_northings_max=obs_northings_max,
-            start_grid_idx=start_idx,
-        )
-
-        # Store collapsed mask results (for valid points)
-        valid_points_in_bbox_mask[start_idx:end_idx] = chunk_mask
-
-        # Accumulate grid indices for each observation
-        # Convert from valid-point indices to full raster indices
-        for obs_idx, valid_indices in enumerate(chunk_obs_to_grid):
-            if len(valid_indices) > 0:
-                # Map valid point indices back to full raster indices
-                full_raster_indices = valid_flat_indices[valid_indices]
-                obs_to_grid_indices[obs_idx] = np.concatenate(
-                    [obs_to_grid_indices[obs_idx], full_raster_indices]
-                )
-
-    # Create full-size mask (for all pixels, including NoData)
-    # Initialize all False, then set True only for valid points that are in bbox
-    grid_points_in_bbox_of_any_obs_mask = np.zeros(n_total_pixels, dtype=bool)
-
-    # Map valid points mask back to full raster indices
-    grid_points_in_bbox_of_any_obs_mask[valid_flat_indices] = valid_points_in_bbox_mask
-
-    n_affected = np.sum(valid_points_in_bbox_mask)  # Count of affected valid points
-    n_total = n_total_pixels  # Total includes NoData
-    n_valid_total = len(valid_points_in_bbox_mask)  # Total valid points
-    percentage_valid = 100 * n_affected / n_valid_total if n_valid_total > 0 else 0
-    percentage_total = 100 * n_affected / n_total if n_total > 0 else 0
-
-    print("\nGrid points affected by any observation:")
-    print(f"  Affected valid points: {n_affected:,}")
-    print(f"  Total valid points: {n_valid_total:,}")
-    print(f"  Percentage of valid points in mask: {percentage_valid:.2f}%")
-    print(f"  Total grid points (including NoData): {n_total:,}")
-    print(f"  Percentage of all grid points in mask: {percentage_total:.2f}%")
-
-    if n_affected == 0:
-        print("\n⚠️  WARNING: No valid grid points found within bounding boxes!")
-        print("   Checking a sample observation...")
-        if len(obs_locs) > 0:
-            sample_obs_idx = 0
-            sample_obs = obs_locs[sample_obs_idx]
-            print(
-                f"   Sample observation {sample_obs_idx}: easting={sample_obs[0]:.2f}, northing={sample_obs[1]:.2f}"
-            )
-            print(
-                f"   Bounding box: easting [{sample_obs[0] - max_dist:.2f}, {sample_obs[0] + max_dist:.2f}], "
-                f"northing [{sample_obs[1] - max_dist:.2f}, {sample_obs[1] + max_dist:.2f}]"
-            )
-
-            # Check if any valid grid points are close
-            distances = np.sqrt(
-                (grid_locs[:, 0] - sample_obs[0]) ** 2
-                + (grid_locs[:, 1] - sample_obs[1]) ** 2
-            )
-            min_dist = np.min(distances)
-            closest_idx = np.argmin(distances)
-            closest_point = grid_locs[closest_idx]
-            print(
-                f"   Closest valid grid point: easting={closest_point[0]:.2f}, northing={closest_point[1]:.2f}"
-            )
-            print(f"   Distance to closest valid grid point: {min_dist:.2f} m")
-
-            if min_dist > max_dist:
-                print(
-                    f"   ⚠️  Closest valid grid point is {min_dist:.2f} m away, but max_dist is {max_dist} m"
-                )
-            else:
-                print(
-                    "   ✓ Closest valid grid point is within max_dist, but wasn't found by bounding box check"
-                )
-                print("   This suggests the bounding box logic may have an issue")
-
-    # Save the boolean mask in efficient formats
-    print("\nSaving boolean mask...")
-
-    # Save as NumPy binary format (.npy) - efficient for programmatic reading
-    mask_npy_path = base_path / "resources" / "data" / "grid_points_in_bbox_mask.npy"
-    mask_npy_path.parent.mkdir(parents=True, exist_ok=True)
-    np.save(mask_npy_path, grid_points_in_bbox_of_any_obs_mask)
-    print(f"  ✓ Saved flattened mask to {mask_npy_path}")
-    print(
-        f"    Shape: {grid_points_in_bbox_of_any_obs_mask.shape}, dtype: {grid_points_in_bbox_of_any_obs_mask.dtype}"
-    )
-
-    # Save as GeoTIFF raster - good for visualization and GIS tools
-    # Commented out for now, but may be useful later
-    # # Reshape mask back to original raster dimensions
-    # mask_2d = grid_points_in_bbox_of_any_obs_mask.reshape(raster_shape)
-    # mask_tif_path = base_path.parent / "vs30map" / "grid_points_in_bbox_mask.tif"
-    #
-    # with rasterio.open(
-    #     mask_tif_path,
-    #     "w",
-    #     driver="GTiff",
-    #     height=raster_shape[0],
-    #     width=raster_shape[1],
-    #     count=1,
-    #     dtype=mask_2d.dtype,
-    #     crs=crs,
-    #     transform=transform,
-    #     compress="lzw",  # Compression for efficiency
-    # ) as dst:
-    #     dst.write(mask_2d, 1)
-    #
-    # print(f"  ✓ Saved 2D raster mask to {mask_tif_path}")
-    # print(f"    Shape: {mask_2d.shape}, dtype: {mask_2d.dtype}")
-    # print(
-    #     f"    True values: {np.sum(mask_2d):,} ({100 * np.sum(mask_2d) / mask_2d.size:.2f}%)"
-    # )
-
-    end_time = time.time()
-    print(f"\nTime taken: {end_time - start_time:.2f} seconds")
-
-    print()
-
-    # # Create reverse mapping: for each observation, which grid points are active
-    # # Convert grid_to_obs (grid_idx -> [obs_indices]) to obs_to_grid (obs_idx -> [grid_indices])
-    # obs_to_grid = {}
-    # for grid_idx, obs_indices in grid_to_obs.items():
-    #     for obs_idx in obs_indices:
-    #         if obs_idx not in obs_to_grid:
-    #             obs_to_grid[obs_idx] = []
-    #         obs_to_grid[obs_idx].append(int(grid_idx))
-
-    # # Add active grid point information to observed_vs30 DataFrame
-    # # Store as list of grid point indices for each observation
-    # observed_vs30["active_grid_indices"] = observed_vs30.index.map(
-    #     lambda idx: obs_to_grid.get(idx, [])
-    # )
-    # observed_vs30["n_active_grid_points"] = observed_vs30["active_grid_indices"].map(
-    #     len
-    # )
-
-    # print("\nObservations with active grid points:")
-    # print(
-    #     f"  {np.sum(observed_vs30['n_active_grid_points'] > 0)}/{len(observed_vs30)} observations affect grid points"
-    # )
-    # print(
-    #     f"  Mean active grid points per observation: {observed_vs30['n_active_grid_points'].mean():.1f}"
-    # )
-    # print(
-    #     f"  Max active grid points per observation: {observed_vs30['n_active_grid_points'].max()}"
-    # )
-
-    # print()
-
-    # # Save updated DataFrame with active grid point information
-    # output_file = "vs30/resources/data/measured_vs30_with_active_grid_points.csv"
-    # print(f"\nSaving to {output_file}...")
-    # # Convert list column to string for CSV compatibility
-    # observed_vs30_export = observed_vs30.copy()
-    # observed_vs30_export["active_grid_indices"] = observed_vs30_export[
-    #     "active_grid_indices"
-    # ].map(lambda x: ",".join(map(str, x)) if x else "")
-    # observed_vs30_export.to_csv(output_file, index=False)
-    # print(f"✓ Saved {len(observed_vs30)} observations with active grid point mappings")
-
-    # print()
