@@ -2,17 +2,14 @@
 MVN (multivariate normal distribution)
 for modifying vs30 values based on proximity to measured values.
 """
-import os
-import logging
 
-from functools import partial
-from multiprocessing import Pool
+import logging
 import os
+from multiprocessing import Pool
 from shutil import copyfile
 
 import numpy as np
 from osgeo import gdal
-
 
 logger = logging.getLogger(__name__)
 
@@ -171,9 +168,11 @@ def mvn_table(table, sites, model_name):
     """
     # reset indexes for this instance to prevent index errors with split table
     ix0_table = table.reset_index(drop=True)
-    logger.debug(f"Running MVN on {len(ix0_table)} points for "
-                 f"model {model_name} on process {os.getpid()}")
-    result =  np.column_stack(
+    logger.debug(
+        f"Running MVN on {len(ix0_table)} points for "
+        f"model {model_name} on process {os.getpid()}"
+    )
+    result = np.column_stack(
         _mvn(
             ix0_table[["easting", "northing"]].values,
             ix0_table[f"{model_name}_vs30"],
@@ -182,15 +181,20 @@ def mvn_table(table, sites, model_name):
             model_name,
         )
     )
-    logger.debug(f"Completed MVN on {len(ix0_table)} points for "
-                 f"model {model_name} on process {os.getpid()}")
+    logger.debug(
+        f"Completed MVN on {len(ix0_table)} points for "
+        f"model {model_name} on process {os.getpid()}"
+    )
     return result
 
 
-def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_name):
+def _mvn_tiff_worker(model_args):
     """
     Works on single tif block as split by mvn_tiff.
     """
+
+    tif_path, x_offset, y_offset, x_size, y_size, sites, model_name = model_args
+
     # load tif
     tif_ds = gdal.Open(tif_path, gdal.GA_ReadOnly)
     tif_trans = tif_ds.GetGeoTransform()
@@ -208,6 +212,7 @@ def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_
         xoff=x_offset, yoff=y_offset, win_xsize=x_size, win_ysize=y_size
     ).flatten()
     stdv_val[stdv_val == stdv_nd] = np.nan
+
     # coordinates for tif data
     locs = np.vstack(
         np.mgrid[
@@ -222,7 +227,6 @@ def _mvn_tiff_worker(tif_path, x_offset, y_offset, x_size, y_size, sites, model_
     vs30_band = None
     stdv_band = None
     tif_ds = None
-
     # calculate mvn
     vs30_mvn, stdv_mvn = _mvn(locs, vs30_val, stdv_val, sites, model_name)
     return (
@@ -269,7 +273,6 @@ def mvn_tiff(out_dir, model_name, sites, nproc=1):
                 block_y = ny - y * block[1]
 
             job_args.append((in_tiff, xoff, yoff, block[0], block_y, sites, model_name))
-
     with Pool(nproc) as pool:
         results = pool.map(_mvn_tiff_worker, job_args)
 
