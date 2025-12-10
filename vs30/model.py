@@ -2,15 +2,77 @@
 Shared model functions for processing GIS data and processing/combining models.
 """
 
-from math import exp, log, sqrt
+import importlib.resources
 import os
+from math import exp, log, sqrt
 
 import numpy as np
+import pandas as pd
 from osgeo import gdal, gdalconst
 
 gdal.UseExceptions()
 
 ID_NODATA = 255
+
+# Resources directory path using importlib.resources
+RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
+
+
+def load_model_values_from_csv(csv_path: str) -> np.ndarray:
+    """
+    Load model values (vs30 and standard deviation) from CSV file.
+
+    Parameters
+    ----------
+    csv_path : str
+        Path to CSV file relative to resources directory.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape (n_categories, 2) with dtype np.float64.
+        Columns are [mean_vs30_km_per_s, standard_deviation_vs30_km_per_s].
+
+    Raises
+    ------
+    FileNotFoundError
+        If CSV file is not found.
+    ValueError
+        If CSV file is malformed or missing required columns.
+    """
+    # Resolve CSV file path using importlib.resources
+    csv_file_traversable = RESOURCE_PATH / csv_path
+
+    # Use importlib.resources.as_file to get a context manager for file access
+    # This handles both development (files on disk) and installed package scenarios
+    with importlib.resources.as_file(csv_file_traversable) as csv_file_path:
+        if not csv_file_path.exists():
+            raise FileNotFoundError(
+                f"CSV file not found: {csv_file_path}. "
+                f"Expected path relative to resources directory: {csv_path}"
+            )
+
+        # Read CSV - first read all columns to check what's available
+        # Use skipinitialspace=True to handle spaces after commas in CSV
+        df_all = pd.read_csv(csv_file_path, skipinitialspace=True)
+
+        # Check if required columns exist
+        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+        missing_cols = [col for col in required_cols if col not in df_all.columns]
+
+        if missing_cols:
+            available_cols = list(df_all.columns)
+            raise ValueError(
+                f"CSV file {csv_file_path} is missing required columns. "
+                f"Missing columns: {missing_cols}. "
+                f"Available columns: {available_cols}"
+            )
+
+        # Select only the columns we need
+        df = df_all[required_cols]
+
+        # Convert DataFrame to numpy array with float64 dtype
+        return df.values.astype(np.float64)
 
 
 def interpolate_raster(points, raster, band=1):

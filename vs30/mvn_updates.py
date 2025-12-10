@@ -307,7 +307,7 @@ def update_categorical_priors(
     mvn_config: MVNConfig,
 ) -> np.ndarray:
     """
-    Unified function for updating categorical priors.
+    Load categorical model values and optionally apply Bayesian update.
 
     Parameters
     ----------
@@ -321,26 +321,27 @@ def update_categorical_priors(
     Returns
     -------
     ndarray
-        Updated model table (n_categories, 2) array of [vs30, stdv].
+        Model table (n_categories, 2) array of [vs30, stdv].
+        If compute_bayesian_update is True, values are updated from observations.
+        If False, values are loaded directly from CSV (as specified in config).
     """
-    # Load prior model
+    # Load model values from CSV file specified in config
+    from vs30.model import load_model_values_from_csv
+
     if model_config.name == "geology":
+        csv_path = mvn_config.geology_mean_and_standard_deviation_per_category_file
         import vs30.model_geology as model_module
     elif model_config.name == "terrain":
+        csv_path = mvn_config.terrain_mean_and_standard_deviation_per_category_file
         import vs30.model_terrain as model_module
     else:
         raise ValueError(f"Unknown model: {model_config.name}")
 
-    prior_model = model_module.model_prior()
+    # Load model values from CSV file specified in config
+    model_values = load_model_values_from_csv(csv_path)
 
-    if mvn_config.update_mode == "prior":
-        # Return prior unchanged (bypasses Bayesian update)
-        return prior_model
-    elif mvn_config.update_mode == "posterior_paper":
-        # Load hardcoded posterior values
-        return model_module.model_posterior_paper()
-    elif mvn_config.update_mode == "computed":
-        # Compute batch Bayesian update using observations
+    if mvn_config.compute_bayesian_update:
+        # Compute Bayesian update from observations
         # First, compute model IDs from observation locations and add to DataFrame
         obs_locs = observations[["easting", "northing"]].values
         model_ids = model_module.model_id(obs_locs)
@@ -351,14 +352,11 @@ def update_categorical_priors(
             observations, model_config.id_column
         )
         return apply_bayesian_update(
-            prior_model, category_stats, mvn_config.n_prior, mvn_config.min_sigma
+            model_values, category_stats, mvn_config.n_prior, mvn_config.min_sigma
         )
-    elif mvn_config.update_mode == "custom":
-        # Use custom values if provided (for now, return prior)
-        # TODO: Add support for custom values from config
-        return prior_model
     else:
-        raise ValueError(f"Unknown update_mode: {mvn_config.update_mode}")
+        # Use loaded CSV values directly (bypass Bayesian update)
+        return model_values
 
 
 # ============================================================================
@@ -1027,9 +1025,12 @@ def apply_and_write_updates(
         updated_vs30.flat[update.pixel_index] = update.updated_vs30
         updated_stdv.flat[update.pixel_index] = update.updated_stdv
 
+    # Create output directory if it doesn't exist
+    output_dir = base_path / mvn_config.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # Write output
-    output_path = base_path / "vs30map" / f"{model_config.name}_mvn.tif"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{model_config.name}_mvn.tif"
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
 
@@ -1093,7 +1094,7 @@ def validate_observations(observations: pd.DataFrame) -> None:
 # ============================================================================
 
 
-def load_observations(base_path: Path) -> pd.DataFrame:
+def load_observations(base_path: Path, observations_file: str) -> pd.DataFrame:
     """
     Load observation CSV file.
 
@@ -1101,19 +1102,15 @@ def load_observations(base_path: Path) -> pd.DataFrame:
     ----------
     base_path : Path
         Base path for data files.
+    observations_file : str
+        Path to observations CSV file (relative to resources directory).
 
     Returns
     -------
     DataFrame
         Observations with vs30, uncertainty, easting, northing.
     """
-    obs_path = (
-        base_path
-        / "vs30"
-        / "resources"
-        / "data"
-        / "measured_vs30_original_filtered.csv"
-    )
+    obs_path = base_path / "vs30" / "resources" / observations_file
     return pd.read_csv(obs_path)
 
 
@@ -1147,18 +1144,23 @@ def process_model_updates(config: MVNConfig, base_path: Path) -> None:
 
         # Stage 2: Load observations
         logger.info("Loading observations...")
-        observations = load_observations(base_path)
+        observations = load_observations(base_path, config.observations_file)
         validate_observations(observations)
         logger.info(f"Loaded {len(observations)} observations")
 
-        # Stage 3: Bayesian update (optional)
-        logger.info(f"Updating categorical priors (mode: {config.update_mode})...")
+        # Stage 3: Load model values and optionally apply Bayesian update
+        if config.compute_bayesian_update:
+            logger.info(
+                "Loading model values and computing Bayesian update from observations..."
+            )
+        else:
+            logger.info("Loading model values from CSV (bypassing Bayesian update)...")
         start_time_stage = time.time()
         updated_model_table = update_categorical_priors(
             model_config, observations, config
         )
         logger.info(
-            f"Updated categorical priors in {time.time() - start_time_stage:.2f}s"
+            f"Loaded/updated model values in {time.time() - start_time_stage:.2f}s"
         )
 
         # Stage 4: Prepare observation data for MVN

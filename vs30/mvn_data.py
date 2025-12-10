@@ -157,7 +157,7 @@ class RasterData:
         output_vs30.flat[self.valid_flat_indices] = updated_vs30
         output_stdv.flat[self.valid_flat_indices] = updated_stdv
 
-        # Write using rasterio
+        # Write using rasterio with compression to match input file size
         with rasterio.open(
             path,
             "w",
@@ -169,6 +169,9 @@ class RasterData:
             crs=self.crs,
             transform=self.transform,
             nodata=self.nodata,
+            compress="deflate",
+            tiled=True,
+            bigtiff="yes",
         ) as dst:
             dst.write(output_vs30, 1)
             dst.write(output_stdv, 2)
