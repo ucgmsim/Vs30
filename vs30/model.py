@@ -20,7 +20,7 @@ RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
 
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     """
-    Load model values (vs30 and standard deviation) from CSV file.
+    Load model values (vs30 mean and standard deviation) from CSV file.
 
     Parameters
     ----------

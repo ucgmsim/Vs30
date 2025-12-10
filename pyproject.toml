@@ -16,13 +16,14 @@ dependencies = [
     "matplotlib",
     "pytest",
     "geopandas",
+    "typer",
 ]
 
 [project.urls]
 Repository = "https://github.com/ucgmsim/Vs30"
 
 [project.scripts]
-run-vs30calc = "run_vs30calc:main"
+vs30map = "vs30.main:main"
 
 [tool.setuptools]
 packages = ["vs30", "VsViewer"]
@@ -36,4 +37,7 @@ vs30 = [
     "data/*.qgz",
     "data/coast/*",
     "data/qmap/*",
+    "resources/**/*.csv",
+    "resources/**/*.yaml",
+    "resources/**/*.npy",
 ]

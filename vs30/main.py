@@ -12,8 +12,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import typer
 from scipy.spatial.distance import cdist, euclidean
 from tqdm import tqdm
+from typer import Option
 
 from vs30.model import ID_NODATA
 from vs30.mvn_config import ModelConfig, MVNConfig
@@ -26,6 +28,13 @@ from vs30.mvn_data import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Create Typer app for CLI
+app = typer.Typer(
+    name="vs30map",
+    help="VS30 map generation and categorical model updates",
+    add_completion=False,
+)
 
 
 def grid_points_in_bbox(
@@ -357,6 +366,174 @@ def update_categorical_priors(
     else:
         # Use loaded CSV values directly (bypass Bayesian update)
         return model_values
+
+
+def update_and_save_categorical_priors(
+    model_name: str,
+    observations: pd.DataFrame,
+    mvn_config: MVNConfig,
+    base_path: Path,
+    output_csv_path: Path | None = None,
+) -> np.ndarray:
+    """
+    Load categorical model values, apply Bayesian update, and save to CSV.
+
+    Parameters
+    ----------
+    model_name : str
+        Model name ("geology" or "terrain").
+    observations : DataFrame
+        Observations with vs30, uncertainty, easting, northing.
+    mvn_config : MVNConfig
+        MVN configuration.
+    base_path : Path
+        Base path for finding input CSV files.
+    output_csv_path : Path, optional
+        Output CSV file path. If None, writes to same directory as input CSV
+        with "_updated" suffix before extension.
+
+    Returns
+    -------
+    ndarray
+        Updated model table (n_categories, 2) array of [vs30, stdv].
+    """
+    import importlib.resources
+
+    from vs30.model import RESOURCE_PATH, load_model_values_from_csv
+
+    # Get input CSV path
+    if model_name == "geology":
+        csv_path_rel = mvn_config.geology_mean_and_standard_deviation_per_category_file
+        import vs30.model_geology as model_module
+    elif model_name == "terrain":
+        csv_path_rel = mvn_config.terrain_mean_and_standard_deviation_per_category_file
+        import vs30.model_terrain as model_module
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+
+    # Load full CSV with all columns
+    csv_file_traversable = RESOURCE_PATH / csv_path_rel
+    with importlib.resources.as_file(csv_file_traversable) as input_csv_path:
+        if not input_csv_path.exists():
+            raise FileNotFoundError(
+                f"CSV file not found: {input_csv_path}. "
+                f"Expected path relative to resources directory: {csv_path_rel}"
+            )
+
+        # Read full CSV preserving all columns
+        df = pd.read_csv(input_csv_path, skipinitialspace=True)
+
+        # Validate required columns exist
+        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            raise ValueError(
+                f"CSV file {input_csv_path} is missing required columns: {missing_cols}"
+            )
+
+        # Load model values (just the numeric values)
+        model_values = load_model_values_from_csv(csv_path_rel)
+
+        # Compute model IDs from observation locations
+        obs_locs = observations[["easting", "northing"]].values
+        model_ids = model_module.model_id(obs_locs)
+        observations_copy = observations.copy()
+        id_column = "gid" if model_name == "geology" else "tid"
+        observations_copy[id_column] = model_ids
+
+        # Compute category statistics
+        category_stats = compute_category_statistics(observations_copy, id_column)
+
+        # Apply Bayesian update
+        updated_model_values = apply_bayesian_update(
+            model_values, category_stats, mvn_config.n_prior, mvn_config.min_sigma
+        )
+
+        # Update DataFrame with new values
+        df["mean_vs30_km_per_s"] = updated_model_values[:, 0]
+        df["standard_deviation_vs30_km_per_s"] = updated_model_values[:, 1]
+
+        # Determine output path
+        if output_csv_path is None:
+            # Write to same location relative to base_path/resources with "_updated" suffix
+            resources_dir = base_path / "vs30" / "resources"
+            output_csv_path = resources_dir / csv_path_rel
+            output_csv_path = output_csv_path.parent / (
+                output_csv_path.stem + "_updated" + output_csv_path.suffix
+            )
+        else:
+            # Ensure output directory exists
+            output_csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Write updated CSV
+        df.to_csv(output_csv_path, index=False)
+        logger.info(
+            f"Wrote updated {model_name} model values to {output_csv_path} "
+            f"({len(updated_model_values)} categories updated)"
+        )
+
+        return updated_model_values
+
+
+def update_category_values_only(
+    config: MVNConfig, base_path: Path, output_dir: Path | None = None
+) -> None:
+    """
+    Update categorical model values using Bayesian updates and save to CSV files.
+
+    This function only performs the Bayesian update step, without running the
+    full MVN raster update pipeline.
+
+    Parameters
+    ----------
+    config : MVNConfig
+        MVN configuration.
+    base_path : Path
+        Base path for input/output files.
+    output_dir : Path, optional
+        Directory for output CSV files. If None, writes to same directory as input CSV files.
+    """
+    # Load observations
+    logger.info("Loading observations...")
+    observations = load_observations(base_path, config.observations_file)
+    validate_observations(observations)
+    logger.info(f"Loaded {len(observations)} observations")
+
+    # Process each model
+    for model_name in config.models_to_process:
+        logger.info(f"Updating {model_name} model category values...")
+
+        # Determine output path
+        if output_dir is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if model_name == "geology":
+                csv_path_rel = (
+                    config.geology_mean_and_standard_deviation_per_category_file
+                )
+            else:
+                csv_path_rel = (
+                    config.terrain_mean_and_standard_deviation_per_category_file
+                )
+            csv_filename = Path(csv_path_rel).name
+            # Remove "_updated" suffix if present, then add it
+            if csv_filename.endswith(".csv"):
+                base_name = csv_filename[:-4]
+                if base_name.endswith("_updated"):
+                    base_name = base_name[:-8]
+                output_csv_path = output_dir / f"{base_name}_updated.csv"
+            else:
+                output_csv_path = output_dir / csv_filename
+        else:
+            output_csv_path = None
+
+        # Update and save
+        start_time = time.time()
+        update_and_save_categorical_priors(
+            model_name, observations, config, base_path, output_csv_path
+        )
+        logger.info(
+            f"Completed updating {model_name} model in {time.time() - start_time:.2f}s"
+        )
 
 
 # ============================================================================
@@ -1029,8 +1206,9 @@ def apply_and_write_updates(
     output_dir = base_path / mvn_config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write output
-    output_path = output_dir / f"{model_config.name}_mvn.tif"
+    # Write output using filename from config
+    output_filename = mvn_config.get_output_filename(model_config.name)
+    output_path = output_dir / output_filename
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
 
@@ -1225,22 +1403,170 @@ def process_model_updates(config: MVNConfig, base_path: Path) -> None:
         logger.info(f"Completed processing {model_name} model")
 
 
-if __name__ == "__main__":
-    import logging
+# ============================================================================
+# CLI Functions
+# ============================================================================
 
-    logging.basicConfig(level=logging.INFO)
-    start_time = time.time()
 
-    base_path = Path(__file__).parent
+def _resolve_base_path(config_path: Path) -> Path:
+    """
+    Resolve base path from config file location.
 
-    # Load configuration
-    config_path = base_path / "config.yaml"
-    config = MVNConfig.from_yaml(config_path)
+    The base path is the parent directory of the vs30 package directory.
+    For example, if config is at vs30/config.yaml, base_path is the workspace root.
 
-    # Run main pipeline
-    process_model_updates(config, base_path.parent)
+    Parameters
+    ----------
+    config_path : Path
+        Path to config.yaml file.
 
-    elapsed_total = time.time() - start_time
-    logger.info(
-        f"Total processing time: {elapsed_total:.2f}s ({elapsed_total / 60:.1f} minutes)"
+    Returns
+    -------
+    Path
+        Base path for input/output files.
+    """
+    if config_path.name == "config.yaml" and config_path.parent.name == "vs30":
+        return config_path.parent.parent
+    else:
+        return config_path.parent
+
+
+def _find_config_file(config: Path | None) -> Path:
+    """
+    Find config.yaml file if not specified.
+
+    Parameters
+    ----------
+    config : Path | None
+        Config path if provided, None otherwise.
+
+    Returns
+    -------
+    Path
+        Path to config.yaml file.
+
+    Raises
+    ------
+    FileNotFoundError
+        If config file cannot be found.
+    """
+    if config is not None:
+        return config
+
+    cwd = Path.cwd()
+    # Try common locations
+    candidates = [
+        cwd / "vs30" / "config.yaml",
+        cwd / "config.yaml",
+        cwd.parent / "vs30" / "config.yaml",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    raise FileNotFoundError(
+        "Could not find config.yaml. Tried:\n"
+        + "\n".join(f"  - {c}" for c in candidates)
+        + "\nPlease specify --config PATH"
     )
+
+
+@app.command(name="update-categorical-vs30-mean-stddev")
+def update_category_values(
+    config: Path = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
+    ),
+    output_dir: Path = Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Directory for output CSV files (default: same directory as input CSV files)",
+    ),
+) -> None:
+    """
+    Update categorical model values using Bayesian updates and save to CSV files.
+
+    This command loads observations, applies Bayesian updates to the categorical
+    model values (mean and standard deviation per category), and writes the
+    updated values back to CSV files. This is the first step before running
+    --make-map if you want to use updated categorical priors.
+    """
+    try:
+        config_path = _find_config_file(config)
+        if not config_path.exists():
+            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+            raise typer.Exit(1)
+
+        logger.info(f"Loading configuration from {config_path}")
+        mvn_config = MVNConfig.from_yaml(config_path)
+
+        base_path = _resolve_base_path(config_path)
+        logger.info(f"Using base path: {base_path}")
+
+        update_category_values_only(mvn_config, base_path, output_dir)
+
+        typer.echo("✓ Successfully updated categorical model values")
+
+    except Exception as e:
+        logger.exception("Error updating category values")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def make_map(
+    config: Path = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
+    ),
+) -> None:
+    """
+    Generate VS30 map by applying MVN updates to 2D rasters.
+
+    This command runs the full MVN update pipeline:
+    1. Loads raster data (geology.tif and/or terrain.tif)
+    2. Optionally applies Bayesian updates to categorical priors
+    3. Prepares observation data
+    4. Finds affected pixels
+    5. Computes MVN updates
+    6. Applies updates to raster and writes output
+
+    The output rasters are written to the directory specified in config.yaml
+    (default: new_vs30map/).
+    """
+    try:
+        config_path = _find_config_file(config)
+        if not config_path.exists():
+            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+            raise typer.Exit(1)
+
+        logger.info(f"Loading configuration from {config_path}")
+        mvn_config = MVNConfig.from_yaml(config_path)
+
+        base_path = _resolve_base_path(config_path)
+        logger.info(f"Using base path: {base_path}")
+
+        process_model_updates(mvn_config, base_path)
+
+        typer.echo("✓ Successfully generated VS30 map")
+
+    except Exception as e:
+        logger.exception("Error generating map")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+def main() -> None:
+    """Entry point for vs30map command."""
+    app()
+
+
+if __name__ == "__main__":
+    # When run as script, use CLI
+    main()
