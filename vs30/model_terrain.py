@@ -2,13 +2,21 @@
 Terrain model functions based on IwahashiPike terrain categories and YongCA values.
 """
 
+import functools
 import os
+from pathlib import Path
 from subprocess import call
 
 import numpy as np
+import yaml
 from osgeo import gdal
 
-from vs30.model import ID_NODATA, interpolate_raster, resample_raster
+from vs30.model import (
+    ID_NODATA,
+    interpolate_raster,
+    load_model_values_from_csv,
+    resample_raster,
+)
 
 gdal.UseExceptions()
 
@@ -16,6 +24,14 @@ gdal.UseExceptions()
 MODEL_RASTER = os.path.join(os.path.dirname(__file__), "data", "IwahashiPike.tif")
 # for output model
 MODEL_NODATA = -32767
+
+
+@functools.lru_cache(maxsize=1)
+def _load_config():
+    """Load config.yaml and cache the result."""
+    config_path = Path(__file__).parent / "config.yaml"
+    with open(config_path) as f:
+        return yaml.safe_load(f)
 
 
 def model_prior():
@@ -38,49 +54,20 @@ def model_prior():
     15 - Dune, incised terrace, etc.
     16 - Fluvial plain, alluvial fan, low-lying flat plains, etc.
     """
-    # position 13 (idx 12) was a guess - Kevin
-    # fmt: off
-    return np.array([[519, 0.3521],
-                     [393, 0.4161],
-                     [547, 0.4695],
-                     [459, 0.3540],
-                     [402, 0.3136],
-                     [345, 0.2800],
-                     [388, 0.4161],
-                     [374, 0.3249],
-                     [497, 0.3516],
-                     [349, 0.2800],
-                     [328, 0.2736],
-                     [297, 0.2931],
-                     [500, 0.5],
-                     [209, 0.1749],
-                     [363, 0.2800],
-                     [246, 0.2206]], dtype=np.float32)
-    # fmt: on
+    config = _load_config()
+    csv_path = config["terrain_mean_and_standard_deviation_per_category_file"]
+    return load_model_values_from_csv(csv_path)
 
 
 def model_posterior_paper():
     """
     Posterior model from the paper.
     """
-    # fmt: off
-    return np.array([[519, 0.5],
-                     [393, 0.5],
-                     [547, 0.5],
-                     [459, 0.5],
-                     [323.504047697085, 0.407430975749267],
-                     [300.639538792274, 0.306594194335118],
-                     [535.786417756242, 0.380788655293195],
-                     [514.970575501527, 0.380788655293195],
-                     [284.470950299338, 0.360555127546399],
-                     [317.368444092771, 0.33166247903554],
-                     [266.870166096091, 0.4],
-                     [297, 0.5],
-                     [216.62368022053, 0.254950975679639],
-                     [241.80869962047, 0.307482445914323],
-                     [198.64481157494, 0.205256370217328],
-                     [202.125866002814, 0.206820130727133]], dtype=np.float32)
-    # fmt: on
+    config = _load_config()
+    prior_csv_path = config["terrain_mean_and_standard_deviation_per_category_file"]
+    # Replace "prior" with "posterior_from_foster_2019" in the filename
+    posterior_csv_path = prior_csv_path.replace("prior", "posterior_from_foster_2019")
+    return load_model_values_from_csv(posterior_csv_path)
 
 
 def model_id(points):
