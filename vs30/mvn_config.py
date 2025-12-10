@@ -32,6 +32,13 @@ class MVNConfig:
     terrain_mean_and_standard_deviation_per_category_file: (
         str  # Path to terrain model CSV file (relative to resources directory)
     )
+    terrain_vs30_mean_stddev_filename: (
+        str  # Output filename for terrain MVN updated raster
+    )
+    geology_vs30_mean_stddev_filename: (
+        str  # Output filename for geology MVN updated raster
+    )
+    model_nodata: float  # NoData value for model rasters (from config.yaml)
     n_prior: int = 3  # For Bayesian updates
     min_sigma: float = 0.5  # Minimum stdv for Bayesian updates
 
@@ -85,6 +92,12 @@ class MVNConfig:
         assert len(self.terrain_mean_and_standard_deviation_per_category_file) > 0, (
             "terrain_mean_and_standard_deviation_per_category_file must be non-empty"
         )
+        assert len(self.terrain_vs30_mean_stddev_filename) > 0, (
+            "terrain_vs30_mean_stddev_filename must be non-empty"
+        )
+        assert len(self.geology_vs30_mean_stddev_filename) > 0, (
+            "geology_vs30_mean_stddev_filename must be non-empty"
+        )
 
     def get_phi(self, model_name: str) -> float:
         """
@@ -109,6 +122,32 @@ class MVNConfig:
             return self.phi_geology
         elif model_name == "terrain":
             return self.phi_terrain
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+
+    def get_output_filename(self, model_name: str) -> str:
+        """
+        Get output filename for specified model.
+
+        Parameters
+        ----------
+        model_name : str
+            Model name ("geology" or "terrain").
+
+        Returns
+        -------
+        str
+            Output filename for the model.
+
+        Raises
+        ------
+        ValueError
+            If model_name is not recognized.
+        """
+        if model_name == "geology":
+            return self.geology_vs30_mean_stddev_filename
+        elif model_name == "terrain":
+            return self.terrain_vs30_mean_stddev_filename
         else:
             raise ValueError(f"Unknown model: {model_name}")
 
@@ -158,7 +197,9 @@ class ModelConfig:
 
             # Generate terrain.tif if it doesn't exist
             if not raster_path.exists():
-                _generate_terrain_raster(raster_path, csv_path, base_path)
+                _generate_terrain_raster(
+                    raster_path, csv_path, base_path, mvn_config.model_nodata
+                )
         else:
             raise ValueError(f"Unknown model: {model_name}")
 
@@ -174,12 +215,14 @@ class ModelConfig:
         )
 
 
-def _generate_terrain_raster(output_path: Path, csv_path: str, base_path: Path) -> None:
+def _generate_terrain_raster(
+    output_path: Path, csv_path: str, base_path: Path, model_nodata: float
+) -> None:
     """
-    Generate terrain.tif raster from IwahashiPike.tif and model values.
+    Generate terrain.tif raster from IwahashiPike.tif and terrain category model values.
 
     This creates a 2-band GeoTIFF with vs30 (band 1) and stdv (band 2) by
-    mapping terrain IDs from IwahashiPike.tif to model values.
+    mapping terrain IDs from IwahashiPike.tif to terrain category model values.
 
     Parameters
     ----------
@@ -189,6 +232,8 @@ def _generate_terrain_raster(output_path: Path, csv_path: str, base_path: Path) 
         Path to terrain model CSV file (relative to resources directory).
     base_path : Path
         Base path for finding IwahashiPike.tif.
+    model_nodata : float
+        NoData value to use for output raster (from config).
     """
     import rasterio
 
@@ -204,36 +249,55 @@ def _generate_terrain_raster(output_path: Path, csv_path: str, base_path: Path) 
 
     # Load terrain IDs from IwahashiPike.tif
     with rasterio.open(iwahashi_path) as src:
-        terrain_ids = src.read(1)
+        terrain_id_map = src.read(1)
         transform = src.transform
         crs = src.crs
-        nodata = src.nodatavals[0] if src.nodatavals else None
 
     # Get model values from CSV
-    model = load_model_values_from_csv(csv_path)
-    MODEL_NODATA = -32767
+    # mean_and_stddev_vs30_per_category shape: (16, 2) where each row is [vs30_mean, vs30_stdv] for terrain IDs 1-16
+    # Row 0 corresponds to terrain ID 1, row 1 to terrain ID 2, ..., row 15 to terrain ID 16
+    mean_and_stddev_vs30_per_category = load_model_values_from_csv(csv_path)
 
-    # Map terrain IDs to vs30 and stdv
-    # Terrain IDs are 1-indexed (1-16), model table is 0-indexed
-    vs30_array = np.full_like(terrain_ids, MODEL_NODATA, dtype=np.float64)
-    stdv_array = np.full_like(terrain_ids, MODEL_NODATA, dtype=np.float64)
+    # Initialize output arrays with nodata value
+    # vs30_array shape: same as terrain_id_map (e.g., (height, width))
+    # stdv_array shape: same as terrain_id_map (e.g., (height, width))
+    vs30_array = np.full_like(terrain_id_map, model_nodata, dtype=np.float64)
+    stdv_array = np.full_like(terrain_id_map, model_nodata, dtype=np.float64)
 
-    # Create mapping: ID -> (vs30, stdv)
-    # ID 0 (or nodata) maps to MODEL_NODATA
-    # IDs 1-16 map to model[0-15]
-    valid_mask = terrain_ids != (nodata if nodata is not None else MODEL_NODATA)
-    valid_mask = valid_mask & (terrain_ids >= 1) & (terrain_ids <= len(model))
+    # Create boolean mask to identify valid terrain IDs in the map
+    # Shape: (height, width) - boolean array, same shape as terrain_id_map
+    # True = terrain ID is between 1 and len(mean_and_stddev_vs30_per_category) (inclusive), which means it's valid
+    # False = terrain ID is outside range 1-16 (includes 0, negative values, nodata, values > 16)
+    is_valid_terrain_id_in_map = (terrain_id_map >= 1) & (
+        terrain_id_map <= len(mean_and_stddev_vs30_per_category)
+    )
 
-    valid_ids = terrain_ids[valid_mask]
-    vs30_array[valid_mask] = model[valid_ids - 1, 0]  # vs30 values
-    stdv_array[valid_mask] = model[valid_ids - 1, 1]  # stdv values
-    print()
+    # Extract the actual terrain ID values from valid pixels
+    # Shape: (n_valid_pixels,) - 1D array of terrain ID integers (values 1-16)
+    valid_terrain_ids = terrain_id_map[is_valid_terrain_id_in_map]
 
-    # Set nodata pixels
-    if nodata is not None:
-        nodata_mask = terrain_ids == nodata
-        vs30_array[nodata_mask] = MODEL_NODATA
-        stdv_array[nodata_mask] = MODEL_NODATA
+    # Convert terrain IDs to array indices for indexing into mean_and_stddev_vs30_per_category array
+    # Terrain IDs are 1-indexed (1-16), but mean_and_stddev_vs30_per_category array rows are 0-indexed (0-15)
+    # Shape: (n_valid_pixels,) - 1D array of array indices (values 0-15)
+    # Example: terrain_id=1 -> index=0, terrain_id=2 -> index=1, terrain_id=16 -> index=15
+    valid_terrain_ids_as_indices = valid_terrain_ids - 1
+
+    # Map terrain IDs to vs30 values
+    # NumPy boolean indexing: vs30_array[is_valid_terrain_id_in_map] creates a 1D view
+    # of all pixels where the mask is True (in row-major order). The right-hand side
+    # must have the same number of elements, which it does because:
+    # - is_valid_terrain_id_in_map has n_valid_pixels True values
+    # - valid_terrain_ids_as_indices has n_valid_pixels elements
+    # - mean_and_stddev_vs30_per_category[valid_terrain_ids_as_indices, 0] extracts n_valid_pixels values
+    # NumPy assigns them element-by-element: first True pixel gets first value, etc.
+    vs30_array[is_valid_terrain_id_in_map] = mean_and_stddev_vs30_per_category[
+        valid_terrain_ids_as_indices, 0
+    ]
+
+    # Map terrain IDs to stdv values using same boolean indexing as before
+    stdv_array[is_valid_terrain_id_in_map] = mean_and_stddev_vs30_per_category[
+        valid_terrain_ids_as_indices, 1
+    ]
 
     # Create output directory if needed
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,13 +307,13 @@ def _generate_terrain_raster(output_path: Path, csv_path: str, base_path: Path) 
         output_path,
         "w",
         driver="GTiff",
-        height=terrain_ids.shape[0],
-        width=terrain_ids.shape[1],
+        height=terrain_id_map.shape[0],
+        width=terrain_id_map.shape[1],
         count=2,
         dtype=np.float32,
         crs=crs,
         transform=transform,
-        nodata=MODEL_NODATA,
+        nodata=model_nodata,
         compress="deflate",
         tiled=True,
         bigtiff="yes",
