@@ -3,7 +3,7 @@
 
 # Models to process: can be ["geology"], ["terrain"], or ["geology", "terrain"]
 models_to_process:
-  - terrain
+  - geology
 
 # Maximum distance in meters for considering observations
 max_dist_m: 10000
@@ -36,9 +36,15 @@ compute_bayesian_update: true
 n_prior: 3  # Assume prior model made up of n_prior measurements
 min_sigma: 0.5  # Minimum standard deviation allowed
 
+# NoData value for model rasters
+model_nodata: -32767
+
 # Paths relative to the resources directory
 observations_file: observations/measured_vs30_original_filtered.csv
 output_dir: new_vs30map
+
+terrain_vs30_mean_stddev_filename: terrain_vs30_mean_stddev.tif
+geology_vs30_mean_stddev_filename: geology_vs30_mean_stddev.tif
 
 # Options for geology Vs30 models: categorical_vs30_mean_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv, geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
