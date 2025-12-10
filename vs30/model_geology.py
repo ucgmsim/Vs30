@@ -2,15 +2,22 @@
 Geology model functions based on GNS QMAP geology categories and AhdiAk values.
 """
 
-from copy import deepcopy
+import functools
 import os
+from copy import deepcopy
+from pathlib import Path
 
-import numpy as np
-from osgeo import gdal, ogr, osr
 import geopandas as gpd
+import numpy as np
 import shapely
+import yaml
+from osgeo import gdal, osr
 
-from vs30.model import ID_NODATA, interpolate_raster, resample_raster
+from vs30.model import (
+    ID_NODATA,
+    interpolate_raster,
+    resample_raster,
+)
 
 gdal.UseExceptions()
 
@@ -32,66 +39,49 @@ HYBRID_VS30 = [
 HYBRID_SRF = np.array([2, 3, 4, 6]), np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 
-def model_prior():
-    """
-    ID NAME (id in datasource)
-    0  00_water (not used)
-    1  01_peat
-    2  04_fill
-    3  05_fluvialEstuarine
-    4  06_alluvium
-    5  08_lacustrine
-    6  09_beachBarDune
-    7  10_fan
-    8  11_loess
-    9  12_outwash
-    10 13_floodplain
-    11 14_moraineTill
-    12 15_undifSed
-    13 16_terrace
-    14 17_volcanic
-    15 18_crystalline
-    """
-    # fmt: off
-    return np.array([[161, 0.522],
-                     [198, 0.314],
-                     [239, 0.867],
-                     [323, 0.365],
-                     [326, 0.135],
-                     [339, 0.647],
-                     [360, 0.338],
-                     [376, 0.380],
-                     [399, 0.305],
-                     [448, 0.432],
-                     [453, 0.512],
-                     [455, 0.545],
-                     [458, 0.761],
-                     [635, 0.995],
-                     [750, 0.641]], dtype=np.float32)
-    # fmt: on
+@functools.lru_cache(maxsize=1)
+def _load_config():
+    """Load config.yaml and cache the result."""
+    config_path = Path(__file__).parent / "config.yaml"
+    with open(config_path) as f:
+        return yaml.safe_load(f)
 
 
-def model_posterior_paper():
-    """
-    Posterior model from the paper.
-    """
-    # fmt: off
-    return np.array([[162.892120019443, 0.301033220758108],
-                     [272.512711921894, 0.280305955290694],
-                     [199.502400319993, 0.438753673163297],
-                     [271.050623687222, 0.243486579272276],
-                     [326, 0.5],
-                     [204.373998521848, 0.232196981798137],
-                     [246.6138371423, 0.344601218802256],
-                     [472.749388885179, 0.354562104171167],
-                     [399, 0.5],
-                     [197.472849225266, 0.202629769603115],
-                     [453, 0.512],
-                     [455, 0.545],
-                     [335.279503497185, 0.602886888230288],
-                     [635, 0.995],
-                     [690.974348966211, 0.446036993981441]], dtype=np.float32)
-    # fmt: on
+# def model_prior():
+#     """
+#     ID NAME (id in datasource)
+#     0  00_water (not used)
+#     1  01_peat
+#     2  04_fill
+#     3  05_fluvialEstuarine
+#     4  06_alluvium
+#     5  08_lacustrine
+#     6  09_beachBarDune
+#     7  10_fan
+#     8  11_loess
+#     9  12_outwash
+#     10 13_floodplain
+#     11 14_moraineTill
+#     12 15_undifSed
+#     13 16_terrace
+#     14 17_volcanic
+#     15 18_crystalline
+#     """
+#     config = _load_config()
+#     csv_path = config["geology_mean_and_standard_deviation_per_category_file"]
+#     return load_model_values_from_csv(csv_path)
+
+
+# def model_posterior_paper():
+#     """
+#     Posterior model from the paper.
+#     """
+#     config = _load_config()
+#     prior_csv_path = config["geology_mean_and_standard_deviation_per_category_file"]
+#     # Replace "prior" with "posterior_from_foster_2019" in the filename
+#     posterior_csv_path = prior_csv_path.replace("prior", "posterior_from_foster_2019")
+#     return load_model_values_from_csv(posterior_csv_path)
+
 
 def model_id(points: np.ndarray) -> np.ndarray:
     """
