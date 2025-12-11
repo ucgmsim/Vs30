@@ -175,4 +175,3 @@ class RasterData:
         ) as dst:
             dst.write(output_vs30, 1)
             dst.write(output_stdv, 2)
-

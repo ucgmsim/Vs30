@@ -10,8 +10,8 @@ import yaml
 
 
 @dataclass
-class MVNConfig:
-    """Configuration for MVN processing."""
+class Vs30MapConfig:
+    """Configuration for VS30 map processing."""
 
     models_to_process: list[str]
     max_dist_m: float
@@ -43,7 +43,7 @@ class MVNConfig:
     min_sigma: float = 0.5  # Minimum stdv for Bayesian updates
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "MVNConfig":
+    def from_yaml(cls, path: Path) -> "Vs30MapConfig":
         """
         Load configuration from YAML file with validation.
 
@@ -54,7 +54,7 @@ class MVNConfig:
 
         Returns
         -------
-        MVNConfig
+        Vs30MapConfig
             Validated configuration object.
         """
         with open(path) as f:
@@ -151,28 +151,116 @@ class MVNConfig:
         else:
             raise ValueError(f"Unknown model: {model_name}")
 
-
-@dataclass
-class ModelConfig:
-    """Model-specific configuration."""
-
-    name: str
-    phi: float
-    prior_values: np.ndarray  # (n_categories, 2) array of [vs30, stdv]
-    raster_path: Path
-    id_column: str  # Column name for model ID in observations
-
-    @classmethod
-    def from_mvn_config(
-        cls, mvn_config: MVNConfig, model_name: str, base_path: Path
-    ) -> "ModelConfig":
+    def get_model_id_column(self, model_name: str) -> str:
         """
-        Create ModelConfig from MVNConfig and model name.
+        Get ID column name for specified model.
 
         Parameters
         ----------
-        mvn_config : MVNConfig
-            MVN configuration object.
+        model_name : str
+            Model name ("geology" or "terrain").
+
+        Returns
+        -------
+        str
+            ID column name ("gid" for geology, "tid" for terrain).
+
+        Raises
+        ------
+        ValueError
+            If model_name is not recognized.
+        """
+        if model_name == "geology":
+            return "gid"
+        elif model_name == "terrain":
+            return "tid"
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+
+    def get_model_csv_path(self, model_name: str) -> str:
+        """
+        Get CSV path for specified model.
+
+        Parameters
+        ----------
+        model_name : str
+            Model name ("geology" or "terrain").
+
+        Returns
+        -------
+        str
+            Path to model CSV file (relative to resources directory).
+
+        Raises
+        ------
+        ValueError
+            If model_name is not recognized.
+        """
+        if model_name == "geology":
+            return self.geology_mean_and_standard_deviation_per_category_file
+        elif model_name == "terrain":
+            return self.terrain_mean_and_standard_deviation_per_category_file
+        else:
+            raise ValueError(f"Unknown model: {model_name}")
+
+    def get_output_csv_path(
+        self,
+        model_name: str,
+        base_path: Path,
+        output_dir: Path | None = None,
+    ) -> Path:
+        """
+        Determine output CSV path for updated model values.
+
+        Parameters
+        ----------
+        model_name : str
+            Model name ("geology" or "terrain").
+        base_path : Path
+            Base path for finding input CSV files.
+        output_dir : Path, optional
+            Directory for output CSV files. If None, writes to same directory as input CSV
+            with "updated_" prefix before filename.
+
+        Returns
+        -------
+        Path
+            Output CSV file path.
+
+        Raises
+        ------
+        ValueError
+            If model_name is not recognized.
+        """
+        csv_path_rel = self.get_model_csv_path(model_name)
+
+        if output_dir is not None:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            csv_filename = Path(csv_path_rel).name
+            # Remove "updated_" prefix if present, then add it
+            if csv_filename.endswith(".csv"):
+                base_name = csv_filename[:-4]
+                if base_name.startswith("updated_"):
+                    base_name = base_name[8:]  # Remove "updated_" prefix
+                return output_dir / f"updated_{base_name}.csv"
+            else:
+                return output_dir / csv_filename
+        else:
+            # Default: same directory as input with updated_ prefix
+            resources_dir = base_path / "vs30" / "resources"
+            input_path = resources_dir / csv_path_rel
+            # Remove "updated_" prefix if already present
+            stem = input_path.stem
+            if stem.startswith("updated_"):
+                stem = stem[8:]
+            return input_path.parent / ("updated_" + stem + input_path.suffix)
+
+    def get_model_raster_path(self, model_name: str, base_path: Path) -> Path:
+        """
+        Get raster path for specified model, generating it if needed.
+
+        Parameters
+        ----------
         model_name : str
             Model name ("geology" or "terrain").
         base_path : Path
@@ -180,39 +268,27 @@ class ModelConfig:
 
         Returns
         -------
-        ModelConfig
-            Configured model configuration object.
+        Path
+            Path to model raster file.
+
+        Raises
+        ------
+        ValueError
+            If model_name is not recognized.
         """
-        # Import here to avoid circular imports
-        from vs30.model import load_model_values_from_csv
-
         if model_name == "geology":
-            id_column = "gid"
-            raster_path = base_path / "vs30map" / "geology.tif"
-            csv_path = mvn_config.geology_mean_and_standard_deviation_per_category_file
+            return base_path / "vs30map" / "geology.tif"
         elif model_name == "terrain":
-            id_column = "tid"
             raster_path = base_path / "vs30map" / "terrain.tif"
-            csv_path = mvn_config.terrain_mean_and_standard_deviation_per_category_file
-
             # Generate terrain.tif if it doesn't exist
             if not raster_path.exists():
+                csv_path = self.terrain_mean_and_standard_deviation_per_category_file
                 _generate_terrain_raster(
-                    raster_path, csv_path, base_path, mvn_config.model_nodata
+                    raster_path, csv_path, base_path, self.model_nodata
                 )
+            return raster_path
         else:
             raise ValueError(f"Unknown model: {model_name}")
-
-        # Load model values from CSV file specified in config
-        prior_values = load_model_values_from_csv(csv_path)
-
-        return cls(
-            name=model_name,
-            phi=mvn_config.get_phi(model_name),
-            prior_values=prior_values,
-            raster_path=raster_path,
-            id_column=id_column,
-        )
 
 
 def _generate_terrain_raster(

@@ -5,6 +5,11 @@
 models_to_process:
   - geology
 
+
+geology_or_terrain_to_raster_filename:
+  geology: geology.tif
+  terrain: terrain.tif
+
 # Maximum distance in meters for considering observations
 max_dist_m: 10000
 
