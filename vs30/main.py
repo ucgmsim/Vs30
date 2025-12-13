@@ -1681,8 +1681,7 @@ def make_initial_vs30_raster(
         if terrain:
             logger.info("Processing terrain model...")
             csv_path = mvn_config.terrain_mean_and_standard_deviation_per_category_file
-            logger.info(f"Loading terrain model values from {csv_path}")
-            model_values = categorical_raster.load_model_values_from_csv(csv_path)
+            logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
             id_raster = categorical_raster.create_category_id_raster(
@@ -1692,7 +1691,7 @@ def make_initial_vs30_raster(
             logger.info("Creating terrain VS30 raster...")
             vs30_raster = output_dir / "terrain_initial_vs30.tif"
             categorical_raster.create_vs30_raster_from_ids(
-                id_raster, model_values, vs30_raster
+                id_raster, csv_path, vs30_raster
             )
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
@@ -1700,8 +1699,7 @@ def make_initial_vs30_raster(
         if geology:
             logger.info("Processing geology model...")
             csv_path = mvn_config.geology_mean_and_standard_deviation_per_category_file
-            logger.info(f"Loading geology model values from {csv_path}")
-            model_values = categorical_raster.load_model_values_from_csv(csv_path)
+            logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
             id_raster = categorical_raster.create_category_id_raster(
@@ -1711,7 +1709,7 @@ def make_initial_vs30_raster(
             logger.info("Creating geology VS30 raster...")
             vs30_raster = output_dir / "geology_initial_vs30.tif"
             categorical_raster.create_vs30_raster_from_ids(
-                id_raster, model_values, vs30_raster
+                id_raster, csv_path, vs30_raster
             )
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
