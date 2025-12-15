@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import typer
+from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist, euclidean
 from tqdm import tqdm
 from typer import Option
@@ -1185,6 +1186,11 @@ def update_categorical_vs30_models(
         # Load categorical model CSV (absolute path)
         categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
 
+        # Drop rows with invalid placeholder values (e.g., -9999 for water category)
+        categorical_model_df = categorical_model_df[
+            categorical_model_df["mean_vs30_km_per_s"] != -9999
+        ]
+
         # Validate required columns
         required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
         missing_cols = [
@@ -1415,6 +1421,130 @@ def make_map(
 
     except Exception as e:
         logger.exception("Error generating map")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def plot_posterior_values(
+    csv_path: Path = Option(
+        ...,
+        "--csv-path",
+        "-c",
+        help="Path to CSV file with prior and posterior values",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-o",
+        help="Path to output directory for plots (will be created if it does not exist)",
+    ),
+) -> None:
+    """
+    Plot prior and posterior vs30 mean values with error bars.
+
+    Creates a plot showing vs30 mean values (y-axis) vs category ID (x-axis)
+    for both prior and posterior values, with error bars showing standard deviation.
+    """
+    try:
+        # Validate input file exists
+        if not csv_path.exists():
+            typer.echo(f"Error: CSV file not found: {csv_path}", err=True)
+            raise typer.Exit(1)
+
+        logger.info(f"Loading data from: {csv_path}")
+
+        # Load CSV
+        df = pd.read_csv(csv_path, skipinitialspace=True)
+
+        # Filter out invalid rows (e.g., -9999 placeholder values)
+        df = df[df["prior_mean_vs30_km_per_s"] != -9999].copy()
+
+        # Validate required columns
+        required_cols = [
+            "id",
+            "prior_mean_vs30_km_per_s",
+            "prior_standard_deviation_vs30_km_per_s",
+            "posterior_mean_vs30_km_per_s",
+            "posterior_standard_deviation_vs30_km_per_s",
+        ]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            typer.echo(
+                f"Error: CSV file missing required columns: {missing_cols}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract data
+        category_ids = df["id"].values
+        prior_mean = df["prior_mean_vs30_km_per_s"].values
+        prior_std = df["prior_standard_deviation_vs30_km_per_s"].values
+        posterior_mean = df["posterior_mean_vs30_km_per_s"].values
+        posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Offset for x positions to separate prior and posterior
+        offset = 0.2
+        prior_x = category_ids - offset
+        posterior_x = category_ids + offset
+
+        # Plot prior values with error bars
+        ax.errorbar(
+            prior_x,
+            prior_mean,
+            yerr=prior_std,
+            fmt="o",
+            label="Prior",
+            capsize=5,
+            capthick=1.5,
+            markersize=6,
+            alpha=0.7,
+        )
+
+        # Plot posterior values with error bars
+        ax.errorbar(
+            posterior_x,
+            posterior_mean,
+            yerr=posterior_std,
+            fmt="s",
+            label="Posterior",
+            capsize=5,
+            capthick=1.5,
+            markersize=6,
+            alpha=0.7,
+        )
+
+        # Set labels and title
+        ax.set_xlabel("Category ID", fontsize=12)
+        ax.set_ylabel("Vs30 (m/s)", fontsize=12)
+        ax.set_title("Prior vs Posterior Vs30 Values by Category", fontsize=14)
+        ax.legend(fontsize=11)
+        ax.grid(True, alpha=0.3)
+
+        # Set x-axis to show category IDs
+        ax.set_xticks(category_ids)
+        ax.set_xticklabels(category_ids.astype(int))
+
+        # Generate output filename from input CSV
+        output_filename = csv_path.stem + "_plot.png"
+        output_path = output_dir / output_filename
+
+        # Save plot
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        logger.info(f"Plot saved to: {output_path}")
+        typer.echo(f"✓ Plot saved to: {output_path}")
+
+    except Exception as e:
+        logger.exception("Error creating plot")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
