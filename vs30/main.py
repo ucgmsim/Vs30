@@ -7,7 +7,7 @@ in geology.tif and terrain.tif that are within range of observations.
 
 import logging
 import time
-from math import exp, log, sqrt
+from math import sqrt
 from pathlib import Path
 
 import numpy as np
@@ -18,8 +18,9 @@ from tqdm import tqdm
 from typer import Option
 
 from vs30 import categorical_raster
+from vs30.categorical_values import find_posterior
 from vs30.model import ID_NODATA
-from vs30.model_registry import STANDARD_ID_COLUMN, get_model_info
+from vs30.model_registry import get_model_info
 from vs30.mvn_data import (
     BoundingBoxResult,
     MVNUpdateResult,
@@ -201,435 +202,6 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     Minimum distance of 0.1 meters is enforced to prevent division issues.
     """
     return 1 / np.exp(np.maximum(0.1, distances) / phi)
-
-
-# ============================================================================
-# Bayesian Update Functions
-# ============================================================================
-
-
-def compute_category_statistics(
-    sites: pd.DataFrame, idcol: str
-) -> dict[int, dict[str, float]]:
-    """
-    Group observations by category and compute aggregated statistics.
-
-    Parameters
-    ----------
-    sites : DataFrame
-        Observations with vs30, uncertainty, and category ID column.
-        Model IDs in the DataFrame are 1-indexed (from model_id() function).
-    idcol : str
-        Column name for model ID in sites.
-
-    Returns
-    -------
-    dict
-        Dictionary mapping category ID (1-indexed) to statistics dict with keys:
-        - 'mean': mean log(vs30)
-        - 'variance': variance of log(vs30)
-        - 'count': number of observations
-        - 'mean_uncertainty': mean uncertainty
-    """
-    stats = {}
-    for cat_id in sites[idcol].unique():
-        if cat_id == ID_NODATA:
-            continue
-        cat_sites = sites[sites[idcol] == cat_id]
-        if len(cat_sites) == 0:
-            continue
-
-        log_vs30 = np.log(cat_sites.vs30.values)
-        stats[cat_id] = {
-            "mean": np.mean(log_vs30),
-            "variance": np.var(log_vs30, ddof=0),
-            "count": len(cat_sites),
-            "mean_uncertainty": np.mean(cat_sites.uncertainty.values),
-        }
-    return stats
-
-
-def apply_bayesian_update(
-    prior_model: np.ndarray,
-    category_stats: dict[int, dict[str, float]],
-    n_prior: int,
-    min_sigma: float,
-) -> np.ndarray:
-    """
-    Apply Bayesian update formulas using pre-computed statistics.
-
-    Parameters
-    ----------
-    prior_model : ndarray
-        Prior model values (n_categories, 2) array of [vs30, stdv].
-    category_stats : dict
-        Statistics per category from compute_category_statistics.
-    n_prior : int
-        Assume prior model made up of n_prior measurements.
-    min_sigma : float
-        Minimum standard deviation allowed.
-
-    Returns
-    -------
-    ndarray
-        Updated model values (n_categories, 2) array of [vs30, stdv].
-    """
-    updated_model = prior_model.copy()
-    vs30 = updated_model[:, 0]
-    stdv = np.maximum(updated_model[:, 1], min_sigma)
-
-    n0 = np.repeat(n_prior, len(updated_model))
-
-    for cat_id, stats in category_stats.items():
-        # Model IDs in observations are 1-indexed, but model table is 0-indexed
-        # Convert to 0-indexed for array access
-        if cat_id == ID_NODATA:
-            continue
-        array_idx = cat_id - 1  # Convert 1-indexed to 0-indexed
-        if array_idx < 0 or array_idx >= len(updated_model):
-            continue
-
-        # Use aggregated statistics
-        n_obs = stats["count"]
-        mean_log_vs30 = stats["mean"]
-        mean_uncertainty = stats["mean_uncertainty"]
-
-        # Update variance
-        var_new = (n0[array_idx] * stdv[array_idx] ** 2 + mean_uncertainty**2) / (
-            n0[array_idx] + n_obs
-        )
-
-        # Update mean (in log space)
-        log_mu_0 = log(vs30[array_idx])
-        log_mu_new = (n0[array_idx] / var_new * log_mu_0 + mean_log_vs30 / var_new) / (
-            n0[array_idx] / var_new + n_obs / var_new
-        )
-
-        vs30[array_idx] = exp(log_mu_new)
-        stdv[array_idx] = sqrt(var_new)
-        n0[array_idx] += n_obs
-
-    return np.column_stack((vs30, stdv))
-
-
-def update_category_values_core(
-    observations: pd.DataFrame,
-    categorical_vs30_mean_and_stddev: np.ndarray,
-    model_id_func,
-    n_prior: int = 3,
-    min_sigma: float = 0.5,
-) -> np.ndarray:
-    """
-    Core function: Update categorical values from observations.
-
-    This is a pure function - takes minimal inputs, returns updated array.
-    Works identically for geology and terrain models.
-
-    Parameters
-    ----------
-    observations : DataFrame
-        Observations with vs30, uncertainty, easting, northing.
-    categorical_vs30_mean_and_stddev : ndarray
-        Prior model values (n_categories, 2) array of [vs30, stdv].
-    model_id_func : callable
-        Function that computes model IDs: (N, 2) array -> (N,) array.
-        Should have signature: model_id_func(points: np.ndarray) -> np.ndarray
-    n_prior : int
-        Assume prior model made up of n_prior measurements.
-    min_sigma : float
-        Minimum standard deviation allowed.
-
-    Returns
-    -------
-    ndarray
-        Updated model values (n_categories, 2) array of [vs30, stdv].
-    """
-    # Compute model IDs using the provided function
-    obs_locs = observations[["easting", "northing"]].values
-    model_ids = model_id_func(obs_locs)
-
-    # Add to DataFrame using STANDARD column name (same for all models!)
-    observations = observations.copy()
-    observations[STANDARD_ID_COLUMN] = model_ids
-
-    # Compute statistics and update - same code for all models!
-    category_stats = compute_category_statistics(observations, STANDARD_ID_COLUMN)
-    return apply_bayesian_update(
-        categorical_vs30_mean_and_stddev, category_stats, n_prior, min_sigma
-    )
-
-
-def load_categorical_model_csv(csv_path: str) -> tuple[pd.DataFrame, np.ndarray]:
-    """
-    Load categorical model CSV file and return both DataFrame and values array.
-
-    Parameters
-    ----------
-    csv_path : str
-        Path to CSV file relative to resources directory.
-
-    Returns
-    -------
-    tuple[pd.DataFrame, np.ndarray]
-        Tuple of (DataFrame with all columns, values array (n_categories, 2)).
-
-    Raises
-    ------
-    FileNotFoundError
-        If CSV file is not found.
-    ValueError
-        If CSV file is missing required columns.
-    """
-    import importlib.resources
-
-    from vs30.model import RESOURCE_PATH, load_model_values_from_csv
-
-    csv_file_traversable = RESOURCE_PATH / csv_path
-    with importlib.resources.as_file(csv_file_traversable) as input_csv_path:
-        if not input_csv_path.exists():
-            raise FileNotFoundError(
-                f"CSV file not found: {input_csv_path}. "
-                f"Expected path relative to resources directory: {csv_path}"
-            )
-
-        # Read full CSV preserving all columns
-        df = pd.read_csv(input_csv_path, skipinitialspace=True)
-
-        # Validate required columns exist
-        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            raise ValueError(
-                f"CSV file {input_csv_path} is missing required columns: {missing_cols}"
-            )
-
-        # Load model values (just the numeric values)
-        model_values = load_model_values_from_csv(csv_path)
-
-        return df, model_values
-
-
-def save_updated_categorical_model(
-    df: pd.DataFrame, updated_values: np.ndarray, output_path: Path
-) -> None:
-    """
-    Save updated categorical model values to CSV file.
-
-    Parameters
-    ----------
-    df : DataFrame
-        Original DataFrame with all columns.
-    updated_values : ndarray
-        Updated model values (n_categories, 2) array of [vs30, stdv].
-    output_path : Path
-        Output CSV file path.
-    """
-    # Update DataFrame with new values
-    df["mean_vs30_km_per_s"] = updated_values[:, 0]
-    df["standard_deviation_vs30_km_per_s"] = updated_values[:, 1]
-
-    # Ensure output directory exists
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write updated CSV
-    df.to_csv(output_path, index=False)
-    logger.info(
-        f"Wrote updated model values to {output_path} "
-        f"({len(updated_values)} categories updated)"
-    )
-
-
-def update_categorical_priors(
-    model_name: str,
-    observations: pd.DataFrame,
-    mvn_config: Vs30MapConfig,
-) -> np.ndarray:
-    """
-    Load categorical model values and optionally apply Bayesian update.
-
-    Parameters
-    ----------
-    model_name : str
-        Model name ("geology" or "terrain").
-    observations : DataFrame
-        Observations with vs30, uncertainty, and model ID column.
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
-
-    Returns
-    -------
-    ndarray
-        Model table (n_categories, 2) array of [vs30, stdv].
-        If compute_bayesian_update is True, values are updated from observations.
-        If False, values are loaded directly from CSV (as specified in config).
-    """
-    from vs30.model import load_model_values_from_csv
-
-    # Get model info from registry
-    model_info = get_model_info(model_name)
-    csv_path = mvn_config.get_model_csv_path(model_name)
-
-    # Load model values from CSV file specified in config
-    model_values = load_model_values_from_csv(csv_path)
-
-    if mvn_config.compute_bayesian_update:
-        # Get model_id function from registry
-        model_id_func = model_info.get_model_id_func()
-
-        # Update values using core function
-        return update_category_values_core(
-            observations=observations,
-            categorical_vs30_mean_and_stddev=model_values,
-            model_id_func=model_id_func,
-            n_prior=mvn_config.n_prior,
-            min_sigma=mvn_config.min_sigma,
-        )
-    else:
-        # Use loaded CSV values directly (bypass Bayesian update)
-        return model_values
-
-
-def update_category_values(
-    model_name: str,
-    observations: pd.DataFrame,
-    mvn_config: Vs30MapConfig,
-) -> np.ndarray:
-    """
-    Update categorical model values using Bayesian updates.
-
-    This function only performs the Bayesian update computation, without loading
-    or saving CSV files. Use update_and_save_categorical_priors() if you need
-    to load from and save to CSV files.
-
-    Parameters
-    ----------
-    model_name : str
-        Model name ("geology" or "terrain").
-    observations : DataFrame
-        Observations with vs30, uncertainty, easting, northing.
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
-
-    Returns
-    -------
-    ndarray
-        Updated model table (n_categories, 2) array of [vs30, stdv].
-    """
-    from vs30.model import load_model_values_from_csv
-
-    # Get model info from registry (no if/else!)
-    model_info = get_model_info(model_name)
-
-    # Get CSV path using config key from registry
-    csv_path_rel = getattr(mvn_config, model_info.csv_config_key)
-
-    # Load model values (just the numeric values, not the full DataFrame)
-    model_values = load_model_values_from_csv(csv_path_rel)
-
-    # Get model_id function from module
-    model_id_func = model_info.get_model_id_func()
-
-    # Update values using core function (same for all models!)
-    return update_category_values_core(
-        observations=observations,
-        categorical_vs30_mean_and_stddev=model_values,
-        model_id_func=model_id_func,
-        n_prior=mvn_config.n_prior,
-        min_sigma=mvn_config.min_sigma,
-    )
-
-
-def update_and_save_categorical_priors(
-    model_name: str,
-    observations: pd.DataFrame,
-    mvn_config: Vs30MapConfig,
-    base_path: Path,
-    output_csv_path: Path | None = None,
-) -> np.ndarray:
-    """
-    Load categorical model values, apply Bayesian update, and save to CSV.
-
-    Parameters
-    ----------
-    model_name : str
-        Model name ("geology" or "terrain").
-    observations : DataFrame
-        Observations with vs30, uncertainty, easting, northing.
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
-    base_path : Path
-        Base path for finding input CSV files.
-    output_csv_path : Path, optional
-        Output CSV file path. If None, writes to same directory as input CSV
-        with "_updated" suffix before extension.
-
-    Returns
-    -------
-    ndarray
-        Updated model table (n_categories, 2) array of [vs30, stdv].
-    """
-    # Get model info from registry
-    model_info = get_model_info(model_name)
-
-    # Get CSV path using config key from registry
-    csv_path_rel = getattr(mvn_config, model_info.csv_config_key)
-
-    # Load CSV and model values (need DataFrame for saving)
-    df, _ = load_categorical_model_csv(csv_path_rel)
-
-    # Update values using update_category_values function
-    updated_values = update_category_values(model_name, observations, mvn_config)
-
-    # Determine output path if not provided
-    if output_csv_path is None:
-        output_csv_path = mvn_config.get_output_csv_path(model_name, base_path)
-
-    # Save updated model
-    save_updated_categorical_model(df, updated_values, output_csv_path)
-
-    return updated_values
-
-
-def update_and_save_category_values(
-    config: Vs30MapConfig, base_path: Path, output_dir: Path | None = None
-) -> None:
-    """
-    Update categorical model values using Bayesian updates and save to CSV files.
-
-    This function loads observations, calls update_category_values() to compute
-    updated values, and saves them to CSV files. This is the main entry point
-    for updating categorical model values from the command line.
-
-    Parameters
-    ----------
-    config : Vs30MapConfig
-        VS30 map configuration.
-    base_path : Path
-        Base path for input/output files.
-    output_dir : Path, optional
-        Directory for output CSV files. If None, writes to same directory as input CSV files.
-    """
-    # Load observations
-    logger.info("Loading observations...")
-    observations = load_observations(base_path, config.observations_file)
-    validate_observations(observations)
-    logger.info(f"Loaded {len(observations)} observations")
-
-    # Process each model - same code path for all!
-    for model_name in config.models_to_process:
-        logger.info(f"Updating {model_name} model category values...")
-
-        # Determine output path using config handler method
-        output_csv_path = config.get_output_csv_path(model_name, base_path, output_dir)
-
-        # Update and save
-        start_time = time.time()
-        update_and_save_categorical_priors(
-            model_name, observations, config, base_path, output_csv_path
-        )
-        logger.info(
-            f"Completed updating {model_name} model in {time.time() - start_time:.2f}s"
-        )
 
 
 # ============================================================================
@@ -1359,31 +931,6 @@ def validate_observations(observations: pd.DataFrame) -> None:
     assert np.all(observations["uncertainty"] > 0), "Uncertainty must be positive"
 
 
-# ============================================================================
-# Main Pipeline
-# ============================================================================
-
-
-def load_observations(base_path: Path, observations_file: str) -> pd.DataFrame:
-    """
-    Load observation CSV file.
-
-    Parameters
-    ----------
-    base_path : Path
-        Base path for data files.
-    observations_file : str
-        Path to observations CSV file (relative to resources directory).
-
-    Returns
-    -------
-    DataFrame
-        Observations with vs30, uncertainty, easting, northing.
-    """
-    obs_path = base_path / "vs30" / "resources" / observations_file
-    return pd.read_csv(obs_path)
-
-
 def process_model_updates(config: Vs30MapConfig, base_path: Path) -> None:
     """
     Main pipeline for processing MVN updates.
@@ -1564,44 +1111,150 @@ def _find_config_file(config: Path | None) -> Path:
     )
 
 
-@app.command(name="update-categorical-vs30-mean-stddev")
-def update_categorical_vs30_mean_stddev(
-    config: Path = Option(
-        None,
-        "--config",
-        "-c",
-        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
+@app.command()
+def update_categorical_vs30_models(
+    categorical_model_csv: Path = Option(
+        ...,
+        "--categorical-model-csv",
+        "-m",
+        help="Path to CSV file with categorical vs30 mean and standard deviation values (e.g., geology_model_prior_mean_and_standard_deviation.csv)",
+    ),
+    observations_csv: Path = Option(
+        ...,
+        "--observations-csv",
+        "-o",
+        help="Path to CSV file with observations (e.g., measured_vs30_original_filtered.csv)",
     ),
     output_dir: Path = Option(
-        None,
+        ...,
         "--output-dir",
-        "-o",
-        help="Directory for output CSV files (default: same directory as input CSV files)",
+        "-d",
+        help="Path to output directory (will be created if it does not exist)",
+    ),
+    model_type: str = Option(
+        ...,
+        "--model-type",
+        "-t",
+        help="Model type: either 'geology' or 'terrain'",
+    ),
+    n_prior: int = Option(
+        3,
+        "--n-prior",
+        help="Effective number of prior observations (default: 3)",
+    ),
+    min_sigma: float = Option(
+        0.5,
+        "--min-sigma",
+        help="Minimum standard deviation allowed (default: 0.5)",
     ),
 ) -> None:
     """
     Update categorical model values using Bayesian updates and save to CSV files.
 
-    This command loads observations, applies Bayesian updates to the categorical
-    model values (mean and standard deviation per category), and writes the
-    updated values back to CSV files. This is the first step before running
-    --make-map if you want to use updated categorical priors.
+    This command loads observations and categorical model values, applies Bayesian
+    updates to the categorical model values (mean and standard deviation per category),
+    and writes the updated values back to CSV files.
     """
     try:
-        config_path = _find_config_file(config)
-        if not config_path.exists():
-            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+        # Validate input files exist
+        if not categorical_model_csv.exists():
+            typer.echo(
+                f"Error: Categorical model CSV file not found: {categorical_model_csv}",
+                err=True,
+            )
             raise typer.Exit(1)
 
-        logger.info(f"Loading configuration from {config_path}")
-        mvn_config = Vs30MapConfig.from_yaml(config_path)
+        if not observations_csv.exists():
+            typer.echo(
+                f"Error: Observations CSV file not found: {observations_csv}", err=True
+            )
+            raise typer.Exit(1)
 
-        base_path = _resolve_base_path(config_path)
-        logger.info(f"Using base path: {base_path}")
+        # Validate model_type parameter
+        if model_type not in ["geology", "terrain"]:
+            typer.echo(
+                f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
+                err=True,
+            )
+            raise typer.Exit(1)
 
-        update_and_save_category_values(mvn_config, base_path, output_dir)
+        logger.info(f"Model type: {model_type}")
+        logger.info(f"Loading categorical model from: {categorical_model_csv}")
+        logger.info(f"Loading observations from: {observations_csv}")
+
+        # Load categorical model CSV (absolute path)
+        categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
+
+        # Validate required columns
+        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+        missing_cols = [
+            col for col in required_cols if col not in categorical_model_df.columns
+        ]
+        if missing_cols:
+            typer.echo(
+                f"Error: CSV file missing required columns: {missing_cols}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Load observations CSV
+        observations_df = pd.read_csv(observations_csv, skipinitialspace=True)
+
+        # Validate observations have required columns
+        obs_required_cols = ["easting", "northing", "vs30", "uncertainty"]
+        missing_obs_cols = [
+            col for col in obs_required_cols if col not in observations_df.columns
+        ]
+        if missing_obs_cols:
+            typer.echo(
+                f"Error: Observations CSV missing required columns: {missing_obs_cols}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        logger.info(f"Loaded {len(observations_df)} observations")
+
+        # Apply Bayesian update
+        logger.info("Applying Bayesian update...")
+
+        # Import assignment functions and constants from categorical_values
+        from vs30.categorical_values import (
+            STANDARD_ID_COLUMN,
+            _assign_to_category_geology,
+            _assign_to_category_terrain,
+        )
+
+        # Assign model categorical model IDs to observations based on their location
+        # taking into account whether we are considering geology or terrain.
+        obs_locs = observations_df[["easting", "northing"]].values
+        if model_type == "geology":
+            model_ids = _assign_to_category_geology(obs_locs)
+        elif model_type == "terrain":
+            model_ids = _assign_to_category_terrain(obs_locs)
+        else:
+            typer.echo(
+                f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Add to DataFrame using STANDARD column name (same for all models!)
+        observations_df[STANDARD_ID_COLUMN] = model_ids
+
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        updated_categorical_model_df = find_posterior(
+            categorical_model_df, observations_df, n_prior, min_sigma
+        )
+
+        output_filename = "posterior_" + categorical_model_csv.name
+        output_path = output_dir / output_filename
+
+        updated_categorical_model_df.to_csv(output_path, index=False)
 
         typer.echo("✓ Successfully updated categorical model values")
+        typer.echo(f"  Output saved to: {output_path}")
 
     except Exception as e:
         logger.exception("Error updating category values")
