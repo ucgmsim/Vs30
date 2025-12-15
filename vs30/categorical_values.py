@@ -21,7 +21,7 @@ import shapely
 ID_NODATA = 255
 
 # Standard column name used for model IDs in DataFrames
-STANDARD_ID_COLUMN = "model_id"
+STANDARD_ID_COLUMN = "id"
 
 # Data paths for category assignment
 _data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -205,7 +205,7 @@ def find_posterior(
         Columns:
         - "posterior_mean_vs30_km_per_s"
         - "posterior_standard_deviation_vs30_km_per_s"
-        - "posterior_n_observations"
+        - "posterior_num_observations"
         - "assumed_num_prior_observations"
         - "enforced_min_sigma"
     """
@@ -225,22 +225,26 @@ def find_posterior(
     updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
     updated_categorical_model_df["enforced_min_sigma"] = min_sigma
     updated_categorical_model_df["posterior_mean_vs30_km_per_s"] = (
-        updated_categorical_model_df["prior_mean_vs30_km_per_s"]
+        updated_categorical_model_df["prior_mean_vs30_km_per_s"].astype(np.float64)
     )
     updated_categorical_model_df["posterior_standard_deviation_vs30_km_per_s"] = (
-        updated_categorical_model_df["prior_standard_deviation_vs30_km_per_s"]
+        updated_categorical_model_df["prior_standard_deviation_vs30_km_per_s"].astype(
+            np.float64
+        )
     )
-    updated_categorical_model_df["posterior_n_observations"] = n_prior
+    updated_categorical_model_df["posterior_num_observations"] = n_prior
 
     for category_row_idx, category_row in updated_categorical_model_df.iterrows():
+        # Match observations to this category using model_id
+        category_id = category_row[STANDARD_ID_COLUMN]
         observations_for_category_df = observations_df[
-            observations_df[STANDARD_ID_COLUMN] == category_row[STANDARD_ID_COLUMN]
+            observations_df[STANDARD_ID_COLUMN] == category_id
         ]
 
         for _, observation_row in observations_for_category_df.iterrows():
             new_variance = _new_var(
                 category_row["posterior_standard_deviation_vs30_km_per_s"],
-                category_row["posterior_n_observations"],
+                category_row["posterior_num_observations"],
                 observation_row["uncertainty"],
                 category_row["posterior_mean_vs30_km_per_s"],
                 observation_row["vs30"],
@@ -250,13 +254,13 @@ def find_posterior(
                 category_row_idx, "posterior_mean_vs30_km_per_s"
             ] = _new_mean(
                 category_row["posterior_mean_vs30_km_per_s"],
-                category_row["posterior_n_observations"],
+                category_row["posterior_num_observations"],
                 new_variance,
                 observation_row["vs30"],
             )
 
             updated_categorical_model_df.at[
-                category_row_idx, "posterior_n_observations"
+                category_row_idx, "posterior_num_observations"
             ] += 1
 
     return updated_categorical_model_df
