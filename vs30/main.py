@@ -19,7 +19,11 @@ from tqdm import tqdm
 from typer import Option
 
 from vs30 import categorical_raster
-from vs30.categorical_values import find_posterior
+from vs30.categorical_values import (
+    cluster_update,
+    find_posterior,
+    perform_clustering,
+)
 from vs30.model import ID_NODATA
 from vs30.model_registry import get_model_info
 from vs30.mvn_data import (
@@ -1120,11 +1124,17 @@ def update_categorical_vs30_models(
         "-m",
         help="Path to CSV file with categorical vs30 mean and standard deviation values (e.g., geology_model_prior_mean_and_standard_deviation.csv)",
     ),
-    observations_csv: Path = Option(
-        ...,
-        "--observations-csv",
+    clustered_observations_csv: Path = Option(
+        None,
+        "--clustered-observations-csv",
+        "-c",
+        help="Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv). These will be processed with spatial clustering.",
+    ),
+    independent_observations_csv: Path = Option(
+        None,
+        "--independent-observations-csv",
         "-o",
-        help="Path to CSV file with observations (e.g., measured_vs30_original_filtered.csv)",
+        help="Path to CSV file with independent observations (e.g., measured_vs30_original_filtered.csv). These will be processed without clustering.",
     ),
     output_dir: Path = Option(
         ...,
@@ -1148,6 +1158,21 @@ def update_categorical_vs30_models(
         "--min-sigma",
         help="Minimum standard deviation allowed (default: 0.5)",
     ),
+    min_group: int = Option(
+        5,
+        "--min-group",
+        help="Minimum group size for DBSCAN clustering (default: 5)",
+    ),
+    eps: float = Option(
+        15000.0,
+        "--eps",
+        help="Maximum distance (metres) for points to be considered in same cluster (default: 15000)",
+    ),
+    nproc: int = Option(
+        -1,
+        "--nproc",
+        help="Number of processes for DBSCAN clustering. -1 to use all available cores (default: -1)",
+    ),
 ) -> None:
     """
     Update categorical model values using Bayesian updates and save to CSV files.
@@ -1155,8 +1180,21 @@ def update_categorical_vs30_models(
     This command loads observations and categorical model values, applies Bayesian
     updates to the categorical model values (mean and standard deviation per category),
     and writes the updated values back to CSV files.
+
+    Can process clustered observations (with spatial clustering) and/or independent
+    observations (without clustering). If both are provided, clustered observations
+    are processed first, and the resulting posterior is used as the prior for
+    independent observations.
     """
     try:
+        # Validate that at least one observations CSV is provided
+        if clustered_observations_csv is None and independent_observations_csv is None:
+            typer.echo(
+                "Error: At least one of --clustered-observations-csv or --independent-observations-csv must be provided",
+                err=True,
+            )
+            raise typer.Exit(1)
+
         # Validate input files exist
         if not categorical_model_csv.exists():
             typer.echo(
@@ -1165,9 +1203,23 @@ def update_categorical_vs30_models(
             )
             raise typer.Exit(1)
 
-        if not observations_csv.exists():
+        if (
+            clustered_observations_csv is not None
+            and not clustered_observations_csv.exists()
+        ):
             typer.echo(
-                f"Error: Observations CSV file not found: {observations_csv}", err=True
+                f"Error: Clustered observations CSV file not found: {clustered_observations_csv}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        if (
+            independent_observations_csv is not None
+            and not independent_observations_csv.exists()
+        ):
+            typer.echo(
+                f"Error: Independent observations CSV file not found: {independent_observations_csv}",
+                err=True,
             )
             raise typer.Exit(1)
 
@@ -1181,7 +1233,6 @@ def update_categorical_vs30_models(
 
         logger.info(f"Model type: {model_type}")
         logger.info(f"Loading categorical model from: {categorical_model_csv}")
-        logger.info(f"Loading observations from: {observations_csv}")
 
         # Load categorical model CSV (absolute path)
         categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
@@ -1203,61 +1254,130 @@ def update_categorical_vs30_models(
             )
             raise typer.Exit(1)
 
-        # Load observations CSV
-        observations_df = pd.read_csv(observations_csv, skipinitialspace=True)
-
-        # Validate observations have required columns
-        obs_required_cols = ["easting", "northing", "vs30", "uncertainty"]
-        missing_obs_cols = [
-            col for col in obs_required_cols if col not in observations_df.columns
-        ]
-        if missing_obs_cols:
-            typer.echo(
-                f"Error: Observations CSV missing required columns: {missing_obs_cols}",
-                err=True,
-            )
-            raise typer.Exit(1)
-
-        logger.info(f"Loaded {len(observations_df)} observations")
-
-        # Apply Bayesian update
-        logger.info("Applying Bayesian update...")
-
         # Import assignment functions and constants from categorical_values
         from vs30.categorical_values import (
+            ID_NODATA,
             STANDARD_ID_COLUMN,
             _assign_to_category_geology,
             _assign_to_category_terrain,
         )
 
-        # Assign model categorical model IDs to observations based on their location
-        # taking into account whether we are considering geology or terrain.
-        obs_locs = observations_df[["easting", "northing"]].values
-        if model_type == "geology":
-            model_ids = _assign_to_category_geology(obs_locs)
-        elif model_type == "terrain":
-            model_ids = _assign_to_category_terrain(obs_locs)
-        else:
-            typer.echo(
-                f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
-                err=True,
-            )
-            raise typer.Exit(1)
+        # Current prior (will be updated as we process observations)
+        current_prior_df = categorical_model_df.copy()
 
-        # Add to DataFrame using STANDARD column name (same for all models!)
-        observations_df[STANDARD_ID_COLUMN] = model_ids
+        # Process clustered observations if provided
+        if clustered_observations_csv is not None:
+            logger.info(
+                f"Loading clustered observations from: {clustered_observations_csv}"
+            )
+            clustered_observations_df = pd.read_csv(
+                clustered_observations_csv, skipinitialspace=True
+            )
+
+            # Validate clustered observations have required columns
+            obs_required_cols = ["easting", "northing", "vs30"]
+            missing_obs_cols = [
+                col
+                for col in obs_required_cols
+                if col not in clustered_observations_df.columns
+            ]
+            if missing_obs_cols:
+                typer.echo(
+                    f"Error: Clustered observations CSV missing required columns: {missing_obs_cols}",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
+            logger.info(
+                f"Loaded {len(clustered_observations_df)} clustered observations"
+            )
+
+            # Assign category IDs
+            obs_locs = clustered_observations_df[["easting", "northing"]].values
+            if model_type == "geology":
+                model_ids = _assign_to_category_geology(obs_locs)
+            else:  # terrain
+                model_ids = _assign_to_category_terrain(obs_locs)
+
+            clustered_observations_df[STANDARD_ID_COLUMN] = model_ids
+
+            # Log assignment statistics
+            unique_assigned_ids = clustered_observations_df[STANDARD_ID_COLUMN].unique()
+            valid_assigned = clustered_observations_df[
+                clustered_observations_df[STANDARD_ID_COLUMN] != ID_NODATA
+            ]
+            logger.info(
+                f"Assigned category IDs: {len(valid_assigned)} valid observations "
+                f"(out of {len(clustered_observations_df)} total)"
+            )
+            logger.info(
+                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != ID_NODATA])[:20]}"
+            )
+            logger.info(
+                f"Category IDs in prior model: {sorted(current_prior_df[STANDARD_ID_COLUMN].unique())}"
+            )
+
+            # Perform clustering
+            logger.info("Performing spatial clustering...")
+            clustered_observations_df = perform_clustering(
+                clustered_observations_df, model_type, min_group, eps, nproc
+            )
+
+            # Apply cluster update
+            logger.info("Applying clustered Bayesian update...")
+            current_prior_df = cluster_update(
+                current_prior_df, clustered_observations_df, model_type
+            )
+
+        # Process independent observations if provided
+        if independent_observations_csv is not None:
+            logger.info(
+                f"Loading independent observations from: {independent_observations_csv}"
+            )
+            independent_observations_df = pd.read_csv(
+                independent_observations_csv, skipinitialspace=True
+            )
+
+            # Validate independent observations have required columns
+            obs_required_cols = ["easting", "northing", "vs30", "uncertainty"]
+            missing_obs_cols = [
+                col
+                for col in obs_required_cols
+                if col not in independent_observations_df.columns
+            ]
+            if missing_obs_cols:
+                typer.echo(
+                    f"Error: Independent observations CSV missing required columns: {missing_obs_cols}",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
+            logger.info(
+                f"Loaded {len(independent_observations_df)} independent observations"
+            )
+
+            # Assign category IDs
+            obs_locs = independent_observations_df[["easting", "northing"]].values
+            if model_type == "geology":
+                model_ids = _assign_to_category_geology(obs_locs)
+            else:  # terrain
+                model_ids = _assign_to_category_terrain(obs_locs)
+
+            independent_observations_df[STANDARD_ID_COLUMN] = model_ids
+
+            # Apply regular Bayesian update
+            logger.info("Applying independent Bayesian update...")
+            current_prior_df = find_posterior(
+                current_prior_df, independent_observations_df, n_prior, min_sigma
+            )
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        updated_categorical_model_df = find_posterior(
-            categorical_model_df, observations_df, n_prior, min_sigma
-        )
-
         output_filename = "posterior_" + categorical_model_csv.name
         output_path = output_dir / output_filename
 
-        updated_categorical_model_df.to_csv(output_path, index=False)
+        current_prior_df.to_csv(output_path, index=False)
 
         typer.echo("✓ Successfully updated categorical model values")
         typer.echo(f"  Output saved to: {output_path}")
