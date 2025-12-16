@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import shapely
+from sklearn.cluster import DBSCAN
 
 # Constant for no-data category ID
 ID_NODATA = 255
@@ -209,19 +210,46 @@ def find_posterior(
         - "assumed_num_prior_observations"
         - "enforced_min_sigma"
     """
-    # Enforce minimum sigma value
+    # Handle input format - could be initial prior or output from cluster_update/find_posterior
     categorical_model_df = categorical_model_df.copy()
-    mask = categorical_model_df["standard_deviation_vs30_km_per_s"] < min_sigma
-    categorical_model_df.loc[mask, "standard_deviation_vs30_km_per_s"] = min_sigma
 
-    # Make a copy to update
-    updated_categorical_model_df = categorical_model_df.copy()
-    updated_categorical_model_df = updated_categorical_model_df.rename(
-        columns={
-            "mean_vs30_km_per_s": "prior_mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s": "prior_standard_deviation_vs30_km_per_s",
-        }
+    # Check if input has posterior_ columns (from previous update)
+    has_posterior_columns = (
+        "posterior_mean_vs30_km_per_s" in categorical_model_df.columns
     )
+
+    if has_posterior_columns:
+        # Input is from a previous update (cluster_update or find_posterior)
+        # Use posterior_ columns as the new prior
+        updated_categorical_model_df = categorical_model_df.copy()
+        updated_categorical_model_df["prior_mean_vs30_km_per_s"] = (
+            updated_categorical_model_df["posterior_mean_vs30_km_per_s"].copy()
+        )
+        updated_categorical_model_df["prior_standard_deviation_vs30_km_per_s"] = (
+            updated_categorical_model_df[
+                "posterior_standard_deviation_vs30_km_per_s"
+            ].copy()
+        )
+    else:
+        # Initial prior format - rename to prior_ columns
+        updated_categorical_model_df = categorical_model_df.copy()
+        updated_categorical_model_df = updated_categorical_model_df.rename(
+            columns={
+                "mean_vs30_km_per_s": "prior_mean_vs30_km_per_s",
+                "standard_deviation_vs30_km_per_s": "prior_standard_deviation_vs30_km_per_s",
+            }
+        )
+
+    # Enforce minimum sigma value on prior
+    mask = (
+        updated_categorical_model_df["prior_standard_deviation_vs30_km_per_s"]
+        < min_sigma
+    )
+    updated_categorical_model_df.loc[mask, "prior_standard_deviation_vs30_km_per_s"] = (
+        min_sigma
+    )
+
+    # Initialize posterior columns
     updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
     updated_categorical_model_df["enforced_min_sigma"] = min_sigma
     updated_categorical_model_df["posterior_mean_vs30_km_per_s"] = (
@@ -266,7 +294,70 @@ def find_posterior(
     return updated_categorical_model_df
 
 
-def cluster_update(prior, sites, letter):
+def perform_clustering(
+    sites_df: pd.DataFrame,
+    model_type: str,
+    min_group: int = 5,
+    eps: float = 15000,
+    nproc: int = -1,
+) -> pd.DataFrame:
+    """
+    Apply DBSCAN clustering to sites DataFrame, adding cluster assignments.
+
+    Clusters sites spatially within each category to avoid over-weighting
+    dense measurement clusters. Clustering is performed separately for each
+    category ID.
+
+    Parameters
+    ----------
+    sites_df : DataFrame
+        Observations DataFrame with columns: STANDARD_ID_COLUMN, easting, northing.
+        Must have category IDs already assigned.
+    model_type : str
+        Model type: "geology" or "terrain".
+    min_group : int, optional
+        Minimum group size for DBSCAN clustering. Default is 5.
+    eps : float, optional
+        Maximum distance (metres) for points to be considered in same cluster.
+        Default is 15000.
+    nproc : int, optional
+        Number of processes for DBSCAN. -1 to use all available cores.
+        Default is -1.
+
+    Returns
+    -------
+    DataFrame
+        Modified DataFrame with added "cluster" column containing cluster IDs.
+        -1 indicates unclustered points.
+    """
+    sites_df = sites_df.copy()
+    # Default not a member of any cluster (-1)
+    sites_df["cluster"] = -1
+
+    features = np.column_stack((sites_df.easting.values, sites_df.northing.values))
+    model_ids = sites_df[STANDARD_ID_COLUMN].values
+    ids = np.array(sorted(set(model_ids)))
+    ids = ids[ids != ID_NODATA].astype(np.int32)
+
+    for category_id in ids:
+        subset_mask = model_ids == category_id
+        subset = features[subset_mask]
+        if subset.shape[0] < min_group:
+            # Can't form any groups
+            continue
+
+        dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc)
+        dbscan.fit(subset)
+
+        # Save labels
+        sites_df.loc[subset_mask, "cluster"] = dbscan.labels_
+
+    return sites_df
+
+
+def cluster_update(
+    prior_df: pd.DataFrame, sites_df: pd.DataFrame, model_type: str
+) -> pd.DataFrame:
     """
     Perform Bayesian update for clustered CPT data.
 
@@ -276,49 +367,166 @@ def cluster_update(prior, sites, letter):
 
     Parameters
     ----------
-    prior : ndarray
-        Prior model values (n_categories, 2) array of [vs30, stdv].
-        Values only taken if no measurements available for ID.
-    sites : DataFrame
-        Observations with vs30, uncertainty, category ID, and cluster assignments.
-        Must have columns: f"{letter}id", f"{letter}cluster", "vs30".
-    letter : str
-        Model letter prefix ("g" for geology, "t" for terrain).
+    prior_df : DataFrame
+        Prior model DataFrame with columns:
+        - STANDARD_ID_COLUMN: category IDs
+        - Either "mean_vs30_km_per_s" and "standard_deviation_vs30_km_per_s" (initial prior),
+          or "posterior_mean_vs30_km_per_s" and "posterior_standard_deviation_vs30_km_per_s"
+          (from previous update - cluster_update or find_posterior)
+    sites_df : DataFrame
+        Observations with vs30, category ID, and cluster assignments.
+        Must have columns: STANDARD_ID_COLUMN, "cluster", "vs30".
+    model_type : str
+        Model type: "geology" or "terrain" (for compatibility, not currently used).
 
     Returns
     -------
-    ndarray
-        Updated model values (n_categories, 2) array of [vs30, stdv].
+    DataFrame
+        Updated model DataFrame containing:
+        - STANDARD_ID_COLUMN: category IDs
+        - "prior_mean_vs30_km_per_s": prior mean VS30 (from input)
+        - "prior_standard_deviation_vs30_km_per_s": prior standard deviation (from input)
+        - "posterior_mean_vs30_km_per_s": posterior mean VS30 (updated)
+        - "posterior_standard_deviation_vs30_km_per_s": posterior standard deviation (updated)
+        All other columns from prior_df are preserved.
     """
-    # creates a model from the distribution of measured sites as clustered
-    # prior: prior model, values only taken if no measurements available for ID
-    posterior = np.copy(prior)
-    # looping through model IDs
-    for m in range(len(posterior)):
-        vs_sum = 0
-        # add 1 because IDs being used start at 1 in tiffs
-        idtable = sites[sites[f"{letter}id"] == m + 1]
-        clusters = idtable[f"{letter}cluster"].value_counts()
-        # overall N is one per cluster, clusters labeled -1 are individual clusters
+    # Create a copy to update
+    posterior_df = prior_df.copy()
+
+    # Rename columns to match find_posterior format (create prior_ and posterior_ columns)
+    # This ensures consistency when chaining cluster_update with find_posterior
+    has_posterior_columns = "posterior_mean_vs30_km_per_s" in posterior_df.columns
+
+    if has_posterior_columns:
+        # Input is from a previous update - use posterior_ as the new prior
+        posterior_df["prior_mean_vs30_km_per_s"] = posterior_df[
+            "posterior_mean_vs30_km_per_s"
+        ].copy()
+        posterior_df["prior_standard_deviation_vs30_km_per_s"] = posterior_df[
+            "posterior_standard_deviation_vs30_km_per_s"
+        ].copy()
+    else:
+        # First time through - rename existing columns to prior_ and create posterior_ columns
+        posterior_df = posterior_df.rename(
+            columns={
+                "mean_vs30_km_per_s": "prior_mean_vs30_km_per_s",
+                "standard_deviation_vs30_km_per_s": "prior_standard_deviation_vs30_km_per_s",
+            }
+        )
+        posterior_df["posterior_mean_vs30_km_per_s"] = posterior_df[
+            "prior_mean_vs30_km_per_s"
+        ].astype(np.float64)
+        posterior_df["posterior_standard_deviation_vs30_km_per_s"] = posterior_df[
+            "prior_standard_deviation_vs30_km_per_s"
+        ].astype(np.float64)
+
+    # Convert to numpy array format for computation (matching old codebase structure)
+    # We need to map DataFrame IDs to array indices
+    # Find the maximum ID from both the prior and the sites to ensure array is large enough
+    max_id_prior = (
+        int(posterior_df[STANDARD_ID_COLUMN].max()) if len(posterior_df) > 0 else 0
+    )
+
+    # Filter out sites with ID_NODATA
+    valid_sites = sites_df[sites_df[STANDARD_ID_COLUMN] != ID_NODATA].copy()
+    max_id_sites = (
+        int(valid_sites[STANDARD_ID_COLUMN].max()) if len(valid_sites) > 0 else 0
+    )
+
+    max_id = max(max_id_prior, max_id_sites)
+    # Create array with size max_id + 1 to accommodate all IDs
+    # Initialize with NaN to detect uninitialized values
+    posterior_array = np.full((max_id + 1, 2), np.nan)
+    id_to_idx = {}
+    for idx, row in posterior_df.iterrows():
+        cat_id = int(row[STANDARD_ID_COLUMN])
+        if cat_id <= max_id:
+            # Use prior values as starting point
+            posterior_array[cat_id, 0] = row["prior_mean_vs30_km_per_s"]
+            posterior_array[cat_id, 1] = row["prior_standard_deviation_vs30_km_per_s"]
+            id_to_idx[cat_id] = idx
+
+    # Process each category ID that exists in the sites
+    unique_ids = valid_sites[STANDARD_ID_COLUMN].unique()
+    categories_updated = 0
+    categories_skipped_no_match = 0
+    categories_skipped_no_clusters = 0
+
+    for category_id in unique_ids:
+        category_id_int = int(category_id)
+        if category_id_int not in id_to_idx or category_id_int > max_id:
+            # Category ID not in prior model or out of range, skip
+            categories_skipped_no_match += 1
+            continue
+
+        idtable = valid_sites[valid_sites[STANDARD_ID_COLUMN] == category_id_int]
+        clusters = idtable["cluster"].value_counts()
+
+        # Overall N is one per cluster, clusters labeled -1 are individual clusters
         n = len(clusters)
         if -1 in clusters.index:
             n += clusters[-1] - 1
+
         if n == 0:
+            categories_skipped_no_clusters += 1
             continue
+
+        vs_sum = 0
         w = np.repeat(1 / n, len(idtable))
+
         for c in clusters.index:
-            cidx = idtable[f"{letter}cluster"] == c
+            cidx = idtable["cluster"] == c
             ctable = idtable[cidx]
             if c == -1:
-                # values not part of cluster, weight = 1 per value
+                # Values not part of cluster, weight = 1 per value
                 vs_sum += sum(np.log(ctable.vs30.values))
             else:
-                # values in cluster, weight = 1 / cluster_size per value
-                vs_sum += sum(np.log(ctable.vs30)) / len(ctable)
+                # Values in cluster, weight = 1 / cluster_size per value
+                vs_sum += sum(np.log(ctable.vs30.values)) / len(ctable)
                 w[cidx] /= len(ctable)
-        posterior[m, 0] = exp(vs_sum / n)
-        posterior[m, 1] = np.sqrt(
+
+        # Update posterior array
+        posterior_array[category_id_int, 0] = exp(vs_sum / n)
+        posterior_array[category_id_int, 1] = np.sqrt(
             sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2)
         )
+        categories_updated += 1
 
-    return posterior
+    # Log statistics for debugging
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info(
+        f"cluster_update: Updated {categories_updated} categories, "
+        f"skipped {categories_skipped_no_match} (no match in prior), "
+        f"skipped {categories_skipped_no_clusters} (no valid clusters)"
+    )
+    if len(unique_ids) > 0:
+        logger.info(
+            f"cluster_update: Found {len(unique_ids)} unique category IDs in observations: {sorted(unique_ids)[:10]}..."
+        )
+    logger.info(
+        f"cluster_update: Prior has {len(id_to_idx)} categories with IDs: {sorted(id_to_idx.keys())}"
+    )
+
+    # Convert back to DataFrame format
+    # Update all categories that were in the prior (whether or not they had observations)
+    for category_id, df_idx in id_to_idx.items():
+        # All categories in prior should have values (either prior or updated)
+        # Categories without observations keep their prior values
+        # Categories with observations get updated values
+        # We check for NaN as a safety measure, but all categories should have values
+        mean_val = posterior_array[category_id, 0]
+        std_val = posterior_array[category_id, 1]
+
+        if np.isnan(mean_val) or np.isnan(std_val):
+            logger.warning(
+                f"Category {category_id} has NaN values in posterior array - this should not happen!"
+            )
+            # Keep original prior values if somehow NaN
+            continue
+
+        posterior_df.at[df_idx, "posterior_mean_vs30_km_per_s"] = mean_val
+        posterior_df.at[df_idx, "posterior_standard_deviation_vs30_km_per_s"] = std_val
+
+    return posterior_df
