@@ -19,17 +19,7 @@ from scipy.spatial.distance import cdist, euclidean
 from tqdm import tqdm
 from typer import Option
 
-from vs30 import categorical_raster
-from vs30.categorical_raster import (
-    apply_hybrid_geology_modifications,
-    create_coast_distance_raster,
-    create_slope_raster,
-)
-from vs30.categorical_values import (
-    perform_clustering,
-    posterior_from_bayesian_update,
-)
-from vs30.model import ID_NODATA
+from vs30 import raster
 from vs30.model_registry import get_model_info
 from vs30.mvn_data import (
     BoundingBoxResult,
@@ -37,6 +27,11 @@ from vs30.mvn_data import (
     ObservationData,
     PixelData,
     RasterData,
+)
+from vs30.raster import (
+    apply_hybrid_geology_modifications,
+    create_coast_distance_raster,
+    create_slope_raster,
 )
 from vs30.vs30_map_config_handler import Vs30MapConfig
 
@@ -1259,12 +1254,14 @@ def update_categorical_vs30_models(
             )
             raise typer.Exit(1)
 
-        # Import assignment functions and constants from categorical_values
-        from vs30.categorical_values import (
+        # Import assignment functions and constants from category
+        from vs30.category import (
             ID_NODATA,
             STANDARD_ID_COLUMN,
             _assign_to_category_geology,
             _assign_to_category_terrain,
+            perform_clustering,
+            posterior_from_bayesian_update,
         )
 
         # Current prior (will be updated as we process observations)
@@ -1469,15 +1466,11 @@ def make_initial_vs30_raster(
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
-            id_raster = categorical_raster.create_category_id_raster(
-                "terrain", output_dir
-            )
+            id_raster = raster.create_category_id_raster("terrain", output_dir)
 
             logger.info("Creating terrain VS30 raster...")
             vs30_raster = output_dir / "terrain_initial_vs30.tif"
-            categorical_raster.create_vs30_raster_from_ids(
-                id_raster, csv_path, vs30_raster
-            )
+            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
         # Process geology if requested
@@ -1487,15 +1480,11 @@ def make_initial_vs30_raster(
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
-            id_raster = categorical_raster.create_category_id_raster(
-                "geology", output_dir
-            )
+            id_raster = raster.create_category_id_raster("geology", output_dir)
 
             logger.info("Creating geology VS30 raster...")
             vs30_raster = output_dir / "geology_initial_vs30.tif"
-            categorical_raster.create_vs30_raster_from_ids(
-                id_raster, csv_path, vs30_raster
-            )
+            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
         typer.echo("✓ Successfully created initial VS30 rasters")
