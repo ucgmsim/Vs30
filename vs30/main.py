@@ -20,9 +20,8 @@ from typer import Option
 
 from vs30 import categorical_raster
 from vs30.categorical_values import (
-    cluster_update,
-    find_posterior,
     perform_clustering,
+    posterior_from_bayesian_update,
 )
 from vs30.model import ID_NODATA
 from vs30.model_registry import get_model_info
@@ -1265,7 +1264,8 @@ def update_categorical_vs30_models(
         # Current prior (will be updated as we process observations)
         current_prior_df = categorical_model_df.copy()
 
-        # Process clustered observations if provided
+        # Load clustered observations if provided
+        clustered_observations_df = None
         if clustered_observations_csv is not None:
             logger.info(
                 f"Loading clustered observations from: {clustered_observations_csv}"
@@ -1323,13 +1323,8 @@ def update_categorical_vs30_models(
                 clustered_observations_df, model_type, min_group, eps, nproc
             )
 
-            # Apply cluster update
-            logger.info("Applying clustered Bayesian update...")
-            current_prior_df = cluster_update(
-                current_prior_df, clustered_observations_df, model_type
-            )
-
-        # Process independent observations if provided
+        # Load independent observations if provided
+        independent_observations_df = None
         if independent_observations_csv is not None:
             logger.info(
                 f"Loading independent observations from: {independent_observations_csv}"
@@ -1365,11 +1360,16 @@ def update_categorical_vs30_models(
 
             independent_observations_df[STANDARD_ID_COLUMN] = model_ids
 
-            # Apply regular Bayesian update
-            logger.info("Applying independent Bayesian update...")
-            current_prior_df = find_posterior(
-                current_prior_df, independent_observations_df, n_prior, min_sigma
-            )
+        # Perform Bayesian update(s) via dispatcher
+        logger.info("Applying Bayesian updates...")
+        current_prior_df = posterior_from_bayesian_update(
+            current_prior_df,
+            independent_observations_df=independent_observations_df,
+            clustered_observations_df=clustered_observations_df,
+            n_prior=n_prior,
+            min_sigma=min_sigma,
+            model_type=model_type,
+        )
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
