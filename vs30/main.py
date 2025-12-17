@@ -12,6 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import rasterio
 import typer
 from matplotlib import pyplot as plt
 from scipy.spatial.distance import cdist, euclidean
@@ -19,6 +20,11 @@ from tqdm import tqdm
 from typer import Option
 
 from vs30 import categorical_raster
+from vs30.categorical_raster import (
+    apply_hybrid_geology_modifications,
+    create_coast_distance_raster,
+    create_slope_raster,
+)
 from vs30.categorical_values import (
     perform_clustering,
     posterior_from_bayesian_update,
@@ -1388,7 +1394,7 @@ def update_categorical_vs30_models(
         raise typer.Exit(1)
 
 
-@app.command(name="make-initial-vs30-raster")
+@app.command()
 def make_initial_vs30_raster(
     terrain: bool = Option(False, "--terrain", help="Create terrain VS30 raster"),
     geology: bool = Option(False, "--geology", help="Create geology VS30 raster"),
@@ -1496,6 +1502,115 @@ def make_initial_vs30_raster(
 
     except Exception as e:
         logger.exception("Error creating initial VS30 rasters")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command(name="create-hybrid-raster")
+def create_hybrid_raster(
+    input_raster: Path = Option(
+        ...,
+        "--input-raster",
+        "-i",
+        help="Path to initial geology VS30 raster (created by make-initial-vs30-raster)",
+    ),
+    id_raster: Path = Option(
+        ...,
+        "--id-raster",
+        help="Path to category ID raster (e.g. gid.tif used to create the input raster)",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-o",
+        help="Directory to save output hybrid raster and intermediate files",
+    ),
+) -> None:
+    """
+    Apply hybrid geology modifications to an initial VS30 raster.
+
+    This command adds slope-based and coast-distance-based modifications to the geology model.
+    It generates intermediate slope and coast distance rasters in the output directory.
+
+    Requires:
+    - Input geology VS30 raster (2 bands: Vs30, Stdv)
+    - Corresponding ID raster (gid.tif)
+    """
+    try:
+        if not input_raster.exists():
+            raise FileNotFoundError(f"Input raster not found: {input_raster}")
+        if not id_raster.exists():
+            raise FileNotFoundError(f"ID raster not found: {id_raster}")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Processing hybrid model for: {input_raster}")
+
+        # 1. Load Input Raster
+        with rasterio.open(input_raster) as src:
+            vs30_array = src.read(1)
+            stdv_array = src.read(2)
+            profile = src.profile.copy()
+            # Ensure profile uses float64 for output calculations
+            # (though input might be float32 or float64)
+
+            # Check dimensions against ID raster
+            with rasterio.open(id_raster) as id_src:
+                if id_src.width != src.width or id_src.height != src.height:
+                    raise ValueError(
+                        f"Dimension mismatch! Input raster: {src.width}x{src.height}, "
+                        f"ID raster: {id_src.width}x{id_src.height}"
+                    )
+                id_array = id_src.read(1)
+
+        # 2. Create/Load Intermediate Rasters
+        slope_path = output_dir / "slope.tif"
+        logger.info(f"Generating slope raster: {slope_path}")
+        slope_array, _ = create_slope_raster(slope_path, profile)
+
+        coast_path = output_dir / "coast_distance.tif"
+        logger.info(f"Generating coast distance raster: {coast_path}")
+        coast_dist_array, _ = create_coast_distance_raster(coast_path, profile)
+
+        # 3. Apply Modifications
+        logger.info("Applying hybrid geology modifications...")
+        # Note: Arrays are modified in-place or returned new.
+        # The function signature was ported to return them.
+        mod_vs30, mod_stdv = apply_hybrid_geology_modifications(
+            vs30_array.astype(np.float64),  # Ensure standard precision
+            stdv_array.astype(np.float64),
+            id_array,
+            slope_array,
+            coast_dist_array,
+            mod6=True,  # Enable all mods by default for hybrid model
+            mod13=True,
+            hybrid=True,
+        )
+
+        # 4. Save Output
+        output_path = output_dir / "hybrid_vs30.tif"
+
+        # Update profile for output
+        profile.update(
+            {
+                "dtype": "float64",
+                "compress": "deflate",
+                # Ensure nodata matches expected model nodata if needed,
+                # though usually inherited from src is fine.
+            }
+        )
+
+        logger.info(f"Saving hybrid raster to: {output_path}")
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(mod_vs30, 1)
+            dst.write(mod_stdv, 2)
+            dst.descriptions = ("Vs30 (Hybrid)", "Standard Deviation (Hybrid)")
+
+        typer.echo("✓ Successfully created hybrid geology raster")
+        typer.echo(f"  Output saved to: {output_path}")
+
+    except Exception as e:
+        logger.exception("Error creating hybrid raster")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 

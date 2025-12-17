@@ -17,6 +17,7 @@ from rasterio import features
 from rasterio.enums import Resampling
 from rasterio.transform import from_bounds
 from rasterio.warp import reproject
+from scipy.ndimage import distance_transform_edt
 from tqdm import tqdm
 
 # Hard-coded grid parameters (from old code defaults)
@@ -32,6 +33,7 @@ NY = round((YMAX - YMIN) / DY)
 # NoData value for model rasters
 MODEL_NODATA = -32767
 ID_NODATA = 255
+SLOPE_NODATA = -9999
 
 # Resources directory path using importlib.resources
 RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
@@ -40,6 +42,23 @@ RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
 DATA_DIR = Path(__file__).parent / "data"
 TERRAIN_RASTER = DATA_DIR / "IwahashiPike.tif"
 GEOLOGY_SHAPEFILE = DATA_DIR / "qmap" / "qmap.shp"
+COAST_SHAPEFILE = (
+    DATA_DIR / "coast" / "nz-coastlines-and-islands-polygons-topo-1500k.shp"
+)
+SLOPE_RASTER = DATA_DIR / "slope.tif"
+
+# Hybrid model vs30 based on interpolation of slope (from old model_geology.py)
+# group ID, log10(slope) array, vs30 array
+HYBRID_VS30_PARAMS = [
+    [2, [-1.85, -1.22], np.log10(np.array([242, 418]))],
+    [3, [-2.70, -1.35], np.log10(np.array([171, 228]))],
+    [4, [-3.44, -0.88], np.log10(np.array([252, 275]))],
+    [6, [-3.56, -0.93], np.log10(np.array([183, 239]))],
+]
+# Hybrid model sigma reduction factors
+# IDs, Factors
+HYBRID_SRF_IDS = np.array([2, 3, 4, 6])
+HYBRID_SRF_FACTORS = np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 # CRS for NZTM
 NZTM_CRS = "EPSG:2193"
@@ -492,3 +511,247 @@ def create_vs30_raster_from_ids(
 
     print("Step 12: Completed VS30 raster creation")
     return output_path
+
+
+def create_coast_distance_raster(
+    output_path: Path, template_profile: dict
+) -> tuple[np.ndarray, dict]:
+    """
+    Create a raster of distance to the nearest coast (in meters).
+
+    Rasterizes the coast shapefile and calculates the Euclidean distance transform.
+    Uses rasterio and scipy.ndimage.
+
+    Parameters
+    ----------
+    output_path : Path
+        Path where the output coast distance raster will be saved.
+    template_profile : dict
+        Rasterio profile of the reference raster (to match resolution and bounds).
+
+    Returns
+    -------
+    tuple[np.ndarray, dict]
+        A tuple containing:
+        - The distance array (float32).
+        - The updated profile used for saving.
+    """
+    print("  Creating coast distance raster...")
+    if not COAST_SHAPEFILE.exists():
+        raise FileNotFoundError(f"Coast shapefile not found: {COAST_SHAPEFILE}")
+
+    # Read coast shapefile
+    gdf = gpd.read_file(COAST_SHAPEFILE)
+    if gdf.crs is None or str(gdf.crs) != NZTM_CRS:
+        gdf = gdf.to_crs(NZTM_CRS)
+
+    # Rasterize land polygons as 1, sea/background as 0
+    shapes = ((geom, 1) for geom in gdf.geometry)
+
+    # Create mask: 1=Land, 0=Sea
+    mask = features.rasterize(
+        shapes=shapes,
+        out_shape=(template_profile["height"], template_profile["width"]),
+        transform=template_profile["transform"],
+        fill=0,
+        dtype=np.uint8,
+        all_touched=False,
+    )
+
+    # Distance Transform: calculates distance to nearest BACKGROUND (0)
+    # We want distance to Sea (0).
+    # scipy.distance_transform_edt computes distance to nearest ZERO.
+    # However, inside the mask, land is 1, sea is 0.
+    # If we run EDT on `mask`, it computes distance to nearest 0 (Sea).
+    # This matches "Distance to Coast" (inland distance).
+
+    # EDT returns distance in PIXELS.
+    # Multiply by pixel size (assuming square pixels DX approx DY)
+    # DX=100.
+    pixel_size = template_profile["transform"][0]  # Standard affine [0] is width
+    distance_pixels = distance_transform_edt(mask)
+    distance_meters = distance_pixels * pixel_size
+
+    # Save to file
+    profile = template_profile.copy()
+    profile.update(
+        {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
+    )
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(distance_meters.astype(np.float32), 1)
+        dst.descriptions = ("Distance to Coast (m)",)
+
+    return distance_meters.astype(np.float32), profile
+
+
+def create_slope_raster(
+    output_path: Path, template_profile: dict
+) -> tuple[np.ndarray, dict]:
+    """
+    Create a slope raster matching the target grid.
+
+    Resamples the source slope raster to the target properties.
+
+    Parameters
+    ----------
+    output_path : Path
+        Path where the output slope raster will be saved.
+    template_profile : dict
+        Rasterio profile of the reference raster.
+
+    Returns
+    -------
+    tuple[np.ndarray, dict]
+        A tuple containing:
+        - The slope array (float32).
+        - The updated profile used for saving.
+    """
+    print("  Creating slope raster...")
+    if not SLOPE_RASTER.exists():
+        raise FileNotFoundError(f"Slope raster not found: {SLOPE_RASTER}")
+
+    # Initialize destination array
+    destination = np.zeros(
+        (template_profile["height"], template_profile["width"]), dtype=np.float32
+    )
+
+    with rasterio.open(SLOPE_RASTER) as src:
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=template_profile["transform"],
+            dst_crs=template_profile["crs"],
+            resampling=Resampling.bilinear,
+        )
+
+    # Save to file
+    profile = template_profile.copy()
+    profile.update(
+        {"dtype": "float32", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
+    )
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(destination, 1)
+        dst.descriptions = ("Slope",)
+
+    return destination, profile
+
+
+def apply_hybrid_geology_modifications(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    id_array: np.ndarray,
+    slope_array: np.ndarray,
+    coast_dist_array: np.ndarray,
+    mod6: bool = True,
+    mod13: bool = True,
+    hybrid: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Apply hybrid model modifications to VS30 and standard deviation arrays.
+
+    Implements the logic from `_hyb_calc` in the old `model_geology.py`.
+    Modifies arrays in-place where possible but returns them for clarity.
+
+    Parameters
+    ----------
+    vs30_array : np.ndarray
+        Base VS30 array (float).
+    stdv_array : np.ndarray
+        Base Standard Deviation array (float).
+    id_array : np.ndarray
+        Category ID array (int).
+    slope_array : np.ndarray
+        Slope array (float).
+    coast_dist_array : np.ndarray
+        Distance to coast array (float).
+    mod6 : bool, optional
+        Whether to apply modification for Group 6 (Alluvium), by default True.
+    mod13 : bool, optional
+        Whether to apply modification for Group 13 (Floodplain), by default True.
+    hybrid : bool, optional
+        Whether to apply general hybrid slope-based modifications, by default True.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Modified (vs30_array, stdv_array).
+    """
+    print("  Applying hybrid geology modifications...")
+
+    # 1. Update Standard Deviation for specific groups
+    if hybrid:
+        # group IDs 2, 3, 4, 6 have reduction factors
+        for idx, gid in enumerate(HYBRID_SRF_IDS):
+            factor = HYBRID_SRF_FACTORS[idx]
+            # Find pixels with this ID
+            mask = id_array == gid
+            stdv_array[mask] *= factor
+
+    # 2. Hybrid slope-based VS30 calculation
+    if hybrid:
+        # Prevent log10(0) or log10(-NODATA)
+        valid_slope_mask = (slope_array > 0) & (slope_array != SLOPE_NODATA)
+
+        # We need to operate on pixels where valid slope AND specific IDs match
+        # To avoid warnings, we can work on a temporary safe slope array
+        safe_log_slope = np.full_like(slope_array, -999.0)
+        safe_log_slope[valid_slope_mask] = np.log10(slope_array[valid_slope_mask])
+
+        for spec in HYBRID_VS30_PARAMS:
+            gid = spec[0]
+            slope_limits = spec[1]
+            vs30_limits_log10 = spec[2]
+
+            # Skip ID 4 if mod6 is active (handled separately later?)
+            # Old code: `if spec[0] == 4 and geol.mod6: continue`
+            if gid == 4 and mod6:
+                continue
+
+            # Find mask: ID matches AND slope is valid
+            mask = (id_array == gid) & valid_slope_mask
+
+            if np.any(mask):
+                # Interpolate
+                # vs30 = 10 ^ interp(log10(slope), [lim1, lim2], [vs1, vs2])
+                interpolated_val = np.interp(
+                    safe_log_slope[mask], slope_limits, vs30_limits_log10
+                )
+                vs30_array[mask] = 10**interpolated_val
+
+    # 3. Distance-based modification for Group 6 (Alluvium, ID=4 in old, check ID mapping?)
+    # Ensure `id_array` contains these GIDs. The CSV mapping preserves GIDs.
+
+    if mod6:
+        # GID 4 = "06_alluvium"
+        mask = id_array == 4
+        if np.any(mask):
+            # Formula: 240 + (500-240) * (dist - 8000) / (20000 - 8000)
+            # Clamped between 240 and 500
+            # dist is in meters.
+
+            dist_vals = coast_dist_array[mask]
+
+            val = 240 + (260.0) * (dist_vals - 8000.0) / 12000.0
+            val = np.clip(val, 240.0, 500.0)
+
+            vs30_array[mask] = val
+
+    if mod13:
+        # GID 10 = "13_floodplain"
+        mask = id_array == 10
+        if np.any(mask):
+            # Formula: 197 + (500-197) * (dist - 8000) / (20000 - 8000)
+            # Clamped between 197 and 500
+
+            dist_vals = coast_dist_array[mask]
+
+            val = 197 + (303.0) * (dist_vals - 8000.0) / 12000.0
+            val = np.clip(val, 197.0, 500.0)
+
+            vs30_array[mask] = val
+
+    return vs30_array, stdv_array
