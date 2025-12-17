@@ -260,6 +260,70 @@ def create_category_id_raster(model_type: str, output_dir: Path) -> Path:
     return output_path
 
 
+def _determine_vs30_columns(columns: list[str]) -> tuple[str, str]:
+    """
+    Determine which columns to use for VS30 mean and standard deviation.
+
+    Prioritizes columns in the following order:
+    1. Independent observations posterior (result of second update step)
+    2. Clustered observations posterior (result of first update step)
+    3. Generic posterior
+    4. Explicit prior
+    5. Standard/Original names
+
+    Parameters
+    ----------
+    columns : list[str]
+        List of available column names in the CSV.
+
+    Returns
+    -------
+    tuple[str, str]
+        (mean_column_name, std_column_name)
+
+    Raises
+    ------
+    ValueError
+        If no suitable column pair is found.
+    """
+    priorities = [
+        # 1. Independent observations posterior
+        (
+            "posterior_mean_vs30_km_per_s_independent_observations",
+            "posterior_standard_deviation_vs30_km_per_s_independent_observations",
+        ),
+        # 2. Clustered observations posterior
+        (
+            "posterior_mean_vs30_km_per_s_clustered_observations",
+            "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
+        ),
+        # 3. Generic posterior
+        (
+            "posterior_mean_vs30_km_per_s",
+            "posterior_standard_deviation_vs30_km_per_s",
+        ),
+        # 4. Explicit prior
+        (
+            "prior_mean_vs30_km_per_s",
+            "prior_standard_deviation_vs30_km_per_s",
+        ),
+        # 5. Standard/Original names
+        (
+            "mean_vs30_km_per_s",
+            "standard_deviation_vs30_km_per_s",
+        ),
+    ]
+
+    for mean_col, std_col in priorities:
+        if mean_col in columns and std_col in columns:
+            return mean_col, std_col
+
+    raise ValueError(
+        f"Could not find valid VS30 mean and standard deviation columns. "
+        f"Available columns: {columns}"
+    )
+
+
 def create_vs30_raster_from_ids(
     id_raster_path: Path, csv_path: str, output_path: Path
 ) -> Path:
@@ -330,9 +394,16 @@ def create_vs30_raster_from_ids(
         df = pd.read_csv(csv_file_path, skipinitialspace=True)
         print(f"  ✓ Loaded {len(df)} rows from CSV")
 
-        # Check required columns exist
-        print("Step 5: Validating CSV columns")
-        required_cols = ["id", "mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+        # Clean column names (strip whitespace)
+        df.columns = df.columns.str.strip()
+
+        # Determine which columns to use for VS30 values
+        print("Step 5: Determining VS30 value columns")
+        mean_col, std_col = _determine_vs30_columns(list(df.columns))
+        print(f"  Using columns: Mean='{mean_col}', StdDev='{std_col}'")
+
+        # Check required columns exist (id + determined value columns)
+        required_cols = ["id", mean_col, std_col]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             raise ValueError(
@@ -346,8 +417,8 @@ def create_vs30_raster_from_ids(
         id_to_vs30_values = {}
         for _, row in df.iterrows():
             category_id = int(row["id"])
-            mean_vs30 = float(row["mean_vs30_km_per_s"])
-            stddev_vs30 = float(row["standard_deviation_vs30_km_per_s"])
+            mean_vs30 = float(row[mean_col])
+            stddev_vs30 = float(row[std_col])
             id_to_vs30_values[category_id] = (mean_vs30, stddev_vs30)
         print(f"  ✓ Created dictionary with {len(id_to_vs30_values)} ID mappings")
         print(f"  IDs in CSV: {sorted(id_to_vs30_values.keys())}")
