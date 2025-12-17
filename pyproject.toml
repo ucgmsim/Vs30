@@ -23,7 +23,7 @@ dependencies = [
 Repository = "https://github.com/ucgmsim/Vs30"
 
 [project.scripts]
-vs30map = "vs30.main:main"
+vs30 = "vs30.cli:app"
 
 [tool.setuptools]
 packages = ["vs30", "VsViewer"]
