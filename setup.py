@@ -3,8 +3,8 @@ Custom build script for shapefile extraction.
 """
 
 import os
-from shutil import rmtree
 import tarfile
+from shutil import rmtree
 
 from setuptools import setup
 from setuptools.command.build_py import build_py

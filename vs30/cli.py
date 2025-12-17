@@ -1,0 +1,649 @@
+"""
+MVN updates for geology and terrain models.
+
+This module implements multivariate normal (MVN) distribution updates for pixels
+in geology.tif and terrain.tif that are within range of observations.
+"""
+
+import logging
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import rasterio
+import typer
+from matplotlib import pyplot as plt
+from typer import Option
+from vs30.vs30_map_config_handler import Vs30MapConfig
+
+from vs30 import raster, utils
+from vs30.raster import (
+    apply_hybrid_geology_modifications,
+    create_coast_distance_raster,
+    create_slope_raster,
+)
+
+logger = logging.getLogger(__name__)
+
+# Create Typer app for CLI
+app = typer.Typer(
+    name="vs30",
+    help="VS30 map generation and categorical model updates",
+    add_completion=False,
+)
+
+
+@app.command()
+def update_categorical_vs30_models(
+    categorical_model_csv: Path = Option(
+        ...,
+        "--categorical-model-csv",
+        "-m",
+        help="Path to CSV file with categorical vs30 mean and standard deviation values (e.g., geology_model_prior_mean_and_standard_deviation.csv)",
+    ),
+    clustered_observations_csv: Path = Option(
+        None,
+        "--clustered-observations-csv",
+        "-c",
+        help="Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv). These will be processed with spatial clustering.",
+    ),
+    independent_observations_csv: Path = Option(
+        None,
+        "--independent-observations-csv",
+        "-o",
+        help="Path to CSV file with independent observations (e.g., measured_vs30_original_filtered.csv). These will be processed without clustering.",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-d",
+        help="Path to output directory (will be created if it does not exist)",
+    ),
+    model_type: str = Option(
+        ...,
+        "--model-type",
+        "-t",
+        help="Model type: either 'geology' or 'terrain'",
+    ),
+    n_prior: int = Option(
+        3,
+        "--n-prior",
+        help="Effective number of prior observations (default: 3)",
+    ),
+    min_sigma: float = Option(
+        0.5,
+        "--min-sigma",
+        help="Minimum standard deviation allowed (default: 0.5)",
+    ),
+    min_group: int = Option(
+        5,
+        "--min-group",
+        help="Minimum group size for DBSCAN clustering (default: 5)",
+    ),
+    eps: float = Option(
+        15000.0,
+        "--eps",
+        help="Maximum distance (metres) for points to be considered in same cluster (default: 15000)",
+    ),
+    nproc: int = Option(
+        -1,
+        "--nproc",
+        help="Number of processes for DBSCAN clustering. -1 to use all available cores (default: -1)",
+    ),
+) -> None:
+    """
+    Update categorical model values using Bayesian updates and save to CSV files.
+
+    This command loads observations and categorical model values, applies Bayesian
+    updates to the categorical model values (mean and standard deviation per category),
+    and writes the updated values back to CSV files.
+
+    Can process clustered observations (with spatial clustering) and/or independent
+    observations (without clustering). If both are provided, clustered observations
+    are processed first, and the resulting posterior is used as the prior for
+    independent observations.
+    """
+    try:
+        # Validate that at least one observations CSV is provided
+        if clustered_observations_csv is None and independent_observations_csv is None:
+            typer.echo(
+                "Error: At least one of --clustered-observations-csv or --independent-observations-csv must be provided",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Validate input files exist
+        if not categorical_model_csv.exists():
+            typer.echo(
+                f"Error: Categorical model CSV file not found: {categorical_model_csv}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        if (
+            clustered_observations_csv is not None
+            and not clustered_observations_csv.exists()
+        ):
+            typer.echo(
+                f"Error: Clustered observations CSV file not found: {clustered_observations_csv}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        if (
+            independent_observations_csv is not None
+            and not independent_observations_csv.exists()
+        ):
+            typer.echo(
+                f"Error: Independent observations CSV file not found: {independent_observations_csv}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Validate model_type parameter
+        if model_type not in ["geology", "terrain"]:
+            typer.echo(
+                f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        logger.info(f"Model type: {model_type}")
+        logger.info(f"Loading categorical model from: {categorical_model_csv}")
+
+        # Load categorical model CSV (absolute path)
+        categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
+
+        # Drop rows with invalid placeholder values (e.g., -9999 for water category)
+        categorical_model_df = categorical_model_df[
+            categorical_model_df["mean_vs30_km_per_s"] != -9999
+        ]
+
+        # Validate required columns
+        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+        missing_cols = [
+            col for col in required_cols if col not in categorical_model_df.columns
+        ]
+        if missing_cols:
+            typer.echo(
+                f"Error: CSV file missing required columns: {missing_cols}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Import assignment functions and constants from category
+        from vs30.category import (
+            ID_NODATA,
+            STANDARD_ID_COLUMN,
+            _assign_to_category_geology,
+            _assign_to_category_terrain,
+            perform_clustering,
+            posterior_from_bayesian_update,
+        )
+
+        # Current prior (will be updated as we process observations)
+        current_prior_df = categorical_model_df.copy()
+
+        # Load clustered observations if provided
+        clustered_observations_df = None
+        if clustered_observations_csv is not None:
+            logger.info(
+                f"Loading clustered observations from: {clustered_observations_csv}"
+            )
+            clustered_observations_df = pd.read_csv(
+                clustered_observations_csv, skipinitialspace=True
+            )
+
+            # Validate clustered observations have required columns
+            obs_required_cols = ["easting", "northing", "vs30"]
+            missing_obs_cols = [
+                col
+                for col in obs_required_cols
+                if col not in clustered_observations_df.columns
+            ]
+            if missing_obs_cols:
+                typer.echo(
+                    f"Error: Clustered observations CSV missing required columns: {missing_obs_cols}",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
+            logger.info(
+                f"Loaded {len(clustered_observations_df)} clustered observations"
+            )
+
+            # Assign category IDs
+            obs_locs = clustered_observations_df[["easting", "northing"]].values
+            if model_type == "geology":
+                model_ids = _assign_to_category_geology(obs_locs)
+            else:  # terrain
+                model_ids = _assign_to_category_terrain(obs_locs)
+
+            clustered_observations_df[STANDARD_ID_COLUMN] = model_ids
+
+            # Log assignment statistics
+            unique_assigned_ids = clustered_observations_df[STANDARD_ID_COLUMN].unique()
+            valid_assigned = clustered_observations_df[
+                clustered_observations_df[STANDARD_ID_COLUMN] != ID_NODATA
+            ]
+            logger.info(
+                f"Assigned category IDs: {len(valid_assigned)} valid observations "
+                f"(out of {len(clustered_observations_df)} total)"
+            )
+            logger.info(
+                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != ID_NODATA])[:20]}"
+            )
+            logger.info(
+                f"Category IDs in prior model: {sorted(current_prior_df[STANDARD_ID_COLUMN].unique())}"
+            )
+
+            # Perform clustering
+            logger.info("Performing spatial clustering...")
+            clustered_observations_df = perform_clustering(
+                clustered_observations_df, model_type, min_group, eps, nproc
+            )
+
+        # Load independent observations if provided
+        independent_observations_df = None
+        if independent_observations_csv is not None:
+            logger.info(
+                f"Loading independent observations from: {independent_observations_csv}"
+            )
+            independent_observations_df = pd.read_csv(
+                independent_observations_csv, skipinitialspace=True
+            )
+
+            # Validate independent observations have required columns
+            obs_required_cols = ["easting", "northing", "vs30", "uncertainty"]
+            missing_obs_cols = [
+                col
+                for col in obs_required_cols
+                if col not in independent_observations_df.columns
+            ]
+            if missing_obs_cols:
+                typer.echo(
+                    f"Error: Independent observations CSV missing required columns: {missing_obs_cols}",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
+            logger.info(
+                f"Loaded {len(independent_observations_df)} independent observations"
+            )
+
+            # Assign category IDs
+            obs_locs = independent_observations_df[["easting", "northing"]].values
+            if model_type == "geology":
+                model_ids = _assign_to_category_geology(obs_locs)
+            else:  # terrain
+                model_ids = _assign_to_category_terrain(obs_locs)
+
+            independent_observations_df[STANDARD_ID_COLUMN] = model_ids
+
+        # Perform Bayesian update(s) via dispatcher
+        logger.info("Applying Bayesian updates...")
+        current_prior_df = posterior_from_bayesian_update(
+            current_prior_df,
+            independent_observations_df=independent_observations_df,
+            clustered_observations_df=clustered_observations_df,
+            n_prior=n_prior,
+            min_sigma=min_sigma,
+            model_type=model_type,
+        )
+
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_filename = "posterior_" + categorical_model_csv.name
+        output_path = output_dir / output_filename
+
+        current_prior_df.to_csv(output_path, index=False)
+
+        typer.echo("✓ Successfully updated categorical model values")
+        typer.echo(f"  Output saved to: {output_path}")
+
+    except Exception as e:
+        logger.exception("Error updating category values")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def make_initial_vs30_raster(
+    terrain: bool = Option(False, "--terrain", help="Create terrain VS30 raster"),
+    geology: bool = Option(False, "--geology", help="Create geology VS30 raster"),
+    config: Path = Option(
+        None,
+        "--config",
+        "-c",
+        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
+    ),
+    output_dir: Path = Option(
+        None,
+        "--output-dir",
+        "-o",
+        help="Output directory (default: output_dir from config.yaml)",
+    ),
+) -> None:
+    """
+    Create initial VS30 mean and standard deviation rasters from category IDs.
+
+    This command generates initial VS30 rasters by:
+    1. Creating category ID rasters (from terrain raster or geology shapefile)
+    2. Mapping category IDs to VS30 mean and standard deviation values from CSV files
+    3. Writing 2-band GeoTIFFs with VS30 mean (band 1) and standard deviation (band 2)
+
+    Output files are saved as terrain_initial_vs30.tif and/or geology_initial_vs30.tif.
+    """
+    try:
+        # Validate that at least one model type is specified
+        if not terrain and not geology:
+            typer.echo(
+                "Error: At least one of --terrain or --geology must be specified",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Load config
+        config_path = utils._find_config_file(config)
+        if not config_path.exists():
+            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+            raise typer.Exit(1)
+
+        logger.info(f"Loading configuration from {config_path}")
+        # Load config, filtering out unknown keys
+        import yaml
+
+        with open(config_path) as f:
+            config_data = yaml.safe_load(f)
+        # Get only the fields that Vs30MapConfig expects
+        config_fields = {
+            field.name for field in Vs30MapConfig.__dataclass_fields__.values()
+        }
+        filtered_config = {k: v for k, v in config_data.items() if k in config_fields}
+        mvn_config = Vs30MapConfig(**filtered_config)
+
+        base_path = utils._resolve_base_path(config_path)
+        logger.info(f"Using base path: {base_path}")
+
+        # Determine output directory
+        if output_dir is None:
+            output_dir = base_path / mvn_config.output_dir
+        else:
+            output_dir = Path(output_dir)
+
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Output directory: {output_dir}")
+
+        # Process terrain if requested
+        if terrain:
+            logger.info("Processing terrain model...")
+            csv_path = mvn_config.terrain_mean_and_standard_deviation_per_category_file
+            logger.info(f"Using terrain model values from {csv_path}")
+
+            logger.info("Creating terrain category ID raster...")
+            id_raster = raster.create_category_id_raster("terrain", output_dir)
+
+            logger.info("Creating terrain VS30 raster...")
+            vs30_raster = output_dir / "terrain_initial_vs30.tif"
+            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
+            typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
+
+        # Process geology if requested
+        if geology:
+            logger.info("Processing geology model...")
+            csv_path = mvn_config.geology_mean_and_standard_deviation_per_category_file
+            logger.info(f"Using geology model values from {csv_path}")
+
+            logger.info("Creating geology category ID raster...")
+            id_raster = raster.create_category_id_raster("geology", output_dir)
+
+            logger.info("Creating geology VS30 raster...")
+            vs30_raster = output_dir / "geology_initial_vs30.tif"
+            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
+            typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
+
+        typer.echo("✓ Successfully created initial VS30 rasters")
+
+    except Exception as e:
+        logger.exception("Error creating initial VS30 rasters")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def create_hybrid_raster(
+    input_raster: Path = Option(
+        ...,
+        "--input-raster",
+        "-i",
+        help="Path to initial geology VS30 raster (created by make-initial-vs30-raster)",
+    ),
+    id_raster: Path = Option(
+        ...,
+        "--id-raster",
+        help="Path to category ID raster (e.g. gid.tif used to create the input raster)",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-o",
+        help="Directory to save output hybrid raster and intermediate files",
+    ),
+) -> None:
+    """
+    Apply hybrid geology modifications to an initial VS30 raster.
+
+    This command adds slope-based and coast-distance-based modifications to the geology model.
+    It generates intermediate slope and coast distance rasters in the output directory.
+
+    Requires:
+    - Input geology VS30 raster (2 bands: Vs30, Stdv)
+    - Corresponding ID raster (gid.tif)
+    """
+    try:
+        if not input_raster.exists():
+            raise FileNotFoundError(f"Input raster not found: {input_raster}")
+        if not id_raster.exists():
+            raise FileNotFoundError(f"ID raster not found: {id_raster}")
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Processing hybrid model for: {input_raster}")
+
+        # 1. Load Input Raster
+        with rasterio.open(input_raster) as src:
+            vs30_array = src.read(1)
+            stdv_array = src.read(2)
+            profile = src.profile.copy()
+            # Ensure profile uses float64 for output calculations
+            # (though input might be float32 or float64)
+
+            # Check dimensions against ID raster
+            with rasterio.open(id_raster) as id_src:
+                if id_src.width != src.width or id_src.height != src.height:
+                    raise ValueError(
+                        f"Dimension mismatch! Input raster: {src.width}x{src.height}, "
+                        f"ID raster: {id_src.width}x{id_src.height}"
+                    )
+                id_array = id_src.read(1)
+
+        # 2. Create/Load Intermediate Rasters
+        slope_path = output_dir / "slope.tif"
+        logger.info(f"Generating slope raster: {slope_path}")
+        slope_array, _ = create_slope_raster(slope_path, profile)
+
+        coast_path = output_dir / "coast_distance.tif"
+        logger.info(f"Generating coast distance raster: {coast_path}")
+        coast_dist_array, _ = create_coast_distance_raster(coast_path, profile)
+
+        # 3. Apply Modifications
+        logger.info("Applying hybrid geology modifications...")
+        # Note: Arrays are modified in-place or returned new.
+        # The function signature was ported to return them.
+        mod_vs30, mod_stdv = apply_hybrid_geology_modifications(
+            vs30_array.astype(np.float64),  # Ensure standard precision
+            stdv_array.astype(np.float64),
+            id_array,
+            slope_array,
+            coast_dist_array,
+            mod6=True,  # Enable all mods by default for hybrid model
+            mod13=True,
+            hybrid=True,
+        )
+
+        # 4. Save Output
+        output_path = output_dir / "hybrid_vs30.tif"
+
+        # Update profile for output
+        profile.update(
+            {
+                "dtype": "float64",
+                "compress": "deflate",
+                # Ensure nodata matches expected model nodata if needed,
+                # though usually inherited from src is fine.
+            }
+        )
+
+        logger.info(f"Saving hybrid raster to: {output_path}")
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(mod_vs30, 1)
+            dst.write(mod_stdv, 2)
+            dst.descriptions = ("Vs30 (Hybrid)", "Standard Deviation (Hybrid)")
+
+        typer.echo("✓ Successfully created hybrid geology raster")
+        typer.echo(f"  Output saved to: {output_path}")
+
+    except Exception as e:
+        logger.exception("Error creating hybrid raster")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def plot_posterior_values(
+    csv_path: Path = Option(
+        ...,
+        "--csv-path",
+        "-c",
+        help="Path to CSV file with prior and posterior values",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-o",
+        help="Path to output directory for plots (will be created if it does not exist)",
+    ),
+) -> None:
+    """
+    Plot prior and posterior vs30 mean values with error bars.
+
+    Creates a plot showing vs30 mean values (y-axis) vs category ID (x-axis)
+    for both prior and posterior values, with error bars showing standard deviation.
+    """
+    try:
+        # Validate input file exists
+        if not csv_path.exists():
+            typer.echo(f"Error: CSV file not found: {csv_path}", err=True)
+            raise typer.Exit(1)
+
+        logger.info(f"Loading data from: {csv_path}")
+
+        # Load CSV
+        df = pd.read_csv(csv_path, skipinitialspace=True)
+
+        # Filter out invalid rows (e.g., -9999 placeholder values)
+        df = df[df["prior_mean_vs30_km_per_s"] != -9999].copy()
+
+        # Validate required columns
+        required_cols = [
+            "id",
+            "prior_mean_vs30_km_per_s",
+            "prior_standard_deviation_vs30_km_per_s",
+            "posterior_mean_vs30_km_per_s",
+            "posterior_standard_deviation_vs30_km_per_s",
+        ]
+        missing_cols = [col for col in required_cols if col not in df.columns]
+        if missing_cols:
+            typer.echo(
+                f"Error: CSV file missing required columns: {missing_cols}",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract data
+        category_ids = df["id"].values
+        prior_mean = df["prior_mean_vs30_km_per_s"].values
+        prior_std = df["prior_standard_deviation_vs30_km_per_s"].values
+        posterior_mean = df["posterior_mean_vs30_km_per_s"].values
+        posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(12, 8))
+
+        # Offset for x positions to separate prior and posterior
+        offset = 0.2
+        prior_x = category_ids - offset
+        posterior_x = category_ids + offset
+
+        # Plot prior values with error bars
+        ax.errorbar(
+            prior_x,
+            prior_mean,
+            yerr=prior_std,
+            fmt="o",
+            label="Prior",
+            capsize=5,
+            capthick=1.5,
+            markersize=6,
+            alpha=0.7,
+        )
+
+        # Plot posterior values with error bars
+        ax.errorbar(
+            posterior_x,
+            posterior_mean,
+            yerr=posterior_std,
+            fmt="s",
+            label="Posterior",
+            capsize=5,
+            capthick=1.5,
+            markersize=6,
+            alpha=0.7,
+        )
+
+        # Set labels and title
+        ax.set_xlabel("Category ID", fontsize=12)
+        ax.set_ylabel("Vs30 (m/s)", fontsize=12)
+        ax.set_title("Prior vs Posterior Vs30 Values by Category", fontsize=14)
+        ax.legend(fontsize=11)
+        ax.grid(True, alpha=0.3)
+
+        # Set x-axis to show category IDs
+        ax.set_xticks(category_ids)
+        ax.set_xticklabels(category_ids.astype(int))
+
+        # Generate output filename from input CSV
+        output_filename = csv_path.stem + "_plot.png"
+        output_path = output_dir / output_filename
+
+        # Save plot
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+        logger.info(f"Plot saved to: {output_path}")
+        typer.echo(f"✓ Plot saved to: {output_path}")
+
+    except Exception as e:
+        logger.exception("Error creating plot")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+if __name__ == "__main__":
+    app()
