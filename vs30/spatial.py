@@ -4,18 +4,19 @@ for modifying vs30 values based on proximity to measured values.
 """
 
 import logging
-import os
 from dataclasses import dataclass
-from multiprocessing import Pool
+from math import sqrt
 from pathlib import Path
-from shutil import copyfile
 
 import numpy as np
+import pandas as pd
 import rasterio
-from osgeo import gdal
 from rasterio import transform as rasterio_transform
+from scipy.spatial.distance import cdist
+from tqdm import tqdm
 
-from vs30 import utils
+from vs30 import constants, utils
+from vs30 import spatial as mvn
 
 logger = logging.getLogger(__name__)
 
@@ -36,98 +37,65 @@ class ObservationData:
     omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
     uncertainty: np.ndarray  # (n_obs,) observation uncertainties
 
-    def __post_init__(self) -> None:
-        """
-        Validate data consistency.
-
-        Raises
-        ------
-        AssertionError
-            If array lengths don't match.
-        """
-        n = len(self.locations)
-        assert len(self.vs30) == n, "vs30 length must match locations"
-        assert len(self.model_vs30) == n, "model_vs30 length must match locations"
-        assert len(self.model_stdv) == n, "model_stdv length must match locations"
-        assert len(self.residuals) == n, "residuals length must match locations"
-        assert len(self.omega) == n, "omega length must match locations"
-        assert len(self.uncertainty) == n, "uncertainty length must match locations"
-
 
 @dataclass
 class PixelData:
-    """Data for a single pixel being updated."""
+    """Data for a single pixel."""
 
-    location: np.ndarray  # (2,) [easting, northing]
-    vs30: float
-    stdv: float
-    index: int  # Index in full raster (for mapping back)
+    location: np.ndarray  # [easting, northing]
+    vs30: float  # prior vs30 value
+    stdv: float  # prior stdv value
+    index: int  # flat index in the raster
 
 
 @dataclass
 class MVNUpdateResult:
-    """Result of MVN update for a single pixel."""
+    """Result of an MVN update for a single pixel."""
 
     updated_vs30: float
     updated_stdv: float
     n_observations_used: int
     min_distance: float
-    pixel_index: int  # For mapping back to raster
-
-
-@dataclass
-class BoundingBoxResult:
-    """Result of bounding box calculation."""
-
-    mask: np.ndarray  # Boolean mask of affected pixels
-    obs_to_grid_indices: list[np.ndarray]  # List of grid indices per observation
-    n_affected_pixels: int
+    pixel_index: int
 
 
 @dataclass
 class RasterData:
-    """Raster data wrapper using rasterio."""
+    """Raster data and metadata."""
 
-    vs30: np.ndarray  # Band 1
-    stdv: np.ndarray  # Band 2
+    vs30: np.ndarray  # Band 1: Vs30 mean
+    stdv: np.ndarray  # Band 2: Vs30 stdv
     transform: rasterio.transform.Affine
     crs: rasterio.crs.CRS
     nodata: float | None
-    valid_mask: np.ndarray  # Boolean mask of valid pixels
-    valid_flat_indices: np.ndarray  # Flat indices of valid pixels
+    valid_mask: np.ndarray  # Boolean mask of non-nodata pixels
+    valid_flat_indices: np.ndarray  # Flat indices of non-nodata pixels
 
     @classmethod
     def from_file(cls, path: Path) -> "RasterData":
-        """
-        Load raster data from file.
-
-        Parameters
-        ----------
-        path : Path
-            Path to GeoTIFF file.
-
-        Returns
-        -------
-        RasterData
-            Loaded raster data object.
-        """
+        """Load 2-band VS30 raster."""
         with rasterio.open(path) as src:
             vs30 = src.read(1)
             stdv = src.read(2)
-            nodata = src.nodatavals[0] if src.nodatavals else None
+            transform = src.transform
+            crs = src.crs
+            nodata = src.nodata
 
-            if nodata is not None:
-                valid_mask = vs30 != nodata
-            else:
-                valid_mask = ~np.isnan(vs30)
-
+            # Create mask of valid pixels (not nodata, not nan, and positive)
+            valid_mask = (
+                (vs30 != nodata)
+                & (~np.isnan(vs30))
+                & (~np.isnan(stdv))
+                & (vs30 > 0)
+                & (stdv > 0)
+            )
             valid_flat_indices = np.where(valid_mask.flatten())[0]
 
             return cls(
                 vs30=vs30,
                 stdv=stdv,
-                transform=src.transform,
-                crs=src.crs,
+                transform=transform,
+                crs=crs,
                 nodata=nodata,
                 valid_mask=valid_mask,
                 valid_flat_indices=valid_flat_indices,
@@ -135,7 +103,7 @@ class RasterData:
 
     def get_coordinates(self) -> np.ndarray:
         """
-        Get coordinates for valid pixels.
+        Get coordinates for all valid pixels.
 
         Returns
         -------
@@ -159,19 +127,11 @@ class RasterData:
         path : Path
             Output file path.
         updated_vs30 : ndarray
-            Updated vs30 values (1D array for valid pixels only).
+            Updated vs30 values (same shape as self.vs30).
         updated_stdv : ndarray
-            Updated stdv values (1D array for valid pixels only).
+            Updated stdv values (same shape as self.stdv).
         """
-        # Initialize with original values
-        output_vs30 = self.vs30.copy()
-        output_stdv = self.stdv.copy()
-
-        # Update only modified pixels
-        output_vs30.flat[self.valid_flat_indices] = updated_vs30
-        output_stdv.flat[self.valid_flat_indices] = updated_stdv
-
-        # Write using rasterio with compression to match input file size
+        # Write using rasterio with compression
         with rasterio.open(
             path,
             "w",
@@ -187,8 +147,63 @@ class RasterData:
             tiled=True,
             bigtiff="yes",
         ) as dst:
-            dst.write(output_vs30, 1)
-            dst.write(output_stdv, 2)
+            dst.write(updated_vs30, 1)
+            dst.write(updated_stdv, 2)
+
+
+@dataclass
+class BoundingBoxResult:
+    """Result of bounding box search for affected pixels."""
+
+    mask: np.ndarray  # Boolean mask of pixels in any observation's bounding box
+    obs_to_grid_indices: list[
+        np.ndarray
+    ]  # For each observation, flat indices of pixels in its bounding box
+    n_affected_pixels: int
+
+
+def validate_raster_data(raster_data: RasterData) -> None:
+    """
+    Validate raster data before processing.
+
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data object.
+
+    Raises
+    ------
+    AssertionError
+        If raster data is invalid.
+    """
+    assert raster_data.vs30.shape == raster_data.stdv.shape, "Band shapes must match"
+    assert np.all(np.isfinite(raster_data.vs30[raster_data.valid_mask])), (
+        "Valid pixels must be finite"
+    )
+    assert np.all(raster_data.vs30[raster_data.valid_mask] > 0), "Vs30 must be positive"
+    assert np.all(raster_data.stdv[raster_data.valid_mask] > 0), "Stdv must be positive"
+
+
+def validate_observations(observations: pd.DataFrame) -> None:
+    """
+    Validate observation data.
+
+    Parameters
+    ----------
+    observations : DataFrame
+        Observation data.
+
+    Raises
+    ------
+    AssertionError
+        If observation data is invalid.
+    """
+    assert "easting" in observations.columns, "Missing 'easting' column"
+    assert "northing" in observations.columns, "Missing 'northing' column"
+    assert "vs30" in observations.columns, "Missing 'vs30' column"
+    assert "uncertainty" in observations.columns, "Missing 'uncertainty' column"
+    assert np.all(observations["vs30"] > 0), "Vs30 must be positive"
+    assert np.all(observations["uncertainty"] > 0), "Uncertainty must be positive"
 
 
 def grid_points_in_bbox(
@@ -299,7 +314,6 @@ def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
     model_name: str,
-    mvn_config: Vs30MapConfig,
 ) -> np.ndarray:
     """
     Build covariance matrix through clear pipeline of steps.
@@ -312,8 +326,6 @@ def build_covariance_matrix(
         Selected observations for this pixel.
     model_name : str
         Model name ("geology" or "terrain").
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -326,7 +338,7 @@ def build_covariance_matrix(
     distance_matrix = utils.euclidean_distance_matrix(all_points)
 
     # Step 2: Apply correlation function
-    phi = mvn_config.get_phi(model_name)
+    phi = constants.PHI[model_name]
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
@@ -334,19 +346,19 @@ def build_covariance_matrix(
     cov = corr * np.outer(stdvs, stdvs)
 
     # Step 4: Apply noise weighting (if enabled)
-    if mvn_config.noisy:
+    if constants.NOISY:
         omega = np.insert(selected_observations.omega, 0, 1.0)
         omega_matrix = np.outer(omega, omega)
         np.fill_diagonal(omega_matrix, 1.0)
         cov *= omega_matrix
 
     # Step 5: Apply covariance reduction (if enabled)
-    if mvn_config.cov_reduc > 0:
+    if constants.COV_REDUC > 0:
         log_vs30s = np.insert(
             np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
         )
         log_dist_matrix = utils.euclidean_distance_matrix(log_vs30s.reshape(-1, 1))
-        cov *= np.exp(-mvn_config.cov_reduc * log_dist_matrix)
+        cov *= np.exp(-constants.COV_REDUC * log_dist_matrix)
 
     return cov
 
@@ -361,7 +373,6 @@ def select_observations_for_pixel(
     obs_data: mvn.ObservationData,
     obs_to_grid_indices: list[np.ndarray],
     chunk_grid_to_obs: dict[int, list[int]],
-    mvn_config: Vs30MapConfig,
 ) -> mvn.ObservationData:
     """
     Select observations for a pixel using chunk cache and distance filtering.
@@ -376,8 +387,6 @@ def select_observations_for_pixel(
         List of grid indices per observation.
     chunk_grid_to_obs : dict
         Chunk cache mapping pixel indices to observation indices.
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -406,7 +415,7 @@ def select_observations_for_pixel(
     )[0]
 
     # Filter to only observations within max_dist_m
-    within_dist_mask = distances <= mvn_config.max_dist_m
+    within_dist_mask = distances <= constants.MAX_DIST_M
     filtered_indices = np.array(candidate_obs_indices)[within_dist_mask]
     filtered_distances = distances[within_dist_mask]
 
@@ -423,10 +432,10 @@ def select_observations_for_pixel(
         )
 
     # Limit to closest max_points
-    if len(filtered_indices) > mvn_config.max_points:
+    if len(filtered_indices) > constants.MAX_POINTS:
         # Sort by distance and take closest max_points
         sorted_idx = np.argsort(filtered_distances)
-        selected_idx = sorted_idx[: mvn_config.max_points]
+        selected_idx = sorted_idx[: constants.MAX_POINTS]
         filtered_indices = filtered_indices[selected_idx]
         filtered_distances = filtered_distances[selected_idx]
 
@@ -448,7 +457,6 @@ def compute_mvn_update_for_pixel(
     obs_to_grid_indices: list[np.ndarray],
     chunk_grid_to_obs: dict[int, list[int]],
     model_name: str,
-    mvn_config: Vs30MapConfig,
 ) -> mvn.MVNUpdateResult | None:
     """
     Compute MVN update for a single pixel.
@@ -465,8 +473,6 @@ def compute_mvn_update_for_pixel(
         Chunk cache mapping pixel indices to observation indices.
     model_name : str
         Model name ("geology" or "terrain").
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -479,7 +485,7 @@ def compute_mvn_update_for_pixel(
 
     # Select observations for this pixel
     selected_obs = select_observations_for_pixel(
-        pixel, obs_data, obs_to_grid_indices, chunk_grid_to_obs, mvn_config
+        pixel, obs_data, obs_to_grid_indices, chunk_grid_to_obs
     )
 
     if len(selected_obs.locations) == 0:
@@ -493,7 +499,7 @@ def compute_mvn_update_for_pixel(
         )
 
     # Build covariance matrix
-    cov_matrix = build_covariance_matrix(pixel, selected_obs, model_name, mvn_config)
+    cov_matrix = build_covariance_matrix(pixel, selected_obs, model_name)
 
     # Invert covariance matrix (observations only)
     # Note: This uses BLAS/LAPACK and can cause CPU spikes when many observations
@@ -537,7 +543,6 @@ def compute_mvn_update_for_pixel(
 def find_affected_pixels(
     raster_data: mvn.RasterData,
     obs_data: mvn.ObservationData,
-    mvn_config: Vs30MapConfig,
 ) -> mvn.BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
@@ -548,8 +553,6 @@ def find_affected_pixels(
         Raster data object.
     obs_data : ObservationData
         Observation data.
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -561,17 +564,17 @@ def find_affected_pixels(
 
     # Calculate chunk size
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), mvn_config.total_memory_gb
+        len(obs_data.locations), constants.TOTAL_MEMORY_GB
     )
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
     # Precompute observation bounds
     obs_eastings = obs_data.locations[:, 0:1]  # (n_obs, 1)
     obs_northings = obs_data.locations[:, 1:2]  # (n_obs, 1)
-    obs_eastings_min = obs_eastings - mvn_config.max_dist_m
-    obs_eastings_max = obs_eastings + mvn_config.max_dist_m
-    obs_northings_min = obs_northings - mvn_config.max_dist_m
-    obs_northings_max = obs_northings + mvn_config.max_dist_m
+    obs_eastings_min = obs_eastings - constants.MAX_DIST_M
+    obs_eastings_max = obs_eastings + constants.MAX_DIST_M
+    obs_northings_min = obs_northings - constants.MAX_DIST_M
+    obs_northings_max = obs_northings + constants.MAX_DIST_M
 
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
@@ -636,7 +639,6 @@ def compute_mvn_updates(
     obs_data: mvn.ObservationData,
     bbox_result: mvn.BoundingBoxResult,
     model_name: str,
-    mvn_config: Vs30MapConfig,
 ) -> list[mvn.MVNUpdateResult]:
     """
     Compute MVN updates for all affected pixels.
@@ -651,8 +653,6 @@ def compute_mvn_updates(
         Bounding box result.
     model_name : str
         Model name ("geology" or "terrain").
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -675,7 +675,7 @@ def compute_mvn_updates(
 
     # Process in chunks for memory efficiency
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), mvn_config.total_memory_gb
+        len(obs_data.locations), constants.TOTAL_MEMORY_GB
     )
     n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
 
@@ -748,7 +748,6 @@ def compute_mvn_updates(
                 bbox_result.obs_to_grid_indices,
                 chunk_grid_to_obs,
                 model_name,
-                mvn_config,
             )
 
             if update_result is not None:
@@ -785,8 +784,7 @@ def apply_and_write_updates(
     raster_data: RasterData,
     updates: list[MVNUpdateResult],
     model_name: str,
-    mvn_config: Vs30MapConfig,
-    base_path: Path,
+    output_dir: Path,
 ) -> None:
     """
     Apply updates to raster and write output file.
@@ -799,10 +797,8 @@ def apply_and_write_updates(
         List of MVNUpdateResult objects.
     model_name : str
         Model name ("geology" or "terrain").
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
-    base_path : Path
-        Base path for output files.
+    output_dir : Path
+        Directory where output raster will be saved.
     """
     # Initialize output arrays with original values
     updated_vs30 = raster_data.vs30.copy()
@@ -813,12 +809,8 @@ def apply_and_write_updates(
         updated_vs30.flat[update.pixel_index] = update.updated_vs30
         updated_stdv.flat[update.pixel_index] = update.updated_stdv
 
-    # Create output directory if it doesn't exist
-    output_dir = base_path / mvn_config.output_dir
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write output using filename from config
-    output_filename = mvn_config.get_output_filename(model_name)
+    # Write output using filename from constants
+    output_filename = constants.OUTPUT_FILENAMES[model_name]
     output_path = output_dir / output_filename
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
@@ -942,7 +934,6 @@ def _mvn(
         min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
             [0, max_points_i]
         ]
-        prev_model_loc = model_loc
         if min_dist > max_dist:
             # not close enough to any observed locations
             continue
@@ -960,146 +951,93 @@ def _mvn(
             np.fill_diagonal(omega, 1)
             cov_matrix *= omega
 
-        # covariance reduction factors
-        if cov_reduc > 0:
-            cov_matrix *= np.exp(
-                -cov_reduc
-                * _dist_mat(
-                    np.insert(
-                        np.log(sites.loc[loc_mask, f"{model_name}_vs30"].values),
-                        0,
-                        pred[i],
-                    )
-                )
-            )
+        # Invert covariance matrix (observations only)
+        # Note: This uses BLAS/LAPACK and can cause CPU spikes when many observations
+        # are present (up to max_points=500, resulting in 500x500 matrix inversion)
+        inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
 
-        inv_matrix = np.linalg.inv(cov_matrix[1:, 1:])
-        pred[i] += np.dot(
-            np.dot(cov_matrix[0, 1:], inv_matrix), obs_residuals[loc_mask]
-        )
-        var[i] = cov_matrix[0, 0] - np.dot(
-            np.dot(cov_matrix[0, 1:], inv_matrix), cov_matrix[1:, 0]
+        # Calculate prediction update
+        pred_update = np.dot(
+            np.dot(cov_matrix[0, 1:], inv_cov), obs_residuals[loc_mask]
         )
 
-    return model_vs30 * np.exp(pred - np.log(model_vs30)), np.sqrt(var)
+        # Calculate variance
+        var = cov_matrix[0, 0] - np.dot(
+            np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
+        )
+
+        pred[i] += pred_update
+        model_stdv[i] = np.sqrt(var)
+
+    return np.exp(pred), model_stdv
 
 
-def mvn_table(table, sites, model_name):
+def mvn_tiff(
+    tiff_path,
+    obs_sites,
+    model_name,
+    output_path,
+    cov_reduc=1.5,
+    noisy=True,
+    max_dist=10000,
+    max_points=500,
+):
     """
-    Run MVN over DataFrame. multiprocessing.Pool.map friendly.
+    Update vs30 tiff using observations.
+    tiff_path: path to input tiff
+    obs_sites: dataframe with observations
+    model_name: "geology" or "terrain"
+    output_path: path to output tiff
     """
-    # reset indexes for this instance to prevent index errors with split table
-    ix0_table = table.reset_index(drop=True)
-    logger.debug(
-        f"Running MVN on {len(ix0_table)} points for "
-        f"model {model_name} on process {os.getpid()}"
-    )
-    result = np.column_stack(
-        _mvn(
-            ix0_table[["easting", "northing"]].values,
-            ix0_table[f"{model_name}_vs30"],
-            ix0_table[f"{model_name}_stdv"],
-            sites,
+    with rasterio.open(tiff_path) as src:
+        vs30 = src.read(1)
+        model_stdv = src.read(2)
+        transform = src.transform
+        crs = src.crs
+        nodata = src.nodata
+
+    # mask out nodata
+    mask = vs30 != nodata
+    if np.any(mask):
+        rows, cols = np.where(mask)
+        # center of pixel
+        rows_f = rows.astype(float) + 0.5
+        cols_f = cols.astype(float) + 0.5
+        xs, ys = rasterio_transform.xy(transform, rows_f, cols_f)
+        model_locs = np.column_stack((np.array(xs), np.array(ys))).astype(np.float64)
+
+        # compute updates
+        updated_vs30, updated_stdv = _mvn(
+            model_locs,
+            vs30[mask],
+            model_stdv[mask],
+            obs_sites,
             model_name,
+            cov_reduc=cov_reduc,
+            noisy=noisy,
+            max_dist=max_dist,
+            max_points=max_points,
         )
-    )
-    logger.debug(
-        f"Completed MVN on {len(ix0_table)} points for "
-        f"model {model_name} on process {os.getpid()}"
-    )
-    return result
 
+        # apply updates
+        vs30[mask] = updated_vs30
+        model_stdv[mask] = updated_stdv
 
-def _mvn_tiff_worker(model_args):
-    """
-    Works on single tif block as split by mvn_tiff.
-    """
-
-    tif_path, x_offset, y_offset, x_size, y_size, sites, model_name = model_args
-
-    # load tif
-    tif_ds = gdal.Open(tif_path, gdal.GA_ReadOnly)
-    tif_trans = tif_ds.GetGeoTransform()
-    vs30_band = tif_ds.GetRasterBand(1)
-    stdv_band = tif_ds.GetRasterBand(2)
-    vs30_nd = vs30_band.GetNoDataValue()
-    stdv_nd = stdv_band.GetNoDataValue()
-
-    # read pre-mvn data from tif
-    vs30_val = vs30_band.ReadAsArray(
-        xoff=x_offset, yoff=y_offset, win_xsize=x_size, win_ysize=y_size
-    ).flatten()
-    vs30_val[vs30_val == vs30_nd] = np.nan
-    stdv_val = stdv_band.ReadAsArray(
-        xoff=x_offset, yoff=y_offset, win_xsize=x_size, win_ysize=y_size
-    ).flatten()
-    stdv_val[stdv_val == stdv_nd] = np.nan
-
-    # coordinates for tif data
-    locs = np.vstack(
-        np.mgrid[
-            tif_trans[0] + (x_offset + 0.5) * tif_trans[1] : tif_trans[0]
-            + (x_offset + 0.5 + x_size) * tif_trans[1] : tif_trans[1],
-            tif_trans[3] + (y_offset + 0.5) * tif_trans[5] : tif_trans[3]
-            + (y_offset + 0.5 + y_size) * tif_trans[5] : tif_trans[5],
-        ].T
-    ).astype(np.float32)
-
-    # close tif
-    vs30_band = None
-    stdv_band = None
-    tif_ds = None
-    # calculate mvn
-    vs30_mvn, stdv_mvn = _mvn(locs, vs30_val, stdv_val, sites, model_name)
-    return (
-        x_offset,
-        y_offset,
-        vs30_mvn.reshape(y_size, x_size),
-        stdv_mvn.reshape(y_size, x_size),
-    )
-
-
-def mvn_tiff(out_dir, model_name, sites, nproc=1):
-    """
-    Run MVN over GeoTIFF.
-    """
-    # mvn based on original model, modified if in proximity to measured sites
-    in_tiff = os.path.join(out_dir, f"{model_name}.tif")
-    out_tiff = os.path.join(out_dir, f"{model_name}_mvn.tif")
-    copyfile(in_tiff, out_tiff)
-    tif_ds = gdal.Open(out_tiff, gdal.GA_Update)
-    nx = tif_ds.RasterXSize
-    ny = tif_ds.RasterYSize
-    vs30_band = tif_ds.GetRasterBand(1)
-    stdv_band = tif_ds.GetRasterBand(2)
-
-    # processing chunk/block sizing
-    # usually just lines of nx=nx, ny=1 which is a good size for multiprocessing
-    block = vs30_band.GetBlockSize()
-    nxb = (int)((nx + block[0] - 1) / block[0])
-    nyb = (int)((ny + block[1] - 1) / block[1])
-
-    job_args = []
-    for x in range(nxb):
-        xoff = x * block[0]
-        # last block may be smaller
-        if x == nxb - 1:
-            block[0] = nx - x * block[0]
-        # reset y block size
-        block_y = block[1]
-
-        for y in range(nyb):
-            yoff = y * block[1]
-            # last block may be smaller
-            if y == nyb - 1:
-                block_y = ny - y * block[1]
-
-            job_args.append((in_tiff, xoff, yoff, block[0], block_y, sites, model_name))
-    with Pool(nproc) as pool:
-        results = pool.map(_mvn_tiff_worker, job_args)
-
-    for xoff, yoff, vs30_mvn, stdv_mvn in results:
-        vs30_band.WriteArray(vs30_mvn, xoff=xoff, yoff=yoff)
-        stdv_band.WriteArray(stdv_mvn, xoff=xoff, yoff=yoff)
-
-    return out_tiff
+    # write output
+    with rasterio.open(
+        output_path,
+        "w",
+        driver="GTiff",
+        height=vs30.shape[0],
+        width=vs30.shape[1],
+        count=2,
+        dtype=vs30.dtype,
+        crs=crs,
+        transform=transform,
+        nodata=nodata,
+        compress="deflate",
+        tiled=True,
+        bigtiff="yes",
+    ) as dst:
+        dst.write(vs30, 1)
+        dst.write(model_stdv, 2)

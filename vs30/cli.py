@@ -14,9 +14,8 @@ import rasterio
 import typer
 from matplotlib import pyplot as plt
 from typer import Option
-from vs30.vs30_map_config_handler import Vs30MapConfig
 
-from vs30 import raster, utils
+from vs30 import constants, raster, spatial, utils
 from vs30.raster import (
     apply_hybrid_geology_modifications,
     create_coast_distance_raster,
@@ -350,25 +349,13 @@ def make_initial_vs30_raster(
             typer.echo(f"Error: Config file not found: {config_path}", err=True)
             raise typer.Exit(1)
 
-        logger.info(f"Loading configuration from {config_path}")
-        # Load config, filtering out unknown keys
-        import yaml
-
-        with open(config_path) as f:
-            config_data = yaml.safe_load(f)
-        # Get only the fields that Vs30MapConfig expects
-        config_fields = {
-            field.name for field in Vs30MapConfig.__dataclass_fields__.values()
-        }
-        filtered_config = {k: v for k, v in config_data.items() if k in config_fields}
-        mvn_config = Vs30MapConfig(**filtered_config)
-
+        # Use constants for default values
         base_path = utils._resolve_base_path(config_path)
         logger.info(f"Using base path: {base_path}")
 
         # Determine output directory
         if output_dir is None:
-            output_dir = base_path / mvn_config.output_dir
+            output_dir = base_path / constants.OUTPUT_DIR_NAME
         else:
             output_dir = Path(output_dir)
 
@@ -379,7 +366,7 @@ def make_initial_vs30_raster(
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            csv_path = mvn_config.terrain_mean_and_standard_deviation_per_category_file
+            csv_path = constants.TERRAIN_MEAN_STDDEV_CSV
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
@@ -393,7 +380,7 @@ def make_initial_vs30_raster(
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            csv_path = mvn_config.geology_mean_and_standard_deviation_per_category_file
+            csv_path = constants.GEOLOGY_MEAN_STDDEV_CSV
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
@@ -517,6 +504,134 @@ def create_hybrid_raster(
 
     except Exception as e:
         logger.exception("Error creating hybrid raster")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def spatial_fit(
+    input_raster: Path = Option(
+        ...,
+        "--input-raster",
+        "-i",
+        help="Path to input 2-band VS30 raster (Vs30 mean and stdv)",
+    ),
+    observations_csv: Path = Option(
+        ...,
+        "--observations-csv",
+        "-o",
+        help="Path to CSV file with measured VS30 values (easting, northing, vs30, uncertainty)",
+    ),
+    model_values_csv: Path = Option(
+        ...,
+        "--model-values-csv",
+        "-m",
+        help="Path to CSV file with updated categorical vs30 values (e.g., updated_geology_model.csv)",
+    ),
+    output_dir: Path = Option(
+        ...,
+        "--output-dir",
+        "-d",
+        help="Directory to save the adjusted raster",
+    ),
+    model_type: str = Option(
+        ...,
+        "--model-type",
+        "-t",
+        help="Model type: either 'geology' or 'terrain'",
+    ),
+) -> None:
+    """
+    Adjust a VS30 raster based on measurements using MVN spatial fitting.
+
+    This command performs a spatial adjustment of an input raster by:
+    1. Loading the 2-band input raster (VS30 mean and stdv)
+    2. Loading measurements and mapping them to categories
+    3. Computing MVN updates for pixels affected by measurements
+    4. Applying updates and saving the resulting 2-band GeoTIFF
+    """
+    try:
+        if not input_raster.exists():
+            raise FileNotFoundError(f"Input raster not found: {input_raster}")
+        if not observations_csv.exists():
+            raise FileNotFoundError(f"Observations CSV not found: {observations_csv}")
+        if not model_values_csv.exists():
+            raise FileNotFoundError(f"Model values CSV not found: {model_values_csv}")
+
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Starting spatial fit for {model_type} model")
+        logger.info(f"Input raster: {input_raster}")
+        logger.info(f"Observations: {observations_csv}")
+        logger.info(f"Model values: {model_values_csv}")
+
+        # 1. Load Raster Data
+        logger.info("Loading raster data...")
+        raster_data = spatial.RasterData.from_file(input_raster)
+        spatial.validate_raster_data(raster_data)
+
+        # 2. Load Observations
+        logger.info("Loading observations...")
+        observations = pd.read_csv(observations_csv, skipinitialspace=True)
+        spatial.validate_observations(observations)
+
+        # 3. Load Model Values (updated categorical table)
+        logger.info("Loading updated model table...")
+        # We need the table as a numpy array [mean, stdv] for each category index (1-indexed in raster)
+        # category.py functions usually handle this.
+        model_df = pd.read_csv(model_values_csv, skipinitialspace=True)
+        # Determine columns
+        mean_col, std_col = raster._determine_vs30_columns(list(model_df.columns))
+
+        # Build table indexed by category ID
+        max_id = model_df["id"].max()
+        updated_model_table = np.full((max_id, 2), np.nan)
+        for _, row in model_df.iterrows():
+            idx = int(row["id"]) - 1
+            if 0 <= idx < max_id:
+                updated_model_table[idx, 0] = row[mean_col]
+                updated_model_table[idx, 1] = row[std_col]
+
+        # 4. Prepare Observation Data for MVN
+        logger.info("Preparing observation data for MVN processing...")
+        obs_data = utils.prepare_observation_data(
+            observations, raster_data, updated_model_table, model_type
+        )
+        logger.info(f"Prepared {len(obs_data.locations)} valid observations")
+
+        if len(obs_data.locations) == 0:
+            logger.warning(
+                "No valid observations found within model bounds. Copying input raster to output."
+            )
+            output_filename = constants.OUTPUT_FILENAMES[model_type]
+            output_path = output_dir / output_filename
+            import shutil
+
+            shutil.copyfile(input_raster, output_path)
+            typer.echo(f"✓ No updates needed. Copied to {output_path}")
+            return
+
+        # 5. Find Affected Pixels
+        logger.info("Finding pixels affected by observations...")
+        bbox_result = spatial.find_affected_pixels(raster_data, obs_data)
+        logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
+
+        # 6. Compute MVN Updates
+        logger.info("Computing MVN updates...")
+        updates = spatial.compute_mvn_updates(
+            raster_data, obs_data, bbox_result, model_type
+        )
+
+        # 7. Apply Updates and Write Output
+        logger.info("Applying updates and writing output...")
+        spatial.apply_and_write_updates(raster_data, updates, model_type, output_dir)
+
+        typer.echo(f"✓ Successfully completed spatial fit for {model_type}")
+        typer.echo(f"  Results saved to: {output_dir}")
+
+    except Exception as e:
+        logger.exception("Error in spatial-fit")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
