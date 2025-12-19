@@ -4,7 +4,12 @@ import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist, euclidean
 
-from vs30 import mvn
+from vs30 import constants
+from vs30.category import (
+    ID_NODATA,
+    _assign_to_category_geology,
+    _assign_to_category_terrain,
+)
 
 
 def _resolve_base_path(config_path: Path) -> Path:
@@ -73,11 +78,10 @@ def _find_config_file(config: Path | None) -> Path:
 
 def prepare_observation_data(
     observations: pd.DataFrame,
-    raster_data: mvn.RasterData,
+    raster_data: "spatial.RasterData",
     updated_model_table: np.ndarray,
     model_name: str,
-    mvn_config: Vs30MapConfig,
-) -> mvn.ObservationData:
+) -> "spatial.ObservationData":
     """
     Prepare observation data for MVN processing.
 
@@ -91,8 +95,6 @@ def prepare_observation_data(
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_name : str
         Model name ("geology" or "terrain").
-    mvn_config : Vs30MapConfig
-        VS30 map configuration.
 
     Returns
     -------
@@ -103,10 +105,12 @@ def prepare_observation_data(
     obs_locs = observations[["easting", "northing"]].values
 
     # Interpolate model values at observation locations
-    # Get model IDs using registry
-    model_info = get_model_info(model_name)
-    model_id_func = model_info.get_model_id_func()
-    model_ids = model_id_func(obs_locs)
+    if model_name == "geology":
+        model_ids = _assign_to_category_geology(obs_locs)
+    elif model_name == "terrain":
+        model_ids = _assign_to_category_terrain(obs_locs)
+    else:
+        raise ValueError(f"Unknown model name: {model_name}")
 
     # Get model vs30 and stdv from updated model table
     # Model IDs are 1-indexed in the raster, but 0-indexed in the model table
@@ -136,13 +140,15 @@ def prepare_observation_data(
     residuals = np.log(vs30_obs / model_vs30)
 
     # Apply noise weighting (if noisy=True)
-    if mvn_config.noisy:
+    if constants.NOISY:
         omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
         residuals *= omega
     else:
         omega = np.ones(len(residuals))
 
-    return mvn.ObservationData(
+    from vs30 import spatial
+
+    return spatial.ObservationData(
         locations=obs_locs,
         vs30=vs30_obs,
         model_vs30=model_vs30,
@@ -216,52 +222,3 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     Minimum distance of 0.1 meters is enforced to prevent division issues.
     """
     return 1 / np.exp(np.maximum(0.1, distances) / phi)
-
-
-# ============================================================================
-# Validation Functions
-# ============================================================================
-
-
-def validate_raster_data(raster_data: mvn.RasterData) -> None:
-    """
-    Validate raster data before processing.
-
-    Parameters
-    ----------
-    raster_data : RasterData
-        Raster data object.
-
-    Raises
-    ------
-    AssertionError
-        If raster data is invalid.
-    """
-    assert raster_data.vs30.shape == raster_data.stdv.shape, "Band shapes must match"
-    assert np.all(np.isfinite(raster_data.vs30[raster_data.valid_mask])), (
-        "Valid pixels must be finite"
-    )
-    assert np.all(raster_data.vs30[raster_data.valid_mask] > 0), "Vs30 must be positive"
-    assert np.all(raster_data.stdv[raster_data.valid_mask] > 0), "Stdv must be positive"
-
-
-def validate_observations(observations: pd.DataFrame) -> None:
-    """
-    Validate observation data.
-
-    Parameters
-    ----------
-    observations : DataFrame
-        Observation data.
-
-    Raises
-    ------
-    AssertionError
-        If observation data is invalid.
-    """
-    assert "easting" in observations.columns, "Missing 'easting' column"
-    assert "northing" in observations.columns, "Missing 'northing' column"
-    assert "vs30" in observations.columns, "Missing 'vs30' column"
-    assert "uncertainty" in observations.columns, "Missing 'uncertainty' column"
-    assert np.all(observations["vs30"] > 0), "Vs30 must be positive"
-    assert np.all(observations["uncertainty"] > 0), "Uncertainty must be positive"
