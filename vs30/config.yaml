@@ -1,16 +1,36 @@
-# MVN Configuration File
-# All constants and magic numbers are defined here
+# Vs30 config file
 
+# --- Grid Parameters ---
+grid_xmin: 1060050
+grid_xmax: 2120050
+grid_ymin: 4730050
+grid_ymax: 6250050
+grid_dx: 100
+grid_dy: 100
+
+# --- NoData and Placeholder Values ---
+id_nodata: 255
+slope_nodata: -9999
+invalid_vs30_placeholder: -9999
+model_nodata: -32767
+
+# --- filenames and Prefixes ---
+posterior_prefix: "posterior_"
+terrain_initial_vs30_filename: "terrain_initial_vs30.tif"
+geology_initial_vs30_filename: "geology_initial_vs30.tif"
+slope_raster_filename: "slope.tif"
+coast_distance_raster_filename: "coast_distance.tif"
+hybrid_vs30_filename: "hybrid_vs30.tif"
+geology_id_filename: "gid.tif"
+terrain_id_filename: "tid.tif"
+combined_vs30_filename: "combined_vs30_mean_stddev.tif"
+
+# --- General Configuration ---
 # Models to process: can be ["geology"], ["terrain"], or ["geology", "terrain"]
 models_to_process:
   - geology
 
-
-geology_or_terrain_to_raster_filename:
-  geology: geology.tif
-  terrain: terrain.tif
-
-# Maximum distance in meters for considering observations
+# Maximum distance (meters) for considering observations
 max_dist_m: 10000
 
 # Maximum number of observations to consider per pixel
@@ -29,32 +49,50 @@ phi_terrain: 993
 # Total available memory in GB for chunking
 total_memory_gb: 3
 
-# Whether to compute Bayesian update from observations:
-#   true: compute Bayesian update from observations
-#   false: use loaded CSV values directly (bypass Bayesian update)
-# Note: Which CSV file to load (prior vs posterior) is specified by
-# geology_mean_and_standard_deviation_per_category_file and
-# terrain_mean_and_standard_deviation_per_category_file
-compute_bayesian_update: true
-
 # Parameters for Bayesian updates
 n_prior: 3  # Assume prior model made up of n_prior measurements
 min_sigma: 0.5  # Minimum standard deviation allowed
-
-# NoData value for model rasters
-model_nodata: -32767
+min_group: 5  # Minimum number of points in a group for DBSCAN update
+eps: 15000.0  # Threshold for Bayesian update
+nproc: -1  # Number of processors to use (-1 for all)
 
 # Paths relative to the resources directory
 observations_file: observations/measured_vs30_original_filtered.csv
 output_dir: new_vs30map
 
-terrain_vs30_mean_stddev_filename: terrain_vs30_mean_stddev.tif
-geology_vs30_mean_stddev_filename: geology_vs30_mean_stddev.tif
-
-# Options for geology Vs30 models: categorical_vs30_mean_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv, geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+# Options for geology Vs30 models
 geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
 
-# Options for terrain Vs30 models: categorical_vs30_mean_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv, /home/arr65/src/vs30/vs30/resources/categorical_vs30_mean_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+# Options for terrain Vs30 models
 terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv
+
+# Weights for multi-model combining
+geology_weight: 1.0
+terrain_weight: 1.0
+k: -1.0 # Standard deviation based weighting factor (if -1, uses geology_weight and terrain_weight directly)
+
+# Model specific ID columns
+model_id_columns:
+  geology: gid
+  terrain: tid
+
+# --- Hybrid Model constants ---
+hybrid_mod6_dist_min: 8000.0
+hybrid_mod6_dist_max: 20000.0
+hybrid_mod6_vs30_min: 240.0
+hybrid_mod6_vs30_max: 500.0
+
+hybrid_mod13_dist_min: 8000.0
+hybrid_mod13_dist_max: 20000.0
+hybrid_mod13_vs30_min: 197.0
+hybrid_mod13_vs30_max: 500.0
+
+# --- Misc ---
+min_dist_enforced: 0.1
+nztm_crs: "EPSG:2193"
+
+# --- Plotting ---
+plot_figsize: [12, 8]
+plot_dpi: 300
 
 

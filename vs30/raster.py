@@ -20,20 +20,22 @@ from rasterio.warp import reproject
 from scipy.ndimage import distance_transform_edt
 from tqdm import tqdm
 
-# Hard-coded grid parameters (from old code defaults)
-XMIN = 1060050
-XMAX = 2120050
-YMIN = 4730050
-YMAX = 6250050
-DX = 100
-DY = 100
+from vs30 import constants
+
+# Grid parameters from constants
+XMIN = constants.GRID_XMIN
+XMAX = constants.GRID_XMAX
+YMIN = constants.GRID_YMIN
+YMAX = constants.GRID_YMAX
+DX = constants.GRID_DX
+DY = constants.GRID_DY
 NX = round((XMAX - XMIN) / DX)
 NY = round((YMAX - YMIN) / DY)
 
-# NoData value for model rasters
-MODEL_NODATA = -32767
-ID_NODATA = 255
-SLOPE_NODATA = -9999
+# NoData values from constants
+MODEL_NODATA = constants.MODEL_NODATA
+ID_NODATA = constants.ID_NODATA
+SLOPE_NODATA = constants.SLOPE_NODATA
 
 # Resources directory path using importlib.resources
 RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
@@ -60,8 +62,8 @@ HYBRID_VS30_PARAMS = [
 HYBRID_SRF_IDS = np.array([2, 3, 4, 6])
 HYBRID_SRF_FACTORS = np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
-# CRS for NZTM
-NZTM_CRS = "EPSG:2193"
+# CRS for NZTM from constants
+NZTM_CRS = constants.NZTM_CRS
 
 # Path to shapefiles archive
 SHAPEFILES_ARCHIVE = DATA_DIR / "shapefiles.tar.xz"
@@ -462,10 +464,10 @@ def create_vs30_raster_from_ids(
     # For each unique ID in the raster, look up the Vs30 values in the CSV dictionary
     print("Step 9: Mapping pixel IDs to VS30 values")
     unique_ids = np.unique(id_array)
-    # Filter out NODATA to get valid IDs for progress tracking
-    valid_ids = unique_ids[unique_ids != ID_NODATA]
+    # Filter out NODATA and ID 0 (background) to get valid IDs for progress tracking
+    valid_ids = unique_ids[(unique_ids != ID_NODATA) & (unique_ids != 0)]
     print(
-        f"  Found {len(valid_ids)} unique IDs in raster: {sorted([int(x) for x in valid_ids])}"
+        f"  Found {len(unique_ids)} unique IDs in raster: {sorted([int(x) for x in unique_ids])}"
     )
 
     for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30 values", unit="ID"):
@@ -735,8 +737,14 @@ def apply_hybrid_geology_modifications(
 
             dist_vals = coast_dist_array[mask]
 
-            val = 240 + (260.0) * (dist_vals - 8000.0) / 12000.0
-            val = np.clip(val, 240.0, 500.0)
+            val = constants.HYBRID_MOD6_VS30_MIN + (
+                constants.HYBRID_MOD6_VS30_MAX - constants.HYBRID_MOD6_VS30_MIN
+            ) * (dist_vals - constants.HYBRID_MOD6_DIST_MIN) / (
+                constants.HYBRID_MOD6_DIST_MAX - constants.HYBRID_MOD6_DIST_MIN
+            )
+            val = np.clip(
+                val, constants.HYBRID_MOD6_VS30_MIN, constants.HYBRID_MOD6_VS30_MAX
+            )
 
             vs30_array[mask] = val
 
@@ -749,8 +757,14 @@ def apply_hybrid_geology_modifications(
 
             dist_vals = coast_dist_array[mask]
 
-            val = 197 + (303.0) * (dist_vals - 8000.0) / 12000.0
-            val = np.clip(val, 197.0, 500.0)
+            val = constants.HYBRID_MOD13_VS30_MIN + (
+                constants.HYBRID_MOD13_VS30_MAX - constants.HYBRID_MOD13_VS30_MIN
+            ) * (dist_vals - constants.HYBRID_MOD13_DIST_MIN) / (
+                constants.HYBRID_MOD13_DIST_MAX - constants.HYBRID_MOD13_DIST_MIN
+            )
+            val = np.clip(
+                val, constants.HYBRID_MOD13_VS30_MIN, constants.HYBRID_MOD13_VS30_MAX
+            )
 
             vs30_array[mask] = val
 

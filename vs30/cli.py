@@ -5,6 +5,7 @@ This module implements multivariate normal (MVN) distribution updates for pixels
 in geology.tif and terrain.tif that are within range of observations.
 """
 
+import importlib.resources
 import logging
 from pathlib import Path
 
@@ -65,29 +66,29 @@ def update_categorical_vs30_models(
         help="Model type: either 'geology' or 'terrain'",
     ),
     n_prior: int = Option(
-        3,
+        constants.N_PRIOR,
         "--n-prior",
-        help="Effective number of prior observations (default: 3)",
+        help=f"Effective number of prior observations (default: {constants.N_PRIOR})",
     ),
     min_sigma: float = Option(
-        0.5,
+        constants.MIN_SIGMA,
         "--min-sigma",
-        help="Minimum standard deviation allowed (default: 0.5)",
+        help=f"Minimum standard deviation allowed (default: {constants.MIN_SIGMA})",
     ),
     min_group: int = Option(
-        5,
+        constants.MIN_GROUP,
         "--min-group",
-        help="Minimum group size for DBSCAN clustering (default: 5)",
+        help=f"Minimum group size for DBSCAN clustering (default: {constants.MIN_GROUP})",
     ),
     eps: float = Option(
-        15000.0,
+        constants.EPS,
         "--eps",
-        help="Maximum distance (metres) for points to be considered in same cluster (default: 15000)",
+        help=f"Maximum distance (metres) for points to be considered in same cluster (default: {constants.EPS})",
     ),
     nproc: int = Option(
-        -1,
+        constants.NPROC,
         "--nproc",
-        help="Number of processes for DBSCAN clustering. -1 to use all available cores (default: -1)",
+        help=f"Number of processes for DBSCAN clustering. -1 to use all available cores (default: {constants.NPROC})",
     ),
 ) -> None:
     """
@@ -293,7 +294,7 @@ def update_categorical_vs30_models(
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_filename = "posterior_" + categorical_model_csv.name
+        output_filename = constants.POSTERIOR_PREFIX + categorical_model_csv.name
         output_path = output_dir / output_filename
 
         current_prior_df.to_csv(output_path, index=False)
@@ -322,6 +323,12 @@ def make_initial_vs30_raster(
         "--output-dir",
         "-o",
         help="Output directory (default: output_dir from config.yaml)",
+    ),
+    geology_csv: Path = Option(
+        None, "--geology-csv", help="Custom geology model CSV (optional)"
+    ),
+    terrain_csv: Path = Option(
+        None, "--terrain-csv", help="Custom terrain model CSV (optional)"
     ),
 ) -> None:
     """
@@ -366,28 +373,28 @@ def make_initial_vs30_raster(
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            csv_path = constants.TERRAIN_MEAN_STDDEV_CSV
+            csv_path = terrain_csv if terrain_csv else constants.TERRAIN_MEAN_STDDEV_CSV
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
             id_raster = raster.create_category_id_raster("terrain", output_dir)
 
             logger.info("Creating terrain VS30 raster...")
-            vs30_raster = output_dir / "terrain_initial_vs30.tif"
+            vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
             raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            csv_path = constants.GEOLOGY_MEAN_STDDEV_CSV
+            csv_path = geology_csv if geology_csv else constants.GEOLOGY_MEAN_STDDEV_CSV
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
             id_raster = raster.create_category_id_raster("geology", output_dir)
 
             logger.info("Creating geology VS30 raster...")
-            vs30_raster = output_dir / "geology_initial_vs30.tif"
+            vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
             raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
@@ -457,11 +464,11 @@ def create_hybrid_raster(
                 id_array = id_src.read(1)
 
         # 2. Create/Load Intermediate Rasters
-        slope_path = output_dir / "slope.tif"
+        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
         logger.info(f"Generating slope raster: {slope_path}")
         slope_array, _ = create_slope_raster(slope_path, profile)
 
-        coast_path = output_dir / "coast_distance.tif"
+        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
         logger.info(f"Generating coast distance raster: {coast_path}")
         coast_dist_array, _ = create_coast_distance_raster(coast_path, profile)
 
@@ -481,7 +488,7 @@ def create_hybrid_raster(
         )
 
         # 4. Save Output
-        output_path = output_dir / "hybrid_vs30.tif"
+        output_path = output_dir / constants.HYBRID_VS30_FILENAME
 
         # Update profile for output
         profile.update(
@@ -547,7 +554,7 @@ def spatial_fit(
     This command performs a spatial adjustment of an input raster by:
     1. Loading the 2-band input raster (VS30 mean and stdv)
     2. Loading measurements and mapping them to categories
-    3. Computing MVN updates for pixels affected by measurements
+    3. Computing spatial fits to update pixels affected by measurements
     4. Applying updates and saving the resulting 2-band GeoTIFF
     """
     try:
@@ -595,7 +602,7 @@ def spatial_fit(
 
         # 4. Prepare Observation Data for MVN
         logger.info("Preparing observation data for MVN processing...")
-        obs_data = utils.prepare_observation_data(
+        obs_data = spatial.prepare_observation_data(
             observations, raster_data, updated_model_table, model_type
         )
         logger.info(f"Prepared {len(obs_data.locations)} valid observations")
@@ -618,7 +625,7 @@ def spatial_fit(
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
 
         # 6. Compute MVN Updates
-        logger.info("Computing MVN updates...")
+        logger.info("Computing spatial updates...")
         updates = spatial.compute_mvn_updates(
             raster_data, obs_data, bbox_result, model_type
         )
@@ -698,7 +705,7 @@ def plot_posterior_values(
         posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
 
         # Create figure
-        fig, ax = plt.subplots(figsize=(12, 8))
+        fig, ax = plt.subplots(figsize=constants.PLOT_FIGSIZE)
 
         # Offset for x positions to separate prior and posterior
         offset = 0.2
@@ -748,7 +755,7 @@ def plot_posterior_values(
 
         # Save plot
         plt.tight_layout()
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.savefig(output_path, dpi=constants.PLOT_DPI, bbox_inches="tight")
         plt.close()
 
         logger.info(f"Plot saved to: {output_path}")
@@ -756,6 +763,392 @@ def plot_posterior_values(
 
     except Exception as e:
         logger.exception("Error creating plot")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def full_pipeline_given_model(
+    model_type: str = Option(
+        ..., "--model-type", "-t", help="Model type: either 'geology' or 'terrain'"
+    ),
+    categorical_model_csv: Path = Option(
+        ...,
+        "--categorical-model-csv",
+        "-m",
+        help="Path to CSV file with categorical vs30 values",
+    ),
+    clustered_observations_csv: Path = Option(
+        None,
+        "--clustered-observations-csv",
+        "-c",
+        help="Path to CSV file with clustered observations (e.g., CPT)",
+    ),
+    independent_observations_csv: Path = Option(
+        None,
+        "--independent-observations-csv",
+        "-o",
+        help="Path to CSV file with independent observations (e.g., measured filtered)",
+    ),
+    output_dir: Path = Option(
+        ..., "--output-dir", "-d", help="Directory to save all pipeline outputs"
+    ),
+    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
+    # Bayesian Update Parameters
+    n_prior: int = Option(
+        constants.N_PRIOR, "--n-prior", help="Effective number of prior observations"
+    ),
+    min_sigma: float = Option(
+        constants.MIN_SIGMA, "--min-sigma", help="Minimum standard deviation allowed"
+    ),
+    min_group: int = Option(
+        constants.MIN_GROUP, "--min-group", help="Minimum group size for DBSCAN"
+    ),
+    eps: float = Option(
+        constants.EPS, "--eps", help="Max distance for DBSCAN clustering"
+    ),
+    nproc: int = Option(
+        constants.NPROC, "--nproc", help="Number of processes for clustering"
+    ),
+) -> None:
+    """
+    Run the full VS30 generation pipeline in sequence.
+
+    1. update-categorical-vs30-models: Updates categorical pries with observations.
+    2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using posteriors.
+    3. create-hybrid-raster: (Geology only) Applies slope/coastal modifications.
+    4. spatial-fit: Final spatial adjustment using MVN and observations.
+    """
+    try:
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Starting FULL PIPELINE for {model_type}")
+        logger.info(f"Output directory: {output_dir}")
+
+        # --- Step 1: Update Categorical Models ---
+        logger.info("\n=== STEP 1: Updating Categorical Models ===")
+        update_categorical_vs30_models(
+            categorical_model_csv=categorical_model_csv,
+            clustered_observations_csv=clustered_observations_csv,
+            independent_observations_csv=independent_observations_csv,
+            output_dir=output_dir,
+            model_type=model_type,
+            n_prior=n_prior,
+            min_sigma=min_sigma,
+            min_group=min_group,
+            eps=eps,
+            nproc=nproc,
+        )
+
+        posterior_csv = (
+            output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+        )
+        if not posterior_csv.exists():
+            raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
+
+        # --- Step 2: Make Initial Raster ---
+        logger.info("\n=== STEP 2: Creating Initial Raster ===")
+        make_initial_vs30_raster(
+            terrain=(model_type == "terrain"),
+            geology=(model_type == "geology"),
+            config=config,
+            output_dir=output_dir,
+            geology_csv=posterior_csv if model_type == "geology" else None,
+            terrain_csv=posterior_csv if model_type == "terrain" else None,
+        )
+
+        initial_raster = (
+            output_dir / f"{model_type}_initial_vs30.tif"
+        )  # TODO: tie this to filename in constants if they are different?
+        id_raster_name = (
+            constants.GEOLOGY_ID_FILENAME
+            if model_type == "geology"
+            else constants.TERRAIN_ID_FILENAME
+        )
+        id_raster = output_dir / id_raster_name
+
+        if not initial_raster.exists():
+            raise FileNotFoundError(f"Step 2 failed to produce {initial_raster}")
+
+        # --- Step 3: Create Hybrid Raster (Geology Only) ---
+        current_raster = initial_raster
+        if model_type == "geology":
+            logger.info("\n=== STEP 3: Creating Hybrid Geology Raster ===")
+            create_hybrid_raster(
+                input_raster=initial_raster,
+                id_raster=id_raster,
+                output_dir=output_dir,
+            )
+            current_raster = output_dir / constants.HYBRID_VS30_FILENAME
+            if not current_raster.exists():
+                raise FileNotFoundError(f"Step 3 failed to produce {current_raster}")
+
+        # --- Step 4: Spatial Fit ---
+        logger.info("\n=== STEP 4: Spatial Adjustment (MVN) ===")
+        # Note: If independent_observations_csv is None, spatial_fit might still run
+        # but usually we want at least some observations if we are running the full pipeline.
+        # However, the command itself handles empty observations by copying.
+        spatial_fit(
+            input_raster=current_raster,
+            observations_csv=independent_observations_csv
+            if independent_observations_csv
+            else clustered_observations_csv,
+            model_values_csv=posterior_csv,
+            output_dir=output_dir,
+            model_type=model_type,
+        )
+
+        typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
+        typer.echo(f"  Final output available in: {output_dir}")
+
+    except Exception as e:
+        logger.exception("Error in full-pipeline")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def combine(
+    geology_tif: Path = Option(
+        ..., "--geology-tif", help="Path to geology VS30 raster"
+    ),
+    terrain_tif: Path = Option(
+        ..., "--terrain-tif", help="Path to terrain VS30 raster"
+    ),
+    output_path: Path = Option(
+        ..., "--output-path", "-o", help="Path to combined raster"
+    ),
+    geology_weight: float = Option(
+        constants.GEOLOGY_WEIGHT,
+        "--geology-weight",
+        help="Weight for geology model in final average (ignored if --stdv-weight is used)",
+    ),
+    terrain_weight: float = Option(
+        constants.TERRAIN_WEIGHT,
+        "--terrain-weight",
+        help="Weight for terrain model in final average (ignored if --stdv-weight is used)",
+    ),
+    use_stdv_weight: bool = Option(
+        False, "--stdv-weight", help="Use standard deviation for model combination"
+    ),
+    k: float = Option(
+        constants.K, "--k", help="k factor for stdv based weight combination"
+    ),
+) -> None:
+    """
+    Combine geology and terrain VS30 rasters using a weighted average.
+    """
+    try:
+        if not geology_tif.exists():
+            raise FileNotFoundError(f"Geology raster not found: {geology_tif}")
+        if not terrain_tif.exists():
+            raise FileNotFoundError(f"Terrain raster not found: {terrain_tif}")
+
+        logger.info(f"Averaging {geology_tif} and {terrain_tif}")
+
+        with rasterio.open(geology_tif) as src_g, rasterio.open(terrain_tif) as src_t:
+            profile = src_g.profile.copy()
+            geol_data = src_g.read().astype(np.float64)
+            terr_data = src_t.read().astype(np.float64)
+
+            # Use nodata from geology (should be same for terrain)
+            nodata = src_g.nodata
+
+            # Set nodata values to NaN for easier calculation
+            geol_data[geol_data == nodata] = np.nan
+            terr_data[terr_data == nodata] = np.nan
+
+            vs30_g, stdv_g = geol_data[0], geol_data[1]
+            vs30_t, stdv_t = terr_data[0], terr_data[1]
+
+            # Calculate weights
+            if use_stdv_weight:
+                # Weighting based on variance: m = (sigma^2)^-k
+                m_g = (stdv_g**2) ** -k
+                m_t = (stdv_t**2) ** -k
+                w_g = m_g / (m_g + m_t)
+                w_t = m_t / (m_g + m_t)
+            else:
+                total_w = geology_weight + terrain_weight
+                w_g = geology_weight / total_w
+                w_t = terrain_weight / total_w
+
+            # Combine models using log-space mixture (matches legacy logic)
+            log_g = np.log(vs30_g)
+            log_t = np.log(vs30_t)
+
+            log_comb = log_g * w_g + log_t * w_t
+            combined_vs30 = np.exp(log_comb)
+
+            # Combined standard deviation formula for mixture of normals in log-space
+            combined_stdv = np.sqrt(
+                w_g * ((log_g - log_comb) ** 2 + stdv_g**2)
+                + w_t * ((log_t - log_comb) ** 2 + stdv_t**2)
+            )
+
+            # Create output array correctly restoring nodata where things are NaN
+            combined_data = np.stack([combined_vs30, combined_stdv])
+            combined_data[np.isnan(combined_data)] = nodata
+
+            # Update profile for output
+            profile.update(
+                {
+                    "dtype": "float64",
+                    "count": geol_data.shape[0],
+                    "nodata": nodata,
+                    "compress": "deflate",
+                }
+            )
+
+            logger.info(f"Saving combined raster to: {output_path}")
+            with rasterio.open(output_path, "w", **profile) as dst:
+                dst.write(combined_data)
+                dst.descriptions = (
+                    "Vs30 (Combined Average)",
+                    "Standard Deviation (Combined Average)",
+                )
+
+    except Exception as e:
+        logger.exception("Error in combine")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def full_pipeline(
+    geology_categorical_csv: Path = Option(
+        None,
+        "--geology-csv",
+        help="Path to geology categorical CSV (default from config/resources)",
+    ),
+    terrain_categorical_csv: Path = Option(
+        None,
+        "--terrain-csv",
+        help="Path to terrain categorical CSV (default from config/resources)",
+    ),
+    clustered_observations_csv: Path = Option(
+        None,
+        "--clustered-observations-csv",
+        "-c",
+        help="Path to CSV file with clustered observations (e.g., CPT)",
+    ),
+    independent_observations_csv: Path = Option(
+        None,
+        "--independent-observations-csv",
+        "-o",
+        help="Path to CSV file with independent observations (e.g., measured filtered)",
+    ),
+    output_dir: Path = Option(
+        ..., "--output-dir", "-d", help="Directory to save all pipeline outputs"
+    ),
+    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
+    # Bayesian Update Parameters
+    n_prior: int = Option(
+        constants.N_PRIOR, "--n-prior", help="Effective number of prior observations"
+    ),
+    min_sigma: float = Option(
+        constants.MIN_SIGMA, "--min-sigma", help="Minimum standard deviation allowed"
+    ),
+    min_group: int = Option(
+        constants.MIN_GROUP, "--min-group", help="Minimum group size for DBSCAN"
+    ),
+    eps: float = Option(
+        constants.EPS, "--eps", help="Max distance for DBSCAN clustering"
+    ),
+    nproc: int = Option(
+        constants.NPROC, "--nproc", help="Number of processes for clustering"
+    ),
+    geology_weight: float = Option(
+        constants.GEOLOGY_WEIGHT,
+        "--geology-weight",
+        help="Weight for geology model in final average",
+    ),
+    terrain_weight: float = Option(
+        constants.TERRAIN_WEIGHT,
+        "--terrain-weight",
+        help="Weight for terrain model in final average",
+    ),
+    use_stdv_weight: bool = Option(
+        False, "--stdv-weight", help="Use standard deviation for model combination"
+    ),
+    k: float = Option(
+        constants.K, "--k", help="k factor for stdv based weight combination"
+    ),
+) -> None:
+    """
+    Run the full VS30 generation pipeline for both geology and terrain models,
+    then average the results into a final combined raster.
+    """
+    try:
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Resolve CSV paths if not provided
+        resource_path = importlib.resources.files("vs30") / "resources"
+
+        with importlib.resources.as_file(resource_path) as res_dir:
+            if geology_categorical_csv is None:
+                geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_STDDEV_CSV
+            if terrain_categorical_csv is None:
+                terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_STDDEV_CSV
+
+            # 1. Run Geology Pipeline
+            logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
+            full_pipeline_given_model(
+                model_type="geology",
+                categorical_model_csv=geology_categorical_csv,
+                clustered_observations_csv=clustered_observations_csv,
+                independent_observations_csv=independent_observations_csv,
+                output_dir=output_dir,
+                config=config,
+                n_prior=n_prior,
+                min_sigma=min_sigma,
+                min_group=min_group,
+                eps=eps,
+                nproc=nproc,
+            )
+
+            # 2. Run Terrain Pipeline
+            logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
+            full_pipeline_given_model(
+                model_type="terrain",
+                categorical_model_csv=terrain_categorical_csv,
+                clustered_observations_csv=clustered_observations_csv,
+                independent_observations_csv=independent_observations_csv,
+                output_dir=output_dir,
+                config=config,
+                n_prior=n_prior,
+                min_sigma=min_sigma,
+                min_group=min_group,
+                eps=eps,
+                nproc=nproc,
+            )
+
+        # 3. Average Results
+        logger.info(
+            "\n" + "=" * 80 + "\nAVERAGING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
+        )
+
+        geol_tif = output_dir / constants.OUTPUT_FILENAMES["geology"]
+        terr_tif = output_dir / constants.OUTPUT_FILENAMES["terrain"]
+        combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
+
+        combine(
+            geology_tif=geol_tif,
+            terrain_tif=terr_tif,
+            output_path=combined_tif,
+            geology_weight=geology_weight,
+            terrain_weight=terrain_weight,
+            use_stdv_weight=use_stdv_weight,
+            k=k,
+        )
+
+        typer.echo("\n✓ FULL MULTI-MODEL PIPELINE COMPLETED SUCCESSFULLY")
+        typer.echo(f"  Combined output available at: {combined_tif}")
+
+    except Exception as e:
+        logger.exception("Error in full-pipeline")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 

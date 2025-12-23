@@ -18,13 +18,17 @@ import rasterio
 import shapely
 from sklearn.cluster import DBSCAN
 
-# Constant for no-data category ID
-ID_NODATA = 255
+from vs30 import constants
+
+# Constant for no-data category ID from constants
+ID_NODATA = constants.ID_NODATA
 
 # Standard column name used for model IDs in DataFrames
-STANDARD_ID_COLUMN = "id"
+STANDARD_ID_COLUMN = (
+    constants.STANDARD_ID_COLUMN if hasattr(constants, "STANDARD_ID_COLUMN") else "id"
+)
 
-# Data paths for category assignment
+# Data paths for category assignment from constants/internal logic
 _data_dir = os.path.join(os.path.dirname(__file__), "data")
 QMAP = os.path.join(_data_dir, "qmap", "qmap.shp")
 MODEL_RASTER = os.path.join(_data_dir, "IwahashiPike.tif")
