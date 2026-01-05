@@ -49,10 +49,10 @@ OBSERVATIONS_FILE = _config.get(
 OUTPUT_DIR_NAME = _config.get("output_dir", "new_vs30map")
 
 TERRAIN_VS30_MEAN_STDDEV_FILENAME = _config.get(
-    "terrain_vs30_mean_stddev_filename", "terrain_vs30_mean_stddev.tif"
+    "terrain_vs30_mean_stddev_filename", "terrain_vs30_with_uncertainty.tif"
 )
 GEOLOGY_VS30_MEAN_STDDEV_FILENAME = _config.get(
-    "geology_vs30_mean_stddev_filename", "geology_vs30_mean_stddev.tif"
+    "geology_vs30_mean_stddev_filename", "geology_vs30_with_uncertainty.tif"
 )
 
 GEOLOGY_MEAN_STDDEV_CSV = _config.get(
@@ -85,20 +85,24 @@ INVALID_VS30_PLACEHOLDER = _config.get("invalid_vs30_placeholder", -9999)
 # filenames and Prefixes
 POSTERIOR_PREFIX = _config.get("posterior_prefix", "posterior_")
 TERRAIN_INITIAL_VS30_FILENAME = _config.get(
-    "terrain_initial_vs30_filename", "terrain_initial_vs30.tif"
+    "terrain_initial_vs30_filename", "terrain_initial_vs30_with_uncertainty.tif"
 )
 GEOLOGY_INITIAL_VS30_FILENAME = _config.get(
-    "geology_initial_vs30_filename", "geology_initial_vs30.tif"
+    "geology_initial_vs30_filename", "geology_initial_vs30_with_uncertainty.tif"
 )
 SLOPE_RASTER_FILENAME = _config.get("slope_raster_filename", "slope.tif")
 COAST_DISTANCE_RASTER_FILENAME = _config.get(
     "coast_distance_raster_filename", "coast_distance.tif"
 )
-HYBRID_VS30_FILENAME = _config.get("hybrid_vs30_filename", "hybrid_vs30.tif")
+HYBRID_VS30_FILENAME = _config.get(
+    "hybrid_vs30_filename",
+    "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif",
+)
 GEOLOGY_ID_FILENAME = _config.get("geology_id_filename", "gid.tif")
 TERRAIN_ID_FILENAME = _config.get("terrain_id_filename", "tid.tif")
 COMBINED_VS30_FILENAME = _config.get(
-    "combined_vs30_filename", "combined_vs30_mean_and_stddev.tif"
+    "combined_vs30_filename",
+    "slope_coastal_distance_adjusted_geology_and_terrain_vs30_weighted_mixture_with_uncertainty.tif",
 )
 
 # Hybrid Model constants
