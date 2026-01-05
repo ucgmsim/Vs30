@@ -174,7 +174,16 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
         return df.values.astype(np.float64)
 
 
-def create_category_id_raster(model_type: str, output_dir: Path) -> Path:
+def create_category_id_raster(
+    model_type: str,
+    output_dir: Path,
+    xmin: float = XMIN,
+    xmax: float = XMAX,
+    ymin: float = YMIN,
+    ymax: float = YMAX,
+    dx: float = DX,
+    dy: float = DY,
+) -> Path:
     """
     Create category ID raster for terrain or geology.
 
@@ -207,8 +216,10 @@ def create_category_id_raster(model_type: str, output_dir: Path) -> Path:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Common setup: calculate transform and create output path
-    dst_transform = from_bounds(XMIN, YMIN, XMAX, YMAX, NX, NY)
+    # Common setup: calculate grid dimensions and transform
+    nx = round((xmax - xmin) / dx)
+    ny = round((ymax - ymin) / dy)
+    dst_transform = from_bounds(xmin, ymin, xmax, ymax, nx, ny)
     output_filename = "tid.tif" if model_type == "terrain" else "gid.tif"
     output_path = output_dir / output_filename
     band_description = "Model ID Index"
@@ -216,8 +227,8 @@ def create_category_id_raster(model_type: str, output_dir: Path) -> Path:
     # Common output raster profile
     profile = {
         "driver": "GTiff",
-        "width": NX,
-        "height": NY,
+        "width": nx,
+        "height": ny,
         "count": 1,
         "dtype": "uint8",
         "crs": NZTM_CRS,
@@ -269,7 +280,7 @@ def create_category_id_raster(model_type: str, output_dir: Path) -> Path:
         with rasterio.open(output_path, "w", **profile) as dst:
             burned = features.rasterize(
                 shapes=shapes,
-                out_shape=(NY, NX),
+                out_shape=(ny, nx),
                 transform=dst_transform,
                 fill=ID_NODATA,
                 dtype=np.uint8,
@@ -547,32 +558,54 @@ def create_coast_distance_raster(
     if gdf.crs is None or str(gdf.crs) != NZTM_CRS:
         gdf = gdf.to_crs(NZTM_CRS)
 
-    # Rasterize land polygons as 1, sea/background as 0
-    shapes = ((geom, 1) for geom in gdf.geometry)
+    # Legacy logic: Compute on global NZ grid to ensure correct distances for inland patches
+    global_xmin = constants.GRID_XMIN
+    global_xmax = constants.GRID_XMAX
+    global_ymin = constants.GRID_YMIN
+    global_ymax = constants.GRID_YMAX
+    dx = template_profile["transform"].a
+    dy = abs(template_profile["transform"].e)
 
-    # Create mask: 1=Land, 0=Sea
-    mask = features.rasterize(
+    # Extend bounds to include template if it's outside default global
+    s_xmin = template_profile["transform"].c
+    s_ymax = template_profile["transform"].f
+    s_xmax = s_xmin + template_profile["width"] * dx
+    s_ymin = s_ymax - template_profile["height"] * dy
+
+    g_xmin = min(global_xmin, s_xmin)
+    g_xmax = max(global_xmax, s_xmax)
+    g_ymin = min(global_ymin, s_ymin)
+    g_ymax = max(global_ymax, s_ymax)
+
+    # Calculate global grid dimensions
+    gnx = round((g_xmax - g_xmin) / dx)
+    gny = round((g_ymax - g_ymin) / dy)
+    global_transform = from_bounds(g_xmin, g_ymin, g_xmax, g_ymax, gnx, gny)
+
+    # Rasterize land polygons as 1, sea/background as 0 on the global grid
+    shapes = ((geom, 1) for geom in gdf.geometry)
+    global_mask = features.rasterize(
         shapes=shapes,
-        out_shape=(template_profile["height"], template_profile["width"]),
-        transform=template_profile["transform"],
+        out_shape=(gny, gnx),
+        transform=global_transform,
         fill=0,
         dtype=np.uint8,
         all_touched=False,
     )
 
-    # Distance Transform: calculates distance to nearest BACKGROUND (0)
-    # We want distance to Sea (0).
-    # scipy.distance_transform_edt computes distance to nearest ZERO.
-    # However, inside the mask, land is 1, sea is 0.
-    # If we run EDT on `mask`, it computes distance to nearest 0 (Sea).
-    # This matches "Distance to Coast" (inland distance).
+    # Distance Transform on global mask
+    global_dist_px = distance_transform_edt(global_mask)
+    global_dist_m = (global_dist_px * dx).astype(np.float32)
 
-    # EDT returns distance in PIXELS.
-    # Multiply by pixel size (assuming square pixels DX approx DY)
-    # DX=100.
-    pixel_size = template_profile["transform"][0]  # Standard affine [0] is width
-    distance_pixels = distance_transform_edt(mask)
-    distance_meters = distance_pixels * pixel_size
+    # Extract study area slice
+    col_off = round((s_xmin - g_xmin) / dx)
+    row_off = round((g_ymax - s_ymax) / dy)
+
+    distance_meters = global_dist_m[
+        row_off : row_off + template_profile["height"],
+        col_off : col_off + template_profile["width"],
+    ]
+    # Save to file
 
     # Save to file
     profile = template_profile.copy()
@@ -626,7 +659,7 @@ def create_slope_raster(
             src_crs=src.crs,
             dst_transform=template_profile["transform"],
             dst_crs=template_profile["crs"],
-            resampling=Resampling.bilinear,
+            resampling=Resampling.nearest,
         )
 
     # Save to file

@@ -370,6 +370,18 @@ def make_initial_vs30_raster(
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
+        # Load grid parameters from config if provided
+        config_data = utils.load_config(config_path) if config_path else {}
+        grid_params = {
+            "xmin": config_data.get("grid_xmin", constants.GRID_XMIN),
+            "xmax": config_data.get("grid_xmax", constants.GRID_XMAX),
+            "ymin": config_data.get("grid_ymin", constants.GRID_YMIN),
+            "ymax": config_data.get("grid_ymax", constants.GRID_YMAX),
+            "dx": config_data.get("grid_dx", constants.GRID_DX),
+            "dy": config_data.get("grid_dy", constants.GRID_DY),
+        }
+        logger.info(f"Using grid parameters: {grid_params}")
+
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
@@ -377,7 +389,9 @@ def make_initial_vs30_raster(
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
-            id_raster = raster.create_category_id_raster("terrain", output_dir)
+            id_raster = raster.create_category_id_raster(
+                "terrain", output_dir, **grid_params
+            )
 
             logger.info("Creating terrain VS30 raster...")
             vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
@@ -391,7 +405,9 @@ def make_initial_vs30_raster(
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
-            id_raster = raster.create_category_id_raster("geology", output_dir)
+            id_raster = raster.create_category_id_raster(
+                "geology", output_dir, **grid_params
+            )
 
             logger.info("Creating geology VS30 raster...")
             vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
@@ -547,6 +563,21 @@ def spatial_fit(
         "-t",
         help="Model type: either 'geology' or 'terrain'",
     ),
+    max_dist_m: float = Option(
+        constants.MAX_DIST_M, "--max-dist", help="Maximum distance for spatial fit"
+    ),
+    max_points: int = Option(
+        constants.MAX_POINTS, "--max-points", help="Maximum number of points for MVN"
+    ),
+    phi: float = Option(
+        None, "--phi", help="Correlation length (phi). Defaults based on model type."
+    ),
+    noisy: bool = Option(
+        constants.NOISY, "--noisy/--not-noisy", help="Apply noise weighting"
+    ),
+    cov_reduc: float = Option(
+        constants.COV_REDUC, "--cov-reduc", help="Covariance reduction factor"
+    ),
 ) -> None:
     """
     Adjust a VS30 raster based on measurements using MVN spatial fitting.
@@ -603,7 +634,12 @@ def spatial_fit(
         # 4. Prepare Observation Data for MVN
         logger.info("Preparing observation data for MVN processing...")
         obs_data = spatial.prepare_observation_data(
-            observations, raster_data, updated_model_table, model_type
+            observations,
+            raster_data,
+            updated_model_table,
+            model_type,
+            output_dir,
+            noisy=noisy,
         )
         logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
@@ -621,13 +657,23 @@ def spatial_fit(
 
         # 5. Find Affected Pixels
         logger.info("Finding pixels affected by observations...")
-        bbox_result = spatial.find_affected_pixels(raster_data, obs_data)
+        bbox_result = spatial.find_affected_pixels(
+            raster_data, obs_data, max_dist_m=max_dist_m
+        )
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
 
         # 6. Compute MVN Updates
         logger.info("Computing spatial updates...")
         updates = spatial.compute_mvn_updates(
-            raster_data, obs_data, bbox_result, model_type
+            raster_data,
+            obs_data,
+            bbox_result,
+            model_type,
+            phi=phi,
+            max_dist_m=max_dist_m,
+            max_points=max_points,
+            noisy=noisy,
+            cov_reduc=cov_reduc,
         )
 
         # 7. Apply Updates and Write Output
@@ -801,6 +847,21 @@ def full_pipeline_given_model(
     min_sigma: float = Option(
         constants.MIN_SIGMA, "--min-sigma", help="Minimum standard deviation allowed"
     ),
+    max_dist_m: float = Option(
+        constants.MAX_DIST_M, "--max-dist", help="Maximum distance for spatial fit"
+    ),
+    max_points: int = Option(
+        constants.MAX_POINTS, "--max-points", help="Maximum number of points for MVN"
+    ),
+    phi: float = Option(
+        None, "--phi", help="Correlation length (phi). Defaults based on model type."
+    ),
+    noisy: bool = Option(
+        constants.NOISY, "--noisy/--not-noisy", help="Apply noise weighting"
+    ),
+    cov_reduc: float = Option(
+        constants.COV_REDUC, "--cov-reduc", help="Covariance reduction factor"
+    ),
     min_group: int = Option(
         constants.MIN_GROUP, "--min-group", help="Minimum group size for DBSCAN"
     ),
@@ -825,6 +886,25 @@ def full_pipeline_given_model(
 
         logger.info(f"Starting FULL PIPELINE for {model_type}")
         logger.info(f"Output directory: {output_dir}")
+
+        # Load config to get potential overrides
+        config_path = utils._find_config_file(config)
+        config_data = utils.load_config(config_path) if config_path else {}
+
+        # Resolve observations from config if not provided
+        if clustered_observations_csv is None and independent_observations_csv is None:
+            obs_file = config_data.get("observations_file", constants.OBSERVATIONS_FILE)
+            if obs_file:
+                # Find observation file relative to package resources
+                resource_path = importlib.resources.files("vs30") / "resources"
+                with importlib.resources.as_file(resource_path) as res_dir:
+                    candidate = res_dir / obs_file
+                    if candidate.exists():
+                        independent_observations_csv = candidate
+                    else:
+                        logger.warning(
+                            f"Observations file not found in resources: {obs_file}"
+                        )
 
         # --- Step 1: Update Categorical Models ---
         logger.info("\n=== STEP 1: Updating Categorical Models ===")
@@ -886,9 +966,33 @@ def full_pipeline_given_model(
 
         # --- Step 4: Spatial Fit ---
         logger.info("\n=== STEP 4: Spatial Adjustment (MVN) ===")
-        # Note: If independent_observations_csv is None, spatial_fit might still run
-        # but usually we want at least some observations if we are running the full pipeline.
-        # However, the command itself handles empty observations by copying.
+        # Load config to get potential overrides if calling as part of pipeline
+        config_path = utils._find_config_file(config)
+        config_data = utils.load_config(config_path) if config_path else {}
+
+        # Merge priorities: explicit arguments > config file > defaults
+        f_max_dist = (
+            max_dist_m
+            if max_dist_m != constants.MAX_DIST_M
+            else config_data.get("max_dist_m", constants.MAX_DIST_M)
+        )
+        f_max_points = (
+            max_points
+            if max_points != constants.MAX_POINTS
+            else config_data.get("max_points", constants.MAX_POINTS)
+        )
+        f_noisy = (
+            noisy
+            if noisy != constants.NOISY
+            else config_data.get("noisy", constants.NOISY)
+        )
+        f_cov_reduc = (
+            cov_reduc
+            if cov_reduc != constants.COV_REDUC
+            else config_data.get("cov_reduc", constants.COV_REDUC)
+        )
+        f_phi = phi if phi is not None else config_data.get(f"phi_{model_type}")
+
         spatial_fit(
             input_raster=current_raster,
             observations_csv=independent_observations_csv
@@ -897,6 +1001,11 @@ def full_pipeline_given_model(
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
+            max_dist_m=f_max_dist,
+            max_points=f_max_points,
+            phi=f_phi,
+            noisy=f_noisy,
+            cov_reduc=f_cov_reduc,
         )
 
         typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
@@ -1050,6 +1159,21 @@ def full_pipeline(
     min_sigma: float = Option(
         constants.MIN_SIGMA, "--min-sigma", help="Minimum standard deviation allowed"
     ),
+    max_dist_m: float = Option(
+        constants.MAX_DIST_M, "--max-dist", help="Maximum distance for spatial fit"
+    ),
+    max_points: int = Option(
+        constants.MAX_POINTS, "--max-points", help="Maximum number of points for MVN"
+    ),
+    phi: float = Option(
+        None, "--phi", help="Correlation length (phi). Defaults based on model type."
+    ),
+    noisy: bool = Option(
+        constants.NOISY, "--noisy/--not-noisy", help="Apply noise weighting"
+    ),
+    cov_reduc: float = Option(
+        constants.COV_REDUC, "--cov-reduc", help="Covariance reduction factor"
+    ),
     min_group: int = Option(
         constants.MIN_GROUP, "--min-group", help="Minimum group size for DBSCAN"
     ),
@@ -1104,6 +1228,11 @@ def full_pipeline(
                 config=config,
                 n_prior=n_prior,
                 min_sigma=min_sigma,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                phi=phi,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,
@@ -1120,6 +1249,11 @@ def full_pipeline(
                 config=config,
                 n_prior=n_prior,
                 min_sigma=min_sigma,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                phi=phi,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,

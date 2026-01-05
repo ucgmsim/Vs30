@@ -98,7 +98,7 @@ HYBRID_VS30_FILENAME = _config.get("hybrid_vs30_filename", "hybrid_vs30.tif")
 GEOLOGY_ID_FILENAME = _config.get("geology_id_filename", "gid.tif")
 TERRAIN_ID_FILENAME = _config.get("terrain_id_filename", "tid.tif")
 COMBINED_VS30_FILENAME = _config.get(
-    "combined_vs30_filename", "combined_vs30_mean_stddev.tif"
+    "combined_vs30_filename", "combined_vs30_mean_and_stddev.tif"
 )
 
 # Hybrid Model constants

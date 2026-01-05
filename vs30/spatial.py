@@ -25,14 +25,10 @@ from vs30.category import (
 
 logger = logging.getLogger(__name__)
 
-"""
-Data classes for MVN processing.
-"""
-
 
 @dataclass
 class ObservationData:
-    """Bundled observation data for MVN processing."""
+    """Bundled observation data for spatial processing."""
 
     locations: np.ndarray  # (n_obs, 2) array of [easting, northing]
     vs30: np.ndarray  # (n_obs,) measured vs30 values
@@ -119,7 +115,7 @@ class RasterData:
         rows_valid = valid_rows.astype(float) + 0.5
         cols_valid = valid_cols.astype(float) + 0.5
         xs, ys = rasterio_transform.xy(self.transform, rows_valid, cols_valid)
-        return np.column_stack((np.array(xs), np.array(ys))).astype(np.float64)
+        return np.column_stack((np.array(xs), np.array(ys))).astype(np.float32)
 
     def write_updated(
         self, path: Path, updated_vs30: np.ndarray, updated_stdv: np.ndarray
@@ -216,6 +212,8 @@ def prepare_observation_data(
     raster_data: RasterData,
     updated_model_table: np.ndarray,
     model_name: str,
+    output_dir: Path,
+    noisy: bool = constants.NOISY,
 ) -> ObservationData:
     """
     Prepare observation data for MVN processing.
@@ -272,10 +270,54 @@ def prepare_observation_data(
     uncertainty = observations.uncertainty.values[valid_obs_mask]
 
     # Calculate log residuals
+    # For geology, we must apply hybrid modifications to model values at observation points
+    if model_name == "geology":
+        from vs30.raster import (
+            apply_hybrid_geology_modifications,
+            create_coast_distance_raster,
+            create_slope_raster,
+        )
+
+        # 1. Get slope and coast distance at points
+        # Use existing rasters in output_dir if possible, otherwise create temporary ones
+        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
+        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
+
+        profile = {
+            "transform": raster_data.transform,
+            "width": raster_data.vs30.shape[1],
+            "height": raster_data.vs30.shape[0],
+            "crs": rasterio.crs.CRS.from_epsg(2193),  # Default if not set
+        }
+
+        if not slope_path.exists():
+            create_slope_raster(slope_path, profile)
+        if not coast_path.exists():
+            create_coast_distance_raster(coast_path, profile)
+
+        # Sample rasters at observation locations
+        with rasterio.open(slope_path) as src:
+            slope_obs = np.array([v[0] for v in src.sample(obs_locs)], dtype=np.float32)
+        with rasterio.open(coast_path) as src:
+            coast_obs = np.array([v[0] for v in src.sample(obs_locs)], dtype=np.float32)
+
+        # Apply modifications to model_vs30 and model_stdv at points
+        # Note: we only need to modify where category IDs match hybrid types
+        model_vs30, model_stdv = apply_hybrid_geology_modifications(
+            model_vs30,
+            model_stdv,
+            model_ids[valid_obs_mask],
+            slope_obs,
+            coast_obs,
+            mod6=True,
+            mod13=True,
+            hybrid=True,
+        )
+
     residuals = np.log(vs30_obs / model_vs30)
 
     # Apply noise weighting (if noisy=True)
-    if constants.NOISY:
+    if noisy:
         omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
         residuals *= omega
     else:
@@ -400,6 +442,9 @@ def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
     model_name: str,
+    phi: float | None = None,
+    noisy: bool = constants.NOISY,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
     """
     Build covariance matrix through clear pipeline of steps.
@@ -420,31 +465,36 @@ def build_covariance_matrix(
         First row/column is for the pixel, rest are for observations.
     """
     # Step 1: Compute distances
-    all_points = np.vstack([pixel.location, selected_observations.locations])
+    all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
+        np.float64
+    )
     distance_matrix = utils.euclidean_distance_matrix(all_points)
 
     # Step 2: Apply correlation function
-    phi = constants.PHI[model_name]
+    if phi is None:
+        phi = constants.PHI[model_name]
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
-    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
+    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv).astype(
+        np.float64
+    )
     cov = corr * np.outer(stdvs, stdvs)
 
     # Step 4: Apply noise weighting (if enabled)
-    if constants.NOISY:
-        omega = np.insert(selected_observations.omega, 0, 1.0)
+    if noisy:
+        omega = np.insert(selected_observations.omega, 0, 1.0).astype(np.float64)
         omega_matrix = np.outer(omega, omega)
         np.fill_diagonal(omega_matrix, 1.0)
         cov *= omega_matrix
 
     # Step 5: Apply covariance reduction (if enabled)
-    if constants.COV_REDUC > 0:
+    if cov_reduc > 0:
         log_vs30s = np.insert(
             np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
-        )
+        ).astype(np.float64)
         log_dist_matrix = utils.euclidean_distance_matrix(log_vs30s.reshape(-1, 1))
-        cov *= np.exp(-constants.COV_REDUC * log_dist_matrix)
+        cov *= np.exp(-cov_reduc * log_dist_matrix)
 
     return cov
 
@@ -459,6 +509,8 @@ def select_observations_for_pixel(
     obs_data: mvn.ObservationData,
     obs_to_grid_indices: list[np.ndarray],
     chunk_grid_to_obs: dict[int, list[int]],
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
 ) -> mvn.ObservationData:
     """
     Select observations for a pixel using chunk cache and distance filtering.
@@ -501,7 +553,7 @@ def select_observations_for_pixel(
     )[0]
 
     # Filter to only observations within max_dist_m
-    within_dist_mask = distances <= constants.MAX_DIST_M
+    within_dist_mask = distances <= max_dist_m
     filtered_indices = np.array(candidate_obs_indices)[within_dist_mask]
     filtered_distances = distances[within_dist_mask]
 
@@ -518,10 +570,10 @@ def select_observations_for_pixel(
         )
 
     # Limit to closest max_points
-    if len(filtered_indices) > constants.MAX_POINTS:
+    if len(filtered_indices) > max_points:
         # Sort by distance and take closest max_points
         sorted_idx = np.argsort(filtered_distances)
-        selected_idx = sorted_idx[: constants.MAX_POINTS]
+        selected_idx = sorted_idx[:max_points]
         filtered_indices = filtered_indices[selected_idx]
         filtered_distances = filtered_distances[selected_idx]
 
@@ -543,6 +595,11 @@ def compute_mvn_update_for_pixel(
     obs_to_grid_indices: list[np.ndarray],
     chunk_grid_to_obs: dict[int, list[int]],
     model_name: str,
+    phi: float | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = constants.NOISY,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> mvn.MVNUpdateResult | None:
     """
     Compute MVN update for a single pixel.
@@ -569,23 +626,34 @@ def compute_mvn_update_for_pixel(
     if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
         return None
 
+    phi_val = phi if phi is not None else constants.PHI[model_name]
+    corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
+    initial_var = (pixel.stdv**2) * corr_zero
+
     # Select observations for this pixel
     selected_obs = select_observations_for_pixel(
-        pixel, obs_data, obs_to_grid_indices, chunk_grid_to_obs
+        pixel,
+        obs_data,
+        obs_to_grid_indices,
+        chunk_grid_to_obs,
+        max_dist_m=max_dist_m,
+        max_points=max_points,
     )
 
     if len(selected_obs.locations) == 0:
-        # No observations nearby, return unchanged values
+        # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
         return mvn.MVNUpdateResult(
             updated_vs30=pixel.vs30,
-            updated_stdv=pixel.stdv,
+            updated_stdv=sqrt(initial_var),
             n_observations_used=0,
             min_distance=np.inf,
             pixel_index=pixel.index,
         )
 
     # Build covariance matrix
-    cov_matrix = build_covariance_matrix(pixel, selected_obs, model_name)
+    cov_matrix = build_covariance_matrix(
+        pixel, selected_obs, model_name, phi=phi, noisy=noisy, cov_reduc=cov_reduc
+    ).astype(np.float64)
 
     # Invert covariance matrix (observations only)
     # Note: This uses BLAS/LAPACK and can cause CPU spikes when many observations
@@ -593,7 +661,9 @@ def compute_mvn_update_for_pixel(
     inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
 
     # Calculate prediction update
-    pred_update = np.dot(np.dot(cov_matrix[0, 1:], inv_cov), selected_obs.residuals)
+    pred_update = np.dot(
+        np.dot(cov_matrix[0, 1:], inv_cov), selected_obs.residuals.astype(np.float64)
+    )
 
     # Calculate variance
     var = cov_matrix[0, 0] - np.dot(
@@ -606,17 +676,17 @@ def compute_mvn_update_for_pixel(
 
     # Calculate minimum distance
     distances = cdist(
-        pixel.location.reshape(1, -1),
-        selected_obs.locations,
+        pixel.location.reshape(1, -1).astype(np.float64),
+        selected_obs.locations.astype(np.float64),
         metric="euclidean",
     )[0]
     min_distance = np.min(distances)
 
     return mvn.MVNUpdateResult(
-        updated_vs30=new_vs30,
-        updated_stdv=new_stdv,
+        updated_vs30=float(new_vs30),
+        updated_stdv=float(new_stdv),
         n_observations_used=len(selected_obs.locations),
-        min_distance=min_distance,
+        min_distance=float(min_distance),
         pixel_index=pixel.index,
     )
 
@@ -629,6 +699,7 @@ def compute_mvn_update_for_pixel(
 def find_affected_pixels(
     raster_data: mvn.RasterData,
     obs_data: mvn.ObservationData,
+    max_dist_m: float = constants.MAX_DIST_M,
 ) -> mvn.BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
@@ -657,10 +728,10 @@ def find_affected_pixels(
     # Precompute observation bounds
     obs_eastings = obs_data.locations[:, 0:1]  # (n_obs, 1)
     obs_northings = obs_data.locations[:, 1:2]  # (n_obs, 1)
-    obs_eastings_min = obs_eastings - constants.MAX_DIST_M
-    obs_eastings_max = obs_eastings + constants.MAX_DIST_M
-    obs_northings_min = obs_northings - constants.MAX_DIST_M
-    obs_northings_max = obs_northings + constants.MAX_DIST_M
+    obs_eastings_min = obs_eastings - max_dist_m
+    obs_eastings_max = obs_eastings + max_dist_m
+    obs_northings_min = obs_northings - max_dist_m
+    obs_northings_max = obs_northings + max_dist_m
 
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
@@ -725,6 +796,11 @@ def compute_mvn_updates(
     obs_data: mvn.ObservationData,
     bbox_result: mvn.BoundingBoxResult,
     model_name: str,
+    phi: float | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = constants.NOISY,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> list[mvn.MVNUpdateResult]:
     """
     Compute MVN updates for all affected pixels.
@@ -834,6 +910,11 @@ def compute_mvn_updates(
                 bbox_result.obs_to_grid_indices,
                 chunk_grid_to_obs,
                 model_name,
+                phi=phi,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
             )
 
             if update_result is not None:
