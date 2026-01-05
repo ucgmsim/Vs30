@@ -339,7 +339,7 @@ def make_initial_vs30_raster(
     2. Mapping category IDs to VS30 mean and standard deviation values from CSV files
     3. Writing 2-band GeoTIFFs with VS30 mean (band 1) and standard deviation (band 2)
 
-    Output files are saved as terrain_initial_vs30.tif and/or geology_initial_vs30.tif.
+    Output files are saved as terrain_initial_vs30_with_uncertainty.tif and/or geology_initial_vs30_with_uncertainty.tif.
     """
     try:
         # Validate that at least one model type is specified
@@ -938,9 +938,11 @@ def full_pipeline_given_model(
             terrain_csv=posterior_csv if model_type == "terrain" else None,
         )
 
-        initial_raster = (
-            output_dir / f"{model_type}_initial_vs30.tif"
-        )  # TODO: tie this to filename in constants if they are different?
+        initial_raster = output_dir / (
+            constants.GEOLOGY_INITIAL_VS30_FILENAME
+            if model_type == "geology"
+            else constants.TERRAIN_INITIAL_VS30_FILENAME
+        )
         id_raster_name = (
             constants.GEOLOGY_ID_FILENAME
             if model_type == "geology"
