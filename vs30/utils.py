@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import numpy as np
+import yaml
 from scipy.spatial.distance import cdist, euclidean
 
 
@@ -68,6 +69,24 @@ def _find_config_file(config: Path | None) -> Path:
     )
 
 
+def load_config(config_path: Path) -> dict:
+    """
+    Load configuration from YAML file.
+
+    Parameters
+    ----------
+    config_path : Path
+        Path to config.yaml file.
+
+    Returns
+    -------
+    dict
+        Configuration dictionary.
+    """
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f)
+
+
 # ============================================================================
 # Helper Functions for Distance and Correlation
 # ============================================================================
@@ -129,4 +148,4 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     -----
     Uses exponential correlation function: 1 / exp(distance / phi)
     """
-    return 1 / np.exp(distances / phi)
+    return 1 / np.exp(np.maximum(0.1, distances) / phi)
