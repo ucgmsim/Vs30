@@ -127,7 +127,6 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
 
     Notes
     -----
-    Uses exponential correlation function: 1 / exp(max(0.1, distance) / phi)
-    Minimum distance of 0.1 meters is enforced to prevent division issues.
+    Uses exponential correlation function: 1 / exp(distance / phi)
     """
-    return 1 / np.exp(np.maximum(0.1, distances) / phi)
+    return 1 / np.exp(distances / phi)

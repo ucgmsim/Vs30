@@ -695,30 +695,25 @@ def apply_hybrid_geology_modifications(
 
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
-        # Prevent log10(0) or log10(-NODATA)
-        valid_slope_mask = (slope_array > 0) & (slope_array != SLOPE_NODATA)
-
-        # We need to operate on pixels where valid slope AND specific IDs match
-        # To avoid warnings, we can work on a temporary safe slope array
-        safe_log_slope = np.full_like(slope_array, -999.0)
-        safe_log_slope[valid_slope_mask] = np.log10(slope_array[valid_slope_mask])
+        # Prevent log10(0) or log10(-NODATA) by capping at 1e-9 (legacy logic)
+        modified_slope = np.copy(slope_array)
+        modified_slope[(modified_slope <= 0) | (modified_slope == SLOPE_NODATA)] = 1e-9
+        safe_log_slope = np.log10(modified_slope)
 
         for spec in HYBRID_VS30_PARAMS:
             gid = spec[0]
             slope_limits = spec[1]
             vs30_limits_log10 = spec[2]
 
-            # Skip ID 4 if mod6 is active (handled separately later?)
-            # Old code: `if spec[0] == 4 and geol.mod6: continue`
+            # Skip ID 4 if mod6 is active (handled separately later)
             if gid == 4 and mod6:
                 continue
 
-            # Find mask: ID matches AND slope is valid
-            mask = (id_array == gid) & valid_slope_mask
+            # Find mask: ID matches
+            mask = id_array == gid
 
             if np.any(mask):
-                # Interpolate
-                # vs30 = 10 ^ interp(log10(slope), [lim1, lim2], [vs1, vs2])
+                # Interpolate for all pixels in this group
                 interpolated_val = np.interp(
                     safe_log_slope[mask], slope_limits, vs30_limits_log10
                 )
