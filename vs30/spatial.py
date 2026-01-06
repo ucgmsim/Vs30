@@ -214,6 +214,15 @@ def prepare_observation_data(
     model_name: str,
     output_dir: Path,
     noisy: bool = constants.NOISY,
+    # Hybrid Modification Parameters (optional, for geology)
+    hybrid_mod6_dist_min: float | None = None,
+    hybrid_mod6_dist_max: float | None = None,
+    hybrid_mod6_vs30_min: float | None = None,
+    hybrid_mod6_vs30_max: float | None = None,
+    hybrid_mod13_dist_min: float | None = None,
+    hybrid_mod13_dist_max: float | None = None,
+    hybrid_mod13_vs30_min: float | None = None,
+    hybrid_mod13_vs30_max: float | None = None,
 ) -> ObservationData:
     """
     Prepare observation data for MVN processing.
@@ -312,6 +321,15 @@ def prepare_observation_data(
             mod6=True,
             mod13=True,
             hybrid=True,
+            # Pass hybrid parameters
+            hybrid_mod6_dist_min=hybrid_mod6_dist_min,
+            hybrid_mod6_dist_max=hybrid_mod6_dist_max,
+            hybrid_mod6_vs30_min=hybrid_mod6_vs30_min,
+            hybrid_mod6_vs30_max=hybrid_mod6_vs30_max,
+            hybrid_mod13_dist_min=hybrid_mod13_dist_min,
+            hybrid_mod13_dist_max=hybrid_mod13_dist_max,
+            hybrid_mod13_vs30_min=hybrid_mod13_vs30_min,
+            hybrid_mod13_vs30_max=hybrid_mod13_vs30_max,
         )
 
     residuals = np.log(vs30_obs / model_vs30)

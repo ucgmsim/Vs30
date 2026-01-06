@@ -684,6 +684,15 @@ def apply_hybrid_geology_modifications(
     mod6: bool = True,
     mod13: bool = True,
     hybrid: bool = True,
+    # Hybrid parameters (required)
+    hybrid_mod6_dist_min: float | None = None,
+    hybrid_mod6_dist_max: float | None = None,
+    hybrid_mod6_vs30_min: float | None = None,
+    hybrid_mod6_vs30_max: float | None = None,
+    hybrid_mod13_dist_min: float | None = None,
+    hybrid_mod13_dist_max: float | None = None,
+    hybrid_mod13_vs30_min: float | None = None,
+    hybrid_mod13_vs30_max: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply hybrid model modifications to VS30 and standard deviation arrays.
@@ -709,13 +718,32 @@ def apply_hybrid_geology_modifications(
         Whether to apply modification for Group 13 (Floodplain), by default True.
     hybrid : bool, optional
         Whether to apply general hybrid slope-based modifications, by default True.
+    hybrid_mod6_dist_min : float, optional
+        Min distance threshold for mod6.
+    ...
 
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         Modified (vs30_array, stdv_array).
     """
-    print("  Applying hybrid geology modifications...")
+    print("  Applying slope and coastal distance based geology modifications...")
+
+    # Validate required params if mods are active
+    if mod6 and (
+        hybrid_mod6_dist_min is None
+        or hybrid_mod6_dist_max is None
+        or hybrid_mod6_vs30_min is None
+        or hybrid_mod6_vs30_max is None
+    ):
+        raise ValueError("Missing required parameters for modification 6 (Alluvium)")
+    if mod13 and (
+        hybrid_mod13_dist_min is None
+        or hybrid_mod13_dist_max is None
+        or hybrid_mod13_vs30_min is None
+        or hybrid_mod13_vs30_max is None
+    ):
+        raise ValueError("Missing required parameters for modification 13 (Floodplain)")
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:
@@ -765,14 +793,12 @@ def apply_hybrid_geology_modifications(
 
             dist_vals = coast_dist_array[mask]
 
-            val = constants.HYBRID_MOD6_VS30_MIN + (
-                constants.HYBRID_MOD6_VS30_MAX - constants.HYBRID_MOD6_VS30_MIN
-            ) * (dist_vals - constants.HYBRID_MOD6_DIST_MIN) / (
-                constants.HYBRID_MOD6_DIST_MAX - constants.HYBRID_MOD6_DIST_MIN
+            val = hybrid_mod6_vs30_min + (
+                hybrid_mod6_vs30_max - hybrid_mod6_vs30_min
+            ) * (dist_vals - hybrid_mod6_dist_min) / (
+                hybrid_mod6_dist_max - hybrid_mod6_dist_min
             )
-            val = np.clip(
-                val, constants.HYBRID_MOD6_VS30_MIN, constants.HYBRID_MOD6_VS30_MAX
-            )
+            val = np.clip(val, hybrid_mod6_vs30_min, hybrid_mod6_vs30_max)
 
             vs30_array[mask] = val
 
@@ -785,14 +811,12 @@ def apply_hybrid_geology_modifications(
 
             dist_vals = coast_dist_array[mask]
 
-            val = constants.HYBRID_MOD13_VS30_MIN + (
-                constants.HYBRID_MOD13_VS30_MAX - constants.HYBRID_MOD13_VS30_MIN
-            ) * (dist_vals - constants.HYBRID_MOD13_DIST_MIN) / (
-                constants.HYBRID_MOD13_DIST_MAX - constants.HYBRID_MOD13_DIST_MIN
+            val = hybrid_mod13_vs30_min + (
+                hybrid_mod13_vs30_max - hybrid_mod13_vs30_min
+            ) * (dist_vals - hybrid_mod13_dist_min) / (
+                hybrid_mod13_dist_max - hybrid_mod13_dist_min
             )
-            val = np.clip(
-                val, constants.HYBRID_MOD13_VS30_MIN, constants.HYBRID_MOD13_VS30_MAX
-            )
+            val = np.clip(val, hybrid_mod13_vs30_min, hybrid_mod13_vs30_max)
 
             vs30_array[mask] = val
 
