@@ -11,24 +11,24 @@ grid_dy: 100
 # --- NoData and Placeholder Values ---
 id_nodata: 255
 slope_nodata: -9999
-invalid_vs30_placeholder: -9999
 model_nodata: -32767
 
 # --- filenames and Prefixes ---
 posterior_prefix: "posterior_"
-terrain_initial_vs30_filename: "terrain_initial_vs30_with_uncertainty.tif"
-geology_initial_vs30_filename: "geology_initial_vs30_with_uncertainty.tif"
+terrain_initial_vs30_filename: "initial_terrain_vs30_with_uncertainty.tif"
+geology_initial_vs30_filename: "initial_geology_vs30_with_uncertainty.tif"
 slope_raster_filename: "slope.tif"
 coast_distance_raster_filename: "coast_distance.tif"
-hybrid_vs30_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif"
+geology_vs30_slope_and_coastal_distance_adjusted_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif"
 geology_id_filename: "gid.tif"
 terrain_id_filename: "tid.tif"
-combined_vs30_filename: "slope_coastal_distance_adjusted_geology_and_terrain_vs30_weighted_mixture_with_uncertainty.tif"
+
+# Final output filenames (after spatially adjusting by the fitted multivariate normal distribution (MVN))
+terrain_vs30_mean_stddev_filename: "terrain_vs30_spatially_adjusted_with_uncertainty.tif"
+geology_vs30_mean_stddev_filename: "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_coastal_distance_and_spatial_adjustment_and_terrain_vs30_after_spatial_adjustment.tif"
 
 # --- General Configuration ---
-# Models to process: can be ["geology"], ["terrain"], or ["geology", "terrain"]
-models_to_process:
-  - geology
 
 # Maximum distance (meters) for considering observations
 max_dist_m: 10000
@@ -58,7 +58,7 @@ nproc: -1  # Number of processors to use (-1 for all)
 
 # Paths relative to the resources directory
 observations_file: observations/measured_vs30_original_filtered.csv
-output_dir: new_vs30map
+output_dir: /tmp/refactored_vs30_output
 
 # Options for geology Vs30 models
 geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
@@ -66,10 +66,16 @@ geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and
 # Options for terrain Vs30 models
 terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv
 
-# Weights for multi-model combining
-geology_weight: 1.0
-terrain_weight: 1.0
-k: -1.0 # Standard deviation based weighting factor (if -1, uses geology_weight and terrain_weight directly)
+# Method for combining geology and terrain models
+# value can be:
+# - float: Ratio of geology weight to terrain weight (e.g. 1.0 = equal weight, 2.0 = geology has 2x weight)
+# - string: "standard_deviation_weighting" (uses k_value below)
+combination_method: 1.0
+
+# K value for standard deviation based weighting
+# Represents the exponent for inverse variance weighting: weight ~ (sigma^2)^-k
+# Only used if combination_method is "standard_deviation_weighting"
+k_value: 3.0
 
 # Model specific ID columns
 model_id_columns:

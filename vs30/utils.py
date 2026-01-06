@@ -4,6 +4,8 @@ import numpy as np
 import yaml
 from scipy.spatial.distance import cdist, euclidean
 
+from vs30 import constants
+
 
 def _resolve_base_path(config_path: Path) -> Path:
     """
@@ -148,4 +150,4 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     -----
     Uses exponential correlation function: 1 / exp(distance / phi)
     """
-    return 1 / np.exp(np.maximum(0.1, distances) / phi)
+    return 1 / np.exp(np.maximum(constants.MIN_DIST_ENFORCED, distances) / phi)
