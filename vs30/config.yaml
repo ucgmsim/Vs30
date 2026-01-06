@@ -30,6 +30,9 @@ combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_co
 
 # --- General Configuration ---
 
+# Whether to perform Bayesian update of geology and terrain categorical vs30 values
+do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+
 # Maximum distance (meters) for considering observations
 max_dist_m: 10000
 

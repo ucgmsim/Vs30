@@ -595,7 +595,7 @@ def create_coast_distance_raster(
 
     # Distance Transform on global mask
     global_dist_px = distance_transform_edt(global_mask)
-    global_dist_m = (global_dist_px * dx).astype(np.float32)
+    global_dist_m = global_dist_px * dx
 
     # Extract study area slice
     col_off = round((s_xmin - g_xmin) / dx)
@@ -610,14 +610,14 @@ def create_coast_distance_raster(
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
+        {"dtype": "float64", "count": 1, "nodata": None, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(distance_meters.astype(np.float32), 1)
+        dst.write(distance_meters, 1)
         dst.descriptions = ("Distance to Coast (m)",)
 
-    return distance_meters.astype(np.float32), profile
+    return distance_meters, profile
 
 
 def create_slope_raster(
@@ -648,7 +648,7 @@ def create_slope_raster(
 
     # Initialize destination array
     destination = np.zeros(
-        (template_profile["height"], template_profile["width"]), dtype=np.float32
+        (template_profile["height"], template_profile["width"])
     )
 
     with rasterio.open(SLOPE_RASTER) as src:
@@ -665,7 +665,7 @@ def create_slope_raster(
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
+        {"dtype": "float64", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:

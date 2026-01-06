@@ -964,8 +964,8 @@ def full_pipeline_given_model(
     """
     Run the full VS30 generation pipeline in sequence.
 
-    1. update-categorical-vs30-models: Updates categorical pries with observations.
-    2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using posteriors.
+    1. update-categorical-vs30-models: (Conditional) Updates categorical priors with observations if do_bayesian_update is enabled.
+    2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using posteriors (or priors if updates skipped).
     3. create-hybrid-raster: (Geology only) Applies slope/coastal modifications.
     4. spatial-fit: Final spatial adjustment using MVN and observations.
     """
@@ -995,6 +995,11 @@ def full_pipeline_given_model(
         if phi is None:
             phi = cfg[f"phi_{model_type}"]
 
+        # Resolve Bayesian update flag
+        do_bayesian_update = cfg[
+            "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values"
+        ]
+
         # Resolve observations from config if not provided
         if clustered_observations_csv is None and independent_observations_csv is None:
             obs_file = cfg.get("observations_file", constants.OBSERVATIONS_FILE)
@@ -1006,26 +1011,32 @@ def full_pipeline_given_model(
                     if candidate.exists():
                         independent_observations_csv = candidate
 
-        # --- Step 1: Update Categorical Models ---
-        logger.info("\n=== STEP 1: Updating Categorical Models ===")
-        update_categorical_vs30_models(
-            categorical_model_csv=categorical_model_csv,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
-            output_dir=output_dir,
-            model_type=model_type,
-            n_prior=n_prior,
-            min_sigma=min_sigma,
-            min_group=min_group,
-            eps=eps,
-            nproc=nproc,
-        )
+        # --- Step 1: Update Categorical Models (conditional) ---
+        if do_bayesian_update:
+            logger.info("\n=== STEP 1: Updating Categorical Models ===")
+            update_categorical_vs30_models(
+                categorical_model_csv=categorical_model_csv,
+                clustered_observations_csv=clustered_observations_csv,
+                independent_observations_csv=independent_observations_csv,
+                output_dir=output_dir,
+                model_type=model_type,
+                n_prior=n_prior,
+                min_sigma=min_sigma,
+                min_group=min_group,
+                eps=eps,
+                nproc=nproc,
+            )
 
-        posterior_csv = (
-            output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
-        )
-        if not posterior_csv.exists():
-            raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
+            posterior_csv = (
+                output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+            )
+            if not posterior_csv.exists():
+                raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
+        else:
+            logger.info(
+                "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
+            )
+            posterior_csv = categorical_model_csv
 
         # --- Step 2: Make Initial Raster ---
         logger.info("\n=== STEP 2: Creating Initial Raster ===")
@@ -1138,6 +1149,11 @@ def combine(
         "--combination-method",
         help="Method for combining models: Ratio (float) or 'standard_deviation_weighting'",
     ),
+    config: Path = Option(
+        None,
+        "--config",
+        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
+    ),
 ) -> None:
     """
     Combine geology and terrain VS30 rasters using a weighted average.
@@ -1149,33 +1165,11 @@ def combine(
             raise FileNotFoundError(f"Terrain raster not found: {terrain_tif}")
 
         # Load config to resolve defaults if needed
-        # Since this command doesn't take a config path argument explicitly, we try to find one
-        # or rely on what's passed. But here we only need global config if args are missing.
-        # Ideally combine should take a --config arg too, but for now let's assume standard lookup
-        # or that constants are okay if we really have no other source?
-        # WAIT - the requirement is to crash if missing.
-        # We'll use the _config object from constants.py AS A FALLBACK only if we want
-        # behavior to stay same for normal runs, but if we want to enforce config file
-        # logic, we should load it.
-        # However, `combine` is often called by `full_pipeline` which passes args.
-        # Let's use the constants._config dictionary directly which IS the loaded config.
-        # If constants.py loads default config, that's the "silent default".
-        # But we need to use the method provided in the plan: explicit lookup.
-        # Since `combine` doesn't take a config path, let's load default/local lookup.
-
-        # Actually, let's rely on constants._config which IS the loaded config.
-        # If the user put a broken config there, it would have crashed constants load.
-        # The issue is we want `full_pipeline` (which loads a specific config) to pass values.
-        # If `combine` is run standalone, it will load default config via constants.
-        # To strictly follow instructions: "look for silent defaults and delete them".
-        # The silent defaults were Option(constants.XYZ).
-
-        # We need to resolve them now.
-        # We need to resolve them now if not provided
-        from vs30.constants import _config as default_config
+        config_path = utils._find_config_file(config)
+        cfg = utils.load_config(config_path)
 
         if combination_method is None:
-            combination_method = default_config["combination_method"]
+            combination_method = cfg["combination_method"]
 
         logger.info(f"Averaging {geology_tif} and {terrain_tif}")
 
@@ -1436,6 +1430,7 @@ def full_pipeline(
             terrain_tif=terr_tif,
             output_path=combined_tif,
             combination_method=combination_method,
+            config=config,
         )
 
         typer.echo("\n✓ FULL MULTI-MODEL PIPELINE COMPLETED SUCCESSFULLY")
