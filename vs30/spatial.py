@@ -115,7 +115,7 @@ class RasterData:
         rows_valid = valid_rows.astype(float) + 0.5
         cols_valid = valid_cols.astype(float) + 0.5
         xs, ys = rasterio_transform.xy(self.transform, rows_valid, cols_valid)
-        return np.column_stack((np.array(xs), np.array(ys))).astype(np.float32)
+        return np.column_stack((np.array(xs), np.array(ys)))
 
     def write_updated(
         self, path: Path, updated_vs30: np.ndarray, updated_stdv: np.ndarray
@@ -306,9 +306,9 @@ def prepare_observation_data(
 
         # Sample rasters at observation locations
         with rasterio.open(slope_path) as src:
-            slope_obs = np.array([v[0] for v in src.sample(obs_locs)], dtype=np.float32)
+            slope_obs = np.array([v[0] for v in src.sample(obs_locs)])
         with rasterio.open(coast_path) as src:
-            coast_obs = np.array([v[0] for v in src.sample(obs_locs)], dtype=np.float32)
+            coast_obs = np.array([v[0] for v in src.sample(obs_locs)])
 
         # Apply modifications to model_vs30 and model_stdv at points
         # Note: we only need to modify where category IDs match hybrid types
