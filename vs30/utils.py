@@ -30,47 +30,6 @@ def _resolve_base_path(config_path: Path) -> Path:
         return config_path.parent
 
 
-def _find_config_file(config: Path | None) -> Path:
-    """
-    Find config.yaml file if not specified.
-
-    Parameters
-    ----------
-    config : Path | None
-        Config path if provided, None otherwise.
-
-    Returns
-    -------
-    Path
-        Path to config.yaml file.
-
-    Raises
-    ------
-    FileNotFoundError
-        If config file cannot be found.
-    """
-    if config is not None:
-        return config
-
-    cwd = Path.cwd()
-    # Try common locations
-    candidates = [
-        cwd / "vs30" / "config.yaml",
-        cwd / "config.yaml",
-        cwd.parent / "vs30" / "config.yaml",
-    ]
-
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    raise FileNotFoundError(
-        "Could not find config.yaml. Tried:\n"
-        + "\n".join(f"  - {c}" for c in candidates)
-        + "\nPlease specify --config PATH"
-    )
-
-
 def load_config(config_path: Path) -> dict:
     """
     Load configuration from YAML file.

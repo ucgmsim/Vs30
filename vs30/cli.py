@@ -17,7 +17,7 @@ from matplotlib import pyplot as plt
 from typer import Option
 
 from vs30 import constants, raster, spatial, utils
-from vs30.utils import _find_config_file, load_config
+from vs30.utils import load_config
 
 logger = logging.getLogger(__name__)
 
@@ -308,12 +308,6 @@ def update_categorical_vs30_models(
 def make_initial_vs30_raster(
     terrain: bool = Option(False, "--terrain", help="Create terrain VS30 raster"),
     geology: bool = Option(False, "--geology", help="Create geology VS30 raster"),
-    config: Path = Option(
-        None,
-        "--config",
-        "-c",
-        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
-    ),
     output_dir: Path = Option(
         None,
         "--output-dir",
@@ -347,7 +341,7 @@ def make_initial_vs30_raster(
             raise typer.Exit(1)
 
         # Load config - REQUIRED
-        config_path = utils._find_config_file(config)
+        config_path = Path(__file__).parent / "config.yaml"
         cfg = utils.load_config(config_path)
         logger.info(f"Loaded config from {config_path}")
 
@@ -416,7 +410,7 @@ def make_initial_vs30_raster(
 
 
 @app.command()
-def create_hybrid_raster(
+def adjust_geology_vs30_by_slope_and_coastal_distance(
     input_raster: Path = Option(
         ...,
         "--input-raster",
@@ -434,16 +428,6 @@ def create_hybrid_raster(
         "-o",
         help="Directory to save output hybrid raster and intermediate files",
     ),
-    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
-    # Hybrid parameters
-    hybrid_mod6_dist_min: float | None = Option(None, "--mod6-dist-min"),
-    hybrid_mod6_dist_max: float | None = Option(None, "--mod6-dist-max"),
-    hybrid_mod6_vs30_min: float | None = Option(None, "--mod6-vs30-min"),
-    hybrid_mod6_vs30_max: float | None = Option(None, "--mod6-vs30-max"),
-    hybrid_mod13_dist_min: float | None = Option(None, "--mod13-dist-min"),
-    hybrid_mod13_dist_max: float | None = Option(None, "--mod13-dist-max"),
-    hybrid_mod13_vs30_min: float | None = Option(None, "--mod13-vs30-min"),
-    hybrid_mod13_vs30_max: float | None = Option(None, "--mod13-vs30-max"),
 ) -> None:
     """
     Apply hybrid geology modifications to an initial VS30 raster.
@@ -463,52 +447,9 @@ def create_hybrid_raster(
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Config resolution
-        cfg_path = _find_config_file(config)
+        # Load config
+        cfg_path = Path(__file__).parent / "config.yaml"
         cfg = load_config(cfg_path)
-
-        # Resolve hybrid parameters
-        hybrid_mod6_dist_min = (
-            hybrid_mod6_dist_min
-            if hybrid_mod6_dist_min is not None
-            else cfg["hybrid_mod6_dist_min"]
-        )
-        hybrid_mod6_dist_max = (
-            hybrid_mod6_dist_max
-            if hybrid_mod6_dist_max is not None
-            else cfg["hybrid_mod6_dist_max"]
-        )
-        hybrid_mod6_vs30_min = (
-            hybrid_mod6_vs30_min
-            if hybrid_mod6_vs30_min is not None
-            else cfg["hybrid_mod6_vs30_min"]
-        )
-        hybrid_mod6_vs30_max = (
-            hybrid_mod6_vs30_max
-            if hybrid_mod6_vs30_max is not None
-            else cfg["hybrid_mod6_vs30_max"]
-        )
-
-        hybrid_mod13_dist_min = (
-            hybrid_mod13_dist_min
-            if hybrid_mod13_dist_min is not None
-            else cfg["hybrid_mod13_dist_min"]
-        )
-        hybrid_mod13_dist_max = (
-            hybrid_mod13_dist_max
-            if hybrid_mod13_dist_max is not None
-            else cfg["hybrid_mod13_dist_max"]
-        )
-        hybrid_mod13_vs30_min = (
-            hybrid_mod13_vs30_min
-            if hybrid_mod13_vs30_min is not None
-            else cfg["hybrid_mod13_vs30_min"]
-        )
-        hybrid_mod13_vs30_max = (
-            hybrid_mod13_vs30_max
-            if hybrid_mod13_vs30_max is not None
-            else cfg["hybrid_mod13_vs30_max"]
-        )
 
         logger.info(
             f"Processing slope and coastal distance adjusted model for: {input_raster}"
@@ -555,15 +496,15 @@ def create_hybrid_raster(
             mod6=True,  # Enable all mods by default for hybrid model
             mod13=True,
             hybrid=True,
-            # Pass resolved parameters
-            hybrid_mod6_dist_min=hybrid_mod6_dist_min,
-            hybrid_mod6_dist_max=hybrid_mod6_dist_max,
-            hybrid_mod6_vs30_min=hybrid_mod6_vs30_min,
-            hybrid_mod6_vs30_max=hybrid_mod6_vs30_max,
-            hybrid_mod13_dist_min=hybrid_mod13_dist_min,
-            hybrid_mod13_dist_max=hybrid_mod13_dist_max,
-            hybrid_mod13_vs30_min=hybrid_mod13_vs30_min,
-            hybrid_mod13_vs30_max=hybrid_mod13_vs30_max,
+            # Pass parameters from config
+            hybrid_mod6_dist_min=cfg["hybrid_mod6_dist_min"],
+            hybrid_mod6_dist_max=cfg["hybrid_mod6_dist_max"],
+            hybrid_mod6_vs30_min=cfg["hybrid_mod6_vs30_min"],
+            hybrid_mod6_vs30_max=cfg["hybrid_mod6_vs30_max"],
+            hybrid_mod13_dist_min=cfg["hybrid_mod13_dist_min"],
+            hybrid_mod13_dist_max=cfg["hybrid_mod13_dist_max"],
+            hybrid_mod13_vs30_min=cfg["hybrid_mod13_vs30_min"],
+            hybrid_mod13_vs30_max=cfg["hybrid_mod13_vs30_max"],
         )
 
         # 4. Save Output
@@ -625,27 +566,11 @@ def spatial_fit(
         "-d",
         help="Directory to save the adjusted raster",
     ),
-    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
     model_type: str = Option(
         ...,
         "--model-type",
         "-t",
         help="Model type: either 'geology' or 'terrain'",
-    ),
-    max_dist_m: float = Option(
-        constants.MAX_DIST_M, "--max-dist", help="Maximum distance for spatial fit"
-    ),
-    max_points: int = Option(
-        constants.MAX_POINTS, "--max-points", help="Maximum number of points for MVN"
-    ),
-    phi: float = Option(
-        None, "--phi", help="Correlation length (phi). Defaults based on model type."
-    ),
-    noisy: bool = Option(
-        constants.NOISY, "--noisy/--not-noisy", help="Apply noise weighting"
-    ),
-    cov_reduc: float = Option(
-        constants.COV_REDUC, "--cov-reduc", help="Covariance reduction factor"
     ),
 ) -> None:
     """
@@ -667,6 +592,17 @@ def spatial_fit(
 
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Load config to get parameters
+        cfg_path = Path(__file__).parent / "config.yaml"
+        cfg = load_config(cfg_path)
+
+        # Get parameters from config
+        max_dist_m = cfg["max_dist_m"]
+        max_points = cfg["max_points"]
+        phi = cfg[f"phi_{model_type}"]
+        noisy = cfg["noisy"]
+        cov_reduc = cfg["cov_reduc"]
 
         logger.info(f"Starting spatial fit for {model_type} model")
         logger.info(f"Input raster: {input_raster}")
@@ -703,33 +639,38 @@ def spatial_fit(
         # 4. Prepare Observation Data for MVN
         logger.info("Preparing observation data for MVN processing...")
 
-        # Resolve hybrid parameters if geology model
-        hybrid_params = {}
+        # Prepare observation data (with hybrid parameters for geology models)
         if model_type == "geology":
-            # Load config if not loaded
-            cfg_path = _find_config_file(config)
+            # Load config for hybrid parameters
+            cfg_path = Path(__file__).parent / "config.yaml"
             cfg = load_config(cfg_path)
 
-            hybrid_params = {
-                "hybrid_mod6_dist_min": cfg.get("hybrid_mod6_dist_min"),
-                "hybrid_mod6_dist_max": cfg.get("hybrid_mod6_dist_max"),
-                "hybrid_mod6_vs30_min": cfg.get("hybrid_mod6_vs30_min"),
-                "hybrid_mod6_vs30_max": cfg.get("hybrid_mod6_vs30_max"),
-                "hybrid_mod13_dist_min": cfg.get("hybrid_mod13_dist_min"),
-                "hybrid_mod13_dist_max": cfg.get("hybrid_mod13_dist_max"),
-                "hybrid_mod13_vs30_min": cfg.get("hybrid_mod13_vs30_min"),
-                "hybrid_mod13_vs30_max": cfg.get("hybrid_mod13_vs30_max"),
-            }
-
-        obs_data = spatial.prepare_observation_data(
-            observations,
-            raster_data,
-            updated_model_table,
-            model_type,
-            output_dir,
-            noisy=noisy,
-            **hybrid_params,
-        )
+            obs_data = spatial.prepare_observation_data(
+                observations,
+                raster_data,
+                updated_model_table,
+                model_type,
+                output_dir,
+                noisy=noisy,
+                hybrid_mod6_dist_min=cfg.get("hybrid_mod6_dist_min"),
+                hybrid_mod6_dist_max=cfg.get("hybrid_mod6_dist_max"),
+                hybrid_mod6_vs30_min=cfg.get("hybrid_mod6_vs30_min"),
+                hybrid_mod6_vs30_max=cfg.get("hybrid_mod6_vs30_max"),
+                hybrid_mod13_dist_min=cfg.get("hybrid_mod13_dist_min"),
+                hybrid_mod13_dist_max=cfg.get("hybrid_mod13_dist_max"),
+                hybrid_mod13_vs30_min=cfg.get("hybrid_mod13_vs30_min"),
+                hybrid_mod13_vs30_max=cfg.get("hybrid_mod13_vs30_max"),
+            )
+        else:
+            # Terrain models don't use hybrid parameters
+            obs_data = spatial.prepare_observation_data(
+                observations,
+                raster_data,
+                updated_model_table,
+                model_type,
+                output_dir,
+                noisy=noisy,
+            )
         logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
         if len(obs_data.locations) == 0:
@@ -903,7 +844,7 @@ def plot_posterior_values(
 
 
 @app.command()
-def full_pipeline_given_model(
+def full_pipeline_for_geology_or_terrain(
     model_type: str = Option(
         ..., "--model-type", "-t", help="Model type: either 'geology' or 'terrain'"
     ),
@@ -928,28 +869,12 @@ def full_pipeline_given_model(
     output_dir: Path = Option(
         ..., "--output-dir", "-d", help="Directory to save all pipeline outputs"
     ),
-    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
     # Bayesian Update Parameters (None defaults)
     n_prior: int | None = Option(
         None, "--n-prior", help="Effective number of prior observations"
     ),
     min_sigma: float | None = Option(
         None, "--min-sigma", help="Minimum standard deviation allowed"
-    ),
-    max_dist_m: float | None = Option(
-        None, "--max-dist", help="Maximum distance for spatial fit"
-    ),
-    max_points: int | None = Option(
-        None, "--max-points", help="Maximum number of points for MVN"
-    ),
-    phi: float | None = Option(
-        None, "--phi", help="Correlation length (phi). Defaults based on model type."
-    ),
-    noisy: bool | None = Option(
-        None, "--noisy/--not-noisy", help="Apply noise weighting"
-    ),
-    cov_reduc: float | None = Option(
-        None, "--cov-reduc", help="Covariance reduction factor"
     ),
     min_group: int | None = Option(
         None, "--min-group", help="Minimum group size for DBSCAN"
@@ -977,23 +902,15 @@ def full_pipeline_given_model(
         logger.info(f"Output directory: {output_dir}")
 
         # Config resolution
-        cfg_path = _find_config_file(config)
+        cfg_path = Path(__file__).parent / "config.yaml"
         cfg = load_config(cfg_path)
 
-        # Resolve generic parameters
+        # Resolve parameters
         n_prior = n_prior if n_prior is not None else cfg["n_prior"]
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
-        max_dist_m = max_dist_m if max_dist_m is not None else cfg["max_dist_m"]
-        max_points = max_points if max_points is not None else cfg["max_points"]
-        noisy = noisy if noisy is not None else cfg["noisy"]
-        cov_reduc = cov_reduc if cov_reduc is not None else cfg["cov_reduc"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
         nproc = nproc if nproc is not None else cfg["nproc"]
-
-        # Resolve phi based on model type
-        if phi is None:
-            phi = cfg[f"phi_{model_type}"]
 
         # Resolve Bayesian update flag
         do_bayesian_update = cfg[
@@ -1043,7 +960,6 @@ def full_pipeline_given_model(
         make_initial_vs30_raster(
             terrain=(model_type == "terrain"),
             geology=(model_type == "geology"),
-            config=config,
             output_dir=output_dir,
             geology_csv=posterior_csv if model_type == "geology" else None,
             terrain_csv=posterior_csv if model_type == "terrain" else None,
@@ -1073,30 +989,10 @@ def full_pipeline_given_model(
                 "\n=== STEP 3: Creating Slope and Coastal Distance Adjusted Geology Raster ==="
             )
 
-            # Resolve hybrid parameters ONLY IF processing geology
-            h_mod6_dist_min = cfg["hybrid_mod6_dist_min"]
-            h_mod6_dist_max = cfg["hybrid_mod6_dist_max"]
-            h_mod6_vs30_min = cfg["hybrid_mod6_vs30_min"]
-            h_mod6_vs30_max = cfg["hybrid_mod6_vs30_max"]
-            h_mod13_dist_min = cfg["hybrid_mod13_dist_min"]
-            h_mod13_dist_max = cfg["hybrid_mod13_dist_max"]
-            h_mod13_vs30_min = cfg["hybrid_mod13_vs30_min"]
-            h_mod13_vs30_max = cfg["hybrid_mod13_vs30_max"]
-
-            create_hybrid_raster(
+            adjust_geology_vs30_by_slope_and_coastal_distance(
                 input_raster=initial_raster,
                 id_raster=id_raster,
                 output_dir=output_dir,
-                config=config,  # Pass config path
-                # Pass resolved parameters
-                hybrid_mod6_dist_min=h_mod6_dist_min,
-                hybrid_mod6_dist_max=h_mod6_dist_max,
-                hybrid_mod6_vs30_min=h_mod6_vs30_min,
-                hybrid_mod6_vs30_max=h_mod6_vs30_max,
-                hybrid_mod13_dist_min=h_mod13_dist_min,
-                hybrid_mod13_dist_max=h_mod13_dist_max,
-                hybrid_mod13_vs30_min=h_mod13_vs30_min,
-                hybrid_mod13_vs30_max=h_mod13_vs30_max,
             )
             current_raster = (
                 output_dir
@@ -1116,12 +1012,6 @@ def full_pipeline_given_model(
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            phi=phi,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-            config=config,
         )
 
         typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
@@ -1149,11 +1039,6 @@ def combine(
         "--combination-method",
         help="Method for combining models: Ratio (float) or 'standard_deviation_weighting'",
     ),
-    config: Path = Option(
-        None,
-        "--config",
-        help="Path to config.yaml file (default: vs30/config.yaml relative to workspace root)",
-    ),
 ) -> None:
     """
     Combine geology and terrain VS30 rasters using a weighted average.
@@ -1165,7 +1050,7 @@ def combine(
             raise FileNotFoundError(f"Terrain raster not found: {terrain_tif}")
 
         # Load config to resolve defaults if needed
-        config_path = utils._find_config_file(config)
+        config_path = Path(__file__).parent / "config.yaml"
         cfg = utils.load_config(config_path)
 
         if combination_method is None:
@@ -1289,28 +1174,12 @@ def full_pipeline(
     output_dir: Path | None = Option(
         None, "--output-dir", "-d", help="Directory to save all pipeline outputs"
     ),
-    config: Path = Option(None, "--config", help="Path to config.yaml file (optional)"),
     # Bayesian Update Parameters
     n_prior: int | None = Option(
         None, "--n-prior", help="Effective number of prior observations"
     ),
     min_sigma: float | None = Option(
         None, "--min-sigma", help="Minimum standard deviation allowed"
-    ),
-    max_dist_m: float | None = Option(
-        None, "--max-dist", help="Maximum distance for spatial fit"
-    ),
-    max_points: int | None = Option(
-        None, "--max-points", help="Maximum number of points for MVN"
-    ),
-    phi: float = Option(
-        None, "--phi", help="Correlation length (phi). Defaults based on model type."
-    ),
-    noisy: bool | None = Option(
-        None, "--noisy/--not-noisy", help="Apply noise weighting"
-    ),
-    cov_reduc: float | None = Option(
-        None, "--cov-reduc", help="Covariance reduction factor"
     ),
     min_group: int | None = Option(
         None, "--min-group", help="Minimum group size for DBSCAN"
@@ -1331,10 +1200,14 @@ def full_pipeline(
     Run the full VS30 generation pipeline for both geology and terrain models,
     then average the results into a final combined raster.
     """
+    import time
+
+    start_time = time.time()
+
     try:
         # START CONFIG RESOLUTION
-        # Load config specified by user (or find default)
-        cfg_path = _find_config_file(config)
+        # Load config
+        cfg_path = Path(__file__).parent / "config.yaml"
         cfg = load_config(cfg_path)
 
         # Resolve output_dir
@@ -1347,16 +1220,11 @@ def full_pipeline(
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Resolve all parameters
+        # Resolve parameters
         n_prior = n_prior if n_prior is not None else cfg["n_prior"]
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
-        max_dist_m = max_dist_m if max_dist_m is not None else cfg["max_dist_m"]
-        max_points = max_points if max_points is not None else cfg["max_points"]
-        noisy = noisy if noisy is not None else cfg["noisy"]
-        cov_reduc = cov_reduc if cov_reduc is not None else cfg["cov_reduc"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["nproc"]
         nproc = nproc if nproc is not None else cfg["nproc"]
         combination_method = (
             combination_method
@@ -1376,20 +1244,14 @@ def full_pipeline(
 
             # 1. Run Geology Pipeline
             logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
-            full_pipeline_given_model(
+            full_pipeline_for_geology_or_terrain(
                 model_type="geology",
                 categorical_model_csv=geology_categorical_csv,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
                 output_dir=output_dir,
-                config=config,
                 n_prior=n_prior,
                 min_sigma=min_sigma,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                phi=phi,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,
@@ -1397,20 +1259,14 @@ def full_pipeline(
 
             # 2. Run Terrain Pipeline
             logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
-            full_pipeline_given_model(
+            full_pipeline_for_geology_or_terrain(
                 model_type="terrain",
                 categorical_model_csv=terrain_categorical_csv,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
                 output_dir=output_dir,
-                config=config,
                 n_prior=n_prior,
                 min_sigma=min_sigma,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                phi=phi,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,
@@ -1418,7 +1274,7 @@ def full_pipeline(
 
         # 3. Average Results
         logger.info(
-            "\n" + "=" * 80 + "\nAVERAGING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
+            "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
         geol_tif = output_dir / constants.OUTPUT_FILENAMES["geology"]
@@ -1430,10 +1286,10 @@ def full_pipeline(
             terrain_tif=terr_tif,
             output_path=combined_tif,
             combination_method=combination_method,
-            config=config,
         )
 
-        typer.echo("\n✓ FULL MULTI-MODEL PIPELINE COMPLETED SUCCESSFULLY")
+        elapsed_time = time.time() - start_time
+        typer.echo(f"  Total execution time: {elapsed_time:.1f} seconds")
         typer.echo(f"  Combined output available at: {combined_tif}")
 
     except Exception as e:
