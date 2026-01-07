@@ -1,12 +1,28 @@
 # Vs30 config file
 
 # --- Grid Parameters ---
-grid_xmin: 1060050
-grid_xmax: 2120050
-grid_ymin: 4730050
-grid_ymax: 6250050
+grid_xmin: 1558800
+grid_xmax: 1582300
+grid_ymin: 5168800
+grid_ymax: 5192300
 grid_dx: 100
 grid_dy: 100
+
+
+# --- Full New Zealand Land Extent Bounds (for coastal distance calculations) ---
+# IMPORTANT: These values define the full extent of New Zealand land coverage
+# and MUST NOT be changed. They are used to ensure coastal distance calculations
+# are computed on the full NZ land extent, regardless of the configured study
+# domain bounds (grid_xmin/max/ymin/max above). This is critical because:
+# 1. Observations used in MVN spatial adjustment may fall anywhere within NZ
+# 2. Coastal distances must be accurate for all observation locations
+# 3. Computing distances only on a small domain leads to incorrect values for
+#    observations outside that domain, causing errors in MVN calculations
+# These bounds match the legacy _full_land_grid() function behavior
+full_nz_land_xmin: 1060050
+full_nz_land_xmax: 2120050
+full_nz_land_ymin: 4730050
+full_nz_land_ymax: 6250050
 
 # --- NoData and Placeholder Values ---
 id_nodata: 255
@@ -31,7 +47,7 @@ combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_co
 # --- General Configuration ---
 
 # Whether to perform Bayesian update of geology and terrain categorical vs30 values
-do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: false
 
 # Maximum distance (meters) for considering observations
 max_dist_m: 10000
@@ -61,13 +77,15 @@ nproc: -1  # Number of processors to use (-1 for all)
 
 # Paths relative to the resources directory
 observations_file: observations/measured_vs30_original_filtered.csv
-output_dir: /tmp/refactored_vs30_output
+output_dir: /tmp/refactored_vs30_output_460x_tiny_domain
 
 # Options for geology Vs30 models
-geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
+# geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
+geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 
 # Options for terrain Vs30 models
-terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv
+# terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv
+terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 
 # Method for combining geology and terrain models
 # value can be:
@@ -85,7 +103,7 @@ model_id_columns:
   geology: gid
   terrain: tid
 
-# --- Hybrid Model constants ---
+# --- Parameters for creating the "hybrid" geology Vs30 model that adjusts with slope and coastal distance ---
 hybrid_mod6_dist_min: 8000.0
 hybrid_mod6_dist_max: 20000.0
 hybrid_mod6_vs30_min: 240.0
