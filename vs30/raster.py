@@ -8,16 +8,17 @@ using rasterio for all raster operations.
 import importlib.resources
 import tarfile
 from pathlib import Path
+from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from osgeo import gdal
 from rasterio import features
 from rasterio.enums import Resampling
 from rasterio.transform import from_bounds
 from rasterio.warp import reproject
-from scipy.ndimage import distance_transform_edt
 from tqdm import tqdm
 
 from vs30 import constants
@@ -466,9 +467,11 @@ def create_vs30_raster_from_ids(
     print(f"  CRS: {crs}")
 
     # Create output arrays initialized with NODATA
+    # TEMPORARY: Using float32 for testing comparison with old codebase
+    # TODO: Revert to float64 after verification
     print("Step 8: Creating output arrays")
-    vs30_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float64)
-    stdv_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float64)
+    vs30_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
+    stdv_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
     print("  ✓ Created VS30 and standard deviation arrays")
 
     # Map each pixel's ID to VS30 values from CSV
@@ -497,14 +500,16 @@ def create_vs30_raster_from_ids(
             )
     print("  ✓ Completed mapping all IDs to VS30 values")
 
-    # Create output profile for 2-band Float64 raster
+    # Create output profile for 2-band raster
+    # TEMPORARY: Using float32 for testing comparison with old codebase
+    # TODO: Revert to float64 after verification
     print("Step 10: Preparing output raster profile")
     output_profile = {
         "driver": "GTiff",
         "width": profile["width"],
         "height": profile["height"],
         "count": 2,
-        "dtype": "float64",
+        "dtype": "float32",
         "crs": crs,
         "transform": transform,
         "nodata": MODEL_NODATA,
@@ -528,12 +533,14 @@ def create_vs30_raster_from_ids(
 
 def create_coast_distance_raster(
     output_path: Path, template_profile: dict
-) -> tuple[np.ndarray, dict]:
+) -> Tuple[np.ndarray, dict]:
     """
     Create a raster of distance to the nearest coast (in meters).
 
-    Rasterizes the coast shapefile and calculates the Euclidean distance transform.
-    Uses rasterio and scipy.ndimage.
+    Uses GDAL to rasterize coast shapefile and compute proximity distances,
+    following the legacy implementation for numerical consistency.
+    Computes on full NZ land extent to ensure accurate distances for all
+    observation locations, even those outside the configured study domain.
 
     Parameters
     ----------
@@ -544,7 +551,7 @@ def create_coast_distance_raster(
 
     Returns
     -------
-    tuple[np.ndarray, dict]
+    Tuple[np.ndarray, dict]
         A tuple containing:
         - The distance array (float32).
         - The updated profile used for saving.
@@ -553,69 +560,82 @@ def create_coast_distance_raster(
     if not COAST_SHAPEFILE.exists():
         raise FileNotFoundError(f"Coast shapefile not found: {COAST_SHAPEFILE}")
 
-    # Read coast shapefile
-    gdf = gpd.read_file(COAST_SHAPEFILE)
-    if gdf.crs is None or str(gdf.crs) != NZTM_CRS:
-        gdf = gdf.to_crs(NZTM_CRS)
-
-    # Legacy logic: Compute on global NZ grid to ensure correct distances for inland patches
-    global_xmin = constants.GRID_XMIN
-    global_xmax = constants.GRID_XMAX
-    global_ymin = constants.GRID_YMIN
-    global_ymax = constants.GRID_YMAX
+    # Get template bounds for final output extent
     dx = template_profile["transform"].a
     dy = abs(template_profile["transform"].e)
-
-    # Extend bounds to include template if it's outside default global
     s_xmin = template_profile["transform"].c
     s_ymax = template_profile["transform"].f
     s_xmax = s_xmin + template_profile["width"] * dx
     s_ymin = s_ymax - template_profile["height"] * dy
 
-    g_xmin = min(global_xmin, s_xmin)
-    g_xmax = max(global_xmax, s_xmax)
-    g_ymin = min(global_ymin, s_ymin)
-    g_ymax = max(global_ymax, s_ymax)
+    # Extend to full NZ land coverage to ensure accurate distances
+    # (matching legacy _full_land_grid behavior)
+    g_xmin = min(constants.FULL_NZ_LAND_XMIN, s_xmin)
+    g_xmax = max(constants.FULL_NZ_LAND_XMAX, s_xmax)
+    g_ymin = min(constants.FULL_NZ_LAND_YMIN, s_ymin)
+    g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
 
-    # Calculate global grid dimensions
-    gnx = round((g_xmax - g_xmin) / dx)
-    gny = round((g_ymax - g_ymin) / dy)
-    global_transform = from_bounds(g_xmin, g_ymin, g_xmax, g_ymax, gnx, gny)
+    # Check if we need to extend beyond template bounds
+    gridmod = g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
 
-    # Rasterize land polygons as 1, sea/background as 0 on the global grid
-    shapes = ((geom, 1) for geom in gdf.geometry)
-    global_mask = features.rasterize(
-        shapes=shapes,
-        out_shape=(gny, gnx),
-        transform=global_transform,
-        fill=0,
-        dtype=np.uint8,
-        all_touched=False,
+    # Rasterize land polygons using GDAL (legacy approach)
+    # Use UInt16 data type as in legacy code (sufficient for distance range)
+    ds = gdal.Rasterize(
+        str(output_path),
+        str(COAST_SHAPEFILE),
+        creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
+        outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
+        xRes=dx,
+        yRes=dy,
+        noData=0,
+        burnValues=1,
+        outputType=gdal.GetDataTypeByName("UInt16"),
     )
 
-    # Distance Transform on global mask
-    global_dist_px = distance_transform_edt(global_mask)
-    global_dist_m = global_dist_px * dx
+    # Compute proximity distances using GDAL (legacy approach)
+    # DISTUNITS=GEO ensures distances in georeferenced units (meters)
+    band = ds.GetRasterBand(1)
+    band.SetDescription("Distance to Coast (m)")
+    # Note: ComputeProximity modifies the raster in-place
+    ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
+    band = None
+    ds = None
 
-    # Extract study area slice
-    col_off = round((s_xmin - g_xmin) / dx)
-    row_off = round((g_ymax - s_ymax) / dy)
+    # If grid was extended, resample back to template bounds
+    if gridmod:
+        # Read the extended raster
+        with rasterio.open(output_path) as src:
+            extended_data = src.read(1)
 
-    distance_meters = global_dist_m[
-        row_off : row_off + template_profile["height"],
-        col_off : col_off + template_profile["width"],
-    ]
-    # Save to file
+        # Calculate offsets for template region
+        col_off = round((s_xmin - g_xmin) / dx)
+        row_off = round((g_ymax - s_ymax) / dy)
 
-    # Save to file
-    profile = template_profile.copy()
-    profile.update(
-        {"dtype": "float64", "count": 1, "nodata": None, "compress": "deflate"}
-    )
+        # Extract template region
+        distance_meters = extended_data[
+            row_off : row_off + template_profile["height"],
+            col_off : col_off + template_profile["width"],
+        ]
 
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(distance_meters, 1)
-        dst.descriptions = ("Distance to Coast (m)",)
+        # Overwrite file with cropped data
+        profile = template_profile.copy()
+        profile.update(
+            {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
+        )
+
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(distance_meters.astype(np.float32), 1)
+            dst.descriptions = ("Distance to Coast (m)",)
+    else:
+        # No resampling needed, just read the data
+        with rasterio.open(output_path) as src:
+            distance_meters = src.read(1).astype(np.float32)
+
+        # Update profile for consistency
+        profile = template_profile.copy()
+        profile.update(
+            {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
+        )
 
     return distance_meters, profile
 
@@ -647,9 +667,7 @@ def create_slope_raster(
         raise FileNotFoundError(f"Slope raster not found: {SLOPE_RASTER}")
 
     # Initialize destination array
-    destination = np.zeros(
-        (template_profile["height"], template_profile["width"])
-    )
+    destination = np.zeros((template_profile["height"], template_profile["width"]))
 
     with rasterio.open(SLOPE_RASTER) as src:
         reproject(
@@ -663,9 +681,11 @@ def create_slope_raster(
         )
 
     # Save to file
+    # TEMPORARY: Using float32 for testing comparison with old codebase
+    # TODO: Revert to float64 after verification
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float64", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
+        {"dtype": "float32", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:

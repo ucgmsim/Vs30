@@ -67,6 +67,13 @@ GRID_YMAX = _config["grid_ymax"]
 GRID_DX = _config["grid_dx"]
 GRID_DY = _config["grid_dy"]
 
+# Full NZ Land Extent Bounds (for coastal distance calculations)
+# These are separate from GRID_XMIN/MAX/YMIN/YMAX which define the study domain
+FULL_NZ_LAND_XMIN = _config["full_nz_land_xmin"]
+FULL_NZ_LAND_XMAX = _config["full_nz_land_xmax"]
+FULL_NZ_LAND_YMIN = _config["full_nz_land_ymin"]
+FULL_NZ_LAND_YMAX = _config["full_nz_land_ymax"]
+
 # NoData and Placeholder Values
 ID_NODATA = _config["id_nodata"]
 SLOPE_NODATA = _config["slope_nodata"]
