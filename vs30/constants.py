@@ -26,7 +26,7 @@ MAX_DIST_M = _config["max_dist_m"]
 MAX_POINTS = _config["max_points"]
 COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
-TOTAL_MEMORY_GB = _config["total_memory_gb"]
+MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB = _config["max_spatial_boolean_array_memory_gb"]
 MODEL_NODATA = _config["model_nodata"]
 
 # Bayesian Update Parameters
