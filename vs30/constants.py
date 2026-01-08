@@ -28,6 +28,10 @@ COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
 TOTAL_MEMORY_GB = _config["total_memory_gb"]
 MODEL_NODATA = _config["model_nodata"]
+# LEGACY CONSTANT - DELETE AFTER VALIDATION
+# Enables legacy MVN behavior with known bugs (exceeding max_points).
+# Only kept temporarily for validation purposes.
+USE_LEGACY_MVN_BEHAVIOR = _config["use_legacy_mvn_behavior"]
 
 # Bayesian Update Parameters
 N_PRIOR = _config["n_prior"]
@@ -84,7 +88,9 @@ TERRAIN_INITIAL_VS30_FILENAME = _config["terrain_initial_vs30_filename"]
 GEOLOGY_INITIAL_VS30_FILENAME = _config["geology_initial_vs30_filename"]
 SLOPE_RASTER_FILENAME = _config["slope_raster_filename"]
 COAST_DISTANCE_RASTER_FILENAME = _config["coast_distance_raster_filename"]
-GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME = _config["geology_vs30_slope_and_coastal_distance_adjusted_filename"]
+GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME = _config[
+    "geology_vs30_slope_and_coastal_distance_adjusted_filename"
+]
 GEOLOGY_ID_FILENAME = _config["geology_id_filename"]
 TERRAIN_ID_FILENAME = _config["terrain_id_filename"]
 COMBINED_VS30_FILENAME = _config["combined_vs30_filename"]
