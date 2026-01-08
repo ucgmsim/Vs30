@@ -63,7 +63,7 @@ max_points: 500
 # when observations cluster at the same distance. This should NEVER be used in production.
 # Set to true only temporarily for validation against legacy codebase.
 # Once validation is complete, this parameter and all associated code should be removed.
-use_legacy_mvn_behavior: true
+use_legacy_mvn_behavior: false
 
 # Covariance reduction factor
 cov_reduc: 1.5
@@ -87,7 +87,7 @@ nproc: -1  # Number of processors to use (-1 for all)
 
 # Paths relative to the resources directory
 observations_file: observations/measured_vs30_original_filtered.csv
-output_dir: /tmp/refactored_vs30_output_tiny_domain_legacy_mvn_behavior
+output_dir: /tmp/refactored_vs30_output_tiny_domain_no_legacy_behavior
 
 # Options for geology Vs30 models
 # geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
