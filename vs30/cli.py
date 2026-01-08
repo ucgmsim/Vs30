@@ -572,6 +572,11 @@ def spatial_fit(
         "-t",
         help="Model type: either 'geology' or 'terrain'",
     ),
+    use_legacy_mvn_behavior: bool = Option(
+        True,
+        "--use-legacy-mvn-behavior",
+        help="Use legacy MVN behavior for validation (default: True)",
+    ),
 ) -> None:
     """
     Adjust a VS30 raster based on measurements using MVN spatial fitting.
@@ -652,6 +657,7 @@ def spatial_fit(
                 model_type,
                 output_dir,
                 noisy=noisy,
+                use_legacy_mvn_behavior=use_legacy_mvn_behavior,
                 hybrid_mod6_dist_min=cfg.get("hybrid_mod6_dist_min"),
                 hybrid_mod6_dist_max=cfg.get("hybrid_mod6_dist_max"),
                 hybrid_mod6_vs30_min=cfg.get("hybrid_mod6_vs30_min"),
@@ -670,6 +676,7 @@ def spatial_fit(
                 model_type,
                 output_dir,
                 noisy=noisy,
+                use_legacy_mvn_behavior=use_legacy_mvn_behavior,
             )
         logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
@@ -1012,6 +1019,7 @@ def full_pipeline_for_geology_or_terrain(
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
+            use_legacy_mvn_behavior=cfg.get("use_legacy_mvn_behavior", True),
         )
 
         typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
