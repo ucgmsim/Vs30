@@ -2,10 +2,18 @@
 
 # --- Grid Parameters ---
 # For tiny domain
-grid_xmin: 1570050
-grid_xmax: 1571050
-grid_ymin: 5180050
-grid_ymax: 5181050
+# grid_xmin: 1570050
+# grid_xmax: 1571050
+# grid_ymin: 5180050
+# grid_ymax: 5181050
+# grid_dx: 100
+# grid_dy: 100
+
+# For full NZ domain
+grid_xmin: 1060050
+grid_xmax: 2120050
+grid_ymin: 4730050
+grid_ymax: 6250050
 grid_dx: 100
 grid_dy: 100
 
@@ -68,8 +76,10 @@ noisy: true
 phi_geology: 1407
 phi_terrain: 993
 
-# Total available memory in GB for chunking
-total_memory_gb: 3
+# Maximum memory in GB for spatial boolean arrays during chunked processing
+# Note: Total process memory usage will be several GB more than this limit
+# due to raster data, observation arrays, and other data structures
+max_spatial_boolean_array_memory_gb: 3
 
 # Parameters for Bayesian updates
 n_prior: 3  # Assume prior model made up of n_prior measurements

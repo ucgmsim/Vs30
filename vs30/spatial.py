@@ -442,27 +442,28 @@ def grid_points_in_bbox(
     return chunk_mask, obs_to_grid_indices
 
 
-def calculate_chunk_size(n_obs, total_memory_gb):
+def calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb):
     """
-    Calculate the maximum number of grid points per chunk based on total available memory.
+    Calculate the maximum number of grid points per chunk based on available memory for spatial boolean arrays.
 
-    The memory-intensive operation is the boolean array of shape (n_obs, n_grid_chunk).
-    NumPy boolean arrays use 1 byte per element (not 1 bit or 8 bytes).
-    Memory usage per chunk: n_obs * n_grid_chunk * 1 byte (for boolean array)
+    The memory-intensive operation is the boolean array of shape (n_obs, n_grid_chunk)
+    used to determine which grid points are within bounding boxes of observations.
+    NumPy boolean arrays use 1 byte per element.
+    Memory usage per chunk: n_obs * n_grid_chunk * 1 byte
 
     Parameters
     ----------
     n_obs : int
         Number of observations.
-    total_memory_gb : float
-        Total available memory in GB.
+    max_spatial_boolean_array_memory_gb : float
+        Maximum memory in GB allocated for spatial boolean arrays during chunked processing.
 
     Returns
     -------
     chunk_size : int
         Maximum number of grid points per chunk.
     """
-    memory_per_chunk_bytes = total_memory_gb * 1024 * 1024 * 1024
+    memory_per_chunk_bytes = max_spatial_boolean_array_memory_gb * 1024 * 1024 * 1024
     # Memory needed: n_obs * n_grid_chunk * 1 byte (NumPy boolean arrays are 1 byte/element)
     # Solve for n_grid_chunk: n_grid_chunk = memory_per_chunk_bytes / n_obs
     chunk_size = int(memory_per_chunk_bytes / n_obs)
@@ -804,7 +805,7 @@ def find_affected_pixels(
 
     # Calculate chunk size
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), constants.TOTAL_MEMORY_GB
+        len(obs_data.locations), constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
     )
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
@@ -922,7 +923,7 @@ def compute_mvn_updates(
 
     # Process in chunks for memory efficiency
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), constants.TOTAL_MEMORY_GB
+        len(obs_data.locations), constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
     )
     n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
 
