@@ -260,10 +260,10 @@ def update_with_independent_data(
     updated_categorical_model_df["enforced_min_sigma"] = min_sigma
     updated_categorical_model_df[post_mean_col] = updated_categorical_model_df[
         prior_mean_col
-    ].astype(np.float64)
+    ]
     updated_categorical_model_df[post_std_col] = updated_categorical_model_df[
         prior_std_col
-    ].astype(np.float64)
+    ]
     updated_categorical_model_df[post_n_col] = n_prior
 
     for category_row_idx, category_row in updated_categorical_model_df.iterrows():
@@ -405,8 +405,8 @@ def update_with_clustered_data(
     post_mean_col = "posterior_mean_vs30_km_per_s_clustered_observations"
     post_std_col = "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
 
-    posterior_df[post_mean_col] = posterior_df[prior_mean_col].astype(np.float64)
-    posterior_df[post_std_col] = posterior_df[prior_std_col].astype(np.float64)
+    posterior_df[post_mean_col] = posterior_df[prior_mean_col]
+    posterior_df[post_std_col] = posterior_df[prior_std_col]
 
     # Convert to numpy array format for computation
     max_id_prior = (

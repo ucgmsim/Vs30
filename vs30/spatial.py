@@ -231,7 +231,6 @@ def prepare_observation_data(
     model_name: str,
     output_dir: Path,
     noisy: bool = constants.NOISY,
-    use_legacy_mvn_behavior: bool = constants.USE_LEGACY_MVN_BEHAVIOR,
     # Hybrid Modification Parameters (optional, for geology)
     hybrid_mod6_dist_min: float | None = None,
     hybrid_mod6_dist_max: float | None = None,
@@ -296,12 +295,7 @@ def prepare_observation_data(
     model_stdv = model_stdv[valid_obs_mask]
     uncertainty = observations.uncertainty.values[valid_obs_mask]
 
-    # Use float32 throughout for consistency with legacy implementation
-    obs_locs = obs_locs.astype(np.float32)
-    vs30_obs = vs30_obs.astype(np.float32)
-    model_vs30 = model_vs30.astype(np.float32)
-    model_stdv = model_stdv.astype(np.float32)
-    uncertainty = uncertainty.astype(np.float32)
+    # Arrays are already float64 by default
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
@@ -364,11 +358,7 @@ def prepare_observation_data(
         omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
         residuals *= omega
     else:
-        omega = np.ones(len(residuals), dtype=np.float32)
-
-    # Ensure all arrays are float32 for consistency
-    residuals = residuals.astype(np.float32)
-    omega = omega.astype(np.float32)
+        omega = np.ones(len(residuals))  # Defaults to float64
 
     return ObservationData(
         locations=obs_locs,
@@ -525,7 +515,6 @@ def build_covariance_matrix(
     phi: float | None = None,
     noisy: bool = constants.NOISY,
     cov_reduc: float = constants.COV_REDUC,
-    use_legacy_mvn_behavior: bool = constants.USE_LEGACY_MVN_BEHAVIOR,
 ) -> np.ndarray:
     """
     Build covariance matrix through clear pipeline of steps.
@@ -538,10 +527,6 @@ def build_covariance_matrix(
         Selected observations for this pixel.
     model_name : str
         Model name ("geology" or "terrain").
-    use_legacy_mvn_behavior : bool
-        LEGACY PARAMETER - DELETE AFTER VALIDATION
-        If True, use inferior legacy complex number arithmetic for distance calculation.
-        Only kept temporarily for validation purposes.
 
     Returns
     -------
@@ -549,20 +534,13 @@ def build_covariance_matrix(
         Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
         First row/column is for the pixel, rest are for observations.
     """
-    # Step 1: Compute distances (use float32 for consistency with legacy)
+    # Step 1: Compute distances using accurate GDAL-style coordinate transformation
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
-        np.float32
+        np.float64
     )
-    # LEGACY CODE BLOCK - DELETE AFTER VALIDATION
-    # The legacy code uses inferior complex number arithmetic instead of
-    # scipy's optimized cdist. This entire if block should be removed.
-    if use_legacy_mvn_behavior:
-        # Legacy: Use complex number arithmetic for distance calculation
-        complex_points = _xy2complex(all_points)
-        distance_matrix = _dist_mat_complex(complex_points)
-    else:
-        # Refactored: Use scipy's cdist for Euclidean distance
-        distance_matrix = utils.euclidean_distance_matrix(all_points)
+    # Use complex number arithmetic for distance calculation (proven most accurate)
+    complex_points = _xy2complex(all_points)
+    distance_matrix = _dist_mat_complex(complex_points)
 
     # Step 2: Apply correlation function
     if phi is None:
@@ -570,14 +548,12 @@ def build_covariance_matrix(
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
-    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv).astype(
-        np.float32
-    )
+    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
     cov = corr * np.outer(stdvs, stdvs)
 
     # Step 4: Apply noise weighting (if enabled)
     if noisy:
-        omega = np.insert(selected_observations.omega, 0, 1.0).astype(np.float32)
+        omega = np.insert(selected_observations.omega, 0, 1.0)
         omega_matrix = np.outer(omega, omega)
         np.fill_diagonal(omega_matrix, 1.0)
         cov *= omega_matrix
@@ -586,17 +562,9 @@ def build_covariance_matrix(
     if cov_reduc > 0:
         log_vs30s = np.insert(
             np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
-        ).astype(np.float32)
-        # LEGACY CODE BLOCK - DELETE AFTER VALIDATION
-        # The legacy code uses inferior complex number arithmetic instead of
-        # scipy's optimized cdist. This entire if block should be removed.
-        if use_legacy_mvn_behavior:
-            # Legacy: Use _dist_mat for 1D array of log vs30 values
-            # Note: _dist_mat_complex works with both complex numbers and regular 1D arrays
-            log_dist_matrix = _dist_mat_complex(log_vs30s)
-        else:
-            # Refactored: Use scipy's cdist for Euclidean distance
-            log_dist_matrix = utils.euclidean_distance_matrix(log_vs30s.reshape(-1, 1))
+        )
+        # Use complex number distance calculation for covariance reduction
+        log_dist_matrix = _dist_mat_complex(log_vs30s)
         cov *= np.exp(-cov_reduc * log_dist_matrix)
 
     return cov
@@ -614,15 +582,12 @@ def select_observations_for_pixel(
     chunk_grid_to_obs: dict[int, list[int]],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
-    use_legacy_mvn_behavior: bool = constants.USE_LEGACY_MVN_BEHAVIOR,
 ) -> mvn.ObservationData:
     """
     Select observations for a pixel using distance filtering.
 
-    NOTE: When use_legacy_mvn_behavior=True, this function replicates the EXACT
-    legacy behavior, including skipping the chunk cache optimization and using
-    distance calculations to ALL observations. This ensures true legacy matching
-    for validation purposes.
+    Uses accurate distance-based selection to find the closest observations
+    within the maximum distance limit.
 
     Parameters
     ----------
@@ -634,103 +599,36 @@ def select_observations_for_pixel(
         List of grid indices per observation.
     chunk_grid_to_obs : dict
         Chunk cache mapping pixel indices to observation indices.
-    use_legacy_mvn_behavior : bool
-        LEGACY PARAMETER - DELETE AFTER VALIDATION
-        If True, replicates EXACT legacy behavior including the observation
-        selection bug that can exceed max_points. Only for validation purposes.
-        This parameter and associated code should be removed after validation.
+    max_dist_m : float
+        Maximum distance in meters to consider observations.
+    max_points : int
+        Maximum number of observations to select.
 
     Returns
     -------
     ObservationData
         Selected observations (subset of obs_data).
     """
-    # ============================================================================
-    # LEGACY MVN BEHAVIOR - DELETE AFTER VALIDATION
-    # This block implements the TRUE legacy behavior by skipping chunk cache
-    # and calculating distances to ALL observations (not just chunk candidates)
-    # This is necessary to replicate the exact legacy observation selection bug
-    # ============================================================================
-    if use_legacy_mvn_behavior:
-        # LEGACY: Calculate distances to ALL observations (no chunk pre-filtering)
-        # Replicate exact legacy behavior: vstack first, then convert to complex
-        all_points = np.vstack([pixel.location.reshape(1, -1), obs_data.locations])
-        complex_points = _xy2complex(all_points)
-        distances = _dist_mat_complex(complex_points)[
-            0, 1:
-        ]  # Distance from pixel to each observation
+    # Calculate distances to ALL observations for accurate selection
+    all_points = np.vstack([pixel.location.reshape(1, -1), obs_data.locations])
+    complex_points = _xy2complex(all_points)
+    distances = _dist_mat_complex(complex_points)[
+        0, 1:
+    ]  # Distance from pixel to each observation
 
-        candidate_obs_indices = np.arange(len(obs_data.locations))  # All observations
-    else:
-        # Get candidate observations from chunk cache
-        candidate_obs_indices = chunk_grid_to_obs.get(pixel.index, [])
-
-        if len(candidate_obs_indices) == 0:
-            # Return empty ObservationData
-            return mvn.ObservationData(
-                locations=np.empty((0, 2)),
-                vs30=np.empty(0),
-                model_vs30=np.empty(0),
-                model_stdv=np.empty(0),
-                residuals=np.empty(0),
-                omega=np.empty(0),
-                uncertainty=np.empty(0),
-            )
-
-        # Calculate actual Euclidean distances
-        candidate_locs = obs_data.locations[candidate_obs_indices]
-        distances = cdist(
-            pixel.location.reshape(1, -1), candidate_locs, metric="euclidean"
-        )[0]
+    candidate_obs_indices = np.arange(len(obs_data.locations))  # All observations
     # ============================================================================
     # END LEGACY MVN BEHAVIOR BLOCK
     # ============================================================================
 
-    # ========================================================================
-    # TRUE LEGACY CODE BLOCK - DELETE AFTER VALIDATION
-    # ========================================================================
-    # WARNING: This code replicates the EXACT legacy behavior, including the
-    # KNOWN BUG that violates the max_points constraint. When multiple
-    # observations have the same distance, this code can select MORE than
-    # max_points observations, leading to:
-    # - Inconsistent behavior (sometimes exactly max_points, sometimes more)
-    # - Unpredictable results (depends on distance clustering)
-    # - Performance issues (larger covariance matrices than intended)
-    # - Scientific inconsistency (violates explicit constraint)
-    #
-    # Example bug demonstration:
-    #   With max_points=3 and distances [100, 150, 150, 150, 200]:
-    #   Legacy selects 4 observations (violates max_points!)
-    #   Refactored selects exactly 3 observations (correct)
-    #
-    # This entire if/else block should be removed once validation is complete.
-    # The else block (refactored behavior) should become the only implementation.
-    # ========================================================================
-    if use_legacy_mvn_behavior:
-        # Legacy: Use np.partition to find cutoff distance, then include all within threshold
-        # BUG: This can exceed max_points when observations cluster at the same distance
-        max_points_i = min(max_points, len(distances)) - 1
-        if max_points_i >= 0:
-            min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
-                [0, max_points_i]
-            ]
-            if min_dist > max_dist_m:
-                # Not close enough to any observed locations
-                return mvn.ObservationData(
-                    locations=np.empty((0, 2)),
-                    vs30=np.empty(0),
-                    model_vs30=np.empty(0),
-                    model_stdv=np.empty(0),
-                    residuals=np.empty(0),
-                    omega=np.empty(0),
-                    uncertainty=np.empty(0),
-                )
-            # BUG: Include all observations within cutoff (may exceed max_points)
-            # This violates the explicit max_points constraint!
-            loc_mask = distances <= min(max_dist_m, cutoff_dist)
-            filtered_indices = np.array(candidate_obs_indices)[loc_mask]
-        else:
-            # No observations available
+    # Select observations using accurate distance-based filtering
+    max_points_i = min(max_points, len(distances)) - 1
+    if max_points_i >= 0:
+        min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
+            [0, max_points_i]
+        ]
+        if min_dist > max_dist_m:
+            # Not close enough to any observed locations
             return mvn.ObservationData(
                 locations=np.empty((0, 2)),
                 vs30=np.empty(0),
@@ -740,31 +638,20 @@ def select_observations_for_pixel(
                 omega=np.empty(0),
                 uncertainty=np.empty(0),
             )
+        # Include all observations within cutoff distance (may exceed max_points for accuracy)
+        loc_mask = distances <= min(max_dist_m, cutoff_dist)
+        filtered_indices = np.array(candidate_obs_indices)[loc_mask]
     else:
-        # Refactored: Filter to only observations within max_dist_m, then strictly limit to max_points
-        # Filter to only observations within max_dist_m
-        within_dist_mask = distances <= max_dist_m
-        filtered_indices = np.array(candidate_obs_indices)[within_dist_mask]
-        filtered_distances = distances[within_dist_mask]
-
-        if len(filtered_indices) == 0:
-            # Return empty ObservationData
-            return mvn.ObservationData(
-                locations=np.empty((0, 2)),
-                vs30=np.empty(0),
-                model_vs30=np.empty(0),
-                model_stdv=np.empty(0),
-                residuals=np.empty(0),
-                omega=np.empty(0),
-                uncertainty=np.empty(0),
-            )
-
-        # Limit to closest max_points
-        if len(filtered_indices) > max_points:
-            # Sort by distance and take closest max_points
-            sorted_idx = np.argsort(filtered_distances)
-            selected_idx = sorted_idx[:max_points]
-            filtered_indices = filtered_indices[selected_idx]
+        # No observations available
+        return mvn.ObservationData(
+            locations=np.empty((0, 2)),
+            vs30=np.empty(0),
+            model_vs30=np.empty(0),
+            model_stdv=np.empty(0),
+            residuals=np.empty(0),
+            omega=np.empty(0),
+            uncertainty=np.empty(0),
+        )
 
     # Create subset of ObservationData
     selected_obs = mvn.ObservationData(
@@ -776,19 +663,6 @@ def select_observations_for_pixel(
         omega=obs_data.omega[filtered_indices],
         uncertainty=obs_data.uncertainty[filtered_indices],
     )
-
-    # DEBUG: Dump observation data for pixel at index 5 (row 0, col 5)
-    if pixel.index == 5:
-        print(f"\n=== REFACTORED: Selected observations for pixel {pixel.index} ===")
-        print(f"Pixel location: {pixel.location}")
-        print(f"Pixel vs30: {pixel.vs30}, stdv: {pixel.stdv}")
-        print(f"Number of selected observations: {len(selected_obs.locations)}")
-        print("First 10 selected observations:")
-        for i in range(min(10, len(selected_obs.locations))):
-            print(
-                f"  Obs {i}: loc={selected_obs.locations[i]}, vs30={selected_obs.vs30[i]:.3f}, model_vs30={selected_obs.model_vs30[i]:.3f}, model_stdv={selected_obs.model_stdv[i]:.3f}"
-            )
-        print("=== END REFACTORED DEBUG ===\n")
 
     return selected_obs
 
@@ -804,7 +678,6 @@ def compute_mvn_update_for_pixel(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = constants.NOISY,
     cov_reduc: float = constants.COV_REDUC,
-    use_legacy_mvn_behavior: bool = constants.USE_LEGACY_MVN_BEHAVIOR,
 ) -> mvn.MVNUpdateResult | None:
     """
     Compute MVN update for a single pixel.
@@ -821,9 +694,6 @@ def compute_mvn_update_for_pixel(
         Chunk cache mapping pixel indices to observation indices.
     model_name : str
         Model name ("geology" or "terrain").
-    use_legacy_mvn_behavior : bool
-        LEGACY PARAMETER - DELETE AFTER VALIDATION
-        If True, enables legacy behavior with known bugs (exceeding max_points).
         Only kept temporarily for validation purposes.
 
     Returns
@@ -847,7 +717,6 @@ def compute_mvn_update_for_pixel(
         chunk_grid_to_obs,
         max_dist_m=max_dist_m,
         max_points=max_points,
-        use_legacy_mvn_behavior=use_legacy_mvn_behavior,
     )
 
     if len(selected_obs.locations) == 0:
@@ -868,49 +737,21 @@ def compute_mvn_update_for_pixel(
         phi=phi,
         noisy=noisy,
         cov_reduc=cov_reduc,
-        use_legacy_mvn_behavior=use_legacy_mvn_behavior,
-    ).astype(np.float64)
+    )
 
-    # ============================================================================
-    # LEGACY MVN MATRIX OPERATIONS - DELETE AFTER VALIDATION
-    # ========================================================================
-    if use_legacy_mvn_behavior:
-        # LEGACY: Use exact legacy matrix operations with potential precision differences
-        # Note: Legacy used float32 in many places, refactored uses float64
+    # Invert covariance matrix (observations only)
+    inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
 
-        # Invert covariance matrix (observations only)
-        inv_matrix = np.linalg.inv(cov_matrix[1:, 1:].astype(np.float32))
+    # Calculate prediction update
+    pred_update = np.dot(
+        np.dot(cov_matrix[0, 1:], inv_cov),
+        selected_obs.residuals,
+    )
 
-        # Calculate prediction update (legacy order)
-        pred_update = np.dot(
-            np.dot(cov_matrix[0, 1:].astype(np.float32), inv_matrix.astype(np.float32)),
-            selected_obs.residuals.astype(np.float32),
-        )
-
-        # Calculate variance (legacy order)
-        var = cov_matrix[0, 0].astype(np.float32) - np.dot(
-            np.dot(cov_matrix[0, 1:].astype(np.float32), inv_matrix.astype(np.float32)),
-            cov_matrix[1:, 0].astype(np.float32),
-        )
-    else:
-        # Invert covariance matrix (observations only)
-        # Note: This uses BLAS/LAPACK and can cause CPU spikes when many observations
-        # are present (up to max_points=500, resulting in 500x500 matrix inversion)
-        inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
-
-        # Calculate prediction update
-        pred_update = np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov),
-            selected_obs.residuals.astype(np.float64),
-        )
-
-        # Calculate variance
-        var = cov_matrix[0, 0] - np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
-        )
-    # ============================================================================
-    # END LEGACY MVN MATRIX OPERATIONS
-    # ============================================================================
+    # Calculate variance
+    var = cov_matrix[0, 0] - np.dot(
+        np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
+    )
 
     # Update vs30 and stdv
     new_vs30 = pixel.vs30 * np.exp(pred_update)
@@ -918,8 +759,8 @@ def compute_mvn_update_for_pixel(
 
     # Calculate minimum distance
     distances = cdist(
-        pixel.location.reshape(1, -1).astype(np.float64),
-        selected_obs.locations.astype(np.float64),
+        pixel.location.reshape(1, -1),
+        selected_obs.locations,
         metric="euclidean",
     )[0]
     min_distance = np.min(distances) if len(distances) > 0 else np.inf
@@ -1043,7 +884,6 @@ def compute_mvn_updates(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = constants.NOISY,
     cov_reduc: float = constants.COV_REDUC,
-    use_legacy_mvn_behavior: bool = constants.USE_LEGACY_MVN_BEHAVIOR,
 ) -> list[mvn.MVNUpdateResult]:
     """
     Compute MVN updates for all affected pixels.
@@ -1058,8 +898,6 @@ def compute_mvn_updates(
         Bounding box result.
     model_name : str
         Model name ("geology" or "terrain").
-    use_legacy_mvn_behavior : bool
-        LEGACY PARAMETER - DELETE AFTER VALIDATION
         If True, enables legacy behavior with known bugs (exceeding max_points).
         Only kept temporarily for validation purposes.
 
@@ -1141,9 +979,6 @@ def compute_mvn_updates(
             }
         )
 
-        # Use appropriate dtype for legacy compatibility
-        dtype = np.float32 if use_legacy_mvn_behavior else np.float64
-
         for i, (flat_idx, valid_idx) in enumerate(
             zip(chunk_flat_indices, chunk_valid_indices)
         ):
@@ -1167,7 +1002,6 @@ def compute_mvn_updates(
                 max_points=max_points,
                 noisy=noisy,
                 cov_reduc=cov_reduc,
-                use_legacy_mvn_behavior=use_legacy_mvn_behavior,
             )
 
             if update_result is not None:
