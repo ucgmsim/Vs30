@@ -11,7 +11,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rasterio
-from rasterio import transform as rasterio_transform
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
@@ -104,7 +103,7 @@ class RasterData:
 
     def get_coordinates(self) -> np.ndarray:
         """
-        Get coordinates for all valid pixels.
+        Get coordinates for all valid pixels using GDAL affine transform.
 
         Returns
         -------
@@ -112,10 +111,28 @@ class RasterData:
             (N_valid, 2) array of [easting, northing] coordinates.
         """
         valid_rows, valid_cols = np.where(self.valid_mask)
-        rows_valid = valid_rows.astype(float) + 0.5
-        cols_valid = valid_cols.astype(float) + 0.5
-        xs, ys = rasterio_transform.xy(self.transform, rows_valid, cols_valid)
-        return np.column_stack((np.array(xs), np.array(ys)))
+
+        # Rasterio Affine: [a, b, c, d, e, f] = [x_scale, x_shear, x_origin, y_shear, y_scale, y_origin]
+        x_scale, x_shear, x_origin = (
+            self.transform[0],
+            self.transform[1],
+            self.transform[2],
+        )
+        y_shear, y_scale, y_origin = (
+            self.transform[3],
+            self.transform[4],
+            self.transform[5],
+        )
+
+        # Pixel centers: add 0.5 to row/col indices (following legacy implementation)
+        rows_center = valid_rows.astype(float) + 0.5
+        cols_center = valid_cols.astype(float) + 0.5
+
+        # Apply affine transformation (matching legacy GDAL calculation)
+        xs = x_origin + cols_center * x_scale  # col controls easting
+        ys = y_origin + rows_center * y_scale  # row controls northing
+
+        return np.column_stack((xs, ys)).astype(np.float32)
 
     def write_updated(
         self, path: Path, updated_vs30: np.ndarray, updated_stdv: np.ndarray
@@ -279,13 +296,12 @@ def prepare_observation_data(
     model_stdv = model_stdv[valid_obs_mask]
     uncertainty = observations.uncertainty.values[valid_obs_mask]
 
-    # Use float32 throughout when legacy behavior is enabled
-    dtype = np.float32 if use_legacy_mvn_behavior else np.float64
-    obs_locs = obs_locs.astype(dtype)
-    vs30_obs = vs30_obs.astype(dtype)
-    model_vs30 = model_vs30.astype(dtype)
-    model_stdv = model_stdv.astype(dtype)
-    uncertainty = uncertainty.astype(dtype)
+    # Use float32 throughout for consistency with legacy implementation
+    obs_locs = obs_locs.astype(np.float32)
+    vs30_obs = vs30_obs.astype(np.float32)
+    model_vs30 = model_vs30.astype(np.float32)
+    model_stdv = model_stdv.astype(np.float32)
+    uncertainty = uncertainty.astype(np.float32)
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
@@ -348,11 +364,11 @@ def prepare_observation_data(
         omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
         residuals *= omega
     else:
-        omega = np.ones(len(residuals), dtype=dtype)
+        omega = np.ones(len(residuals), dtype=np.float32)
 
-    # Ensure residuals and omega are the right dtype
-    residuals = residuals.astype(dtype)
-    omega = omega.astype(dtype)
+    # Ensure all arrays are float32 for consistency
+    residuals = residuals.astype(np.float32)
+    omega = omega.astype(np.float32)
 
     return ObservationData(
         locations=obs_locs,
@@ -533,10 +549,9 @@ def build_covariance_matrix(
         Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
         First row/column is for the pixel, rest are for observations.
     """
-    # Step 1: Compute distances
-    dtype = np.float32 if use_legacy_mvn_behavior else np.float64
+    # Step 1: Compute distances (use float32 for consistency with legacy)
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
-        dtype
+        np.float32
     )
     # LEGACY CODE BLOCK - DELETE AFTER VALIDATION
     # The legacy code uses inferior complex number arithmetic instead of
@@ -555,12 +570,14 @@ def build_covariance_matrix(
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
-    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv).astype(dtype)
+    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv).astype(
+        np.float32
+    )
     cov = corr * np.outer(stdvs, stdvs)
 
     # Step 4: Apply noise weighting (if enabled)
     if noisy:
-        omega = np.insert(selected_observations.omega, 0, 1.0).astype(dtype)
+        omega = np.insert(selected_observations.omega, 0, 1.0).astype(np.float32)
         omega_matrix = np.outer(omega, omega)
         np.fill_diagonal(omega_matrix, 1.0)
         cov *= omega_matrix
@@ -569,7 +586,7 @@ def build_covariance_matrix(
     if cov_reduc > 0:
         log_vs30s = np.insert(
             np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
-        ).astype(dtype)
+        ).astype(np.float32)
         # LEGACY CODE BLOCK - DELETE AFTER VALIDATION
         # The legacy code uses inferior complex number arithmetic instead of
         # scipy's optimized cdist. This entire if block should be removed.
@@ -750,7 +767,7 @@ def select_observations_for_pixel(
             filtered_indices = filtered_indices[selected_idx]
 
     # Create subset of ObservationData
-    return mvn.ObservationData(
+    selected_obs = mvn.ObservationData(
         locations=obs_data.locations[filtered_indices],
         vs30=obs_data.vs30[filtered_indices],
         model_vs30=obs_data.model_vs30[filtered_indices],
@@ -759,6 +776,21 @@ def select_observations_for_pixel(
         omega=obs_data.omega[filtered_indices],
         uncertainty=obs_data.uncertainty[filtered_indices],
     )
+
+    # DEBUG: Dump observation data for pixel at index 5 (row 0, col 5)
+    if pixel.index == 5:
+        print(f"\n=== REFACTORED: Selected observations for pixel {pixel.index} ===")
+        print(f"Pixel location: {pixel.location}")
+        print(f"Pixel vs30: {pixel.vs30}, stdv: {pixel.stdv}")
+        print(f"Number of selected observations: {len(selected_obs.locations)}")
+        print("First 10 selected observations:")
+        for i in range(min(10, len(selected_obs.locations))):
+            print(
+                f"  Obs {i}: loc={selected_obs.locations[i]}, vs30={selected_obs.vs30[i]:.3f}, model_vs30={selected_obs.model_vs30[i]:.3f}, model_stdv={selected_obs.model_stdv[i]:.3f}"
+            )
+        print("=== END REFACTORED DEBUG ===\n")
+
+    return selected_obs
 
 
 def compute_mvn_update_for_pixel(
@@ -1116,9 +1148,11 @@ def compute_mvn_updates(
             zip(chunk_flat_indices, chunk_valid_indices)
         ):
             pixel = mvn.PixelData(
-                location=chunk_affected_locs[i].astype(dtype),
-                vs30=float(chunk_affected_vs30[i].astype(dtype)),
-                stdv=float(chunk_affected_stdv[i].astype(dtype)),
+                location=chunk_affected_locs[
+                    i
+                ],  # Already float32 from get_coordinates()
+                vs30=float(chunk_affected_vs30[i]),
+                stdv=float(chunk_affected_stdv[i]),
                 index=flat_idx,
             )
 
