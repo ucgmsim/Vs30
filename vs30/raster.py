@@ -171,8 +171,8 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
         # Select only the columns we need
         df = df_all[required_cols]
 
-        # Convert DataFrame to numpy array with float64 dtype
-        return df.values.astype(np.float64)
+        # Convert DataFrame to numpy array
+        return df.values
 
 
 def create_category_id_raster(
@@ -467,8 +467,6 @@ def create_vs30_raster_from_ids(
     print(f"  CRS: {crs}")
 
     # Create output arrays initialized with NODATA
-    # TEMPORARY: Using float32 for testing comparison with old codebase
-    # TODO: Revert to float64 after verification
     print("Step 8: Creating output arrays")
     vs30_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
     stdv_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
@@ -501,8 +499,6 @@ def create_vs30_raster_from_ids(
     print("  ✓ Completed mapping all IDs to VS30 values")
 
     # Create output profile for 2-band raster
-    # TEMPORARY: Using float32 for testing comparison with old codebase
-    # TODO: Revert to float64 after verification
     print("Step 10: Preparing output raster profile")
     output_profile = {
         "driver": "GTiff",
@@ -681,8 +677,6 @@ def create_slope_raster(
         )
 
     # Save to file
-    # TEMPORARY: Using float32 for testing comparison with old codebase
-    # TODO: Revert to float64 after verification
     profile = template_profile.copy()
     profile.update(
         {"dtype": "float32", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}

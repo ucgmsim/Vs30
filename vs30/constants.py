@@ -28,10 +28,6 @@ COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
 TOTAL_MEMORY_GB = _config["total_memory_gb"]
 MODEL_NODATA = _config["model_nodata"]
-# LEGACY CONSTANT - DELETE AFTER VALIDATION
-# Enables legacy MVN behavior with known bugs (exceeding max_points).
-# Only kept temporarily for validation purposes.
-USE_LEGACY_MVN_BEHAVIOR = _config["use_legacy_mvn_behavior"]
 
 # Bayesian Update Parameters
 N_PRIOR = _config["n_prior"]

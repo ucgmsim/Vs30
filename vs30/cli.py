@@ -488,8 +488,8 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         # Note: Arrays are modified in-place or returned new.
         # The function signature was ported to return them.
         mod_vs30, mod_stdv = raster.apply_hybrid_geology_modifications(
-            vs30_array.astype(np.float64),  # Ensure standard precision
-            stdv_array.astype(np.float64),
+            vs30_array,
+            stdv_array,
             id_array,
             slope_array,
             coast_dist_array,
@@ -516,7 +516,7 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         # Update profile for output
         profile.update(
             {
-                "dtype": "float64",
+                "dtype": "float32",
                 "compress": "deflate",
                 # Ensure nodata matches expected model nodata if needed,
                 # though usually inherited from src is fine.
@@ -571,11 +571,6 @@ def spatial_fit(
         "--model-type",
         "-t",
         help="Model type: either 'geology' or 'terrain'",
-    ),
-    use_legacy_mvn_behavior: bool = Option(
-        True,
-        "--use-legacy-mvn-behavior",
-        help="Use legacy MVN behavior for validation (default: True)",
     ),
 ) -> None:
     """
@@ -657,7 +652,6 @@ def spatial_fit(
                 model_type,
                 output_dir,
                 noisy=noisy,
-                use_legacy_mvn_behavior=use_legacy_mvn_behavior,
                 hybrid_mod6_dist_min=cfg.get("hybrid_mod6_dist_min"),
                 hybrid_mod6_dist_max=cfg.get("hybrid_mod6_dist_max"),
                 hybrid_mod6_vs30_min=cfg.get("hybrid_mod6_vs30_min"),
@@ -676,7 +670,6 @@ def spatial_fit(
                 model_type,
                 output_dir,
                 noisy=noisy,
-                use_legacy_mvn_behavior=use_legacy_mvn_behavior,
             )
         logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
@@ -1019,7 +1012,6 @@ def full_pipeline_for_geology_or_terrain(
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
-            use_legacy_mvn_behavior=cfg.get("use_legacy_mvn_behavior", True),
         )
 
         typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
@@ -1068,8 +1060,8 @@ def combine(
 
         with rasterio.open(geology_tif) as src_g, rasterio.open(terrain_tif) as src_t:
             profile = src_g.profile.copy()
-            geol_data = src_g.read().astype(np.float64)
-            terr_data = src_t.read().astype(np.float64)
+            geol_data = src_g.read()
+            terr_data = src_t.read()
 
             # Use nodata from geology (should be same for terrain)
             nodata = src_g.nodata
@@ -1134,7 +1126,7 @@ def combine(
             # Update profile for output
             profile.update(
                 {
-                    "dtype": "float64",
+                    "dtype": "float32",
                     "count": geol_data.shape[0],
                     "nodata": nodata,
                     "compress": "deflate",
