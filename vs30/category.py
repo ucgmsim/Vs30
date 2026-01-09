@@ -222,8 +222,26 @@ def update_with_independent_data(
     prior_mean_col = "prior_mean_vs30_km_per_s"
     prior_std_col = "prior_standard_deviation_vs30_km_per_s"
 
-    # Check for existing prior columns, otherwise fallback to generic names or clustered posterior
-    if prior_mean_col not in categorical_model_df.columns:
+    # If a Bayesian update was previously performed, use the posterior values as priors
+    # for subsequent updates. Otherwise, use the raw categorical model data as priors.
+    #
+    # This ensures sequential Bayesian updates: when both clustered and independent observations
+    # are processed, independent observations use the spatially bias-corrected clustered posterior
+    # as their prior, rather than the original (potentially biased) categorical model priors.
+    if (
+        "posterior_mean_vs30_km_per_s_clustered_observations"
+        in categorical_model_df.columns
+    ):
+        # Use clustered posterior as prior for independent updates
+        # This implements the sequential Bayesian update: clustered → independent
+        categorical_model_df[prior_mean_col] = categorical_model_df[
+            "posterior_mean_vs30_km_per_s_clustered_observations"
+        ]
+        categorical_model_df[prior_std_col] = categorical_model_df[
+            "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+        ]
+    else:
+        # No posterior available - must have raw categorical data to use as priors
         if "mean_vs30_km_per_s" in categorical_model_df.columns:
             # Initial prior format - rename to prior_ columns
             categorical_model_df = categorical_model_df.rename(
@@ -232,18 +250,13 @@ def update_with_independent_data(
                     "standard_deviation_vs30_km_per_s": prior_std_col,
                 }
             )
-        elif (
-            "posterior_mean_vs30_km_per_s_clustered_observations"
-            in categorical_model_df.columns
-        ):
-            # Use clustered posterior as prior
-            categorical_model_df[prior_mean_col] = categorical_model_df[
-                "posterior_mean_vs30_km_per_s_clustered_observations"
-            ]
-            categorical_model_df[prior_std_col] = categorical_model_df[
-                "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
-            ]
-        # Add else if needed for other cases, but this covers the main ones
+        else:
+            # Fail fast - no usable prior information available
+            raise ValueError(
+                "No usable prior information found. Expected either posterior columns from "
+                "previous Bayesian update or initial categorical model columns ('mean_vs30_km_per_s', "
+                "'standard_deviation_vs30_km_per_s')."
+            )
 
     updated_categorical_model_df = categorical_model_df.copy()
 
@@ -356,7 +369,7 @@ def perform_clustering(
     features = np.column_stack((sites_df.easting.values, sites_df.northing.values))
     model_ids = sites_df[STANDARD_ID_COLUMN].values
     ids = np.array(sorted(set(model_ids)))
-    ids = ids[ids != ID_NODATA].astype(np.int32)
+    ids = ids[ids != ID_NODATA].astype(int)
 
     for category_id in ids:
         subset_mask = model_ids == category_id
@@ -495,18 +508,29 @@ def posterior_from_bayesian_update(
     clustered_observations_df: pd.DataFrame | None = None,
     n_prior: int = 3,
     min_sigma: float = 0.5,
-    model_type: str = "geology",  # Passed to cluster update, though unused logic-wise
+    model_type: str = "geology",  # Passed to cluster update
 ) -> pd.DataFrame:
     """
     Dispatcher function to perform Bayesian updates with clustered and/or independent data.
+
+    When both clustered and independent observations are provided, the order matters:
+    1. Clustered observations (typically CPT data) are processed first with spatial clustering
+       to correct for sampling biases that may arise from dense geotechnical investigations.
+    2. Independent observations (typically direct Vs30 measurements) then update the
+       bias-corrected model.
+
+    This order is scientifically motivated because:
+    - Clustered data may have spatial biases (urban/infrastructure-focused sampling)
+    - Independent data are often higher-quality and more representative
+    - Processing clustered data first corrects biases, then independent data refines the model
     """
     df = categorical_model_df.copy()
 
-    # 1. Update with clustered data if provided
     if clustered_observations_df is not None:
         df = update_with_clustered_data(df, clustered_observations_df, model_type)
 
-    # 2. Update with independent data if provided
+    # Step 2: Update with independent data (if provided)
+    # Independent observations refine the already bias-corrected model from clustered data
     if independent_observations_df is not None:
         df = update_with_independent_data(
             df, independent_observations_df, n_prior, min_sigma

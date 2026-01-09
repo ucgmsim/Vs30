@@ -47,7 +47,7 @@ def update_categorical_vs30_models(
         None,
         "--independent-observations-csv",
         "-o",
-        help="Path to CSV file with independent observations (e.g., measured_vs30_original_filtered.csv). These will be processed without clustering.",
+        help="Path to CSV file with independent observations (e.g., measured_vs30_independent_observations.csv). These will be processed without clustering.",
     ),
     output_dir: Path = Option(
         ...,
@@ -82,9 +82,9 @@ def update_categorical_vs30_models(
         help=f"Maximum distance (metres) for points to be considered in same cluster (default: {constants.EPS})",
     ),
     nproc: int = Option(
-        constants.NPROC,
+        constants.NPROC_FOR_DBSCAN_CLUSTERING,
         "--nproc",
-        help=f"Number of processes for DBSCAN clustering. -1 to use all available cores (default: {constants.NPROC})",
+        help=f"Number of processes for DBSCAN clustering. -1 to use all available cores (default: {constants.NPROC_FOR_DBSCAN_CLUSTERING})",
     ),
 ) -> None:
     """
@@ -98,6 +98,12 @@ def update_categorical_vs30_models(
     observations (without clustering). If both are provided, clustered observations
     are processed first, and the resulting posterior is used as the prior for
     independent observations.
+
+    The order (clustered first, then independent) is scientifically motivated:
+    - Clustered observations (e.g., CPT data) may have spatial sampling biases from
+      geotechnical investigations; clustering corrects for over-weighting dense samples
+    - Independent observations (e.g., direct Vs30 measurements) are typically higher-quality
+      and more representative; they refine the bias-corrected model from clustered data
     """
     try:
         # Validate that at least one observations CSV is provided
@@ -910,7 +916,7 @@ def full_pipeline_for_geology_or_terrain(
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["nproc"]
+        nproc = nproc if nproc is not None else cfg["nproc_for_dbscan_clustering"]
 
         # Resolve Bayesian update flag
         do_bayesian_update = cfg[
@@ -918,13 +924,27 @@ def full_pipeline_for_geology_or_terrain(
         ]
 
         # Resolve observations from config if not provided
-        if clustered_observations_csv is None and independent_observations_csv is None:
-            obs_file = cfg.get("observations_file", constants.OBSERVATIONS_FILE)
-            if obs_file:
+        if clustered_observations_csv is None:
+            clustered_obs_file = cfg.get(
+                "clustered_observations_file", constants.CLUSTERED_OBSERVATIONS_FILE
+            )
+            if clustered_obs_file and clustered_obs_file.lower() != "none":
                 # Find observation file relative to package resources
                 resource_path = importlib.resources.files("vs30") / "resources"
                 with importlib.resources.as_file(resource_path) as res_dir:
-                    candidate = res_dir / obs_file
+                    candidate = res_dir / clustered_obs_file
+                    if candidate.exists():
+                        clustered_observations_csv = candidate
+
+        if independent_observations_csv is None:
+            indep_obs_file = cfg.get(
+                "independent_observations_file", constants.INDEPENDENT_OBSERVATIONS_FILE
+            )
+            if indep_obs_file and indep_obs_file.lower() != "none":
+                # Find observation file relative to package resources
+                resource_path = importlib.resources.files("vs30") / "resources"
+                with importlib.resources.as_file(resource_path) as res_dir:
+                    candidate = res_dir / indep_obs_file
                     if candidate.exists():
                         independent_observations_csv = candidate
 
@@ -1225,7 +1245,7 @@ def full_pipeline(
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["nproc"]
+        nproc = nproc if nproc is not None else cfg["nproc_for_dbscan_clustering"]
         combination_method = (
             combination_method
             if combination_method is not None

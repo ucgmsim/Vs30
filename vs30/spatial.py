@@ -610,17 +610,10 @@ def select_observations_for_pixel(
     ObservationData
         Selected observations (subset of obs_data).
     """
-    # Calculate distances to ALL observations for accurate selection
-    all_points = np.vstack([pixel.location.reshape(1, -1), obs_data.locations])
-    complex_points = _xy2complex(all_points)
-    distances = _dist_mat_complex(complex_points)[
-        0, 1:
-    ]  # Distance from pixel to each observation
+    # Calculate distances from pixel to all observations (O(N) efficient calculation)
+    distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
 
     candidate_obs_indices = np.arange(len(obs_data.locations))  # All observations
-    # ============================================================================
-    # END LEGACY MVN BEHAVIOR BLOCK
-    # ============================================================================
 
     # Select observations using accurate distance-based filtering
     max_points_i = min(max_points, len(distances)) - 1

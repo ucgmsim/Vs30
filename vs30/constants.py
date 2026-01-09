@@ -34,14 +34,15 @@ N_PRIOR = _config["n_prior"]
 MIN_SIGMA = _config["min_sigma"]
 MIN_GROUP = _config["min_group"]
 EPS = _config["eps"]
-NPROC = _config["nproc"]
+NPROC_FOR_DBSCAN_CLUSTERING = _config["nproc_for_dbscan_clustering"]
 
 # Correlation Lengths (Phi)
 PHI_GEOLOGY = _config["phi_geology"]
 PHI_TERRAIN = _config["phi_terrain"]
 
 # Paths and Filenames
-OBSERVATIONS_FILE = _config["observations_file"]
+INDEPENDENT_OBSERVATIONS_FILE = _config["independent_observations_file"]
+CLUSTERED_OBSERVATIONS_FILE = _config["clustered_observations_file"]
 OUTPUT_DIR_NAME = _config["output_dir"]
 
 TERRAIN_VS30_MEAN_STDDEV_FILENAME = _config["terrain_vs30_mean_stddev_filename"]
