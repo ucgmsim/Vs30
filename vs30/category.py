@@ -24,9 +24,7 @@ from vs30 import constants
 ID_NODATA = constants.ID_NODATA
 
 # Standard column name used for model IDs in DataFrames
-STANDARD_ID_COLUMN = (
-    constants.STANDARD_ID_COLUMN if hasattr(constants, "STANDARD_ID_COLUMN") else "id"
-)
+STANDARD_ID_COLUMN = "id"
 
 # Data paths for category assignment from constants/internal logic
 _data_dir = os.path.join(os.path.dirname(__file__), "data")
@@ -96,26 +94,14 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
         nodata = src.nodata
         dtype = src.dtypes[0]
 
-        # Convert points to list of (x, y) tuples for rasterio.sample()
-        # rasterio expects coordinates as (x, y) pairs
+        # Sample raster values at point locations
         coords = [(points[i, 0], points[i, 1]) for i in range(len(points))]
-
-        # Sample values at point locations (nearest neighbor)
-        # sample() returns an iterator of arrays, one per band
-        # For single-band raster, each element is a 1-element array
         sampled = list(src.sample(coords))
-
-        # Extract values from first band (assuming single band raster)
-        # sampled[i] is a numpy array with shape (1,) for single-band raster
         terrain_ids = np.array([s[0] for s in sampled], dtype=dtype)
 
-        # Handle nodata values - convert raster nodata to ID_NODATA
+        # Handle nodata values
         if nodata is not None:
-            nodata_mask = terrain_ids == nodata
-            terrain_ids[nodata_mask] = ID_NODATA
-        # Also handle any NaN values that might occur outside raster bounds
-        nan_mask = np.isnan(terrain_ids)
-        terrain_ids[nan_mask] = ID_NODATA
+            terrain_ids[terrain_ids == nodata] = ID_NODATA
 
     return terrain_ids
 
@@ -411,8 +397,6 @@ def update_with_clustered_data(
                     "standard_deviation_vs30_km_per_s": prior_std_col,
                 }
             )
-        # Note: If passing in output from independent update, we might need to handle checks here,
-        # but usually clustered update comes first or stands alone.
 
     # Initialize posterior columns with suffix
     post_mean_col = "posterior_mean_vs30_km_per_s_clustered_observations"
@@ -446,9 +430,6 @@ def update_with_clustered_data(
 
     # Process each category ID that exists in the sites
     unique_ids = valid_sites[STANDARD_ID_COLUMN].unique()
-    categories_updated = 0
-
-    # ... (skipping logging for brevity of replacement, logic remains similar)
 
     for category_id in unique_ids:
         category_id_int = int(category_id)
@@ -485,7 +466,6 @@ def update_with_clustered_data(
         posterior_array[category_id_int, 1] = np.sqrt(
             sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2)
         )
-        categories_updated += 1
 
     # Convert back to DataFrame format
     for category_id, df_idx in id_to_idx.items():

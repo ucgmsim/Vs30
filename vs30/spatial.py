@@ -295,8 +295,6 @@ def prepare_observation_data(
     model_stdv = model_stdv[valid_obs_mask]
     uncertainty = observations.uncertainty.values[valid_obs_mask]
 
-    # Arrays are already float64 by default
-
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
     if model_name == "geology":
@@ -476,39 +474,6 @@ def calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb):
 # ============================================================================
 
 
-# ============================================================================
-# LEGACY CODE - TO BE DELETED AFTER VALIDATION
-# ============================================================================
-# These functions implement inferior legacy behavior using complex number
-# arithmetic for distance calculations. They are only kept temporarily for
-# validation purposes and should be removed once validation is complete.
-# ============================================================================
-
-
-def _xy2complex(x):
-    """
-    Convert array of 2D coordinates to array of 1D complex numbers.
-
-    LEGACY FUNCTION - DELETE AFTER VALIDATION
-    This function is only used when use_legacy_mvn_behavior=True.
-    The refactored code uses scipy's optimized cdist instead.
-    """
-    c = x[:, 0].astype(np.complex64)
-    c.imag += x[:, 1]
-    return c
-
-
-def _dist_mat_complex(x):
-    """
-    Distance matrix between coordinates (complex numbers).
-
-    LEGACY FUNCTION - DELETE AFTER VALIDATION
-    This function is only used when use_legacy_mvn_behavior=True.
-    The refactored code uses scipy's optimized cdist instead.
-    """
-    return np.abs(x[:, np.newaxis] - x)
-
-
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
@@ -535,13 +500,11 @@ def build_covariance_matrix(
         Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
         First row/column is for the pixel, rest are for observations.
     """
-    # Step 1: Compute distances using accurate GDAL-style coordinate transformation
+    # Step 1: Compute Euclidean distance matrix
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
         np.float64
     )
-    # Use complex number arithmetic for distance calculation (proven most accurate)
-    complex_points = _xy2complex(all_points)
-    distance_matrix = _dist_mat_complex(complex_points)
+    distance_matrix = utils.euclidean_distance_matrix(all_points)
 
     # Step 2: Apply correlation function
     if phi is None:
@@ -564,8 +527,7 @@ def build_covariance_matrix(
         log_vs30s = np.insert(
             np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
         )
-        # Use complex number distance calculation for covariance reduction
-        log_dist_matrix = _dist_mat_complex(log_vs30s)
+        log_dist_matrix = np.abs(log_vs30s[:, np.newaxis] - log_vs30s)
         cov *= np.exp(-cov_reduc * log_dist_matrix)
 
     return cov
@@ -579,8 +541,6 @@ def build_covariance_matrix(
 def select_observations_for_pixel(
     pixel: mvn.PixelData,
     obs_data: mvn.ObservationData,
-    obs_to_grid_indices: list[np.ndarray],
-    chunk_grid_to_obs: dict[int, list[int]],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
 ) -> mvn.ObservationData:
@@ -596,10 +556,6 @@ def select_observations_for_pixel(
         Pixel data.
     obs_data : ObservationData
         Full observation data.
-    obs_to_grid_indices : list
-        List of grid indices per observation.
-    chunk_grid_to_obs : dict
-        Chunk cache mapping pixel indices to observation indices.
     max_dist_m : float
         Maximum distance in meters to consider observations.
     max_points : int
@@ -664,8 +620,6 @@ def select_observations_for_pixel(
 def compute_mvn_update_for_pixel(
     pixel: mvn.PixelData,
     obs_data: mvn.ObservationData,
-    obs_to_grid_indices: list[np.ndarray],
-    chunk_grid_to_obs: dict[int, list[int]],
     model_name: str,
     phi: float | None = None,
     max_dist_m: float = constants.MAX_DIST_M,
@@ -682,13 +636,8 @@ def compute_mvn_update_for_pixel(
         Pixel data.
     obs_data : ObservationData
         Full observation data.
-    obs_to_grid_indices : list
-        List of grid indices per observation.
-    chunk_grid_to_obs : dict
-        Chunk cache mapping pixel indices to observation indices.
     model_name : str
         Model name ("geology" or "terrain").
-        Only kept temporarily for validation purposes.
 
     Returns
     -------
@@ -707,8 +656,6 @@ def compute_mvn_update_for_pixel(
     selected_obs = select_observations_for_pixel(
         pixel,
         obs_data,
-        obs_to_grid_indices,
-        chunk_grid_to_obs,
         max_dist_m=max_dist_m,
         max_points=max_points,
     )
@@ -946,20 +893,6 @@ def compute_mvn_updates(
         chunk_flat_indices = affected_flat_indices[start_idx:end_idx]
         chunk_valid_indices = affected_valid_indices[start_idx:end_idx]
 
-        # Build chunk cache: reverse mapping from grid pixels to observations
-        # Use set for faster lookup
-        pixel_pbar.set_postfix(
-            {"status": "building cache", "chunk": f"{chunk_idx + 1}/{n_chunks}"}
-        )
-        chunk_flat_indices_set = set(chunk_flat_indices)
-        chunk_grid_to_obs: dict[int, list[int]] = {}
-        for obs_idx, grid_indices in enumerate(bbox_result.obs_to_grid_indices):
-            for grid_idx in grid_indices:
-                if grid_idx in chunk_flat_indices_set:
-                    if grid_idx not in chunk_grid_to_obs:
-                        chunk_grid_to_obs[grid_idx] = []
-                    chunk_grid_to_obs[grid_idx].append(obs_idx)
-
         # Process each pixel in chunk
         chunk_affected_locs = affected_locs[start_idx:end_idx]
         chunk_affected_vs30 = affected_vs30[start_idx:end_idx]
@@ -977,9 +910,7 @@ def compute_mvn_updates(
             zip(chunk_flat_indices, chunk_valid_indices)
         ):
             pixel = mvn.PixelData(
-                location=chunk_affected_locs[
-                    i
-                ],  # Already float32 from get_coordinates()
+                location=chunk_affected_locs[i],
                 vs30=float(chunk_affected_vs30[i]),
                 stdv=float(chunk_affected_stdv[i]),
                 index=flat_idx,
@@ -988,8 +919,6 @@ def compute_mvn_updates(
             update_result = compute_mvn_update_for_pixel(
                 pixel,
                 obs_data,
-                bbox_result.obs_to_grid_indices,
-                chunk_grid_to_obs,
                 model_name,
                 phi=phi,
                 max_dist_m=max_dist_m,
