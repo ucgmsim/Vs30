@@ -7,6 +7,7 @@ in geology.tif and terrain.tif that are within range of observations.
 
 import importlib.resources
 import logging
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -491,8 +492,6 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         logger.info(
             "Applying slope and coastal distance based geology modifications..."
         )
-        # Note: Arrays are modified in-place or returned new.
-        # The function signature was ported to return them.
         mod_vs30, mod_stdv = raster.apply_hybrid_geology_modifications(
             vs30_array,
             stdv_array,
@@ -520,14 +519,7 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         )
 
         # Update profile for output
-        profile.update(
-            {
-                "dtype": "float32",
-                "compress": "deflate",
-                # Ensure nodata matches expected model nodata if needed,
-                # though usually inherited from src is fine.
-            }
-        )
+        profile.update({"dtype": "float32", "compress": "deflate"})
 
         logger.info(f"Saving hybrid raster to: {output_path}")
         with rasterio.open(output_path, "w", **profile) as dst:
@@ -645,9 +637,8 @@ def spatial_fit(
         # 4. Prepare Observation Data for MVN
         logger.info("Preparing observation data for MVN processing...")
 
-        # Prepare observation data (with hybrid parameters for geology models)
         if model_type == "geology":
-            # Load config for hybrid parameters
+            # Geology models use hybrid parameters from config
             cfg_path = Path(__file__).parent / "config.yaml"
             cfg = load_config(cfg_path)
 
@@ -685,8 +676,6 @@ def spatial_fit(
             )
             output_filename = constants.OUTPUT_FILENAMES[model_type]
             output_path = output_dir / output_filename
-            import shutil
-
             shutil.copyfile(input_raster, output_path)
             typer.echo(f"✓ No updates needed. Copied to {output_path}")
             return
@@ -1095,7 +1084,6 @@ def combine(
 
             # Calculate weights based on combination method
             use_stdv_weight = False
-            k_val = 3.0  # fallback
 
             # Try parsing as float (ratio) first
             try:
@@ -1109,8 +1097,6 @@ def combine(
                 # Not a float, check for specific string
                 if str(combination_method).strip() == "standard_deviation_weighting":
                     use_stdv_weight = True
-                    # Resolve K value from config (or pass as arg if we had one, but we don't anymore)
-                    # We rely on constants loading it from config
                     from vs30 import constants
 
                     k_val = constants.K_VALUE
@@ -1225,8 +1211,7 @@ def full_pipeline(
     start_time = time.time()
 
     try:
-        # START CONFIG RESOLUTION
-        # Load config
+        # Load config and resolve parameters
         cfg_path = Path(__file__).parent / "config.yaml"
         cfg = load_config(cfg_path)
 
@@ -1251,7 +1236,6 @@ def full_pipeline(
             if combination_method is not None
             else cfg["combination_method"]
         )
-        # END CONFIG RESOLUTION
 
         # Resolve CSV paths if not provided
         resource_path = importlib.resources.files("vs30") / "resources"

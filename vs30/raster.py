@@ -8,7 +8,6 @@ using rasterio for all raster operations.
 import importlib.resources
 import tarfile
 from pathlib import Path
-from typing import Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -393,26 +392,12 @@ def create_vs30_raster_from_ids(
     ValueError
         If CSV file is missing required columns or IDs don't match.
     """
-    print("=" * 80)
-    print("Creating VS30 raster from category IDs")
-    print("This process may take 1-2 minutes depending on raster size...")
-    print("=" * 80)
-    print("Step 1: Starting VS30 raster creation")
-    print(f"  Input ID raster: {id_raster_path}")
-    print(f"  CSV file: {csv_path}")
-    print(f"  Output raster: {output_path}")
+    print(f"Creating VS30 raster: {output_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
-    # This is required for geology ID rasters (qmap.shp may not be present by default)
-    print("Step 2: Ensuring qmap.shp shapefile is available")
     _ensure_qmap_shapefile_extracted()
-    print("  ✓ qmap.shp shapefile is available")
 
-    # Load CSV file and create ID-to-values mapping
-    # This makes it clear that we're matching IDs between spatial file and CSV
-    print("Step 3: Loading CSV file with ID-to-VS30 mapping")
+    # Load CSV and create ID-to-values mapping
     csv_file_traversable = RESOURCE_PATH / csv_path
     with importlib.resources.as_file(csv_file_traversable) as csv_file_path:
         if not csv_file_path.exists():
@@ -420,86 +405,54 @@ def create_vs30_raster_from_ids(
                 f"CSV file not found: {csv_file_path}. "
                 f"Expected path relative to resources directory: {csv_path}"
             )
-        print(f"  CSV file found: {csv_file_path}")
 
-        # Read CSV file
-        print("Step 4: Reading CSV file")
         df = pd.read_csv(csv_file_path, skipinitialspace=True)
-        print(f"  ✓ Loaded {len(df)} rows from CSV")
-
-        # Clean column names (strip whitespace)
         df.columns = df.columns.str.strip()
 
-        # Determine which columns to use for VS30 values
-        print("Step 5: Determining VS30 value columns")
         mean_col, std_col = _determine_vs30_columns(list(df.columns))
-        print(f"  Using columns: Mean='{mean_col}', StdDev='{std_col}'")
 
-        # Check required columns exist (id + determined value columns)
         required_cols = ["id", mean_col, std_col]
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             raise ValueError(
                 f"CSV file {csv_file_path} is missing required columns: {missing_cols}"
             )
-        print("  ✓ All required columns present")
 
-        # Create dictionary mapping ID -> (mean_vs30, stddev_vs30)
-        # This dictionary makes it explicit that we're looking up values by ID
-        print("Step 6: Creating ID-to-VS30 values dictionary")
         id_to_vs30_values = {}
         for _, row in df.iterrows():
             category_id = int(row["id"])
             mean_vs30 = float(row[mean_col])
             stddev_vs30 = float(row[std_col])
             id_to_vs30_values[category_id] = (mean_vs30, stddev_vs30)
-        print(f"  ✓ Created dictionary with {len(id_to_vs30_values)} ID mappings")
-        print(f"  IDs in CSV: {sorted(id_to_vs30_values.keys())}")
 
     # Read ID raster
-    print("Step 7: Reading ID raster")
     with rasterio.open(id_raster_path) as src:
         id_array = src.read(1)
         profile = src.profile.copy()
         transform = src.transform
         crs = src.crs
-    print(f"  ✓ Loaded ID raster: {id_array.shape[0]} x {id_array.shape[1]} pixels")
-    print(f"  CRS: {crs}")
 
-    # Create output arrays initialized with NODATA
-    print("Step 8: Creating output arrays")
+    # Create output arrays
     vs30_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
     stdv_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
-    print("  ✓ Created VS30 and standard deviation arrays")
 
-    # Map each pixel's ID to VS30 values from CSV
-    # For each unique ID in the raster, look up the Vs30 values in the CSV dictionary
-    print("Step 9: Mapping pixel IDs to VS30 values")
+    # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
-    # Filter out NODATA and ID 0 (background) to get valid IDs for progress tracking
     valid_ids = unique_ids[(unique_ids != ID_NODATA) & (unique_ids != 0)]
-    print(
-        f"  Found {len(unique_ids)} unique IDs in raster: {sorted([int(x) for x in unique_ids])}"
-    )
 
-    for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30 values", unit="ID"):
-        # Look up this ID in the CSV file's ID-to-values mapping
+    for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
         if pixel_id in id_to_vs30_values:
             mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
-            # Set VS30 values for all pixels with this ID
             mask = id_array == pixel_id
             vs30_array[mask] = mean_vs30
             stdv_array[mask] = stddev_vs30
         else:
-            # ID found in raster but not in CSV - this is an error
             raise ValueError(
                 f"ID {pixel_id} found in raster {id_raster_path} but not in CSV {csv_path}. "
                 f"Available IDs in CSV: {sorted(id_to_vs30_values.keys())}"
             )
-    print("  ✓ Completed mapping all IDs to VS30 values")
 
-    # Create output profile for 2-band raster
-    print("Step 10: Preparing output raster profile")
+    # Write output raster
     output_profile = {
         "driver": "GTiff",
         "width": profile["width"],
@@ -511,25 +464,19 @@ def create_vs30_raster_from_ids(
         "nodata": MODEL_NODATA,
         "compress": "deflate",
     }
-    print(
-        f"  ✓ Output profile created: {output_profile['width']} x {output_profile['height']}, 2 bands"
-    )
 
-    # Write output raster
-    print("Step 11: Writing output raster to disk")
     with rasterio.open(output_path, "w", **output_profile) as dst:
         dst.write(vs30_array, 1)
         dst.write(stdv_array, 2)
         dst.descriptions = ("Vs30", "Standard Deviation")
-    print(f"  ✓ Successfully wrote VS30 raster: {output_path}")
 
-    print("Step 12: Completed VS30 raster creation")
+    print(f"Completed VS30 raster: {output_path}")
     return output_path
 
 
 def create_coast_distance_raster(
     output_path: Path, template_profile: dict
-) -> Tuple[np.ndarray, dict]:
+) -> tuple[np.ndarray, dict]:
     """
     Create a raster of distance to the nearest coast (in meters).
 
@@ -547,7 +494,7 @@ def create_coast_distance_raster(
 
     Returns
     -------
-    Tuple[np.ndarray, dict]
+    tuple[np.ndarray, dict]
         A tuple containing:
         - The distance array (float32).
         - The updated profile used for saving.
@@ -794,9 +741,7 @@ def apply_hybrid_geology_modifications(
                 )
                 vs30_array[mask] = 10**interpolated_val
 
-    # 3. Distance-based modification for Group 6 (Alluvium, ID=4 in old, check ID mapping?)
-    # Ensure `id_array` contains these GIDs. The CSV mapping preserves GIDs.
-
+    # 3. Distance-based modification for alluvium (GID 4)
     if mod6:
         # GID 4 = "06_alluvium"
         mask = id_array == 4
