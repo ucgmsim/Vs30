@@ -49,18 +49,6 @@ COAST_SHAPEFILE = (
 )
 SLOPE_RASTER = DATA_DIR / "slope.tif"
 
-# Hybrid model vs30 based on interpolation of slope (from old model_geology.py)
-# group ID, log10(slope) array, vs30 array
-HYBRID_VS30_PARAMS = [
-    [2, [-1.85, -1.22], np.log10(np.array([242, 418]))],
-    [3, [-2.70, -1.35], np.log10(np.array([171, 228]))],
-    [4, [-3.44, -0.88], np.log10(np.array([252, 275]))],
-    [6, [-3.56, -0.93], np.log10(np.array([183, 239]))],
-]
-# Hybrid model sigma reduction factors
-# IDs, Factors
-HYBRID_SRF_IDS = np.array([2, 3, 4, 6])
-HYBRID_SRF_FACTORS = np.array([0.4888, 0.7103, 0.9988, 0.9348])
 
 # CRS for NZTM from constants
 NZTM_CRS = constants.NZTM_CRS
@@ -708,24 +696,27 @@ def apply_hybrid_geology_modifications(
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:
-        # group IDs 2, 3, 4, 6 have reduction factors
-        for idx, gid in enumerate(HYBRID_SRF_IDS):
-            factor = HYBRID_SRF_FACTORS[idx]
+        # group IDs have reduction factors loaded from config
+        for gid_str, factor in constants.HYBRID_SIGMA_REDUCTION_FACTORS.items():
+            gid = int(gid_str)
             # Find pixels with this ID
             mask = id_array == gid
             stdv_array[mask] *= factor
 
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
-        # Prevent log10(0) or log10(-NODATA) by capping at 1e-9 (legacy logic)
+        # Prevent log10(0) or log10(-NODATA) by capping at min_slope_for_log
         modified_slope = np.copy(slope_array)
-        modified_slope[(modified_slope <= 0) | (modified_slope == SLOPE_NODATA)] = 1e-9
+        modified_slope[(modified_slope <= 0) | (modified_slope == SLOPE_NODATA)] = (
+            constants.MIN_SLOPE_FOR_LOG
+        )
         safe_log_slope = np.log10(modified_slope)
 
-        for spec in HYBRID_VS30_PARAMS:
-            gid = spec[0]
-            slope_limits = spec[1]
-            vs30_limits_log10 = spec[2]
+        for spec in constants.HYBRID_VS30_PARAMS:
+            gid = spec["gid"]
+            slope_limits = spec["slope_limits"]
+            # Compute log10 of vs30 values at runtime
+            vs30_limits_log10 = np.log10(np.array(spec["vs30_values"]))
 
             # Skip ID 4 if mod6 is active (handled separately later)
             if gid == 4 and mod6:
