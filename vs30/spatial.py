@@ -313,7 +313,7 @@ def prepare_observation_data(
             "transform": raster_data.transform,
             "width": raster_data.vs30.shape[1],
             "height": raster_data.vs30.shape[0],
-            "crs": rasterio.crs.CRS.from_epsg(2193),  # Default if not set
+            "crs": rasterio.crs.CRS.from_string(constants.NZTM_CRS),
         }
 
         if not slope_path.exists():
