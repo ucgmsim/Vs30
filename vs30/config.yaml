@@ -38,6 +38,9 @@ full_nz_land_ymax: 6250050
 id_nodata: 255
 slope_nodata: -9999
 model_nodata: -32767
+# Placeholder value in CSV files to mark categories that should be excluded
+# (e.g., water categories have no meaningful Vs30 value)
+csv_placeholder_nodata: -9999
 
 # --- filenames and Prefixes ---
 posterior_prefix: "posterior_"
@@ -59,20 +62,29 @@ combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_co
 # Whether to perform Bayesian update of geology and terrain categorical vs30 values
 do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
 
-# Maximum distance (meters) for considering observations
+# Maximum distance (meters) for considering observations in MVN spatial adjustment.
+# Observations further than this distance from a pixel will not influence its update.
 max_dist_m: 10000
 
-# Maximum number of observations to consider per pixel
+# Maximum number of observations to consider per pixel during MVN update.
+# Using the closest observations improves computational efficiency while
+# maintaining accuracy (observations far away have minimal influence anyway).
 max_points: 500
 
 
-# Covariance reduction factor
+# Covariance reduction factor for dissimilar Vs30 values (dimensionless).
+# Controls how much the correlation between two points is reduced when their
+# model Vs30 values differ. Higher values = more reduction for dissimilar values.
 cov_reduc: 1.5
 
-# Whether measurements are noisy (affects noise weighting)
+# Whether measurements are "noisy" (affects noise weighting in MVN update).
+# When true, observations with higher uncertainty contribute less to pixel updates.
 noisy: true
 
-# Correlation length parameters (in meters)
+# Correlation length parameters (phi) in meters.
+# Phi represents the distance at which spatial correlation decays to ~37% (1/e).
+# Larger phi = smoother spatial interpolation, smaller phi = more localized updates.
+# These values were calibrated for New Zealand geology and terrain data.
 phi_geology: 1407
 phi_terrain: 993
 
@@ -81,14 +93,32 @@ phi_terrain: 993
 # due to raster data, observation arrays, and other data structures
 max_spatial_boolean_array_memory_gb: 3
 
-# Parameters for Bayesian updates
-n_prior: 3  # Assume prior model made up of n_prior measurements
-min_sigma: 0.5  # Minimum standard deviation allowed
-min_group: 5  # Minimum number of points in a group for DBSCAN update
-eps: 15000.0  # Threshold for Bayesian update
-# Number of processors to use for sklearn.cluster.DBSCAN clustering algorithm
-# This only changes the overall execution time by one or two seconds, as this is a small part of the overall process
-nproc_for_dbscan_clustering: 1 # -1 for all available cores (only decreases total pipeline run time by one or two seconds)
+# --- Bayesian Update Parameters ---
+# These control how categorical Vs30 values are updated using observations.
+
+# Effective number of prior observations (n0 in Bayesian formulas).
+# Lower values give more weight to new observations, higher values are more conservative.
+n_prior: 3
+
+# Minimum standard deviation (log-space) allowed after Bayesian update.
+# Prevents over-confidence when many observations are available.
+min_sigma: 0.5
+
+# DBSCAN clustering parameters for handling spatially clustered observations.
+# Geotechnical investigations often produce clusters of measurements (e.g., along roads).
+# DBSCAN groups nearby measurements so each cluster contributes approximately once
+# to the Bayesian update, preventing over-weighting of densely sampled areas.
+
+# Minimum number of observations to form a cluster (DBSCAN min_samples parameter)
+min_group: 5
+
+# Maximum distance (meters) between observations to be in the same cluster
+# (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
+eps: 15000.0
+
+# Number of processors for DBSCAN clustering. -1 uses all available cores.
+# Note: This has minimal impact on total runtime (<2 seconds difference).
+nproc_for_dbscan_clustering: 1
 
 # Paths relative to the resources directory
 # Observational data that should be treated independently (without clustering)
@@ -165,7 +195,12 @@ hybrid_sigma_reduction_factors:
 min_slope_for_log: 1.0e-9
 
 # --- Misc ---
+# Minimum distance (meters) enforced in correlation calculations to prevent
+# division by zero or correlation=1 when points are exactly co-located.
+# The correlation function uses exp(-distance/phi), so distance=0 gives correlation=1.
 min_dist_enforced: 0.1
+
+# Coordinate Reference System for New Zealand Transverse Mercator 2000
 nztm_crs: "EPSG:2193"
 
 # --- Plotting ---
