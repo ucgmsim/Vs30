@@ -125,11 +125,6 @@ combination_method: 1.0
 # Only used if combination_method is "standard_deviation_weighting"
 k_value: 3.0
 
-# Model specific ID columns
-model_id_columns:
-  geology: gid
-  terrain: tid
-
 # --- Parameters for creating the "hybrid" geology Vs30 model that adjusts with slope and coastal distance ---
 hybrid_mod6_dist_min: 8000.0
 hybrid_mod6_dist_max: 20000.0
@@ -140,6 +135,34 @@ hybrid_mod13_dist_min: 8000.0
 hybrid_mod13_dist_max: 20000.0
 hybrid_mod13_vs30_min: 197.0
 hybrid_mod13_vs30_max: 500.0
+
+# Hybrid slope-based Vs30 interpolation parameters
+# Each entry contains: geology group ID, log10(slope) limits, Vs30 values (linear, log10 computed at runtime)
+# Format: [group_id, [slope_log10_min, slope_log10_max], [vs30_min, vs30_max]]
+hybrid_vs30_params:
+  - gid: 2
+    slope_limits: [-1.85, -1.22]
+    vs30_values: [242, 418]
+  - gid: 3
+    slope_limits: [-2.70, -1.35]
+    vs30_values: [171, 228]
+  - gid: 4
+    slope_limits: [-3.44, -0.88]
+    vs30_values: [252, 275]
+  - gid: 6
+    slope_limits: [-3.56, -0.93]
+    vs30_values: [183, 239]
+
+# Hybrid standard deviation reduction factors for specific geology groups
+# Maps geology group ID to sigma reduction factor
+hybrid_sigma_reduction_factors:
+  2: 0.4888
+  3: 0.7103
+  4: 0.9988
+  6: 0.9348
+
+# Minimum slope value used to prevent log10(0) in hybrid calculations
+min_slope_for_log: 1.0e-9
 
 # --- Misc ---
 min_dist_enforced: 0.1

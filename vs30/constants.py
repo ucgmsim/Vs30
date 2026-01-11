@@ -103,6 +103,15 @@ HYBRID_MOD13_DIST_MAX = _config["hybrid_mod13_dist_max"]
 HYBRID_MOD13_VS30_MIN = _config["hybrid_mod13_vs30_min"]
 HYBRID_MOD13_VS30_MAX = _config["hybrid_mod13_vs30_max"]
 
+# Hybrid slope-based Vs30 interpolation parameters
+HYBRID_VS30_PARAMS = _config["hybrid_vs30_params"]
+
+# Hybrid standard deviation reduction factors
+HYBRID_SIGMA_REDUCTION_FACTORS = _config["hybrid_sigma_reduction_factors"]
+
+# Minimum slope value for log calculations
+MIN_SLOPE_FOR_LOG = _config["min_slope_for_log"]
+
 # Misc
 MIN_DIST_ENFORCED = _config["min_dist_enforced"]
 NZTM_CRS = _config["nztm_crs"]
@@ -123,5 +132,3 @@ MODEL_CSV_PATHS = {
     "geology": GEOLOGY_MEAN_STDDEV_CSV,
     "terrain": TERRAIN_MEAN_STDDEV_CSV,
 }
-
-MODEL_ID_COLUMNS = _config["model_id_columns"]
