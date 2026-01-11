@@ -1,8 +1,21 @@
 """
-MVN updates for geology and terrain models.
+Command-line interface for the vs30 package.
 
-This module implements multivariate normal (MVN) distribution updates for pixels
-in geology.tif and terrain.tif that are within range of observations.
+This module provides CLI commands for the full Vs30 modelling pipeline:
+
+Commands
+--------
+- update-categorical-vs30-models: Bayesian update of categorical Vs30 values
+- make-initial-vs30-raster: Create initial Vs30 rasters from categories
+- adjust-geology-vs30-by-slope-and-coastal-distance: Apply hybrid modifications
+- spatial-fit: MVN-based spatial adjustment
+- combine: Combine geology and terrain models
+- full-pipeline: Run the complete workflow
+
+Usage
+-----
+    vs30 full-pipeline  # Run everything with default config
+    vs30 --help         # See all available commands
 """
 
 import importlib.resources
@@ -157,9 +170,9 @@ def update_categorical_vs30_models(
         # Load categorical model CSV (absolute path)
         categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
 
-        # Drop rows with invalid placeholder values (e.g., -9999 for water category)
+        # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"] != -9999
+            categorical_model_df["mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA
         ]
 
         # Validate required columns
@@ -638,10 +651,7 @@ def spatial_fit(
         logger.info("Preparing observation data for MVN processing...")
 
         if model_type == "geology":
-            # Geology models use hybrid parameters from config
-            cfg_path = Path(__file__).parent / "config.yaml"
-            cfg = load_config(cfg_path)
-
+            # Geology models use hybrid parameters from config (cfg already loaded above)
             obs_data = spatial.prepare_observation_data(
                 observations,
                 raster_data,
@@ -746,8 +756,8 @@ def plot_posterior_values(
         # Load CSV
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
-        # Filter out invalid rows (e.g., -9999 placeholder values)
-        df = df[df["prior_mean_vs30_km_per_s"] != -9999].copy()
+        # Filter out rows with placeholder values for excluded categories (e.g., water)
+        df = df[df["prior_mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA].copy()
 
         # Validate required columns
         required_cols = [
@@ -991,7 +1001,7 @@ def full_pipeline_for_geology_or_terrain(
 
         # --- Step 3: Hybrid Modification (Geology Only) ---
         current_raster = initial_raster
-        id_raster = output_dir / "gid.tif"  # Assumed path from make_initial
+        # id_raster was already set above using the correct filename constant
 
         if model_type == "geology":
             logger.info(

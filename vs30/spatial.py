@@ -1,6 +1,32 @@
 """
-MVN (multivariate normal distribution)
-for modifying vs30 values based on proximity to measured values.
+Multivariate Normal (MVN) distribution-based spatial adjustment for Vs30 values.
+
+This module implements spatial interpolation using MVN conditioning, which
+adjusts model Vs30 predictions based on nearby measurements. The approach:
+
+1. For each pixel near observations, builds a covariance matrix relating
+   the pixel to nearby measurements
+2. Uses MVN conditioning to compute the posterior (updated) Vs30 and
+   uncertainty given the observations
+3. Applies updates to create spatially-adjusted Vs30 maps
+
+The covariance structure uses an exponential correlation function, with
+separate correlation lengths (phi) for geology and terrain models.
+
+Key Parameters (from config.yaml)
+---------------------------------
+- phi: Correlation length controlling spatial smoothness (different for geology/terrain)
+- max_dist_m: Maximum distance (meters) to consider observations
+- max_points: Maximum number of observations per pixel update
+- noisy: Whether to apply noise weighting based on observation uncertainty
+- cov_reduc: Covariance reduction factor for dissimilar Vs30 values
+
+Scientific Background
+---------------------
+The MVN conditioning approach assumes that Vs30 residuals (log(measured/model))
+are spatially correlated following an exponential correlation model. Near
+observation points, the model prediction is adjusted toward the measured value,
+with the adjustment magnitude depending on distance and correlation structure.
 """
 
 import logging
@@ -15,7 +41,6 @@ from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 from vs30 import constants, utils
-from vs30 import spatial as mvn
 from vs30.category import (
     ID_NODATA,
     _assign_to_category_geology,
@@ -36,6 +61,19 @@ class ObservationData:
     residuals: np.ndarray  # (n_obs,) log residuals: log(vs30 / model_vs30)
     omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
     uncertainty: np.ndarray  # (n_obs,) observation uncertainties
+
+    @classmethod
+    def empty(cls) -> "ObservationData":
+        """Create an empty ObservationData object with zero observations."""
+        return cls(
+            locations=np.empty((0, 2)),
+            vs30=np.empty(0),
+            model_vs30=np.empty(0),
+            model_stdv=np.empty(0),
+            residuals=np.empty(0),
+            omega=np.empty(0),
+            uncertainty=np.empty(0),
+        )
 
 
 @dataclass
@@ -539,11 +577,11 @@ def build_covariance_matrix(
 
 
 def select_observations_for_pixel(
-    pixel: mvn.PixelData,
-    obs_data: mvn.ObservationData,
+    pixel: PixelData,
+    obs_data: ObservationData,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
-) -> mvn.ObservationData:
+) -> ObservationData:
     """
     Select observations for a pixel using distance filtering.
 
@@ -579,32 +617,16 @@ def select_observations_for_pixel(
         ]
         if min_dist > max_dist_m:
             # Not close enough to any observed locations
-            return mvn.ObservationData(
-                locations=np.empty((0, 2)),
-                vs30=np.empty(0),
-                model_vs30=np.empty(0),
-                model_stdv=np.empty(0),
-                residuals=np.empty(0),
-                omega=np.empty(0),
-                uncertainty=np.empty(0),
-            )
+            return ObservationData.empty()
         # Include all observations within cutoff distance (may exceed max_points for accuracy)
         loc_mask = distances <= min(max_dist_m, cutoff_dist)
         filtered_indices = np.array(candidate_obs_indices)[loc_mask]
     else:
         # No observations available
-        return mvn.ObservationData(
-            locations=np.empty((0, 2)),
-            vs30=np.empty(0),
-            model_vs30=np.empty(0),
-            model_stdv=np.empty(0),
-            residuals=np.empty(0),
-            omega=np.empty(0),
-            uncertainty=np.empty(0),
-        )
+        return ObservationData.empty()
 
     # Create subset of ObservationData
-    selected_obs = mvn.ObservationData(
+    selected_obs = ObservationData(
         locations=obs_data.locations[filtered_indices],
         vs30=obs_data.vs30[filtered_indices],
         model_vs30=obs_data.model_vs30[filtered_indices],
@@ -618,15 +640,15 @@ def select_observations_for_pixel(
 
 
 def compute_mvn_update_for_pixel(
-    pixel: mvn.PixelData,
-    obs_data: mvn.ObservationData,
+    pixel: PixelData,
+    obs_data: ObservationData,
     model_name: str,
     phi: float | None = None,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = constants.NOISY,
     cov_reduc: float = constants.COV_REDUC,
-) -> mvn.MVNUpdateResult | None:
+) -> MVNUpdateResult | None:
     """
     Compute MVN update for a single pixel.
 
@@ -662,7 +684,7 @@ def compute_mvn_update_for_pixel(
 
     if len(selected_obs.locations) == 0:
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
-        return mvn.MVNUpdateResult(
+        return MVNUpdateResult(
             updated_vs30=pixel.vs30,
             updated_stdv=sqrt(initial_var),
             n_observations_used=0,
@@ -706,7 +728,7 @@ def compute_mvn_update_for_pixel(
     )[0]
     min_distance = np.min(distances) if len(distances) > 0 else np.inf
 
-    return mvn.MVNUpdateResult(
+    return MVNUpdateResult(
         updated_vs30=float(new_vs30),
         updated_stdv=float(new_stdv),
         n_observations_used=len(selected_obs.locations),
@@ -721,10 +743,10 @@ def compute_mvn_update_for_pixel(
 
 
 def find_affected_pixels(
-    raster_data: mvn.RasterData,
-    obs_data: mvn.ObservationData,
+    raster_data: RasterData,
+    obs_data: ObservationData,
     max_dist_m: float = constants.MAX_DIST_M,
-) -> mvn.BoundingBoxResult:
+) -> BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
 
@@ -803,7 +825,7 @@ def find_affected_pixels(
         f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
     )
 
-    return mvn.BoundingBoxResult(
+    return BoundingBoxResult(
         mask=grid_points_in_bbox_mask,
         obs_to_grid_indices=obs_to_grid_indices,
         n_affected_pixels=n_affected,
@@ -816,16 +838,16 @@ def find_affected_pixels(
 
 
 def compute_mvn_updates(
-    raster_data: mvn.RasterData,
-    obs_data: mvn.ObservationData,
-    bbox_result: mvn.BoundingBoxResult,
+    raster_data: RasterData,
+    obs_data: ObservationData,
+    bbox_result: BoundingBoxResult,
     model_name: str,
     phi: float | None = None,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = constants.NOISY,
     cov_reduc: float = constants.COV_REDUC,
-) -> list[mvn.MVNUpdateResult]:
+) -> list[MVNUpdateResult]:
     """
     Compute MVN updates for all affected pixels.
 
@@ -909,7 +931,7 @@ def compute_mvn_updates(
         for i, (flat_idx, valid_idx) in enumerate(
             zip(chunk_flat_indices, chunk_valid_indices)
         ):
-            pixel = mvn.PixelData(
+            pixel = PixelData(
                 location=chunk_affected_locs[i],
                 vs30=float(chunk_affected_vs30[i]),
                 stdv=float(chunk_affected_stdv[i]),

@@ -1,6 +1,26 @@
 """
 Centralized constants and configuration loading for the vs30 package.
-Loads values from config.yaml and exports them as module-level constants.
+
+This module serves as a single source of truth for all configuration parameters.
+Values are loaded from config.yaml at import time and exported as module-level
+constants. This pattern allows:
+
+1. Easy access via `from vs30 import constants` then `constants.MAX_DIST_M`
+2. Validation that all required config keys exist at startup
+3. Centralized configuration management
+
+Usage
+-----
+    from vs30 import constants
+
+    # Access configuration values as constants
+    max_distance = constants.MAX_DIST_M
+    phi = constants.PHI["geology"]
+
+Configuration File
+-----------------
+All values are read from config.yaml in this module's directory. See config.yaml
+for parameter descriptions and their scientific meaning.
 """
 
 from pathlib import Path
@@ -78,6 +98,7 @@ FULL_NZ_LAND_YMAX = _config["full_nz_land_ymax"]
 # NoData and Placeholder Values
 ID_NODATA = _config["id_nodata"]
 SLOPE_NODATA = _config["slope_nodata"]
+CSV_PLACEHOLDER_NODATA = _config["csv_placeholder_nodata"]
 
 # filenames and Prefixes
 POSTERIOR_PREFIX = _config["posterior_prefix"]

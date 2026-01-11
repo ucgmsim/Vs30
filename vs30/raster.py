@@ -1,8 +1,25 @@
 """
 Common functions for creating categorical VS30 rasters from terrain and geology data.
 
-This module provides unified functionality for both terrain and geology models,
-using rasterio for all raster operations.
+This module provides:
+- Category ID raster creation (terrain from IwahashiPike, geology from QMAP shapefile)
+- VS30 value mapping from categorical models (CSV files) to raster format
+- Slope and coastal distance rasters for hybrid geology modifications
+- Hybrid geology modifications based on slope and coastal distance
+
+Hybrid Geology Model
+-------------------
+The geology-based Vs30 model includes empirical modifications for certain
+geology categories where Vs30 is known to vary with:
+
+1. Slope - steeper terrain generally indicates more consolidated material, leading
+   to higher Vs30 values. This relationship is captured via log-linear interpolation.
+2. Coastal distance - near-coast sediments (especially alluvium and floodplain
+   deposits) tend to be unconsolidated with lower Vs30. Values increase inland.
+
+These modifications are based on New Zealand-specific calibration studies and are
+applied to geology categories 2, 3, 4, and 6 (slope-based) and categories 4 and 10
+(coastal distance-based).
 """
 
 import importlib.resources
@@ -22,20 +39,6 @@ from tqdm import tqdm
 
 from vs30 import constants
 
-# Grid parameters from constants
-XMIN = constants.GRID_XMIN
-XMAX = constants.GRID_XMAX
-YMIN = constants.GRID_YMIN
-YMAX = constants.GRID_YMAX
-DX = constants.GRID_DX
-DY = constants.GRID_DY
-NX = round((XMAX - XMIN) / DX)
-NY = round((YMAX - YMIN) / DY)
-
-# NoData values from constants
-MODEL_NODATA = constants.MODEL_NODATA
-ID_NODATA = constants.ID_NODATA
-SLOPE_NODATA = constants.SLOPE_NODATA
 
 # Resources directory path using importlib.resources
 RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
@@ -49,9 +52,6 @@ COAST_SHAPEFILE = (
 )
 SLOPE_RASTER = DATA_DIR / "slope.tif"
 
-
-# CRS for NZTM from constants
-NZTM_CRS = constants.NZTM_CRS
 
 # Path to shapefiles archive
 SHAPEFILES_ARCHIVE = DATA_DIR / "shapefiles.tar.xz"
@@ -165,12 +165,12 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
 def create_category_id_raster(
     model_type: str,
     output_dir: Path,
-    xmin: float = XMIN,
-    xmax: float = XMAX,
-    ymin: float = YMIN,
-    ymax: float = YMAX,
-    dx: float = DX,
-    dy: float = DY,
+    xmin: float = constants.GRID_XMIN,
+    xmax: float = constants.GRID_XMAX,
+    ymin: float = constants.GRID_YMIN,
+    ymax: float = constants.GRID_YMAX,
+    dx: float = constants.GRID_DX,
+    dy: float = constants.GRID_DY,
 ) -> Path:
     """
     Create category ID raster for terrain or geology.
@@ -219,9 +219,9 @@ def create_category_id_raster(
         "height": ny,
         "count": 1,
         "dtype": "uint8",
-        "crs": NZTM_CRS,
+        "crs": constants.NZTM_CRS,
         "transform": dst_transform,
-        "nodata": ID_NODATA,
+        "nodata": constants.ID_NODATA,
         "compress": "deflate",
     }
 
@@ -239,7 +239,7 @@ def create_category_id_raster(
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=dst_transform,
-                    dst_crs=NZTM_CRS,
+                    dst_crs=constants.NZTM_CRS,
                     resampling=Resampling.nearest,
                 )
                 dst.descriptions = (band_description,)
@@ -258,8 +258,8 @@ def create_category_id_raster(
             raise ValueError(f"Shapefile {GEOLOGY_SHAPEFILE} missing 'gid' column")
 
         # Ensure shapefile is in NZTM CRS (EPSG:2193)
-        if gdf.crs is None or str(gdf.crs) != NZTM_CRS:
-            gdf = gdf.to_crs(NZTM_CRS)
+        if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
+            gdf = gdf.to_crs(constants.NZTM_CRS)
 
         # Create shapes iterator for rasterization
         shapes = ((geom, value) for geom, value in zip(gdf.geometry, gdf.gid))
@@ -270,7 +270,7 @@ def create_category_id_raster(
                 shapes=shapes,
                 out_shape=(ny, nx),
                 transform=dst_transform,
-                fill=ID_NODATA,
+                fill=constants.ID_NODATA,
                 dtype=np.uint8,
                 all_touched=False,
             )
@@ -421,12 +421,12 @@ def create_vs30_raster_from_ids(
         crs = src.crs
 
     # Create output arrays
-    vs30_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
-    stdv_array = np.full(id_array.shape, MODEL_NODATA, dtype=np.float32)
+    vs30_array = np.full(id_array.shape, constants.MODEL_NODATA, dtype=np.float32)
+    stdv_array = np.full(id_array.shape, constants.MODEL_NODATA, dtype=np.float32)
 
     # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[(unique_ids != ID_NODATA) & (unique_ids != 0)]
+    valid_ids = unique_ids[(unique_ids != constants.ID_NODATA) & (unique_ids != 0)]
 
     for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
         if pixel_id in id_to_vs30_values:
@@ -449,7 +449,7 @@ def create_vs30_raster_from_ids(
         "dtype": "float32",
         "crs": crs,
         "transform": transform,
-        "nodata": MODEL_NODATA,
+        "nodata": constants.MODEL_NODATA,
         "compress": "deflate",
     }
 
@@ -614,7 +614,7 @@ def create_slope_raster(
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": SLOPE_NODATA, "compress": "deflate"}
+        {"dtype": "float32", "count": 1, "nodata": constants.SLOPE_NODATA, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
@@ -707,7 +707,7 @@ def apply_hybrid_geology_modifications(
     if hybrid:
         # Prevent log10(0) or log10(-NODATA) by capping at min_slope_for_log
         modified_slope = np.copy(slope_array)
-        modified_slope[(modified_slope <= 0) | (modified_slope == SLOPE_NODATA)] = (
+        modified_slope[(modified_slope <= 0) | (modified_slope == constants.SLOPE_NODATA)] = (
             constants.MIN_SLOPE_FOR_LOG
         )
         safe_log_slope = np.log10(modified_slope)
