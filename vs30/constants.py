@@ -47,7 +47,7 @@ MAX_POINTS = _config["max_points"]
 COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB = _config["max_spatial_boolean_array_memory_gb"]
-MODEL_NODATA = _config["model_nodata"]
+MODEL_NODATA = _config["nodata_value"]
 N_PROC = _config.get("n_proc", 1)
 
 # Bayesian Update Parameters
@@ -97,9 +97,8 @@ FULL_NZ_LAND_YMIN = _config["full_nz_land_ymin"]
 FULL_NZ_LAND_YMAX = _config["full_nz_land_ymax"]
 
 # NoData and Placeholder Values
-ID_NODATA = _config["id_nodata"]
-SLOPE_NODATA = _config["slope_nodata"]
-CSV_PLACEHOLDER_NODATA = _config["csv_placeholder_nodata"]
+RASTER_ID_NODATA_VALUE = _config["raster_id_nodata_value"]
+NODATA_VALUE = _config["nodata_value"]
 
 # filenames and Prefixes
 POSTERIOR_PREFIX = _config["posterior_prefix"]
