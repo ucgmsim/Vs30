@@ -93,6 +93,10 @@ phi_terrain: 993
 # due to raster data, observation arrays, and other data structures
 max_spatial_boolean_array_memory_gb: 3
 
+# Number of parallel processes for MVN spatial adjustment
+# 1 = single-threaded (default), -1 = all CPU cores, >1 = specific count
+n_proc: 1
+
 # --- Bayesian Update Parameters ---
 # These control how categorical Vs30 values are updated using observations.
 
