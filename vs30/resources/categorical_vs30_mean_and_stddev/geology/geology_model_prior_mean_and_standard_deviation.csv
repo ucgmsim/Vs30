@@ -1,5 +1,5 @@
 id, mean_vs30_km_per_s, standard_deviation_vs30_km_per_s, description, comment
-0, -9999, -9999, "water", "not used | id 00 in Ahdi et al. (2017ab) | -9999 used as a placeholder"
+0, -32767, -32767, "water", "not used | id 00 in Ahdi et al. (2017ab) | -32767 used as a placeholder"
 1, 161, 0.522, "peat", "id 01 in Ahdi et al. (2017ab)"
 2, 198, 0.314, "fill", "id 04 in Ahdi et al. (2017ab)"
 3, 239, 0.867, "fluvial estuarine", "id 05 in Ahdi et al. (2017ab)"

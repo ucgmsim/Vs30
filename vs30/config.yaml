@@ -2,20 +2,20 @@
 
 # --- Grid Parameters ---
 # For tiny domain
-grid_xmin: 1570050
-grid_xmax: 1571050
-grid_ymin: 5180050
-grid_ymax: 5181050
-grid_dx: 100
-grid_dy: 100
+#grid_xmin: 1570050
+#grid_xmax: 1571050
+#grid_ymin: 5180050
+#grid_ymax: 5181050
+#grid_dx: 100
+#grid_dy: 100
 
 # For full NZ domain
-# grid_xmin: 1060050
-# grid_xmax: 2120050
-# grid_ymin: 4730050
-# grid_ymax: 6250050
-# grid_dx: 100
-# grid_dy: 100
+grid_xmin: 1060050
+grid_xmax: 2120050
+grid_ymin: 4730050
+grid_ymax: 6250050
+grid_dx: 100
+grid_dy: 100
 
 
 
@@ -35,12 +35,10 @@ full_nz_land_ymin: 4730050
 full_nz_land_ymax: 6250050
 
 # --- NoData and Placeholder Values ---
-id_nodata: 255
-slope_nodata: -9999
-model_nodata: -32767
-# Placeholder value in CSV files to mark categories that should be excluded
-# (e.g., water categories have no meaningful Vs30 value)
-csv_placeholder_nodata: -9999
+raster_id_nodata_value: 255 # No data value in the provided categorical rasters
+# No-data value used for slope rasters, model outputs, and CSV placeholders
+# -32767 is a traditional no-data value in many GIS applications (minimum value for signed 16-bit integers)
+nodata_value: -32767
 
 # --- filenames and Prefixes ---
 posterior_prefix: "posterior_"
@@ -93,9 +91,13 @@ phi_terrain: 993
 # due to raster data, observation arrays, and other data structures
 max_spatial_boolean_array_memory_gb: 3
 
-# Number of parallel processes for MVN spatial adjustment
+# Number of parallel processes for finding affected pixels in spatial operations
 # 1 = single-threaded (default), -1 = all CPU cores, >1 = specific count
-n_proc: 1
+n_proc_find_affected_pixels: 1
+
+# Number of parallel processes for MVN spatial adjustment and location computations
+# 1 = single-threaded (default), -1 = all CPU cores, >1 = specific count
+n_proc_spatial_updates: 1
 
 # --- Bayesian Update Parameters ---
 # These control how categorical Vs30 values are updated using observations.
@@ -127,16 +129,17 @@ nproc_for_dbscan_clustering: 1
 # Paths relative to the resources directory
 # Observational data that should be treated independently (without clustering)
 # Set to "none" to disable, or provide a filename relative to resources directory
-independent_observations_file: none
-#independent_observations_file: observations/measured_vs30_independent_observations.csv
+#independent_observations_file: none
+independent_observations_file: observations/measured_vs30_independent_observations.csv
 
 # Observational data that should be treated with spatial clustering
 # Set to "none" to disable, or provide a filename relative to resources directory
-#clustered_observations_file : none
-clustered_observations_file: observations/measured_vs30_cpt.csv
+clustered_observations_file : none
+#clustered_observations_file: observations/measured_vs30_cpt.csv
 
-#output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
-output_dir: /tmp/refactored_vs30_output_tiny_domain_clustered_observations
+output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
+#output_dir: /tmp/refactored_vs30_output_tiny_domain_clustered_observations
+#output_dir: /tmp/refactored_vs30_output_full_domain_clustered_observations
 #output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
 
 

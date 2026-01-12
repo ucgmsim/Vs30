@@ -21,7 +21,7 @@ from sklearn.cluster import DBSCAN
 from vs30 import constants
 
 # Constant for no-data category ID from constants
-ID_NODATA = constants.ID_NODATA
+RASTER_ID_NODATA_VALUE = constants.RASTER_ID_NODATA_VALUE
 
 # Standard column name used for model IDs in DataFrames
 STANDARD_ID_COLUMN = "id"
@@ -52,7 +52,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or ID_NODATA if outside polygons).
+        Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside polygons).
     """
     # load QMAP polygons (keeps CRS from file)
     gdf = gpd.read_file(QMAP)[["gid", "geometry"]]
@@ -65,7 +65,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     joined = gpd.sjoin(points_gdf, gdf, how="left", predicate="within")
 
     # Default to ID_NODATA, fill with gid where available
-    values = np.full(len(points), ID_NODATA, dtype=np.uint8)
+    values = np.full(len(points), RASTER_ID_NODATA_VALUE, dtype=np.uint8)
     value_mask = ~joined["gid"].isna()
     values[value_mask] = joined.loc[value_mask, "gid"].values
 
@@ -88,7 +88,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or ID_NODATA if outside raster).
+        Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside raster).
     """
     with rasterio.open(MODEL_RASTER) as src:
         nodata = src.nodata
@@ -101,7 +101,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 
         # Handle nodata values
         if nodata is not None:
-            terrain_ids[terrain_ids == nodata] = ID_NODATA
+            terrain_ids[terrain_ids == nodata] = RASTER_ID_NODATA_VALUE
 
     return terrain_ids
 
@@ -355,7 +355,7 @@ def perform_clustering(
     features = np.column_stack((sites_df.easting.values, sites_df.northing.values))
     model_ids = sites_df[STANDARD_ID_COLUMN].values
     ids = np.array(sorted(set(model_ids)))
-    ids = ids[ids != ID_NODATA].astype(int)
+    ids = ids[ids != RASTER_ID_NODATA_VALUE].astype(int)
 
     for category_id in ids:
         subset_mask = model_ids == category_id
@@ -411,7 +411,9 @@ def update_with_clustered_data(
     )
 
     # Filter out sites with ID_NODATA
-    valid_sites = sites_df[sites_df[STANDARD_ID_COLUMN] != ID_NODATA].copy()
+    valid_sites = sites_df[
+        sites_df[STANDARD_ID_COLUMN] != RASTER_ID_NODATA_VALUE
+    ].copy()
     max_id_sites = (
         int(valid_sites[STANDARD_ID_COLUMN].max()) if len(valid_sites) > 0 else 0
     )
@@ -576,7 +578,9 @@ def get_vs30_for_points(
     elif model_type == "terrain":
         category_ids = _assign_to_category_terrain(points)
     else:
-        raise ValueError(f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'.")
+        raise ValueError(
+            f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
+        )
 
     # Detect mean column (prefer posterior over prior)
     mean_col_candidates = [

@@ -221,7 +221,7 @@ def create_category_id_raster(
         "dtype": "uint8",
         "crs": constants.NZTM_CRS,
         "transform": dst_transform,
-        "nodata": constants.ID_NODATA,
+        "nodata": constants.RASTER_ID_NODATA_VALUE,
         "compress": "deflate",
     }
 
@@ -270,7 +270,7 @@ def create_category_id_raster(
                 shapes=shapes,
                 out_shape=(ny, nx),
                 transform=dst_transform,
-                fill=constants.ID_NODATA,
+                fill=constants.RASTER_ID_NODATA_VALUE,
                 dtype=np.uint8,
                 all_touched=False,
             )
@@ -426,7 +426,7 @@ def create_vs30_raster_from_ids(
 
     # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[(unique_ids != constants.ID_NODATA) & (unique_ids != 0)]
+    valid_ids = unique_ids[(unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)]
 
     for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
         if pixel_id in id_to_vs30_values:
@@ -614,7 +614,7 @@ def create_slope_raster(
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": constants.SLOPE_NODATA, "compress": "deflate"}
+        {"dtype": "float32", "count": 1, "nodata": constants.NODATA_VALUE, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
@@ -707,7 +707,7 @@ def apply_hybrid_geology_modifications(
     if hybrid:
         # Prevent log10(0) or log10(-NODATA) by capping at min_slope_for_log
         modified_slope = np.copy(slope_array)
-        modified_slope[(modified_slope <= 0) | (modified_slope == constants.SLOPE_NODATA)] = (
+        modified_slope[(modified_slope <= 0) | (modified_slope == constants.NODATA_VALUE)] = (
             constants.MIN_SLOPE_FOR_LOG
         )
         safe_log_slope = np.log10(modified_slope)
@@ -875,7 +875,7 @@ def apply_hybrid_modifications_at_points(
         # Prevent log10(0) or log10(negative) by capping at min_slope_for_log
         safe_slope = np.maximum(slope_values, constants.MIN_SLOPE_FOR_LOG)
         # Handle nodata values
-        safe_slope[slope_values == constants.SLOPE_NODATA] = constants.MIN_SLOPE_FOR_LOG
+        safe_slope[slope_values == constants.NODATA_VALUE] = constants.MIN_SLOPE_FOR_LOG
         safe_log_slope = np.log10(safe_slope)
 
         for spec in constants.HYBRID_VS30_PARAMS:

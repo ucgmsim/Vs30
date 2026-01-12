@@ -30,6 +30,7 @@ with the adjustment magnitude depending on distance and correlation structure.
 """
 
 import logging
+import multiprocessing as mp
 from dataclasses import dataclass
 from math import sqrt
 from pathlib import Path
@@ -41,8 +42,11 @@ from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
 from vs30 import constants, utils
+
+# Use spawn context to avoid GDAL fork issues
+_spawn_context = mp.get_context("spawn")
 from vs30.category import (
-    ID_NODATA,
+    RASTER_ID_NODATA_VALUE,
     _assign_to_category_geology,
     _assign_to_category_terrain,
 )
@@ -311,9 +315,9 @@ def prepare_observation_data(
 
     # Get model vs30 and stdv from updated model table
     # Model IDs are 1-indexed in the raster, but 0-indexed in the model table
-    # ID_NODATA is 255, valid IDs are 1-15 for geology, 1-16 for terrain
+    # RASTER_ID_NODATA_VALUE is 255, valid IDs are 1-15 for geology, 1-16 for terrain
     valid_mask = (
-        (model_ids != ID_NODATA)
+        (model_ids != RASTER_ID_NODATA_VALUE)
         & (model_ids > 0)
         & (model_ids <= len(updated_model_table))
     )
@@ -505,6 +509,41 @@ def calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb):
     chunk_size = int(memory_per_chunk_bytes / n_obs)
     # Ensure at least 1 grid point per chunk
     return max(1, chunk_size)
+
+
+def _process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
+    """
+    Worker function for parallel bounding box processing.
+
+    Processes a single chunk of grid points to find which are affected by observations.
+
+    Parameters
+    ----------
+    args : tuple
+        (chunk_idx, grid_locs_chunk, start_idx, obs_bounds)
+        where obs_bounds is (obs_eastings_min, obs_eastings_max,
+                            obs_northings_min, obs_northings_max)
+
+    Returns
+    -------
+    tuple
+        (chunk_idx, chunk_mask, obs_to_grid_indices)
+    """
+    chunk_idx, grid_locs_chunk, start_idx, obs_bounds = args
+    obs_eastings_min, obs_eastings_max, obs_northings_min, obs_northings_max = (
+        obs_bounds
+    )
+
+    chunk_mask, obs_to_grid_indices = grid_points_in_bbox(
+        grid_locs=grid_locs_chunk,
+        obs_eastings_min=obs_eastings_min,
+        obs_eastings_max=obs_eastings_max,
+        obs_northings_min=obs_northings_min,
+        obs_northings_max=obs_northings_max,
+        start_grid_idx=start_idx,
+    )
+
+    return chunk_idx, chunk_mask, obs_to_grid_indices
 
 
 # ============================================================================
@@ -746,6 +785,7 @@ def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
     max_dist_m: float = constants.MAX_DIST_M,
+    n_proc: int = 1,
 ) -> BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
@@ -756,6 +796,11 @@ def find_affected_pixels(
         Raster data object.
     obs_data : ObservationData
         Observation data.
+    max_dist_m : float, optional
+        Maximum distance for considering observations.
+    n_proc : int, optional
+        Number of parallel processes. 1 for sequential (default),
+        >1 for parallel processing.
 
     Returns
     -------
@@ -779,41 +824,88 @@ def find_affected_pixels(
     obs_northings_min = obs_northings - max_dist_m
     obs_northings_max = obs_northings + max_dist_m
 
+    # Bundle observation bounds for passing to workers
+    obs_bounds = (
+        obs_eastings_min,
+        obs_eastings_max,
+        obs_northings_min,
+        obs_northings_max,
+    )
+
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
     obs_to_grid_indices = [
         np.array([], dtype=np.int64) for _ in range(len(obs_data.locations))
     ]
 
-    # Process each chunk
     logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
-    for chunk_idx in tqdm(
-        range(n_chunks),
-        desc="Finding affected pixels",
-        unit="chunk",
-    ):
-        start_idx = chunk_idx * chunk_size
-        end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
-        grid_locs_chunk = grid_locs[start_idx:end_idx]
 
-        chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
-            grid_locs=grid_locs_chunk,
-            obs_eastings_min=obs_eastings_min,
-            obs_eastings_max=obs_eastings_max,
-            obs_northings_min=obs_northings_min,
-            obs_northings_max=obs_northings_max,
-            start_grid_idx=start_idx,
-        )
+    if n_proc > 1 and n_chunks > 1:
+        # Parallel processing
+        logger.info(f"Using {min(n_proc, n_chunks)} parallel workers")
 
-        valid_points_in_bbox_mask[start_idx:end_idx] = chunk_mask
+        # Prepare chunk arguments
+        chunk_args = []
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+            grid_locs_chunk = grid_locs[start_idx:end_idx]
+            chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds))
 
-        # Accumulate grid indices for each observation
-        for obs_idx, valid_indices in enumerate(chunk_obs_to_grid):
-            if len(valid_indices) > 0:
-                full_raster_indices = raster_data.valid_flat_indices[valid_indices]
-                obs_to_grid_indices[obs_idx] = np.concatenate(
-                    [obs_to_grid_indices[obs_idx], full_raster_indices]
+        # Process in parallel using spawn context
+        actual_n_proc = min(n_proc, n_chunks)
+        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(_process_bbox_chunk, chunk_args),
+                    total=n_chunks,
+                    desc=f"Finding affected pixels ({actual_n_proc} workers)",
+                    unit="chunk",
                 )
+            )
+
+        # Merge results
+        for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+            valid_points_in_bbox_mask[start_idx:end_idx] = chunk_mask
+
+            # Accumulate grid indices for each observation
+            for obs_idx, valid_indices in enumerate(chunk_obs_to_grid):
+                if len(valid_indices) > 0:
+                    full_raster_indices = raster_data.valid_flat_indices[valid_indices]
+                    obs_to_grid_indices[obs_idx] = np.concatenate(
+                        [obs_to_grid_indices[obs_idx], full_raster_indices]
+                    )
+    else:
+        # Sequential processing (original code)
+        for chunk_idx in tqdm(
+            range(n_chunks),
+            desc="Finding affected pixels",
+            unit="chunk",
+        ):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+            grid_locs_chunk = grid_locs[start_idx:end_idx]
+
+            chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
+                grid_locs=grid_locs_chunk,
+                obs_eastings_min=obs_eastings_min,
+                obs_eastings_max=obs_eastings_max,
+                obs_northings_min=obs_northings_min,
+                obs_northings_max=obs_northings_max,
+                start_grid_idx=start_idx,
+            )
+
+            valid_points_in_bbox_mask[start_idx:end_idx] = chunk_mask
+
+            # Accumulate grid indices for each observation
+            for obs_idx, valid_indices in enumerate(chunk_obs_to_grid):
+                if len(valid_indices) > 0:
+                    full_raster_indices = raster_data.valid_flat_indices[valid_indices]
+                    obs_to_grid_indices[obs_idx] = np.concatenate(
+                        [obs_to_grid_indices[obs_idx], full_raster_indices]
+                    )
 
     # Create full-size mask
     grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
@@ -1151,7 +1243,12 @@ def compute_mvn_at_points(
         prior_stdv = model_stdv[i]
 
         # Skip invalid points
-        if np.isnan(prior_vs30) or np.isnan(prior_stdv) or prior_vs30 <= 0 or prior_stdv <= 0:
+        if (
+            np.isnan(prior_vs30)
+            or np.isnan(prior_stdv)
+            or prior_vs30 <= 0
+            or prior_stdv <= 0
+        ):
             continue
 
         # Calculate distances from this point to all observations
@@ -1230,6 +1327,8 @@ def compute_mvn_at_points(
         except np.linalg.LinAlgError:
             # Singular matrix - keep prior values with default variance shrinkage
             mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
-            logger.debug(f"Singular covariance matrix at point {i}, keeping prior values")
+            logger.debug(
+                f"Singular covariance matrix at point {i}, keeping prior values"
+            )
 
     return mvn_vs30, mvn_stdv

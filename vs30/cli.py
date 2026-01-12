@@ -172,8 +172,7 @@ def update_categorical_vs30_models(
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"]
-            != constants.CSV_PLACEHOLDER_NODATA
+            categorical_model_df["mean_vs30_km_per_s"] != constants.NODATA_VALUE
         ]
 
         # Validate required columns
@@ -190,7 +189,7 @@ def update_categorical_vs30_models(
 
         # Import assignment functions and constants from category
         from vs30.category import (
-            ID_NODATA,
+            RASTER_ID_NODATA_VALUE,
             STANDARD_ID_COLUMN,
             _assign_to_category_geology,
             _assign_to_category_terrain,
@@ -241,14 +240,14 @@ def update_categorical_vs30_models(
             # Log assignment statistics
             unique_assigned_ids = clustered_observations_df[STANDARD_ID_COLUMN].unique()
             valid_assigned = clustered_observations_df[
-                clustered_observations_df[STANDARD_ID_COLUMN] != ID_NODATA
+                clustered_observations_df[STANDARD_ID_COLUMN] != RASTER_ID_NODATA_VALUE
             ]
             logger.info(
                 f"Assigned category IDs: {len(valid_assigned)} valid observations "
                 f"(out of {len(clustered_observations_df)} total)"
             )
             logger.info(
-                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != ID_NODATA])[:20]}"
+                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != RASTER_ID_NODATA_VALUE])[:20]}"
             )
             logger.info(
                 f"Category IDs in prior model: {sorted(current_prior_df[STANDARD_ID_COLUMN].unique())}"
@@ -623,7 +622,10 @@ def spatial_fit(
 
         # Resolve n_proc from CLI or config
         from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
-        n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
+
+        n_proc_resolved = resolve_n_proc(
+            n_proc if n_proc is not None else cfg.get("n_proc_find_affected_pixels", 1)
+        )
 
         logger.info(f"Starting spatial fit for {model_type} model")
         logger.info(f"Input raster: {input_raster}")
@@ -703,7 +705,7 @@ def spatial_fit(
         # 5. Find Affected Pixels
         logger.info("Finding pixels affected by observations...")
         bbox_result = spatial.find_affected_pixels(
-            raster_data, obs_data, max_dist_m=max_dist_m
+            raster_data, obs_data, max_dist_m=max_dist_m, n_proc=n_proc_resolved
         )
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
 
@@ -783,9 +785,7 @@ def plot_posterior_values(
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
         # Filter out rows with placeholder values for excluded categories (e.g., water)
-        df = df[
-            df["prior_mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA
-        ].copy()
+        df = df[df["prior_mean_vs30_km_per_s"] != constants.NODATA_VALUE].copy()
 
         # Validate required columns
         required_cols = [
@@ -1285,7 +1285,10 @@ def full_pipeline(
         )
         # Resolve n_proc for MVN spatial adjustment
         from vs30.parallel import resolve_n_proc
-        n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
+
+        n_proc_resolved = resolve_n_proc(
+            n_proc if n_proc is not None else cfg.get("n_proc_spatial_updates", 1)
+        )
 
         # Resolve CSV paths if not provided
         resource_path = importlib.resources.files("vs30") / "resources"
@@ -1538,7 +1541,9 @@ def compute_at_locations(
             terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
             # Resolve n_proc from CLI or config
-            n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
+            n_proc_resolved = resolve_n_proc(
+                n_proc if n_proc is not None else cfg.get("n_proc_spatial_updates", 1)
+            )
 
             # ================================================================
             # Parallel Processing Path
