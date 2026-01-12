@@ -517,3 +517,117 @@ def posterior_from_bayesian_update(
         )
 
     return df
+
+
+# ============================================================================
+# Point-Based Query Functions
+# ============================================================================
+
+
+def get_vs30_for_points(
+    points: np.ndarray,
+    model_type: str,
+    categorical_model_df: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Get Vs30 mean and standard deviation at points from categorical model.
+
+    This function assigns each point to a geology or terrain category, then
+    looks up the Vs30 mean and standard deviation from the categorical model.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] coordinates in NZTM.
+    model_type : str
+        Either "geology" or "terrain".
+    categorical_model_df : pd.DataFrame
+        DataFrame with columns for category ID, Vs30 mean, and Vs30 standard deviation.
+        Supports various column naming conventions (see Notes).
+
+    Returns
+    -------
+    vs30_mean : np.ndarray
+        Array of Vs30 mean values (m/s) at each point. NaN for points outside
+        valid categories.
+    vs30_stdv : np.ndarray
+        Array of Vs30 standard deviation values at each point. NaN for points
+        outside valid categories.
+    category_ids : np.ndarray
+        Array of category IDs assigned to each point.
+
+    Notes
+    -----
+    The function automatically detects the column naming convention in the
+    categorical model DataFrame. It looks for columns in this priority order:
+
+    For mean: posterior_mean_vs30_km_per_s_independent_observations,
+              posterior_mean_vs30_km_per_s_clustered_observations,
+              prior_mean_vs30_km_per_s,
+              mean_vs30_km_per_s
+
+    For stddev: posterior_standard_deviation_vs30_km_per_s_independent_observations,
+                posterior_standard_deviation_vs30_km_per_s_clustered_observations,
+                prior_standard_deviation_vs30_km_per_s,
+                standard_deviation_vs30_km_per_s
+    """
+    # Assign category IDs to points
+    if model_type == "geology":
+        category_ids = _assign_to_category_geology(points)
+    elif model_type == "terrain":
+        category_ids = _assign_to_category_terrain(points)
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'.")
+
+    # Detect mean column (prefer posterior over prior)
+    mean_col_candidates = [
+        "posterior_mean_vs30_km_per_s_independent_observations",
+        "posterior_mean_vs30_km_per_s_clustered_observations",
+        "prior_mean_vs30_km_per_s",
+        "mean_vs30_km_per_s",
+    ]
+    mean_col = None
+    for col in mean_col_candidates:
+        if col in categorical_model_df.columns:
+            mean_col = col
+            break
+    if mean_col is None:
+        raise ValueError(
+            f"No mean column found in categorical model. "
+            f"Expected one of: {mean_col_candidates}"
+        )
+
+    # Detect stddev column (prefer posterior over prior)
+    stdv_col_candidates = [
+        "posterior_standard_deviation_vs30_km_per_s_independent_observations",
+        "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
+        "prior_standard_deviation_vs30_km_per_s",
+        "standard_deviation_vs30_km_per_s",
+    ]
+    stdv_col = None
+    for col in stdv_col_candidates:
+        if col in categorical_model_df.columns:
+            stdv_col = col
+            break
+    if stdv_col is None:
+        raise ValueError(
+            f"No stddev column found in categorical model. "
+            f"Expected one of: {stdv_col_candidates}"
+        )
+
+    # Build lookup dictionaries from category ID to Vs30 values
+    id_to_vs30 = dict(
+        zip(categorical_model_df[STANDARD_ID_COLUMN], categorical_model_df[mean_col])
+    )
+    id_to_stdv = dict(
+        zip(categorical_model_df[STANDARD_ID_COLUMN], categorical_model_df[stdv_col])
+    )
+
+    # Look up Vs30 values for each point
+    vs30_mean = np.array(
+        [id_to_vs30.get(cid, np.nan) for cid in category_ids], dtype=np.float64
+    )
+    vs30_stdv = np.array(
+        [id_to_stdv.get(cid, np.nan) for cid in category_ids], dtype=np.float64
+    )
+
+    return vs30_mean, vs30_stdv, category_ids

@@ -1018,3 +1018,218 @@ def apply_and_write_updates(
         f"Wrote updated raster to {output_path} "
         f"({len(updates):,} pixels updated out of {np.sum(raster_data.valid_mask):,} valid)"
     )
+
+
+# ============================================================================
+# Point-Based MVN Computation
+# ============================================================================
+
+
+def compute_mvn_at_points(
+    points: np.ndarray,
+    model_vs30: np.ndarray,
+    model_stdv: np.ndarray,
+    obs_locations: np.ndarray,
+    obs_vs30: np.ndarray,
+    obs_model_vs30: np.ndarray,
+    obs_model_stdv: np.ndarray,
+    obs_uncertainty: np.ndarray,
+    model_type: str,
+    phi: float | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = constants.NOISY,
+    cov_reduc: float = constants.COV_REDUC,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute MVN spatial adjustment at specific query points.
+
+    This is the point-based equivalent of compute_mvn_updates(). It applies
+    the same MVN conditioning algorithm but for arbitrary query points instead
+    of raster pixels.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] query locations in NZTM.
+    model_vs30 : np.ndarray
+        (N,) array of model Vs30 values at query points (before MVN adjustment).
+    model_stdv : np.ndarray
+        (N,) array of model standard deviation at query points.
+    obs_locations : np.ndarray
+        (M, 2) array of observation [easting, northing] locations.
+    obs_vs30 : np.ndarray
+        (M,) array of measured Vs30 values at observations.
+    obs_model_vs30 : np.ndarray
+        (M,) array of model Vs30 values at observation locations.
+    obs_model_stdv : np.ndarray
+        (M,) array of model standard deviation at observation locations.
+    obs_uncertainty : np.ndarray
+        (M,) array of observation uncertainties.
+    model_type : str
+        Either "geology" or "terrain" (determines phi correlation length).
+    phi : float, optional
+        Correlation length parameter. If None, uses value from constants.PHI[model_type].
+    max_dist_m : float, optional
+        Maximum distance (meters) to consider observations. Default from constants.
+    max_points : int, optional
+        Maximum number of observations per point. Default from constants.
+    noisy : bool, optional
+        Whether to apply noise weighting. Default from constants.
+    cov_reduc : float, optional
+        Covariance reduction factor. Default from constants.
+
+    Returns
+    -------
+    mvn_vs30 : np.ndarray
+        (N,) array of spatially adjusted Vs30 values.
+    mvn_stdv : np.ndarray
+        (N,) array of spatially adjusted standard deviation values.
+
+    Notes
+    -----
+    The algorithm for each query point:
+    1. Find observations within max_dist_m (limited to max_points closest)
+    2. Compute log residuals: log(obs_vs30 / obs_model_vs30)
+    3. Build covariance matrix using exponential correlation function
+    4. Apply MVN conditioning to get posterior mean and variance
+    5. Convert back from log-space to linear Vs30
+    """
+    if phi is None:
+        phi = constants.PHI[model_type]
+
+    n_points = len(points)
+    n_obs = len(obs_locations)
+
+    # Initialize output arrays with prior values
+    mvn_vs30 = model_vs30.copy()
+    mvn_stdv = model_stdv.copy()
+
+    if n_obs == 0:
+        logger.warning("No observations provided for MVN adjustment")
+        return mvn_vs30, mvn_stdv
+
+    # Compute log residuals at observation locations
+    # Filter out invalid observations (NaN model values)
+    valid_obs_mask = (
+        ~np.isnan(obs_model_vs30)
+        & ~np.isnan(obs_model_stdv)
+        & (obs_model_vs30 > 0)
+        & (obs_model_stdv > 0)
+    )
+
+    if not np.any(valid_obs_mask):
+        logger.warning("No valid observations for MVN adjustment")
+        return mvn_vs30, mvn_stdv
+
+    # Filter to valid observations
+    obs_locs = obs_locations[valid_obs_mask]
+    obs_vs30_valid = obs_vs30[valid_obs_mask]
+    obs_model_vs30_valid = obs_model_vs30[valid_obs_mask]
+    obs_model_stdv_valid = obs_model_stdv[valid_obs_mask]
+    obs_uncertainty_valid = obs_uncertainty[valid_obs_mask]
+
+    # Compute residuals
+    obs_residuals = np.log(obs_vs30_valid / obs_model_vs30_valid)
+
+    # Apply noise weighting if enabled
+    if noisy:
+        omega_obs = np.sqrt(
+            obs_model_stdv_valid**2
+            / (obs_model_stdv_valid**2 + obs_uncertainty_valid**2)
+        )
+        obs_residuals = obs_residuals * omega_obs
+    else:
+        omega_obs = np.ones(len(obs_residuals))
+
+    # Compute correlation at distance 0 for default variance
+    corr_zero = utils.correlation_function(np.array([0.0]), phi)[0]
+
+    # Process each query point
+    for i in tqdm(range(n_points), desc="Computing MVN at points", unit="point"):
+        point = points[i]
+        prior_vs30 = model_vs30[i]
+        prior_stdv = model_stdv[i]
+
+        # Skip invalid points
+        if np.isnan(prior_vs30) or np.isnan(prior_stdv) or prior_vs30 <= 0 or prior_stdv <= 0:
+            continue
+
+        # Calculate distances from this point to all observations
+        distances = np.sqrt(np.sum((obs_locs - point) ** 2, axis=1))
+
+        # Find nearby observations
+        nearby_mask = distances <= max_dist_m
+
+        if not np.any(nearby_mask):
+            # No nearby observations - apply default variance shrinkage (matching legacy)
+            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            continue
+
+        # Limit to max_points closest observations
+        nearby_indices = np.where(nearby_mask)[0]
+        if len(nearby_indices) > max_points:
+            nearby_distances = distances[nearby_indices]
+            closest_indices = np.argsort(nearby_distances)[:max_points]
+            nearby_indices = nearby_indices[closest_indices]
+
+        # Extract data for nearby observations
+        nearby_locs = obs_locs[nearby_indices]
+        nearby_residuals = obs_residuals[nearby_indices]
+        nearby_model_stdv = obs_model_stdv_valid[nearby_indices]
+        nearby_omega = omega_obs[nearby_indices]
+        nearby_model_vs30 = obs_model_vs30_valid[nearby_indices]
+
+        # Build covariance matrix
+        # First element is query point, rest are nearby observations
+        all_locs = np.vstack([point, nearby_locs])
+        dist_matrix = utils.euclidean_distance_matrix(all_locs)
+
+        # Apply correlation function
+        corr_matrix = utils.correlation_function(dist_matrix, phi)
+
+        # Scale by standard deviations to get covariance
+        stdv_vector = np.concatenate([[prior_stdv], nearby_model_stdv])
+        cov_matrix = corr_matrix * np.outer(stdv_vector, stdv_vector)
+
+        # Apply noise weighting if enabled
+        if noisy:
+            omega_vector = np.concatenate([[1.0], nearby_omega])
+            omega_matrix = np.outer(omega_vector, omega_vector)
+            np.fill_diagonal(omega_matrix, 1.0)
+            cov_matrix *= omega_matrix
+
+        # Apply covariance reduction for dissimilar Vs30 values
+        if cov_reduc > 0:
+            vs30_vector = np.concatenate([[prior_vs30], nearby_model_vs30])
+            log_vs30_dist = np.abs(
+                np.log(vs30_vector[:, np.newaxis]) - np.log(vs30_vector)
+            )
+            cov_matrix *= np.exp(-cov_reduc * log_vs30_dist)
+
+        # MVN conditioning
+        # Partition: C = [[C_pp, C_po], [C_op, C_oo]]
+        C_pp = cov_matrix[0, 0]  # point-point covariance
+        C_po = cov_matrix[0, 1:]  # point-observation covariance
+        C_oo = cov_matrix[1:, 1:]  # observation-observation covariance
+
+        try:
+            C_oo_inv = np.linalg.inv(C_oo)
+
+            # Posterior mean adjustment: C_po @ inv(C_oo) @ residuals
+            pred_adjustment = C_po @ C_oo_inv @ nearby_residuals
+
+            # Posterior variance: C_pp - C_po @ inv(C_oo) @ C_op
+            var_reduction = C_po @ C_oo_inv @ C_po
+            posterior_var = C_pp - var_reduction
+
+            # Update vs30 in log-space, then convert back
+            log_vs30_posterior = np.log(prior_vs30) + pred_adjustment
+            mvn_vs30[i] = np.exp(log_vs30_posterior)
+            mvn_stdv[i] = sqrt(max(0, posterior_var))
+
+        except np.linalg.LinAlgError:
+            # Singular matrix - keep prior values with default variance shrinkage
+            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            logger.debug(f"Singular covariance matrix at point {i}, keeping prior values")
+
+    return mvn_vs30, mvn_stdv
