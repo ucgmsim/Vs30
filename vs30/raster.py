@@ -771,3 +771,153 @@ def apply_hybrid_geology_modifications(
             vs30_array[mask] = val
 
     return vs30_array, stdv_array
+
+
+def apply_hybrid_modifications_at_points(
+    points: np.ndarray,
+    vs30: np.ndarray,
+    stdv: np.ndarray,
+    geology_ids: np.ndarray,
+    slope_raster_path: Path | None = None,
+    coast_distance_raster_path: Path | None = None,
+    mod6: bool = True,
+    mod13: bool = True,
+    hybrid: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Apply hybrid geology modifications at specific points.
+
+    This is the point-based equivalent of apply_hybrid_geology_modifications().
+    It samples slope and coastal distance values at query points and applies
+    the same modification logic.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] coordinates in NZTM.
+    vs30 : np.ndarray
+        Initial Vs30 values at points (N,).
+    stdv : np.ndarray
+        Initial standard deviation values at points (N,).
+    geology_ids : np.ndarray
+        Geology category IDs at points (N,).
+    slope_raster_path : Path, optional
+        Path to slope raster. If None, uses source slope.tif from data directory.
+    coast_distance_raster_path : Path, optional
+        Path to coastal distance raster. If None, raises error (must be provided).
+    mod6 : bool, optional
+        Whether to apply modification for Group 6 (Alluvium). Default True.
+    mod13 : bool, optional
+        Whether to apply modification for Group 13 (Floodplain). Default True.
+    hybrid : bool, optional
+        Whether to apply general hybrid slope-based modifications. Default True.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Modified (vs30, stdv) arrays.
+
+    Raises
+    ------
+    FileNotFoundError
+        If required raster files are not found.
+    ValueError
+        If coast_distance_raster_path is None and mod6 or mod13 is True.
+    """
+    # Use source slope raster if not specified
+    if slope_raster_path is None:
+        slope_raster_path = SLOPE_RASTER
+
+    # Coast distance raster is required for mod6/mod13
+    if (mod6 or mod13) and coast_distance_raster_path is None:
+        raise ValueError(
+            "coast_distance_raster_path is required when mod6 or mod13 is True. "
+            "Run the grid pipeline first to create the coastal distance raster, "
+            "or provide a path to an existing one."
+        )
+
+    # Sample slope at points
+    if not slope_raster_path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
+
+    with rasterio.open(slope_raster_path) as src:
+        slope_values = np.array(
+            [sample[0] for sample in src.sample(points)], dtype=np.float64
+        )
+
+    # Sample coastal distance at points (if needed)
+    if mod6 or mod13:
+        if not coast_distance_raster_path.exists():
+            raise FileNotFoundError(
+                f"Coastal distance raster not found: {coast_distance_raster_path}"
+            )
+
+        with rasterio.open(coast_distance_raster_path) as src:
+            coast_dist_values = np.array(
+                [sample[0] for sample in src.sample(points)], dtype=np.float64
+            )
+    else:
+        coast_dist_values = None
+
+    # Create copies to modify
+    modified_vs30 = vs30.copy()
+    modified_stdv = stdv.copy()
+
+    # 1. Update standard deviation for specific groups
+    if hybrid:
+        for gid_str, factor in constants.HYBRID_SIGMA_REDUCTION_FACTORS.items():
+            gid = int(gid_str)
+            mask = geology_ids == gid
+            if np.any(mask):
+                modified_stdv[mask] *= factor
+
+    # 2. Hybrid slope-based VS30 calculation
+    if hybrid:
+        # Prevent log10(0) or log10(negative) by capping at min_slope_for_log
+        safe_slope = np.maximum(slope_values, constants.MIN_SLOPE_FOR_LOG)
+        # Handle nodata values
+        safe_slope[slope_values == constants.SLOPE_NODATA] = constants.MIN_SLOPE_FOR_LOG
+        safe_log_slope = np.log10(safe_slope)
+
+        for spec in constants.HYBRID_VS30_PARAMS:
+            gid = spec["gid"]
+            slope_limits = spec["slope_limits"]
+            vs30_limits_log10 = np.log10(np.array(spec["vs30_values"]))
+
+            # Skip ID 4 if mod6 is active (handled separately)
+            if gid == 4 and mod6:
+                continue
+
+            mask = geology_ids == gid
+            if np.any(mask):
+                interpolated_val = np.interp(
+                    safe_log_slope[mask], slope_limits, vs30_limits_log10
+                )
+                modified_vs30[mask] = 10**interpolated_val
+
+    # 3. Distance-based modification for alluvium (GID 4)
+    if mod6 and coast_dist_values is not None:
+        mask = geology_ids == 4
+        if np.any(mask):
+            dist_vals = coast_dist_values[mask]
+            val = constants.HYBRID_MOD6_VS30_MIN + (
+                constants.HYBRID_MOD6_VS30_MAX - constants.HYBRID_MOD6_VS30_MIN
+            ) * (dist_vals - constants.HYBRID_MOD6_DIST_MIN) / (
+                constants.HYBRID_MOD6_DIST_MAX - constants.HYBRID_MOD6_DIST_MIN
+            )
+            val = np.clip(val, constants.HYBRID_MOD6_VS30_MIN, constants.HYBRID_MOD6_VS30_MAX)
+            modified_vs30[mask] = val
+
+    # 4. Distance-based modification for floodplain (GID 10)
+    if mod13 and coast_dist_values is not None:
+        mask = geology_ids == 10
+        if np.any(mask):
+            dist_vals = coast_dist_values[mask]
+            val = constants.HYBRID_MOD13_VS30_MIN + (
+                constants.HYBRID_MOD13_VS30_MAX - constants.HYBRID_MOD13_VS30_MIN
+            ) * (dist_vals - constants.HYBRID_MOD13_DIST_MIN) / (
+                constants.HYBRID_MOD13_DIST_MAX - constants.HYBRID_MOD13_DIST_MIN
+            )
+            val = np.clip(val, constants.HYBRID_MOD13_VS30_MIN, constants.HYBRID_MOD13_VS30_MAX)
+            modified_vs30[mask] = val
+
+    return modified_vs30, modified_stdv

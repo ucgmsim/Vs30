@@ -6,6 +6,10 @@ from scipy.spatial.distance import cdist
 
 from vs30 import constants
 
+# ============================================================================
+# Coordinate Conversion Functions
+# ============================================================================
+
 
 def _resolve_base_path(config_path: Path) -> Path:
     """
