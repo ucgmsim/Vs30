@@ -48,6 +48,7 @@ COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB = _config["max_spatial_boolean_array_memory_gb"]
 MODEL_NODATA = _config["model_nodata"]
+N_PROC = _config.get("n_proc", 1)
 
 # Bayesian Update Parameters
 N_PRIOR = _config["n_prior"]

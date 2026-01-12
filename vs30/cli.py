@@ -172,7 +172,8 @@ def update_categorical_vs30_models(
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA
+            categorical_model_df["mean_vs30_km_per_s"]
+            != constants.CSV_PLACEHOLDER_NODATA
         ]
 
         # Validate required columns
@@ -583,6 +584,11 @@ def spatial_fit(
         "-t",
         help="Model type: either 'geology' or 'terrain'",
     ),
+    n_proc: int = Option(
+        None,
+        "--n-proc",
+        help="Number of parallel processes (default from config, -1 for all cores)",
+    ),
 ) -> None:
     """
     Adjust a VS30 raster based on measurements using MVN spatial fitting.
@@ -614,6 +620,10 @@ def spatial_fit(
         phi = cfg[f"phi_{model_type}"]
         noisy = cfg["noisy"]
         cov_reduc = cfg["cov_reduc"]
+
+        # Resolve n_proc from CLI or config
+        from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
+        n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
 
         logger.info(f"Starting spatial fit for {model_type} model")
         logger.info(f"Input raster: {input_raster}")
@@ -699,17 +709,33 @@ def spatial_fit(
 
         # 6. Compute MVN Updates
         logger.info("Computing spatial updates...")
-        updates = spatial.compute_mvn_updates(
-            raster_data,
-            obs_data,
-            bbox_result,
-            model_type,
-            phi=phi,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-        )
+        if n_proc_resolved > 1:
+            logger.info(f"Using {n_proc_resolved} parallel workers")
+            affected_flat_indices = np.where(bbox_result.mask)[0]
+            updates = run_parallel_spatial_fit(
+                affected_flat_indices=affected_flat_indices,
+                raster_data=raster_data,
+                obs_data=obs_data,
+                model_type=model_type,
+                phi=phi,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
+                n_proc=n_proc_resolved,
+            )
+        else:
+            updates = spatial.compute_mvn_updates(
+                raster_data,
+                obs_data,
+                bbox_result,
+                model_type,
+                phi=phi,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
+            )
 
         # 7. Apply Updates and Write Output
         logger.info("Applying updates and writing output...")
@@ -757,7 +783,9 @@ def plot_posterior_values(
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
         # Filter out rows with placeholder values for excluded categories (e.g., water)
-        df = df[df["prior_mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA].copy()
+        df = df[
+            df["prior_mean_vs30_km_per_s"] != constants.CSV_PLACEHOLDER_NODATA
+        ].copy()
 
         # Validate required columns
         required_cols = [
@@ -889,6 +917,9 @@ def full_pipeline_for_geology_or_terrain(
     ),
     nproc: int | None = Option(
         None, "--nproc", help="Number of processes for clustering"
+    ),
+    n_proc: int | None = Option(
+        None, "--n-proc", help="Number of parallel processes for MVN spatial adjustment"
     ),
 ) -> None:
     """
@@ -1031,6 +1062,7 @@ def full_pipeline_for_geology_or_terrain(
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
+            n_proc=n_proc,
         )
 
         typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
@@ -1211,6 +1243,11 @@ def full_pipeline(
         "--combination-method",
         help="Method for combining models: Ratio (float) or 'standard_deviation_weighting'",
     ),
+    n_proc: int = Option(
+        None,
+        "--n-proc",
+        help="Number of parallel processes for MVN spatial adjustment (default from config, -1 for all cores)",
+    ),
 ) -> None:
     """
     Run the full VS30 generation pipeline for both geology and terrain models,
@@ -1246,6 +1283,9 @@ def full_pipeline(
             if combination_method is not None
             else cfg["combination_method"]
         )
+        # Resolve n_proc for MVN spatial adjustment
+        from vs30.parallel import resolve_n_proc
+        n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
 
         # Resolve CSV paths if not provided
         resource_path = importlib.resources.files("vs30") / "resources"
@@ -1269,6 +1309,7 @@ def full_pipeline(
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,
+                n_proc=n_proc_resolved,
             )
 
             # 2. Run Terrain Pipeline
@@ -1284,6 +1325,7 @@ def full_pipeline(
                 min_group=min_group,
                 eps=eps,
                 nproc=nproc,
+                n_proc=n_proc_resolved,
             )
 
         # 3. Average Results
@@ -1308,6 +1350,373 @@ def full_pipeline(
 
     except Exception as e:
         logger.exception("Error in full-pipeline")
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def compute_at_locations(
+    locations_csv: Path = Option(
+        ...,
+        "--locations-csv",
+        "-l",
+        help="CSV file with latitude/longitude columns (WGS84)",
+    ),
+    output_csv: Path = Option(
+        ...,
+        "--output-csv",
+        "-o",
+        help="Output CSV file path",
+    ),
+    lon_column: str = Option(
+        "longitude",
+        "--lon-column",
+        help="Name of longitude column in input CSV",
+    ),
+    lat_column: str = Option(
+        "latitude",
+        "--lat-column",
+        help="Name of latitude column in input CSV",
+    ),
+    geology_categorical_csv: Path = Option(
+        None,
+        "--geology-csv",
+        help="Path to geology categorical CSV (default from config/resources)",
+    ),
+    terrain_categorical_csv: Path = Option(
+        None,
+        "--terrain-csv",
+        help="Path to terrain categorical CSV (default from config/resources)",
+    ),
+    clustered_observations_csv: Path = Option(
+        None,
+        "--clustered-observations-csv",
+        "-c",
+        help="Path to CSV file with clustered observations (e.g., CPT)",
+    ),
+    independent_observations_csv: Path = Option(
+        None,
+        "--independent-observations-csv",
+        "-i",
+        help="Path to CSV file with independent observations",
+    ),
+    coast_distance_raster: Path = Option(
+        None,
+        "--coast-distance-raster",
+        help="Path to coastal distance raster (required for hybrid geology mods)",
+    ),
+    include_intermediate: bool = Option(
+        True,
+        "--include-intermediate/--final-only",
+        help="Include intermediate values (geology/terrain separately) in output",
+    ),
+    combination_method: str = Option(
+        None,
+        "--combination-method",
+        help="Method for combining: ratio (float) or 'standard_deviation_weighting'",
+    ),
+    n_proc: int = Option(
+        None,
+        "--n-proc",
+        help="Number of parallel processes (default from config, -1 for all cores)",
+    ),
+) -> None:
+    """
+    Compute Vs30 values at specific latitude/longitude locations.
+
+    Runs the full Vs30 pipeline but only at the specified query points,
+    without generating raster grids. This is efficient for querying
+    Vs30 at a small number of locations.
+
+    The input CSV must have columns for longitude and latitude (WGS84).
+    Column names can be specified with --lon-column and --lat-column.
+
+    Example:
+        vs30 compute-at-locations \\
+            --locations-csv sites.csv \\
+            --output-csv results.csv
+    """
+    from qcore import coordinates
+
+    from vs30.category import get_vs30_for_points
+    from vs30.parallel import (
+        LocationsChunkConfig,
+        resolve_n_proc,
+        run_parallel_locations,
+    )
+    from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
+    from vs30.spatial import compute_mvn_at_points
+
+    try:
+        # Load config
+        cfg_path = Path(__file__).parent / "config.yaml"
+        cfg = load_config(cfg_path)
+
+        # Resolve combination method
+        if combination_method is None:
+            combination_method = cfg["combination_method"]
+
+        # Load input locations
+        typer.echo(f"Loading locations from {locations_csv}...")
+        if not locations_csv.exists():
+            typer.echo(f"Error: Locations file not found: {locations_csv}", err=True)
+            raise typer.Exit(1)
+
+        df = pd.read_csv(locations_csv)
+
+        # Validate columns
+        if lon_column not in df.columns:
+            typer.echo(
+                f"Error: Column '{lon_column}' not found in {locations_csv}", err=True
+            )
+            raise typer.Exit(1)
+        if lat_column not in df.columns:
+            typer.echo(
+                f"Error: Column '{lat_column}' not found in {locations_csv}", err=True
+            )
+            raise typer.Exit(1)
+
+        # Convert to NZTM
+        nztm_coords = coordinates.wgs_depth_to_nztm(
+            np.column_stack([df[lat_column].values, df[lon_column].values])
+        )
+        northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
+        df["easting"] = easting
+        df["northing"] = northing
+        points = np.column_stack([easting, northing])
+        typer.echo(f"Loaded {len(points)} locations")
+
+        # Resolve CSV paths if not provided
+        resource_path = importlib.resources.files("vs30") / "resources"
+
+        with importlib.resources.as_file(resource_path) as res_dir:
+            if geology_categorical_csv is None:
+                geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_STDDEV_CSV
+            if terrain_categorical_csv is None:
+                terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_STDDEV_CSV
+
+            # Load observations for MVN adjustment
+            # Note: constants already include the 'observations/' prefix
+            if clustered_observations_csv is None:
+                clustered_obs_path = res_dir / constants.CLUSTERED_OBSERVATIONS_FILE
+                if clustered_obs_path.exists():
+                    clustered_observations_csv = clustered_obs_path
+            if independent_observations_csv is None:
+                if constants.INDEPENDENT_OBSERVATIONS_FILE != "none":
+                    independent_obs_path = (
+                        res_dir / constants.INDEPENDENT_OBSERVATIONS_FILE
+                    )
+                    if independent_obs_path.exists():
+                        independent_observations_csv = independent_obs_path
+
+            # Combine observations
+            obs_dfs = []
+            if (
+                clustered_observations_csv is not None
+                and clustered_observations_csv.exists()
+            ):
+                obs_dfs.append(pd.read_csv(clustered_observations_csv))
+            if (
+                independent_observations_csv is not None
+                and independent_observations_csv.exists()
+            ):
+                obs_dfs.append(pd.read_csv(independent_observations_csv))
+
+            if obs_dfs:
+                observations_df = pd.concat(obs_dfs, ignore_index=True)
+            else:
+                observations_df = pd.DataFrame(
+                    columns=["easting", "northing", "vs30", "uncertainty"]
+                )
+
+            typer.echo(
+                f"Loaded {len(observations_df)} observations for spatial adjustment"
+            )
+
+            # Load categorical models (skipinitialspace handles spaces after commas)
+            geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
+            terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
+
+            # Resolve n_proc from CLI or config
+            n_proc_resolved = resolve_n_proc(n_proc if n_proc is not None else cfg.get("n_proc", 1))
+
+            # ================================================================
+            # Parallel Processing Path
+            # ================================================================
+            if n_proc_resolved > 1:
+                typer.echo(f"\nProcessing with {n_proc_resolved} parallel workers...")
+
+                # Re-read the original CSV (without NZTM conversion - workers will do it)
+                locations_df_raw = pd.read_csv(locations_csv)
+
+                config = LocationsChunkConfig(
+                    lon_column=lon_column,
+                    lat_column=lat_column,
+                    include_intermediate=include_intermediate,
+                    combination_method=combination_method,
+                    coast_distance_raster=coast_distance_raster,
+                )
+
+                df = run_parallel_locations(
+                    locations_df=locations_df_raw,
+                    observations_df=observations_df,
+                    geol_model_df=geol_model_df,
+                    terr_model_df=terr_model_df,
+                    config=config,
+                    n_proc=n_proc_resolved,
+                )
+
+                # Write output
+                output_csv.parent.mkdir(parents=True, exist_ok=True)
+                df.to_csv(output_csv, index=False)
+                typer.echo(f"\nResults written to {output_csv}")
+                typer.echo(f"  Total locations: {len(df)}")
+                return
+
+            # ================================================================
+            # Sequential Processing Path (original code)
+            # ================================================================
+            typer.echo("\nProcessing geology model...")
+
+            # Get initial Vs30 values at points
+            geol_vs30, geol_stdv, geol_ids = get_vs30_for_points(
+                points, "geology", geol_model_df
+            )
+            df["geology_id"] = geol_ids
+
+            # Apply hybrid modifications (slope and coastal distance)
+            if coast_distance_raster is not None and coast_distance_raster.exists():
+                geol_vs30_hybrid, geol_stdv_hybrid = (
+                    apply_hybrid_modifications_at_points(
+                        points,
+                        geol_vs30,
+                        geol_stdv,
+                        geol_ids,
+                        slope_raster_path=SLOPE_RASTER,
+                        coast_distance_raster_path=coast_distance_raster,
+                    )
+                )
+            else:
+                typer.echo(
+                    "  Warning: No coastal distance raster provided, skipping hybrid modifications"
+                )
+                geol_vs30_hybrid = geol_vs30
+                geol_stdv_hybrid = geol_stdv
+
+            # Get model values at observation locations for MVN
+            if len(observations_df) > 0:
+                obs_locs = observations_df[["easting", "northing"]].values
+                obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
+                    obs_locs, "geology", geol_model_df
+                )
+
+                # Apply MVN spatial adjustment
+                geol_mvn_vs30, geol_mvn_stdv = compute_mvn_at_points(
+                    points=points,
+                    model_vs30=geol_vs30_hybrid,
+                    model_stdv=geol_stdv_hybrid,
+                    obs_locations=obs_locs,
+                    obs_vs30=observations_df["vs30"].values,
+                    obs_model_vs30=obs_geol_vs30,
+                    obs_model_stdv=obs_geol_stdv,
+                    obs_uncertainty=observations_df["uncertainty"].values,
+                    model_type="geology",
+                )
+            else:
+                geol_mvn_vs30 = geol_vs30_hybrid
+                geol_mvn_stdv = geol_stdv_hybrid
+
+            if include_intermediate:
+                df["geology_vs30"] = geol_vs30
+                df["geology_stdv"] = geol_stdv
+                df["geology_vs30_hybrid"] = geol_vs30_hybrid
+                df["geology_stdv_hybrid"] = geol_stdv_hybrid
+            df["geology_mvn_vs30"] = geol_mvn_vs30
+            df["geology_mvn_stdv"] = geol_mvn_stdv
+
+            # ================================================================
+            # Process Terrain Model
+            # ================================================================
+            typer.echo("Processing terrain model...")
+
+            # Get initial Vs30 values at points
+            terr_vs30, terr_stdv, terr_ids = get_vs30_for_points(
+                points, "terrain", terr_model_df
+            )
+            df["terrain_id"] = terr_ids
+
+            # Get model values at observation locations for MVN
+            if len(observations_df) > 0:
+                obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
+                    obs_locs, "terrain", terr_model_df
+                )
+
+                # Apply MVN spatial adjustment (no hybrid modifications for terrain)
+                terr_mvn_vs30, terr_mvn_stdv = compute_mvn_at_points(
+                    points=points,
+                    model_vs30=terr_vs30,
+                    model_stdv=terr_stdv,
+                    obs_locations=obs_locs,
+                    obs_vs30=observations_df["vs30"].values,
+                    obs_model_vs30=obs_terr_vs30,
+                    obs_model_stdv=obs_terr_stdv,
+                    obs_uncertainty=observations_df["uncertainty"].values,
+                    model_type="terrain",
+                )
+            else:
+                terr_mvn_vs30 = terr_vs30
+                terr_mvn_stdv = terr_stdv
+
+            if include_intermediate:
+                df["terrain_vs30"] = terr_vs30
+                df["terrain_stdv"] = terr_stdv
+            df["terrain_mvn_vs30"] = terr_mvn_vs30
+            df["terrain_mvn_stdv"] = terr_mvn_stdv
+
+            # ================================================================
+            # Combine Models
+            # ================================================================
+            typer.echo("Combining models...")
+
+            # Use the same combination logic as the grid pipeline
+            try:
+                # Check if combination_method is a ratio (float)
+                ratio = float(combination_method)
+                # Simple ratio-based combination
+                combined_vs30 = geol_mvn_vs30 * ratio + terr_mvn_vs30 * (1 - ratio)
+                combined_stdv = np.sqrt(
+                    (geol_mvn_stdv * ratio) ** 2 + (terr_mvn_stdv * (1 - ratio)) ** 2
+                )
+            except ValueError:
+                # Standard deviation weighting
+                if combination_method == "standard_deviation_weighting":
+                    # Inverse variance weighting
+                    geol_weight = 1 / (geol_mvn_stdv**2 + 1e-10)
+                    terr_weight = 1 / (terr_mvn_stdv**2 + 1e-10)
+                    total_weight = geol_weight + terr_weight
+
+                    combined_vs30 = (
+                        geol_mvn_vs30 * geol_weight + terr_mvn_vs30 * terr_weight
+                    ) / total_weight
+                    combined_stdv = np.sqrt(1 / total_weight)
+                else:
+                    typer.echo(
+                        f"Warning: Unknown combination method '{combination_method}', using 0.5 ratio"
+                    )
+                    combined_vs30 = (geol_mvn_vs30 + terr_mvn_vs30) / 2
+                    combined_stdv = np.sqrt((geol_mvn_stdv**2 + terr_mvn_stdv**2) / 4)
+
+            df["vs30"] = combined_vs30
+            df["stdv"] = combined_stdv
+
+            # Write output
+            output_csv.parent.mkdir(parents=True, exist_ok=True)
+            df.to_csv(output_csv, index=False)
+            typer.echo(f"\nResults written to {output_csv}")
+            typer.echo(f"  Total locations: {len(df)}")
+
+    except Exception as e:
+        logger.exception("Error in compute-at-locations")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
