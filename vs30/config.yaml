@@ -1,5 +1,9 @@
 # Vs30 config file
 
+# Number of processors for DBSCAN clustering, finding affected pixels, and spatial updates.
+# -1 uses all available cores.
+n_proc: -1
+
 # --- Grid Parameters ---
 # For tiny domain
 #grid_xmin: 1570050
@@ -16,8 +20,6 @@ grid_ymin: 4730050
 grid_ymax: 6250050
 grid_dx: 100
 grid_dy: 100
-
-
 
 # --- Full New Zealand Land Extent Bounds (for coastal distance calculations) ---
 # IMPORTANT: These values define the full extent of New Zealand land coverage
@@ -86,18 +88,20 @@ noisy: true
 phi_geology: 1407
 phi_terrain: 993
 
-# Maximum memory in GB for spatial boolean arrays during chunked processing
+# Maximum memory in GB for spatial boolean arrays during chunked processing per process.
 # Note: Total process memory usage will be several GB more than this limit
-# due to raster data, observation arrays, and other data structures
-max_spatial_boolean_array_memory_gb: 3
+# due to raster data, observation arrays, and other data structures.
+# When using parallel processing (n_proc > 1), each process uses up to this amount.
+# See docs/spatial_processing_optimization.md for benchmarking results.
+max_spatial_boolean_array_memory_gb: 1
 
-# Number of parallel processes for finding affected pixels in spatial operations
-# 1 = single-threaded (default), -1 = all CPU cores, >1 = specific count
-n_proc_find_affected_pixels: 1
-
-# Number of parallel processes for MVN spatial adjustment and location computations
-# 1 = single-threaded (default), -1 = all CPU cores, >1 = specific count
-n_proc_spatial_updates: 1
+# Observation subsampling step for find_affected_pixels when using clustered observations.
+# When observations are spatially clustered, nearby observations affect the same pixels.
+# Using every Nth observation (e.g., 100) significantly reduces computation time
+# while producing nearly identical results for the affected pixel mask.
+# Set to 1 for no subsampling (use all observations).
+# Only applies to clustered observations; independent observations always use step=1.
+obs_subsample_step_for_clustered: 100
 
 # --- Bayesian Update Parameters ---
 # These control how categorical Vs30 values are updated using observations.
@@ -122,10 +126,6 @@ min_group: 5
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 eps: 15000.0
 
-# Number of processors for DBSCAN clustering. -1 uses all available cores.
-# Note: This has minimal impact on total runtime (<2 seconds difference).
-nproc_for_dbscan_clustering: 1
-
 # Paths relative to the resources directory
 # Observational data that should be treated independently (without clustering)
 # Set to "none" to disable, or provide a filename relative to resources directory
@@ -134,14 +134,14 @@ independent_observations_file: observations/measured_vs30_independent_observatio
 
 # Observational data that should be treated with spatial clustering
 # Set to "none" to disable, or provide a filename relative to resources directory
-clustered_observations_file : none
-#clustered_observations_file: observations/measured_vs30_cpt.csv
+#clustered_observations_file : none
+clustered_observations_file: observations/measured_vs30_cpt.csv
 
-output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
+#output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
 #output_dir: /tmp/refactored_vs30_output_tiny_domain_clustered_observations
 #output_dir: /tmp/refactored_vs30_output_full_domain_clustered_observations
 #output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
-
+output_dir: /tmp/large_domain_clustered_observations
 
 # Options for geology Vs30 models
 # geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv

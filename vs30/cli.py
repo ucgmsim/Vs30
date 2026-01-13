@@ -18,10 +18,34 @@ Usage
     vs30 --help         # See all available commands
 """
 
+# Configure BLAS threading before any imports that might use BLAS libraries
+import os
+
+# Load config early to determine threading behavior
+from pathlib import Path
+
+import yaml
+
+try:
+    config_path = Path(__file__).parent / "config.yaml"
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f)
+    n_proc = cfg.get("n_proc", 1)
+
+    # If n_proc is not 1, we expect multiprocessing, so restrict BLAS threads
+    if n_proc != 1:
+        os.environ["OMP_NUM_THREADS"] = "1"
+        os.environ["OPENBLAS_NUM_THREADS"] = "1"
+        os.environ["MKL_NUM_THREADS"] = "1"
+except Exception:
+    # If config loading fails, default to single-threaded BLAS for safety
+    os.environ["OMP_NUM_THREADS"] = "1"
+    os.environ["OPENBLAS_NUM_THREADS"] = "1"
+    os.environ["MKL_NUM_THREADS"] = "1"
+
 import importlib.resources
 import logging
 import shutil
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -624,7 +648,7 @@ def spatial_fit(
         from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
 
         n_proc_resolved = resolve_n_proc(
-            n_proc if n_proc is not None else cfg.get("n_proc_find_affected_pixels", 1)
+            n_proc if n_proc is not None else cfg.get("n_proc", 1)
         )
 
         logger.info(f"Starting spatial fit for {model_type} model")
@@ -641,6 +665,14 @@ def spatial_fit(
         logger.info("Loading observations...")
         observations = pd.read_csv(observations_csv, skipinitialspace=True)
         spatial.validate_observations(observations)
+
+        # Check if this is clustered observations file (for subsampling optimization)
+        clustered_obs_file = cfg.get("clustered_observations_file", "")
+        is_clustered_obs = (
+            clustered_obs_file
+            and clustered_obs_file.lower() != "none"
+            and observations_csv.name in clustered_obs_file
+        )
 
         # 3. Load Model Values (updated categorical table)
         logger.info("Loading updated model table...")
@@ -703,9 +735,59 @@ def spatial_fit(
             return
 
         # 5. Find Affected Pixels
+        # For clustered observations, subsample within each cluster before finding affected pixels
+        obs_data_for_bbox = obs_data
+        if is_clustered_obs:
+            from sklearn.cluster import DBSCAN
+
+            logger.info(
+                "Clustering observations for optimized affected pixel search..."
+            )
+            min_group = cfg.get("min_group", constants.MIN_GROUP)
+            eps = cfg.get("eps", constants.EPS)
+            nproc_clustering = cfg.get("n_proc", constants.NPROC_FOR_DBSCAN_CLUSTERING)
+
+            # Run DBSCAN directly on the filtered observation locations
+            dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc_clustering)
+            cluster_labels = dbscan.fit_predict(obs_data.locations)
+
+            n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+            n_noise = np.sum(cluster_labels == -1)
+            logger.info(
+                f"Found {n_clusters} clusters and {n_noise} noise points "
+                f"in {len(obs_data.locations)} observations"
+            )
+
+            # Subsample observations within each cluster
+            obs_subsample_step = cfg.get(
+                "obs_subsample_step_for_clustered",
+                constants.OBS_SUBSAMPLE_STEP_FOR_CLUSTERED,
+            )
+            subsample_indices = spatial.subsample_by_cluster(
+                cluster_labels, step=obs_subsample_step
+            )
+
+            # Create subsampled ObservationData for bbox search only
+            obs_data_for_bbox = spatial.ObservationData(
+                locations=obs_data.locations[subsample_indices],
+                vs30=obs_data.vs30[subsample_indices],
+                model_vs30=obs_data.model_vs30[subsample_indices],
+                model_stdv=obs_data.model_stdv[subsample_indices],
+                residuals=obs_data.residuals[subsample_indices],
+                omega=obs_data.omega[subsample_indices],
+                uncertainty=obs_data.uncertainty[subsample_indices],
+            )
+            logger.info(
+                f"Subsampled to {len(subsample_indices)} observations for affected pixel search "
+                f"(step={obs_subsample_step})"
+            )
+
         logger.info("Finding pixels affected by observations...")
         bbox_result = spatial.find_affected_pixels(
-            raster_data, obs_data, max_dist_m=max_dist_m, n_proc=n_proc_resolved
+            raster_data,
+            obs_data_for_bbox,
+            max_dist_m=max_dist_m,
+            n_proc=n_proc_resolved,
         )
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
 
@@ -934,7 +1016,7 @@ def full_pipeline_for_geology_or_terrain(
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"Starting FULL PIPELINE for {model_type}")
+        logger.info(f"Starting full pipeline for {model_type}")
         logger.info(f"Output directory: {output_dir}")
 
         # Config resolution
@@ -946,7 +1028,7 @@ def full_pipeline_for_geology_or_terrain(
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["nproc_for_dbscan_clustering"]
+        nproc = nproc if nproc is not None else cfg["n_proc"]
 
         # Resolve Bayesian update flag
         do_bayesian_update = cfg[
@@ -1065,7 +1147,7 @@ def full_pipeline_for_geology_or_terrain(
             n_proc=n_proc,
         )
 
-        typer.echo("\n✓ FULL PIPELINE COMPLETED SUCCESSFULLY")
+        typer.echo("\n✓ Full pipeline for {model_type} completed successfully")
         typer.echo(f"  Final output available in: {output_dir}")
 
     except Exception as e:
@@ -1277,7 +1359,7 @@ def full_pipeline(
         min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
         min_group = min_group if min_group is not None else cfg["min_group"]
         eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["nproc_for_dbscan_clustering"]
+        nproc = nproc if nproc is not None else cfg["n_proc"]
         combination_method = (
             combination_method
             if combination_method is not None
@@ -1287,7 +1369,7 @@ def full_pipeline(
         from vs30.parallel import resolve_n_proc
 
         n_proc_resolved = resolve_n_proc(
-            n_proc if n_proc is not None else cfg.get("n_proc_spatial_updates", 1)
+            n_proc if n_proc is not None else cfg.get("n_proc", 1)
         )
 
         # Resolve CSV paths if not provided
@@ -1542,7 +1624,7 @@ def compute_at_locations(
 
             # Resolve n_proc from CLI or config
             n_proc_resolved = resolve_n_proc(
-                n_proc if n_proc is not None else cfg.get("n_proc_spatial_updates", 1)
+                n_proc if n_proc is not None else cfg.get("n_proc", 1)
             )
 
             # ================================================================

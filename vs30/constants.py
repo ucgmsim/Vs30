@@ -48,14 +48,16 @@ COV_REDUC = _config["cov_reduc"]
 NOISY = _config["noisy"]
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB = _config["max_spatial_boolean_array_memory_gb"]
 MODEL_NODATA = _config["nodata_value"]
-N_PROC = _config.get("n_proc", 1)
+N_PROC_FIND_AFFECTED_PIXELS = _config["n_proc"]
+N_PROC_SPATIAL_UPDATES = _config["n_proc"]
+OBS_SUBSAMPLE_STEP_FOR_CLUSTERED = _config["obs_subsample_step_for_clustered"]
 
 # Bayesian Update Parameters
 N_PRIOR = _config["n_prior"]
 MIN_SIGMA = _config["min_sigma"]
 MIN_GROUP = _config["min_group"]
 EPS = _config["eps"]
-NPROC_FOR_DBSCAN_CLUSTERING = _config["nproc_for_dbscan_clustering"]
+NPROC_FOR_DBSCAN_CLUSTERING = _config["n_proc"]
 
 # Correlation Lengths (Phi)
 PHI_GEOLOGY = _config["phi_geology"]
