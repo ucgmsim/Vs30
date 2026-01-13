@@ -9,15 +9,16 @@ The core MVN functions in spatial.py remain unchanged - each worker process
 simply calls them with a smaller input, unaware it's part of a parallel job.
 """
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import multiprocessing as mp
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 
-from vs30 import constants
 from vs30.category import get_vs30_for_points
 from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
 from vs30.spatial import (
@@ -27,6 +28,29 @@ from vs30.spatial import (
     compute_mvn_at_points,
     compute_mvn_update_for_pixel,
 )
+
+
+@contextmanager
+def single_threaded_blas():
+    """
+    Context manager to restrict BLAS to single-threaded operation.
+
+    Use this when running multiprocessing to prevent oversubscription.
+    For example, 8 processes x 8 BLAS threads = 64 threads competing
+    for 8 cores, which is slower than 8 single-threaded processes.
+
+    This replaces the previous approach of setting OMP_NUM_THREADS etc.
+    at import time, allowing BLAS thread control to happen at runtime
+    after CLI arguments have been parsed.
+
+    Usage
+    -----
+        with single_threaded_blas():
+            with mp.Pool(n_proc) as pool:
+                results = pool.map(worker_func, chunks)
+    """
+    with threadpool_limits(limits=1, user_api="blas"):
+        yield
 
 
 def resolve_n_proc(n_proc: int | None) -> int:
@@ -362,15 +386,17 @@ def run_parallel_locations(
     actual_n_proc = len(chunk_args)
 
     # Process in parallel using spawn context (avoids GDAL fork issues)
-    with _spawn_context.Pool(processes=actual_n_proc) as pool:
-        results = list(
-            tqdm(
-                pool.imap(_process_locations_chunk, chunk_args),
-                total=actual_n_proc,
-                desc=f"Processing locations ({actual_n_proc} workers)",
-                unit="chunk",
+    # Use single_threaded_blas to prevent BLAS oversubscription
+    with single_threaded_blas():
+        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(_process_locations_chunk, chunk_args),
+                    total=actual_n_proc,
+                    desc=f"Processing locations ({actual_n_proc} workers)",
+                    unit="chunk",
+                )
             )
-        )
 
     # Merge: concatenate in order
     results.sort(key=lambda x: x[0])
@@ -472,15 +498,17 @@ def run_parallel_spatial_fit(
     actual_n_proc = len(chunk_args)
 
     # Process in parallel using spawn context (avoids GDAL fork issues)
-    with _spawn_context.Pool(processes=actual_n_proc) as pool:
-        results = list(
-            tqdm(
-                pool.imap(_process_pixels_chunk, chunk_args),
-                total=actual_n_proc,
-                desc=f"Processing pixels ({actual_n_proc} workers)",
-                unit="chunk",
+    # Use single_threaded_blas to prevent BLAS oversubscription
+    with single_threaded_blas():
+        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(_process_pixels_chunk, chunk_args),
+                    total=actual_n_proc,
+                    desc=f"Processing pixels ({actual_n_proc} workers)",
+                    unit="chunk",
+                )
             )
-        )
 
     # Merge: concatenate update lists
     all_updates = []

@@ -17,6 +17,8 @@ dependencies = [
     "pytest",
     "geopandas",
     "typer",
+    "pydantic>=2.0",
+    "threadpoolctl",
 ]
 
 [project.urls]

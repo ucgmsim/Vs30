@@ -18,10 +18,11 @@ import rasterio
 import shapely
 from sklearn.cluster import DBSCAN
 
-from vs30 import constants
+from vs30.config import get_default_config
 
-# Constant for no-data category ID from constants
-RASTER_ID_NODATA_VALUE = constants.RASTER_ID_NODATA_VALUE
+# Get nodata value from config
+_cfg = get_default_config()
+RASTER_ID_NODATA_VALUE = _cfg.raster_id_nodata_value
 
 # Standard column name used for model IDs in DataFrames
 STANDARD_ID_COLUMN = "id"

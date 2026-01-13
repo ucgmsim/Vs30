@@ -6,20 +6,20 @@ n_proc: -1
 
 # --- Grid Parameters ---
 # For tiny domain
-#grid_xmin: 1570050
-#grid_xmax: 1571050
-#grid_ymin: 5180050
-#grid_ymax: 5181050
-#grid_dx: 100
-#grid_dy: 100
-
-# For full NZ domain
-grid_xmin: 1060050
-grid_xmax: 2120050
-grid_ymin: 4730050
-grid_ymax: 6250050
+grid_xmin: 1570050
+grid_xmax: 1571050
+grid_ymin: 5180050
+grid_ymax: 5181050
 grid_dx: 100
 grid_dy: 100
+
+# For full NZ domain
+# grid_xmin: 1060050
+# grid_xmax: 2120050
+# grid_ymin: 4730050
+# grid_ymax: 6250050
+# grid_dx: 100
+# grid_dy: 100
 
 # --- Full New Zealand Land Extent Bounds (for coastal distance calculations) ---
 # IMPORTANT: These values define the full extent of New Zealand land coverage
@@ -140,8 +140,8 @@ clustered_observations_file: observations/measured_vs30_cpt.csv
 #output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
 #output_dir: /tmp/refactored_vs30_output_tiny_domain_clustered_observations
 #output_dir: /tmp/refactored_vs30_output_full_domain_clustered_observations
-#output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
-output_dir: /tmp/large_domain_clustered_observations
+output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
+# output_dir: /tmp/large_domain_clustered_observations
 
 # Options for geology Vs30 models
 # geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
