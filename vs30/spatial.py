@@ -65,6 +65,7 @@ class ObservationData:
     residuals: np.ndarray  # (n_obs,) log residuals: log(vs30 / model_vs30)
     omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
     uncertainty: np.ndarray  # (n_obs,) observation uncertainties
+    cluster_labels: np.ndarray | None = None  # (n_obs,) cluster labels from DBSCAN, -1 = unclustered
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -77,6 +78,7 @@ class ObservationData:
             residuals=np.empty(0),
             omega=np.empty(0),
             uncertainty=np.empty(0),
+            cluster_labels=None,
         )
 
 
@@ -781,6 +783,60 @@ def compute_mvn_update_for_pixel(
 # ============================================================================
 
 
+def subsample_by_cluster(
+    cluster_labels: np.ndarray,
+    step: int = 100,
+) -> np.ndarray:
+    """
+    Subsample observation indices by taking every Nth observation within each cluster.
+
+    For clustered observations, nearby observations affect the same pixels.
+    This function ensures representative sampling from each cluster rather
+    than global subsampling which might miss small clusters entirely.
+
+    Parameters
+    ----------
+    cluster_labels : ndarray
+        Array of cluster labels for each observation. -1 indicates unclustered
+        observations (noise points from DBSCAN).
+    step : int, optional
+        Take every Nth observation within each cluster. Default is 100.
+
+    Returns
+    -------
+    ndarray
+        Indices of the subsampled observations.
+
+    Notes
+    -----
+    - Unclustered observations (label=-1) are all included since they are
+      spatially isolated and each may affect different pixels.
+    - Within each cluster, observations are subsampled by taking every Nth.
+    - At least one observation is always kept from each cluster.
+    """
+    n_obs = len(cluster_labels)
+    unique_labels = np.unique(cluster_labels)
+
+    selected_indices = []
+
+    for label in unique_labels:
+        cluster_mask = cluster_labels == label
+        cluster_indices = np.where(cluster_mask)[0]
+
+        if label == -1:
+            # Unclustered observations - include all
+            selected_indices.extend(cluster_indices.tolist())
+        else:
+            # Clustered observations - take every Nth
+            subsampled = cluster_indices[::step]
+            selected_indices.extend(subsampled.tolist())
+
+    # Sort to maintain original order
+    selected_indices = np.array(sorted(selected_indices), dtype=np.int64)
+
+    return selected_indices
+
+
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
@@ -810,9 +866,11 @@ def find_affected_pixels(
     # Get coordinates for valid pixels
     grid_locs = raster_data.get_coordinates()
 
-    # Calculate chunk size
+    n_obs = len(obs_data.locations)
+
+    # Calculate chunk size based on observation count
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
+        n_obs, constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
     )
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
@@ -834,9 +892,7 @@ def find_affected_pixels(
 
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
-    obs_to_grid_indices = [
-        np.array([], dtype=np.int64) for _ in range(len(obs_data.locations))
-    ]
+    obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(n_obs)]
 
     logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
 
