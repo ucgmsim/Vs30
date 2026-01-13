@@ -15,37 +15,15 @@ Commands
 Usage
 -----
     vs30 full-pipeline  # Run everything with default config
+    vs30 --config /path/to/config.yaml full-pipeline  # Use custom config
     vs30 --help         # See all available commands
 """
 
-# Configure BLAS threading before any imports that might use BLAS libraries
-import os
-
-# Load config early to determine threading behavior
-from pathlib import Path
-
-import yaml
-
-try:
-    config_path = Path(__file__).parent / "config.yaml"
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
-    n_proc = cfg.get("n_proc", 1)
-
-    # If n_proc is not 1, we expect multiprocessing, so restrict BLAS threads
-    if n_proc != 1:
-        os.environ["OMP_NUM_THREADS"] = "1"
-        os.environ["OPENBLAS_NUM_THREADS"] = "1"
-        os.environ["MKL_NUM_THREADS"] = "1"
-except Exception:
-    # If config loading fails, default to single-threaded BLAS for safety
-    os.environ["OMP_NUM_THREADS"] = "1"
-    os.environ["OPENBLAS_NUM_THREADS"] = "1"
-    os.environ["MKL_NUM_THREADS"] = "1"
-
 import importlib.resources
 import logging
+from pathlib import Path
 import shutil
+from typing import Annotated, Optional
 
 import numpy as np
 import pandas as pd
@@ -54,8 +32,8 @@ import typer
 from matplotlib import pyplot as plt
 from typer import Option
 
-from vs30 import constants, raster, spatial, utils
-from vs30.utils import load_config
+from vs30 import raster, spatial, utils
+from vs30.config import Vs30Config
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +43,58 @@ app = typer.Typer(
     help="VS30 map generation and categorical model updates",
     add_completion=False,
 )
+
+# =============================================================================
+# Global Config State
+# =============================================================================
+
+_cli_config: Vs30Config | None = None
+
+
+def get_config() -> Vs30Config:
+    """
+    Get the current CLI configuration.
+
+    Returns the config set by the --config option, or the default
+    package config if no custom config was specified.
+    """
+    global _cli_config
+    if _cli_config is None:
+        _cli_config = Vs30Config.default()
+    return _cli_config
+
+
+@app.callback()
+def main(
+    config: Annotated[
+        Optional[Path],
+        Option(
+            "--config",
+            "-c",
+            help="Path to config.yaml file (default: package config.yaml)",
+        ),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        Option("--verbose", "-v", help="Enable verbose logging"),
+    ] = False,
+):
+    """VS30 map generation and categorical model updates."""
+    global _cli_config
+
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG)
+
+    # Load config from specified path or default
+    if config is not None:
+        if not config.exists():
+            typer.echo(f"Error: Config file not found: {config}", err=True)
+            raise typer.Exit(1)
+        _cli_config = Vs30Config.from_yaml(config)
+        logger.info(f"Loaded config from {config}")
+    else:
+        _cli_config = Vs30Config.default()
+        logger.debug(f"Using default config from {Vs30Config.default_config_path()}")
 
 
 @app.command()
@@ -100,29 +130,29 @@ def update_categorical_vs30_models(
         help="Model type: either 'geology' or 'terrain'",
     ),
     n_prior: int = Option(
-        constants.N_PRIOR,
+        None,
         "--n-prior",
-        help=f"Effective number of prior observations (default: {constants.N_PRIOR})",
+        help="Effective number of prior observations (default from config)",
     ),
     min_sigma: float = Option(
-        constants.MIN_SIGMA,
+        None,
         "--min-sigma",
-        help=f"Minimum standard deviation allowed (default: {constants.MIN_SIGMA})",
+        help="Minimum standard deviation allowed (default from config)",
     ),
     min_group: int = Option(
-        constants.MIN_GROUP,
+        None,
         "--min-group",
-        help=f"Minimum group size for DBSCAN clustering (default: {constants.MIN_GROUP})",
+        help="Minimum group size for DBSCAN clustering (default from config)",
     ),
     eps: float = Option(
-        constants.EPS,
+        None,
         "--eps",
-        help=f"Maximum distance (metres) for points to be considered in same cluster (default: {constants.EPS})",
+        help="Maximum distance (metres) for points to be considered in same cluster (default from config)",
     ),
     nproc: int = Option(
-        constants.NPROC_FOR_DBSCAN_CLUSTERING,
+        None,
         "--nproc",
-        help=f"Number of processes for DBSCAN clustering. -1 to use all available cores (default: {constants.NPROC_FOR_DBSCAN_CLUSTERING})",
+        help="Number of processes for DBSCAN clustering. -1 to use all available cores (default from config)",
     ),
 ) -> None:
     """
@@ -144,6 +174,14 @@ def update_categorical_vs30_models(
       and more representative; they refine the bias-corrected model from clustered data
     """
     try:
+        # Get config and resolve defaults
+        cfg = get_config()
+        n_prior = n_prior if n_prior is not None else cfg.n_prior
+        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
+        min_group = min_group if min_group is not None else cfg.min_group
+        eps = eps if eps is not None else cfg.eps
+        nproc = nproc if nproc is not None else cfg.n_proc
+
         # Validate that at least one observations CSV is provided
         if clustered_observations_csv is None and independent_observations_csv is None:
             typer.echo(
@@ -196,7 +234,7 @@ def update_categorical_vs30_models(
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"] != constants.NODATA_VALUE
+            categorical_model_df["mean_vs30_km_per_s"] != cfg.nodata_value
         ]
 
         # Validate required columns
@@ -334,7 +372,7 @@ def update_categorical_vs30_models(
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_filename = constants.POSTERIOR_PREFIX + categorical_model_csv.name
+        output_filename = cfg.posterior_prefix + categorical_model_csv.name
         output_path = output_dir / output_filename
 
         current_prior_df.to_csv(output_path, index=False)
@@ -384,39 +422,32 @@ def make_initial_vs30_raster(
             )
             raise typer.Exit(1)
 
-        # Load config - REQUIRED
-        config_path = Path(__file__).parent / "config.yaml"
-        cfg = utils.load_config(config_path)
-        logger.info(f"Loaded config from {config_path}")
-
-        base_path = utils._resolve_base_path(config_path)
-        logger.info(f"Using base path: {base_path}")
+        # Get config
+        cfg = get_config()
 
         # Determine output directory
         if output_dir is None:
-            output_dir = base_path / cfg["output_dir"]
-        else:
-            output_dir = Path(output_dir)
+            output_dir = Path(cfg.output_dir)
 
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
-        # Load grid parameters STRICTLY from config
+        # Load grid parameters from config
         grid_params = {
-            "xmin": cfg["grid_xmin"],
-            "xmax": cfg["grid_xmax"],
-            "ymin": cfg["grid_ymin"],
-            "ymax": cfg["grid_ymax"],
-            "dx": cfg["grid_dx"],
-            "dy": cfg["grid_dy"],
+            "xmin": cfg.grid_xmin,
+            "xmax": cfg.grid_xmax,
+            "ymin": cfg.grid_ymin,
+            "ymax": cfg.grid_ymax,
+            "dx": cfg.grid_dx,
+            "dy": cfg.grid_dy,
         }
         logger.info(f"Using grid parameters: {grid_params}")
 
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            csv_path = terrain_csv if terrain_csv else constants.TERRAIN_MEAN_STDDEV_CSV
+            csv_path = terrain_csv if terrain_csv else cfg.TERRAIN_MEAN_STDDEV_CSV
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
@@ -425,14 +456,14 @@ def make_initial_vs30_raster(
             )
 
             logger.info("Creating terrain VS30 raster...")
-            vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
+            vs30_raster = output_dir / cfg.terrain_initial_vs30_filename
             raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            csv_path = geology_csv if geology_csv else constants.GEOLOGY_MEAN_STDDEV_CSV
+            csv_path = geology_csv if geology_csv else cfg.GEOLOGY_MEAN_STDDEV_CSV
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
@@ -441,7 +472,7 @@ def make_initial_vs30_raster(
             )
 
             logger.info("Creating geology VS30 raster...")
-            vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
+            vs30_raster = output_dir / cfg.geology_initial_vs30_filename
             raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
@@ -491,9 +522,8 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load config
-        cfg_path = Path(__file__).parent / "config.yaml"
-        cfg = load_config(cfg_path)
+        # Get config
+        cfg = get_config()
 
         logger.info(
             f"Processing slope and coastal distance adjusted model for: {input_raster}"
@@ -517,11 +547,11 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
                 id_array = id_src.read(1)
 
         # 2. Create/Load Intermediate Rasters
-        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
+        slope_path = output_dir / cfg.slope_raster_filename
         logger.info(f"Generating slope raster: {slope_path}")
         slope_array, _ = raster.create_slope_raster(slope_path, profile)
 
-        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
+        coast_path = output_dir / cfg.coast_distance_raster_filename
         logger.info(f"Generating coast distance raster: {coast_path}")
         coast_dist_array, _ = raster.create_coast_distance_raster(coast_path, profile)
 
@@ -539,20 +569,20 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
             mod13=True,
             hybrid=True,
             # Pass parameters from config
-            hybrid_mod6_dist_min=cfg["hybrid_mod6_dist_min"],
-            hybrid_mod6_dist_max=cfg["hybrid_mod6_dist_max"],
-            hybrid_mod6_vs30_min=cfg["hybrid_mod6_vs30_min"],
-            hybrid_mod6_vs30_max=cfg["hybrid_mod6_vs30_max"],
-            hybrid_mod13_dist_min=cfg["hybrid_mod13_dist_min"],
-            hybrid_mod13_dist_max=cfg["hybrid_mod13_dist_max"],
-            hybrid_mod13_vs30_min=cfg["hybrid_mod13_vs30_min"],
-            hybrid_mod13_vs30_max=cfg["hybrid_mod13_vs30_max"],
+            hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
+            hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
+            hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
+            hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
+            hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
+            hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
+            hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
+            hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
         )
 
         # 4. Save Output
         output_path = (
             output_dir
-            / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
+            / cfg.geology_vs30_slope_and_coastal_distance_adjusted_filename
         )
 
         # Update profile for output
@@ -633,22 +663,21 @@ def spatial_fit(
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Load config to get parameters
-        cfg_path = Path(__file__).parent / "config.yaml"
-        cfg = load_config(cfg_path)
+        # Get config
+        cfg = get_config()
 
         # Get parameters from config
-        max_dist_m = cfg["max_dist_m"]
-        max_points = cfg["max_points"]
-        phi = cfg[f"phi_{model_type}"]
-        noisy = cfg["noisy"]
-        cov_reduc = cfg["cov_reduc"]
+        max_dist_m = cfg.max_dist_m
+        max_points = cfg.max_points
+        phi = cfg.phi[model_type]
+        noisy = cfg.noisy
+        cov_reduc = cfg.cov_reduc
 
         # Resolve n_proc from CLI or config
         from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
 
         n_proc_resolved = resolve_n_proc(
-            n_proc if n_proc is not None else cfg.get("n_proc", 1)
+            n_proc if n_proc is not None else cfg.n_proc
         )
 
         logger.info(f"Starting spatial fit for {model_type} model")
@@ -667,7 +696,7 @@ def spatial_fit(
         spatial.validate_observations(observations)
 
         # Check if this is clustered observations file (for subsampling optimization)
-        clustered_obs_file = cfg.get("clustered_observations_file", "")
+        clustered_obs_file = cfg.clustered_observations_file
         is_clustered_obs = (
             clustered_obs_file
             and clustered_obs_file.lower() != "none"
@@ -695,7 +724,7 @@ def spatial_fit(
         logger.info("Preparing observation data for MVN processing...")
 
         if model_type == "geology":
-            # Geology models use hybrid parameters from config (cfg already loaded above)
+            # Geology models use hybrid parameters from config
             obs_data = spatial.prepare_observation_data(
                 observations,
                 raster_data,
@@ -703,14 +732,14 @@ def spatial_fit(
                 model_type,
                 output_dir,
                 noisy=noisy,
-                hybrid_mod6_dist_min=cfg.get("hybrid_mod6_dist_min"),
-                hybrid_mod6_dist_max=cfg.get("hybrid_mod6_dist_max"),
-                hybrid_mod6_vs30_min=cfg.get("hybrid_mod6_vs30_min"),
-                hybrid_mod6_vs30_max=cfg.get("hybrid_mod6_vs30_max"),
-                hybrid_mod13_dist_min=cfg.get("hybrid_mod13_dist_min"),
-                hybrid_mod13_dist_max=cfg.get("hybrid_mod13_dist_max"),
-                hybrid_mod13_vs30_min=cfg.get("hybrid_mod13_vs30_min"),
-                hybrid_mod13_vs30_max=cfg.get("hybrid_mod13_vs30_max"),
+                hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
+                hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
+                hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
+                hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
+                hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
+                hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
+                hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
+                hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
             )
         else:
             # Terrain models don't use hybrid parameters
@@ -728,7 +757,7 @@ def spatial_fit(
             logger.warning(
                 "No valid observations found within model bounds. Copying input raster to output."
             )
-            output_filename = constants.OUTPUT_FILENAMES[model_type]
+            output_filename = cfg.output_filenames[model_type]
             output_path = output_dir / output_filename
             shutil.copyfile(input_raster, output_path)
             typer.echo(f"✓ No updates needed. Copied to {output_path}")
@@ -743,9 +772,9 @@ def spatial_fit(
             logger.info(
                 "Clustering observations for optimized affected pixel search..."
             )
-            min_group = cfg.get("min_group", constants.MIN_GROUP)
-            eps = cfg.get("eps", constants.EPS)
-            nproc_clustering = cfg.get("n_proc", constants.NPROC_FOR_DBSCAN_CLUSTERING)
+            min_group = cfg.min_group
+            eps = cfg.eps
+            nproc_clustering = cfg.n_proc
 
             # Run DBSCAN directly on the filtered observation locations
             dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc_clustering)
@@ -759,10 +788,7 @@ def spatial_fit(
             )
 
             # Subsample observations within each cluster
-            obs_subsample_step = cfg.get(
-                "obs_subsample_step_for_clustered",
-                constants.OBS_SUBSAMPLE_STEP_FOR_CLUSTERED,
-            )
+            obs_subsample_step = cfg.obs_subsample_step_for_clustered
             subsample_indices = spatial.subsample_by_cluster(
                 cluster_labels, step=obs_subsample_step
             )
@@ -866,8 +892,11 @@ def plot_posterior_values(
         # Load CSV
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
+        # Get config
+        cfg = get_config()
+
         # Filter out rows with placeholder values for excluded categories (e.g., water)
-        df = df[df["prior_mean_vs30_km_per_s"] != constants.NODATA_VALUE].copy()
+        df = df[df["prior_mean_vs30_km_per_s"] != cfg.nodata_value].copy()
 
         # Validate required columns
         required_cols = [
@@ -896,7 +925,7 @@ def plot_posterior_values(
         posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
 
         # Create figure
-        fig, ax = plt.subplots(figsize=constants.PLOT_FIGSIZE)
+        fig, ax = plt.subplots(figsize=cfg.plot_figsize)
 
         # Offset for x positions to separate prior and posterior
         offset = 0.2
@@ -946,7 +975,7 @@ def plot_posterior_values(
 
         # Save plot
         plt.tight_layout()
-        plt.savefig(output_path, dpi=constants.PLOT_DPI, bbox_inches="tight")
+        plt.savefig(output_path, dpi=cfg.plot_dpi, bbox_inches="tight")
         plt.close()
 
         logger.info(f"Plot saved to: {output_path}")
@@ -1019,27 +1048,22 @@ def full_pipeline_for_geology_or_terrain(
         logger.info(f"Starting full pipeline for {model_type}")
         logger.info(f"Output directory: {output_dir}")
 
-        # Config resolution
-        cfg_path = Path(__file__).parent / "config.yaml"
-        cfg = load_config(cfg_path)
+        # Get config
+        cfg = get_config()
 
         # Resolve parameters
-        n_prior = n_prior if n_prior is not None else cfg["n_prior"]
-        min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
-        min_group = min_group if min_group is not None else cfg["min_group"]
-        eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["n_proc"]
+        n_prior = n_prior if n_prior is not None else cfg.n_prior
+        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
+        min_group = min_group if min_group is not None else cfg.min_group
+        eps = eps if eps is not None else cfg.eps
+        nproc = nproc if nproc is not None else cfg.n_proc
 
         # Resolve Bayesian update flag
-        do_bayesian_update = cfg[
-            "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values"
-        ]
+        do_bayesian_update = cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values
 
         # Resolve observations from config if not provided
         if clustered_observations_csv is None:
-            clustered_obs_file = cfg.get(
-                "clustered_observations_file", constants.CLUSTERED_OBSERVATIONS_FILE
-            )
+            clustered_obs_file = cfg.clustered_observations_file
             if clustered_obs_file and clustered_obs_file.lower() != "none":
                 # Find observation file relative to package resources
                 resource_path = importlib.resources.files("vs30") / "resources"
@@ -1049,9 +1073,7 @@ def full_pipeline_for_geology_or_terrain(
                         clustered_observations_csv = candidate
 
         if independent_observations_csv is None:
-            indep_obs_file = cfg.get(
-                "independent_observations_file", constants.INDEPENDENT_OBSERVATIONS_FILE
-            )
+            indep_obs_file = cfg.independent_observations_file
             if indep_obs_file and indep_obs_file.lower() != "none":
                 # Find observation file relative to package resources
                 resource_path = importlib.resources.files("vs30") / "resources"
@@ -1077,7 +1099,7 @@ def full_pipeline_for_geology_or_terrain(
             )
 
             posterior_csv = (
-                output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+                output_dir / f"{cfg.posterior_prefix}{categorical_model_csv.name}"
             )
             if not posterior_csv.exists():
                 raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
@@ -1098,14 +1120,14 @@ def full_pipeline_for_geology_or_terrain(
         )
 
         initial_raster = output_dir / (
-            constants.GEOLOGY_INITIAL_VS30_FILENAME
+            cfg.geology_initial_vs30_filename
             if model_type == "geology"
-            else constants.TERRAIN_INITIAL_VS30_FILENAME
+            else cfg.terrain_initial_vs30_filename
         )
         id_raster_name = (
-            constants.GEOLOGY_ID_FILENAME
+            cfg.geology_id_filename
             if model_type == "geology"
-            else constants.TERRAIN_ID_FILENAME
+            else cfg.terrain_id_filename
         )
         id_raster = output_dir / id_raster_name
 
@@ -1114,7 +1136,7 @@ def full_pipeline_for_geology_or_terrain(
 
         # --- Step 3: Hybrid Modification (Geology Only) ---
         current_raster = initial_raster
-        # id_raster was already set above using the correct filename constant
+        # id_raster was already set above using the correct filename config
 
         if model_type == "geology":
             logger.info(
@@ -1128,7 +1150,7 @@ def full_pipeline_for_geology_or_terrain(
             )
             current_raster = (
                 output_dir
-                / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
+                / cfg.geology_vs30_slope_and_coastal_distance_adjusted_filename
             )
             if not current_raster.exists():
                 raise FileNotFoundError(f"Step 3 failed to produce {current_raster}")
@@ -1182,12 +1204,11 @@ def combine(
         if not terrain_tif.exists():
             raise FileNotFoundError(f"Terrain raster not found: {terrain_tif}")
 
-        # Load config to resolve defaults if needed
-        config_path = Path(__file__).parent / "config.yaml"
-        cfg = utils.load_config(config_path)
+        # Get config
+        cfg = get_config()
 
         if combination_method is None:
-            combination_method = cfg["combination_method"]
+            combination_method = cfg.combination_method
 
         logger.info(f"Averaging {geology_tif} and {terrain_tif}")
 
@@ -1221,9 +1242,7 @@ def combine(
                 # Not a float, check for specific string
                 if str(combination_method).strip() == "standard_deviation_weighting":
                     use_stdv_weight = True
-                    from vs30 import constants
-
-                    k_val = constants.K_VALUE
+                    k_val = cfg.k_value
                 else:
                     raise ValueError(
                         f"Unknown combination method: {combination_method}"
@@ -1340,36 +1359,32 @@ def full_pipeline(
     start_time = time.time()
 
     try:
-        # Load config and resolve parameters
-        cfg_path = Path(__file__).parent / "config.yaml"
-        cfg = load_config(cfg_path)
+        # Get config
+        cfg = get_config()
 
         # Resolve output_dir
         if output_dir is None:
-            base_path = utils._resolve_base_path(cfg_path)
-            output_dir = base_path / cfg["output_dir"]
-        else:
-            output_dir = Path(output_dir)
+            output_dir = Path(cfg.output_dir)
 
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Resolve parameters
-        n_prior = n_prior if n_prior is not None else cfg["n_prior"]
-        min_sigma = min_sigma if min_sigma is not None else cfg["min_sigma"]
-        min_group = min_group if min_group is not None else cfg["min_group"]
-        eps = eps if eps is not None else cfg["eps"]
-        nproc = nproc if nproc is not None else cfg["n_proc"]
+        n_prior = n_prior if n_prior is not None else cfg.n_prior
+        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
+        min_group = min_group if min_group is not None else cfg.min_group
+        eps = eps if eps is not None else cfg.eps
+        nproc = nproc if nproc is not None else cfg.n_proc
         combination_method = (
             combination_method
             if combination_method is not None
-            else cfg["combination_method"]
+            else cfg.combination_method
         )
         # Resolve n_proc for MVN spatial adjustment
         from vs30.parallel import resolve_n_proc
 
         n_proc_resolved = resolve_n_proc(
-            n_proc if n_proc is not None else cfg.get("n_proc", 1)
+            n_proc if n_proc is not None else cfg.n_proc
         )
 
         # Resolve CSV paths if not provided
@@ -1377,9 +1392,9 @@ def full_pipeline(
 
         with importlib.resources.as_file(resource_path) as res_dir:
             if geology_categorical_csv is None:
-                geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_STDDEV_CSV
+                geology_categorical_csv = res_dir / cfg.GEOLOGY_MEAN_STDDEV_CSV
             if terrain_categorical_csv is None:
-                terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_STDDEV_CSV
+                terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
 
             # 1. Run Geology Pipeline
             logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
@@ -1418,9 +1433,9 @@ def full_pipeline(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
-        geol_tif = output_dir / constants.OUTPUT_FILENAMES["geology"]
-        terr_tif = output_dir / constants.OUTPUT_FILENAMES["terrain"]
-        combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
+        geol_tif = output_dir / cfg.output_filenames["geology"]
+        terr_tif = output_dir / cfg.output_filenames["terrain"]
+        combined_tif = output_dir / cfg.combined_vs30_filename
 
         combine(
             geology_tif=geol_tif,
@@ -1533,13 +1548,12 @@ def compute_at_locations(
     from vs30.spatial import compute_mvn_at_points
 
     try:
-        # Load config
-        cfg_path = Path(__file__).parent / "config.yaml"
-        cfg = load_config(cfg_path)
+        # Get config
+        cfg = get_config()
 
         # Resolve combination method
         if combination_method is None:
-            combination_method = cfg["combination_method"]
+            combination_method = cfg.combination_method
 
         # Load input locations
         typer.echo(f"Loading locations from {locations_csv}...")
@@ -1576,20 +1590,20 @@ def compute_at_locations(
 
         with importlib.resources.as_file(resource_path) as res_dir:
             if geology_categorical_csv is None:
-                geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_STDDEV_CSV
+                geology_categorical_csv = res_dir / cfg.GEOLOGY_MEAN_STDDEV_CSV
             if terrain_categorical_csv is None:
-                terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_STDDEV_CSV
+                terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
 
             # Load observations for MVN adjustment
-            # Note: constants already include the 'observations/' prefix
+            # Note: config paths already include the 'observations/' prefix
             if clustered_observations_csv is None:
-                clustered_obs_path = res_dir / constants.CLUSTERED_OBSERVATIONS_FILE
+                clustered_obs_path = res_dir / cfg.clustered_observations_file
                 if clustered_obs_path.exists():
                     clustered_observations_csv = clustered_obs_path
             if independent_observations_csv is None:
-                if constants.INDEPENDENT_OBSERVATIONS_FILE != "none":
+                if cfg.independent_observations_file != "none":
                     independent_obs_path = (
-                        res_dir / constants.INDEPENDENT_OBSERVATIONS_FILE
+                        res_dir / cfg.independent_observations_file
                     )
                     if independent_obs_path.exists():
                         independent_observations_csv = independent_obs_path

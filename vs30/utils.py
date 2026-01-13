@@ -4,7 +4,7 @@ import numpy as np
 import yaml
 from scipy.spatial.distance import cdist
 
-from vs30 import constants
+from vs30.config import get_default_config
 
 # ============================================================================
 # Coordinate Conversion Functions
@@ -94,4 +94,5 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     -----
     Uses exponential correlation function: 1 / exp(distance / phi)
     """
-    return 1 / np.exp(np.maximum(constants.MIN_DIST_ENFORCED, distances) / phi)
+    cfg = get_default_config()
+    return 1 / np.exp(np.maximum(cfg.min_dist_enforced, distances) / phi)
