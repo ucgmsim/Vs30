@@ -41,7 +41,8 @@ import rasterio
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
 
-from vs30 import constants, utils
+from vs30 import utils
+from vs30.config import get_default_config
 
 # Use spawn context to avoid GDAL fork issues
 _spawn_context = mp.get_context("spawn")
@@ -274,7 +275,7 @@ def prepare_observation_data(
     updated_model_table: np.ndarray,
     model_name: str,
     output_dir: Path,
-    noisy: bool = constants.NOISY,
+    noisy: bool | None = None,
     # Hybrid Modification Parameters (optional, for geology)
     hybrid_mod6_dist_min: float | None = None,
     hybrid_mod6_dist_max: float | None = None,
@@ -304,6 +305,10 @@ def prepare_observation_data(
     ObservationData
         Prepared observation data object.
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    noisy = noisy if noisy is not None else cfg.noisy
+
     # Get observation locations
     obs_locs = observations[["easting", "northing"]].values
 
@@ -350,14 +355,14 @@ def prepare_observation_data(
 
         # 1. Get slope and coast distance at points
         # Use existing rasters in output_dir if possible, otherwise create temporary ones
-        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
-        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
+        slope_path = output_dir / cfg.slope_raster_filename
+        coast_path = output_dir / cfg.coast_distance_raster_filename
 
         profile = {
             "transform": raster_data.transform,
             "width": raster_data.vs30.shape[1],
             "height": raster_data.vs30.shape[0],
-            "crs": rasterio.crs.CRS.from_string(constants.NZTM_CRS),
+            "crs": rasterio.crs.CRS.from_string(cfg.nztm_crs),
         }
 
         if not slope_path.exists():
@@ -558,8 +563,8 @@ def build_covariance_matrix(
     selected_observations: ObservationData,
     model_name: str,
     phi: float | None = None,
-    noisy: bool = constants.NOISY,
-    cov_reduc: float = constants.COV_REDUC,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
 ) -> np.ndarray:
     """
     Build covariance matrix through clear pipeline of steps.
@@ -579,6 +584,11 @@ def build_covariance_matrix(
         Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
         First row/column is for the pixel, rest are for observations.
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
     # Step 1: Compute Euclidean distance matrix
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
         np.float64
@@ -587,7 +597,7 @@ def build_covariance_matrix(
 
     # Step 2: Apply correlation function
     if phi is None:
-        phi = constants.PHI[model_name]
+        phi = cfg.phi[model_name]
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
@@ -620,8 +630,8 @@ def build_covariance_matrix(
 def select_observations_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
 ) -> ObservationData:
     """
     Select observations for a pixel using distance filtering.
@@ -645,6 +655,11 @@ def select_observations_for_pixel(
     ObservationData
         Selected observations (subset of obs_data).
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+
     # Calculate distances from pixel to all observations (O(N) efficient calculation)
     distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
 
@@ -685,10 +700,10 @@ def compute_mvn_update_for_pixel(
     obs_data: ObservationData,
     model_name: str,
     phi: float | None = None,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
-    noisy: bool = constants.NOISY,
-    cov_reduc: float = constants.COV_REDUC,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
 ) -> MVNUpdateResult | None:
     """
     Compute MVN update for a single pixel.
@@ -707,11 +722,18 @@ def compute_mvn_update_for_pixel(
     MVNUpdateResult or None
         Update result, or None if pixel should be skipped.
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
     # Handle NaN/NoData pixels
     if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
         return None
 
-    phi_val = phi if phi is not None else constants.PHI[model_name]
+    phi_val = phi if phi is not None else cfg.phi[model_name]
     corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
     initial_var = (pixel.stdv**2) * corr_zero
 
@@ -840,7 +862,7 @@ def subsample_by_cluster(
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
-    max_dist_m: float = constants.MAX_DIST_M,
+    max_dist_m: float | None = None,
     n_proc: int = 1,
 ) -> BoundingBoxResult:
     """
@@ -863,6 +885,10 @@ def find_affected_pixels(
     BoundingBoxResult
         Result containing mask and observation-to-grid mappings.
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+
     # Get coordinates for valid pixels
     grid_locs = raster_data.get_coordinates()
 
@@ -870,7 +896,7 @@ def find_affected_pixels(
 
     # Calculate chunk size based on observation count
     chunk_size = calculate_chunk_size(
-        n_obs, constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
+        n_obs, cfg.max_spatial_boolean_array_memory_gb
     )
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
@@ -991,10 +1017,10 @@ def compute_mvn_updates(
     bbox_result: BoundingBoxResult,
     model_name: str,
     phi: float | None = None,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
-    noisy: bool = constants.NOISY,
-    cov_reduc: float = constants.COV_REDUC,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
 ) -> list[MVNUpdateResult]:
     """
     Compute MVN updates for all affected pixels.
@@ -1009,14 +1035,19 @@ def compute_mvn_updates(
         Bounding box result.
     model_name : str
         Model name ("geology" or "terrain").
-        If True, enables legacy behavior with known bugs (exceeding max_points).
-        Only kept temporarily for validation purposes.
 
     Returns
     -------
     list
         List of MVNUpdateResult objects.
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
     # Get affected pixel indices
     affected_flat_indices = np.where(bbox_result.mask)[0]
     affected_valid_indices = np.where(bbox_result.mask[raster_data.valid_flat_indices])[
@@ -1033,7 +1064,7 @@ def compute_mvn_updates(
 
     # Process in chunks for memory efficiency
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB
+        len(obs_data.locations), cfg.max_spatial_boolean_array_memory_gb
     )
     n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
 
@@ -1156,8 +1187,9 @@ def apply_and_write_updates(
         updated_vs30.flat[update.pixel_index] = update.updated_vs30
         updated_stdv.flat[update.pixel_index] = update.updated_stdv
 
-    # Write output using filename from constants
-    output_filename = constants.OUTPUT_FILENAMES[model_name]
+    # Write output using filename from config
+    cfg = get_default_config()
+    output_filename = cfg.output_filenames[model_name]
     output_path = output_dir / output_filename
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
@@ -1184,10 +1216,10 @@ def compute_mvn_at_points(
     obs_uncertainty: np.ndarray,
     model_type: str,
     phi: float | None = None,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
-    noisy: bool = constants.NOISY,
-    cov_reduc: float = constants.COV_REDUC,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute MVN spatial adjustment at specific query points.
 
@@ -1216,15 +1248,15 @@ def compute_mvn_at_points(
     model_type : str
         Either "geology" or "terrain" (determines phi correlation length).
     phi : float, optional
-        Correlation length parameter. If None, uses value from constants.PHI[model_type].
+        Correlation length parameter. If None, uses value from config.
     max_dist_m : float, optional
-        Maximum distance (meters) to consider observations. Default from constants.
+        Maximum distance (meters) to consider observations. Default from config.
     max_points : int, optional
-        Maximum number of observations per point. Default from constants.
+        Maximum number of observations per point. Default from config.
     noisy : bool, optional
-        Whether to apply noise weighting. Default from constants.
+        Whether to apply noise weighting. Default from config.
     cov_reduc : float, optional
-        Covariance reduction factor. Default from constants.
+        Covariance reduction factor. Default from config.
 
     Returns
     -------
@@ -1242,8 +1274,15 @@ def compute_mvn_at_points(
     4. Apply MVN conditioning to get posterior mean and variance
     5. Convert back from log-space to linear Vs30
     """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
     if phi is None:
-        phi = constants.PHI[model_type]
+        phi = cfg.phi[model_type]
 
     n_points = len(points)
     n_obs = len(obs_locations)
