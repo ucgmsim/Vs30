@@ -1638,7 +1638,7 @@ def compute_at_locations(
 
             # Resolve n_proc from CLI or config
             n_proc_resolved = resolve_n_proc(
-                n_proc if n_proc is not None else cfg.get("n_proc", 1)
+                n_proc if n_proc is not None else cfg.n_proc
             )
 
             # ================================================================
