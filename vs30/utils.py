@@ -78,3 +78,73 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
     """
     cfg = get_default_config()
     return 1 / np.exp(np.maximum(cfg.min_dist_enforced, distances) / phi)
+
+
+# ============================================================================
+# Model Combination Functions
+# ============================================================================
+
+
+def combine_models_at_points(
+    geol_vs30: np.ndarray,
+    geol_stdv: np.ndarray,
+    terr_vs30: np.ndarray,
+    terr_stdv: np.ndarray,
+    combination_method: str | float,
+    epsilon: float = 1e-10,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Combine geology and terrain Vs30 models at points using weighted average.
+
+    This function implements the combination logic used by both the sequential
+    and parallel point-based computation paths.
+
+    Parameters
+    ----------
+    geol_vs30 : ndarray
+        Geology model Vs30 values at points.
+    geol_stdv : ndarray
+        Geology model standard deviation at points.
+    terr_vs30 : ndarray
+        Terrain model Vs30 values at points.
+    terr_stdv : ndarray
+        Terrain model standard deviation at points.
+    combination_method : str or float
+        Either a ratio (float, where 1.0 means equal weighting) or
+        "standard_deviation_weighting" for inverse variance weighting.
+    epsilon : float, optional
+        Small value to prevent division by zero in variance weighting.
+        Default is 1e-10.
+
+    Returns
+    -------
+    combined_vs30 : ndarray
+        Combined Vs30 values.
+    combined_stdv : ndarray
+        Combined standard deviation values.
+    """
+    try:
+        # Try parsing as float (ratio-based combination)
+        ratio = float(combination_method)
+        combined_vs30 = geol_vs30 * ratio + terr_vs30 * (1 - ratio)
+        combined_stdv = np.sqrt(
+            (geol_stdv * ratio) ** 2 + (terr_stdv * (1 - ratio)) ** 2
+        )
+    except (ValueError, TypeError):
+        # String-based combination method
+        if combination_method == "standard_deviation_weighting":
+            # Inverse variance weighting
+            geol_weight = 1 / (geol_stdv**2 + epsilon)
+            terr_weight = 1 / (terr_stdv**2 + epsilon)
+            total_weight = geol_weight + terr_weight
+
+            combined_vs30 = (
+                geol_vs30 * geol_weight + terr_vs30 * terr_weight
+            ) / total_weight
+            combined_stdv = np.sqrt(1 / total_weight)
+        else:
+            # Default to 0.5 ratio (equal weighting)
+            combined_vs30 = (geol_vs30 + terr_vs30) / 2
+            combined_stdv = np.sqrt((geol_stdv**2 + terr_stdv**2) / 4)
+
+    return combined_vs30, combined_stdv
