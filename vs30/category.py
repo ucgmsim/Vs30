@@ -112,54 +112,56 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 # ============================================================================
 
 
-def _new_mean(mu_0, n0, var, y):
+def _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value):
     """
-    Compute updated mean using Bayesian update formula.
+    Compute posterior mean using Bayesian update formula.
 
     Parameters
     ----------
-    mu_0 : float
+    prior_mean : float
         Prior mean (in linear space, not log space).
-    n0 : float
+    num_prior_observations : float
         Effective number of prior observations.
-    var : float
-        Updated variance (computed from _new_var).
-    y : float
+    posterior_variance : float
+        Posterior variance (computed from _compute_bayesian_posterior_variance).
+    observation_value : float
         New observation value (in linear space).
 
     Returns
     -------
     float
-        Updated mean (in linear space).
+        Posterior mean (in linear space).
     """
+    return exp(
+        (num_prior_observations / posterior_variance * log(prior_mean) + log(observation_value) / posterior_variance)
+        / (num_prior_observations / posterior_variance + 1 / posterior_variance)
+    )
 
-    return exp((n0 / var * log(mu_0) + log(y) / var) / (n0 / var + 1 / var))
 
-
-def _new_var(sigma_0, n0, uncertainty, mu_0, y):
+def _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value):
     """
-    Compute updated variance using Bayesian update formula.
+    Compute posterior variance using Bayesian update formula.
 
     Parameters
     ----------
-    sigma_0 : float
+    prior_stdv : float
         Prior standard deviation.
-    n0 : float
+    num_prior_observations : float
         Effective number of prior observations.
     uncertainty : float
         Uncertainty (standard deviation) of new observation.
-    mu_0 : float
+    prior_mean : float
         Prior mean.
-    y : float
+    observation_value : float
         New observation value (in linear space).
 
     Returns
     -------
     float
-        Updated variance.
+        Posterior variance.
     """
-    mean_shift = (n0 / (n0 + 1)) * (log(y) - log(mu_0)) ** 2
-    return (n0 * sigma_0**2 + uncertainty**2 + mean_shift) / (n0 + 1)
+    mean_shift = (num_prior_observations / (num_prior_observations + 1)) * (log(observation_value) - log(prior_mean)) ** 2
+    return (num_prior_observations * prior_stdv**2 + uncertainty**2 + mean_shift) / (num_prior_observations + 1)
 
 
 # ============================================================================
@@ -202,12 +204,14 @@ def update_with_independent_data(
         - "assumed_num_prior_observations"
         - "enforced_min_sigma"
     """
-    # Handle input format
-    categorical_model_df = categorical_model_df.copy()
+    cfg = get_default_config()
+
+    # Make a working copy to avoid modifying the input DataFrame
+    updated_categorical_model_df = categorical_model_df.copy()
 
     # Identify prior columns
-    prior_mean_col = "prior_mean_vs30_km_per_s"
-    prior_std_col = "prior_standard_deviation_vs30_km_per_s"
+    prior_mean_col = cfg.col_prior_mean
+    prior_std_col = cfg.col_prior_stdv
 
     # If a Bayesian update was previously performed, use the posterior values as priors
     # for subsequent updates. Otherwise, use the raw categorical model data as priors.
@@ -215,45 +219,40 @@ def update_with_independent_data(
     # This ensures sequential Bayesian updates: when both clustered and independent observations
     # are processed, independent observations use the spatially bias-corrected clustered posterior
     # as their prior, rather than the original (potentially biased) categorical model priors.
-    if (
-        "posterior_mean_vs30_km_per_s_clustered_observations"
-        in categorical_model_df.columns
-    ):
+    if cfg.col_posterior_mean_clustered in updated_categorical_model_df.columns:
         # Use clustered posterior as prior for independent updates
         # This implements the sequential Bayesian update: clustered → independent
-        categorical_model_df[prior_mean_col] = categorical_model_df[
-            "posterior_mean_vs30_km_per_s_clustered_observations"
+        updated_categorical_model_df[prior_mean_col] = updated_categorical_model_df[
+            cfg.col_posterior_mean_clustered
         ]
-        categorical_model_df[prior_std_col] = categorical_model_df[
-            "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+        updated_categorical_model_df[prior_std_col] = updated_categorical_model_df[
+            cfg.col_posterior_stdv_clustered
         ]
     else:
         # No posterior available - must have raw categorical data to use as priors
-        if "mean_vs30_km_per_s" in categorical_model_df.columns:
+        if cfg.col_mean in updated_categorical_model_df.columns:
             # Initial prior format - rename to prior_ columns
-            categorical_model_df = categorical_model_df.rename(
+            updated_categorical_model_df = updated_categorical_model_df.rename(
                 columns={
-                    "mean_vs30_km_per_s": prior_mean_col,
-                    "standard_deviation_vs30_km_per_s": prior_std_col,
+                    cfg.col_mean: prior_mean_col,
+                    cfg.col_stdv: prior_std_col,
                 }
             )
         else:
             # Fail fast - no usable prior information available
             raise ValueError(
-                "No usable prior information found. Expected either posterior columns from "
-                "previous Bayesian update or initial categorical model columns ('mean_vs30_km_per_s', "
-                "'standard_deviation_vs30_km_per_s')."
+                f"No usable prior information found. Expected either posterior columns from "
+                f"previous Bayesian update or initial categorical model columns ('{cfg.col_mean}', "
+                f"'{cfg.col_stdv}')."
             )
-
-    updated_categorical_model_df = categorical_model_df.copy()
 
     # Enforce minimum sigma value on prior
     mask = updated_categorical_model_df[prior_std_col] < min_sigma
     updated_categorical_model_df.loc[mask, prior_std_col] = min_sigma
 
     # Initialize posterior columns
-    post_mean_col = "posterior_mean_vs30_km_per_s_independent_observations"
-    post_std_col = "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+    post_mean_col = cfg.col_posterior_mean_independent
+    post_std_col = cfg.col_posterior_stdv_independent
     post_n_col = "posterior_num_observations_independent_observations"
 
     updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
@@ -279,7 +278,7 @@ def update_with_independent_data(
         current_n = category_row[post_n_col]
 
         for _, observation_row in observations_for_category_df.iterrows():
-            new_variance = _new_var(
+            new_variance = _compute_bayesian_posterior_variance(
                 current_std,
                 current_n,
                 observation_row["uncertainty"],
@@ -287,7 +286,7 @@ def update_with_independent_data(
                 observation_row["vs30"],
             )
 
-            new_mean = _new_mean(
+            new_mean = _compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
                 new_variance,
@@ -382,26 +381,28 @@ def update_with_clustered_data(
 
     model_type is deprecated but kept for compatibility.
     """
+    cfg = get_default_config()
+
     # Create a copy to update
     posterior_df = prior_df.copy()
 
     # Identify prior columns
-    prior_mean_col = "prior_mean_vs30_km_per_s"
-    prior_std_col = "prior_standard_deviation_vs30_km_per_s"
+    prior_mean_col = cfg.col_prior_mean
+    prior_std_col = cfg.col_prior_stdv
 
     if prior_mean_col not in posterior_df.columns:
-        if "mean_vs30_km_per_s" in posterior_df.columns:
+        if cfg.col_mean in posterior_df.columns:
             # Initial prior format - rename to prior_ columns
             posterior_df = posterior_df.rename(
                 columns={
-                    "mean_vs30_km_per_s": prior_mean_col,
-                    "standard_deviation_vs30_km_per_s": prior_std_col,
+                    cfg.col_mean: prior_mean_col,
+                    cfg.col_stdv: prior_std_col,
                 }
             )
 
     # Initialize posterior columns with suffix
-    post_mean_col = "posterior_mean_vs30_km_per_s_clustered_observations"
-    post_std_col = "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+    post_mean_col = cfg.col_posterior_mean_clustered
+    post_std_col = cfg.col_posterior_stdv_clustered
 
     posterior_df[post_mean_col] = posterior_df[prior_mean_col]
     posterior_df[post_std_col] = posterior_df[prior_std_col]
@@ -561,17 +562,14 @@ def get_vs30_for_points(
     Notes
     -----
     The function automatically detects the column naming convention in the
-    categorical model DataFrame. It looks for columns in this priority order:
+    categorical model DataFrame. It looks for columns in this priority order
+    (names defined in config.yaml):
 
-    For mean: posterior_mean_vs30_km_per_s_independent_observations,
-              posterior_mean_vs30_km_per_s_clustered_observations,
-              prior_mean_vs30_km_per_s,
-              mean_vs30_km_per_s
+    For mean: col_posterior_mean_independent, col_posterior_mean_clustered,
+              col_prior_mean, col_mean
 
-    For stddev: posterior_standard_deviation_vs30_km_per_s_independent_observations,
-                posterior_standard_deviation_vs30_km_per_s_clustered_observations,
-                prior_standard_deviation_vs30_km_per_s,
-                standard_deviation_vs30_km_per_s
+    For stddev: col_posterior_stdv_independent, col_posterior_stdv_clustered,
+                col_prior_stdv, col_stdv
     """
     # Assign category IDs to points
     if model_type == "geology":
@@ -583,12 +581,14 @@ def get_vs30_for_points(
             f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
         )
 
+    cfg = get_default_config()
+
     # Detect mean column (prefer posterior over prior)
     mean_col_candidates = [
-        "posterior_mean_vs30_km_per_s_independent_observations",
-        "posterior_mean_vs30_km_per_s_clustered_observations",
-        "prior_mean_vs30_km_per_s",
-        "mean_vs30_km_per_s",
+        cfg.col_posterior_mean_independent,
+        cfg.col_posterior_mean_clustered,
+        cfg.col_prior_mean,
+        cfg.col_mean,
     ]
     mean_col = None
     for col in mean_col_candidates:
@@ -603,10 +603,10 @@ def get_vs30_for_points(
 
     # Detect stddev column (prefer posterior over prior)
     stdv_col_candidates = [
-        "posterior_standard_deviation_vs30_km_per_s_independent_observations",
-        "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
-        "prior_standard_deviation_vs30_km_per_s",
-        "standard_deviation_vs30_km_per_s",
+        cfg.col_posterior_stdv_independent,
+        cfg.col_posterior_stdv_clustered,
+        cfg.col_prior_stdv,
+        cfg.col_stdv,
     ]
     stdv_col = None
     for col in stdv_col_candidates:

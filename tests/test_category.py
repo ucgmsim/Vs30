@@ -15,8 +15,8 @@ from math import exp, log, sqrt
 
 from vs30 import category
 from vs30.category import (
-    _new_mean,
-    _new_var,
+    _compute_bayesian_posterior_mean,
+    _compute_bayesian_posterior_variance,
     perform_clustering,
     update_with_independent_data,
     posterior_from_bayesian_update,
@@ -29,87 +29,87 @@ from vs30.category import (
 class TestBayesianUpdateFormulas:
     """Tests for the Bayesian update helper functions."""
 
-    def test_new_var_basic(self):
-        """Test _new_var with simple inputs."""
-        sigma_0 = 0.5  # Prior std dev
-        n0 = 3  # Prior sample size
+    def test_posterior_variance_basic(self):
+        """Test _compute_bayesian_posterior_variance with simple inputs."""
+        prior_stdv = 0.5  # Prior std dev
+        num_prior_observations = 3  # Prior sample size
         uncertainty = 0.2  # Observation uncertainty
-        mu_0 = 200  # Prior mean
-        y = 210  # Observation
+        prior_mean = 200  # Prior mean
+        observation_value = 210  # Observation
 
-        var = _new_var(sigma_0, n0, uncertainty, mu_0, y)
+        var = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
 
         # Variance should be positive
         assert var > 0
         # New variance should be less than prior variance when adding data
-        assert var < sigma_0**2
+        assert var < prior_stdv**2
 
-    def test_new_mean_basic(self):
-        """Test _new_mean with simple inputs."""
-        mu_0 = 200  # Prior mean
-        n0 = 3  # Prior sample size
-        var = 0.2  # Updated variance
-        y = 220  # Observation
+    def test_posterior_mean_basic(self):
+        """Test _compute_bayesian_posterior_mean with simple inputs."""
+        prior_mean = 200  # Prior mean
+        num_prior_observations = 3  # Prior sample size
+        posterior_variance = 0.2  # Updated variance
+        observation_value = 220  # Observation
 
-        mean = _new_mean(mu_0, n0, var, y)
+        mean = _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # New mean should be between prior and observation
-        assert min(mu_0, y) <= mean <= max(mu_0, y)
+        assert min(prior_mean, observation_value) <= mean <= max(prior_mean, observation_value)
 
-    def test_new_mean_pulls_toward_observation(self):
-        """Test that new mean is pulled toward observation."""
-        mu_0 = 200
-        n0 = 3
-        var = 0.2
-        y = 300  # Observation much higher than prior
+    def test_posterior_mean_pulls_toward_observation(self):
+        """Test that posterior mean is pulled toward observation."""
+        prior_mean = 200
+        num_prior_observations = 3
+        posterior_variance = 0.2
+        observation_value = 300  # Observation much higher than prior
 
-        mean = _new_mean(mu_0, n0, var, y)
+        mean = _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # Mean should be closer to observation than prior was
-        assert mean > mu_0
+        assert mean > prior_mean
 
-    def test_new_var_increases_with_mean_shift(self):
+    def test_posterior_variance_increases_with_mean_shift(self):
         """Test that variance increases when observation far from prior."""
-        sigma_0 = 0.5
-        n0 = 3
+        prior_stdv = 0.5
+        num_prior_observations = 3
         uncertainty = 0.2
-        mu_0 = 200
+        prior_mean = 200
 
         # Observation close to prior
-        y_close = 205
-        var_close = _new_var(sigma_0, n0, uncertainty, mu_0, y_close)
+        obs_close = 205
+        var_close = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
 
         # Observation far from prior
-        y_far = 400
-        var_far = _new_var(sigma_0, n0, uncertainty, mu_0, y_far)
+        obs_far = 400
+        var_far = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
 
         # Variance should be higher when observation is far from prior
         assert var_far > var_close
 
     def test_bayesian_update_convergence(self):
         """Test that multiple observations converge toward true value."""
-        mu_0 = 200  # Prior mean
-        sigma_0 = 0.5  # Prior std dev
-        n0 = 3
+        prior_mean = 200  # Prior mean
+        prior_stdv = 0.5  # Prior std dev
+        num_prior_observations = 3
         true_value = 250  # True value observations are drawn from
 
         # Simulate multiple observations around true value
-        current_mean = mu_0
-        current_std = sigma_0
-        current_n = n0
+        current_mean = prior_mean
+        current_std = prior_stdv
+        current_num_observations = num_prior_observations
 
         for _ in range(10):
             # Observation with some noise
-            y = true_value * (1 + np.random.normal(0, 0.05))
+            observation_value = true_value * (1 + np.random.normal(0, 0.05))
             uncertainty = 0.2
 
-            var = _new_var(current_std, current_n, uncertainty, current_mean, y)
-            current_mean = _new_mean(current_mean, current_n, var, y)
+            var = _compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
+            current_mean = _compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
             current_std = sqrt(var)
-            current_n += 1
+            current_num_observations += 1
 
         # After many observations, mean should be close to true value
-        assert abs(current_mean - true_value) < abs(mu_0 - true_value)
+        assert abs(current_mean - true_value) < abs(prior_mean - true_value)
 
 
 class TestUpdateWithIndependentData:
@@ -325,3 +325,42 @@ class TestCategoryConstants:
     def test_standard_id_column(self):
         """Test that STANDARD_ID_COLUMN is correct."""
         assert STANDARD_ID_COLUMN == "id"
+
+
+# =============================================================================
+# Additional Tests from Coverage Improvements
+# =============================================================================
+
+
+class TestCategoryEdgeCases:
+    """Tests for edge cases in category module."""
+
+    def test_update_with_no_matching_observations(self):
+        """Test Bayesian update when no observations match a category."""
+        # Create categorical model with some categories
+        categorical_model_df = pd.DataFrame({
+            'id': [1, 2, 3],
+            'mean_vs30_km_per_s': [300.0, 400.0, 500.0],
+            'standard_deviation_vs30_km_per_s': [30.0, 40.0, 50.0],
+        })
+
+        # Observations that don't match any category (use STANDARD_ID_COLUMN = 'id')
+        observations_df = pd.DataFrame({
+            'vs30': [350.0],
+            'uncertainty': [25.0],
+            'id': [99],  # Non-existent category - uses 'id' column
+            'easting': [1500000.0],
+            'northing': [5100000.0],
+        })
+
+        # Should not raise, categories without observations keep prior
+        result_df = update_with_independent_data(
+            categorical_model_df,
+            observations_df,
+            n_prior=10,
+            min_sigma=0.1,
+        )
+
+        # Result should have posterior columns
+        assert 'posterior_mean_vs30_km_per_s_independent_observations' in result_df.columns
+        assert 'posterior_standard_deviation_vs30_km_per_s_independent_observations' in result_df.columns

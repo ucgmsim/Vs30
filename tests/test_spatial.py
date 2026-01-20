@@ -4,10 +4,10 @@ Tests for the VS30 spatial module.
 Tests cover:
 - ObservationData dataclass
 - PixelData dataclass
-- MVNUpdateResult dataclass
+- SpatialAdjustmentResult dataclass
 - RasterData dataclass
 - Covariance matrix building
-- MVN update computations
+- Spatial adjustment computations
 - Observation selection
 - Bounding box calculations
 - Cluster subsampling
@@ -20,10 +20,10 @@ from math import sqrt
 from vs30.spatial import (
     ObservationData,
     PixelData,
-    MVNUpdateResult,
+    SpatialAdjustmentResult,
     build_covariance_matrix,
     select_observations_for_pixel,
-    compute_mvn_update_for_pixel,
+    compute_spatial_adjustment_for_pixel,
     grid_points_in_bbox,
     calculate_chunk_size,
     subsample_by_cluster,
@@ -96,12 +96,12 @@ class TestPixelData:
         assert len(pixel.location) == 2
 
 
-class TestMVNUpdateResult:
-    """Tests for the MVNUpdateResult dataclass."""
+class TestSpatialAdjustmentResult:
+    """Tests for the SpatialAdjustmentResult dataclass."""
 
     def test_create_result(self):
-        """Test creating an MVNUpdateResult object."""
-        result = MVNUpdateResult(
+        """Test creating an SpatialAdjustmentResult object."""
+        result = SpatialAdjustmentResult(
             updated_vs30=275.0,
             updated_stdv=0.35,
             n_observations_used=5,
@@ -152,7 +152,7 @@ class TestBuildCovarianceMatrix:
         cov = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             noisy=False,
             cov_reduc=0.0,
@@ -167,7 +167,7 @@ class TestBuildCovarianceMatrix:
         cov = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             noisy=False,
             cov_reduc=0.0,
@@ -180,7 +180,7 @@ class TestBuildCovarianceMatrix:
         cov = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             noisy=False,
             cov_reduc=0.0,
@@ -193,7 +193,7 @@ class TestBuildCovarianceMatrix:
         cov = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             noisy=False,
             cov_reduc=0.0,
@@ -209,7 +209,7 @@ class TestBuildCovarianceMatrix:
         cov_small_phi = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=500.0,
             noisy=False,
             cov_reduc=0.0,
@@ -218,7 +218,7 @@ class TestBuildCovarianceMatrix:
         cov_large_phi = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
-            model_name="geology",
+            model_type="geology",
             phi=2000.0,
             noisy=False,
             cov_reduc=0.0,
@@ -307,8 +307,8 @@ class TestSelectObservationsForPixel:
         assert len(selected.locations) == 0
 
 
-class TestComputeMVNUpdateForPixel:
-    """Tests for the compute_mvn_update_for_pixel function."""
+class TestComputeSpatialAdjustmentForPixel:
+    """Tests for the compute_spatial_adjustment_for_pixel function."""
 
     @pytest.fixture
     def pixel(self):
@@ -333,12 +333,12 @@ class TestComputeMVNUpdateForPixel:
             uncertainty=np.array([0.2]),
         )
 
-    def test_returns_mvn_update_result(self, pixel, nearby_observation):
-        """Test that function returns MVNUpdateResult."""
-        result = compute_mvn_update_for_pixel(
+    def test_returns_spatial_adjustment_result(self, pixel, nearby_observation):
+        """Test that function returns SpatialAdjustmentResult."""
+        result = compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
@@ -346,15 +346,15 @@ class TestComputeMVNUpdateForPixel:
             cov_reduc=0.0,
         )
 
-        assert isinstance(result, MVNUpdateResult)
+        assert isinstance(result, SpatialAdjustmentResult)
         assert result.pixel_index == pixel.index
 
     def test_updates_toward_observation(self, pixel, nearby_observation):
         """Test that update shifts vs30 toward observation."""
-        result = compute_mvn_update_for_pixel(
+        result = compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
@@ -367,10 +367,10 @@ class TestComputeMVNUpdateForPixel:
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
         """Test that standard deviation decreases when observation is added."""
-        result = compute_mvn_update_for_pixel(
+        result = compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            model_name="geology",
+            model_type="geology",
             phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
@@ -390,10 +390,10 @@ class TestComputeMVNUpdateForPixel:
             index=0,
         )
 
-        result = compute_mvn_update_for_pixel(
+        result = compute_spatial_adjustment_for_pixel(
             nan_pixel,
             nearby_observation,
-            model_name="geology",
+            model_type="geology",
         )
 
         assert result is None
@@ -410,10 +410,10 @@ class TestComputeMVNUpdateForPixel:
             uncertainty=np.array([0.2]),
         )
 
-        result = compute_mvn_update_for_pixel(
+        result = compute_spatial_adjustment_for_pixel(
             pixel,
             far_observation,
-            model_name="geology",
+            model_type="geology",
             max_dist_m=5000,
         )
 
@@ -575,7 +575,7 @@ class TestValidateObservations:
         validate_observations(obs)
 
     def test_missing_column_raises(self):
-        """Test that missing column raises AssertionError."""
+        """Test that missing column raises ValueError."""
         import pandas as pd
 
         obs = pd.DataFrame({
@@ -585,11 +585,11 @@ class TestValidateObservations:
             # Missing "uncertainty"
         })
 
-        with pytest.raises(AssertionError, match="uncertainty"):
+        with pytest.raises(ValueError, match="uncertainty"):
             validate_observations(obs)
 
     def test_negative_vs30_raises(self):
-        """Test that negative vs30 raises AssertionError."""
+        """Test that negative vs30 raises ValueError."""
         import pandas as pd
 
         obs = pd.DataFrame({
@@ -599,11 +599,11 @@ class TestValidateObservations:
             "uncertainty": [0.2, 0.3],
         })
 
-        with pytest.raises(AssertionError, match="positive"):
+        with pytest.raises(ValueError, match="positive"):
             validate_observations(obs)
 
     def test_negative_uncertainty_raises(self):
-        """Test that negative uncertainty raises AssertionError."""
+        """Test that negative uncertainty raises ValueError."""
         import pandas as pd
 
         obs = pd.DataFrame({
@@ -613,5 +613,575 @@ class TestValidateObservations:
             "uncertainty": [0.2, -0.3],  # Negative value
         })
 
-        with pytest.raises(AssertionError, match="positive"):
+        with pytest.raises(ValueError, match="positive"):
             validate_observations(obs)
+
+
+# =============================================================================
+# Additional Tests from Coverage Improvements
+# =============================================================================
+from pathlib import Path
+
+
+class TestRasterDataClass:
+    """Tests for RasterData class."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create a temporary directory for test outputs."""
+        import tempfile
+        import shutil
+        tmpdir = tempfile.mkdtemp(prefix="vs30_spatial_test_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
+
+    @pytest.fixture
+    def sample_vs30_raster(self, temp_dir):
+        """Create a sample 2-band VS30 raster for testing."""
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        raster_path = temp_dir / "test_vs30.tif"
+
+        # Create small test raster
+        width, height = 10, 10
+        transform = from_bounds(1500000, 5100000, 1505000, 5105000, width, height)
+
+        vs30_data = np.random.uniform(200, 600, (height, width)).astype(np.float32)
+        stdv_data = np.random.uniform(20, 60, (height, width)).astype(np.float32)
+
+        with rasterio.open(
+            raster_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=2,
+            dtype='float32',
+            crs='EPSG:2193',
+            transform=transform,
+            nodata=-9999.0,
+        ) as dst:
+            dst.write(vs30_data, 1)
+            dst.write(stdv_data, 2)
+
+        return raster_path
+
+    def test_from_file(self, sample_vs30_raster):
+        """Test loading raster from file."""
+        from vs30.spatial import RasterData
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+
+        assert raster_data.vs30.shape == (10, 10)
+        assert raster_data.stdv.shape == (10, 10)
+        assert raster_data.transform is not None
+        assert raster_data.crs is not None
+
+    def test_get_coordinates(self, sample_vs30_raster):
+        """Test getting coordinates for valid pixels."""
+        from vs30.spatial import RasterData
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+        coords = raster_data.get_coordinates()
+
+        # Should have coordinates for all valid pixels
+        assert len(coords) == len(raster_data.valid_flat_indices)
+        assert coords.shape[1] == 2  # easting, northing
+
+    def test_write_updated(self, sample_vs30_raster, temp_dir):
+        """Test writing updated raster."""
+        import rasterio
+        from vs30.spatial import RasterData
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+
+        # Modify arrays
+        updated_vs30 = raster_data.vs30 * 1.1
+        updated_stdv = raster_data.stdv * 0.9
+
+        output_path = temp_dir / "updated.tif"
+        raster_data.write_updated(output_path, updated_vs30, updated_stdv)
+
+        assert output_path.exists()
+
+        # Verify written data
+        with rasterio.open(output_path) as src:
+            assert src.count == 2
+            written_vs30 = src.read(1)
+            np.testing.assert_array_almost_equal(written_vs30, updated_vs30)
+
+
+class TestValidateRasterDataFunc:
+    """Tests for validate_raster_data function."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create a temporary directory for test outputs."""
+        import tempfile
+        import shutil
+        tmpdir = tempfile.mkdtemp(prefix="vs30_spatial_test_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
+
+    @pytest.fixture
+    def sample_vs30_raster(self, temp_dir):
+        """Create a sample 2-band VS30 raster for testing."""
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        raster_path = temp_dir / "test_vs30.tif"
+
+        width, height = 10, 10
+        transform = from_bounds(1500000, 5100000, 1505000, 5105000, width, height)
+
+        vs30_data = np.random.uniform(200, 600, (height, width)).astype(np.float32)
+        stdv_data = np.random.uniform(20, 60, (height, width)).astype(np.float32)
+
+        with rasterio.open(
+            raster_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=2,
+            dtype='float32',
+            crs='EPSG:2193',
+            transform=transform,
+            nodata=-9999.0,
+        ) as dst:
+            dst.write(vs30_data, 1)
+            dst.write(stdv_data, 2)
+
+        return raster_path
+
+    def test_valid_raster_passes(self, sample_vs30_raster):
+        """Test that valid raster data passes validation."""
+        from vs30.spatial import RasterData, validate_raster_data
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+        # Should not raise
+        validate_raster_data(raster_data)
+
+    def test_shape_mismatch_fails(self, sample_vs30_raster):
+        """Test that mismatched band shapes fail validation."""
+        from vs30.spatial import RasterData, validate_raster_data
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+        # Artificially corrupt the data
+        raster_data.stdv = np.zeros((5, 5))  # Wrong shape
+
+        with pytest.raises(ValueError):
+            validate_raster_data(raster_data)
+
+
+class TestComputeMvnAtPoints:
+    """Tests for compute_spatial_adjustment_at_points function."""
+
+    def test_no_observations_returns_prior(self):
+        """Test that no observations returns prior values with shrunk stdv."""
+        from vs30.spatial import compute_spatial_adjustment_at_points
+
+        points = np.array([[1500000, 5100000], [1501000, 5101000]])
+        model_vs30 = np.array([300.0, 400.0])
+        model_stdv = np.array([30.0, 40.0])
+
+        # Empty observations
+        obs_locations = np.empty((0, 2))
+        obs_vs30 = np.empty(0)
+        obs_model_vs30 = np.empty(0)
+        obs_model_stdv = np.empty(0)
+        obs_uncertainty = np.empty(0)
+
+        mvn_vs30, mvn_stdv = compute_spatial_adjustment_at_points(
+            points=points,
+            model_vs30=model_vs30,
+            model_stdv=model_stdv,
+            obs_locations=obs_locations,
+            obs_vs30=obs_vs30,
+            obs_model_vs30=obs_model_vs30,
+            obs_model_stdv=obs_model_stdv,
+            obs_uncertainty=obs_uncertainty,
+            model_type="geology",
+        )
+
+        # Should return prior vs30 unchanged
+        np.testing.assert_array_equal(mvn_vs30, model_vs30)
+
+    def test_with_nearby_observations(self):
+        """Test spatial adjustment with nearby observations."""
+        from vs30.spatial import compute_spatial_adjustment_at_points
+
+        # Single query point
+        points = np.array([[1500000.0, 5100000.0]])
+        model_vs30 = np.array([300.0])
+        model_stdv = np.array([30.0])
+
+        # Nearby observation with higher vs30
+        obs_locations = np.array([[1500100.0, 5100100.0]])  # 141m away
+        obs_vs30 = np.array([400.0])
+        obs_model_vs30 = np.array([300.0])
+        obs_model_stdv = np.array([30.0])
+        obs_uncertainty = np.array([25.0])
+
+        mvn_vs30, mvn_stdv = compute_spatial_adjustment_at_points(
+            points=points,
+            model_vs30=model_vs30,
+            model_stdv=model_stdv,
+            obs_locations=obs_locations,
+            obs_vs30=obs_vs30,
+            obs_model_vs30=obs_model_vs30,
+            obs_model_stdv=obs_model_stdv,
+            obs_uncertainty=obs_uncertainty,
+            model_type="geology",
+            max_dist_m=5000,
+        )
+
+        # Should adjust toward observation (increase vs30)
+        assert mvn_vs30[0] > model_vs30[0], "Adjustment should pull vs30 toward observation"
+        # Uncertainty should decrease
+        assert mvn_stdv[0] < model_stdv[0], "Uncertainty should decrease with observation"
+
+    def test_invalid_points_skipped(self):
+        """Test that NaN points are skipped."""
+        from vs30.spatial import compute_spatial_adjustment_at_points
+
+        points = np.array([[1500000.0, 5100000.0], [1501000.0, 5101000.0]])
+        model_vs30 = np.array([np.nan, 300.0])  # First point invalid
+        model_stdv = np.array([30.0, 30.0])
+
+        obs_locations = np.array([[1500500.0, 5100500.0]])
+        obs_vs30 = np.array([350.0])
+        obs_model_vs30 = np.array([300.0])
+        obs_model_stdv = np.array([30.0])
+        obs_uncertainty = np.array([25.0])
+
+        mvn_vs30, mvn_stdv = compute_spatial_adjustment_at_points(
+            points=points,
+            model_vs30=model_vs30,
+            model_stdv=model_stdv,
+            obs_locations=obs_locations,
+            obs_vs30=obs_vs30,
+            obs_model_vs30=obs_model_vs30,
+            obs_model_stdv=obs_model_stdv,
+            obs_uncertainty=obs_uncertainty,
+            model_type="terrain",
+        )
+
+        # First point should remain NaN
+        assert np.isnan(mvn_vs30[0])
+        # Second point should be adjusted
+        assert not np.isnan(mvn_vs30[1])
+
+
+class TestPrepareObservationDataErrors:
+    """Tests for error paths in prepare_observation_data."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create a temporary directory for test outputs."""
+        import tempfile
+        import shutil
+        tmpdir = tempfile.mkdtemp(prefix="vs30_spatial_test_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
+
+    @pytest.fixture
+    def sample_vs30_raster(self, temp_dir):
+        """Create a sample 2-band VS30 raster for testing."""
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        raster_path = temp_dir / "test_vs30.tif"
+
+        width, height = 10, 10
+        transform = from_bounds(1500000, 5100000, 1505000, 5105000, width, height)
+
+        vs30_data = np.random.uniform(200, 600, (height, width)).astype(np.float32)
+        stdv_data = np.random.uniform(20, 60, (height, width)).astype(np.float32)
+
+        with rasterio.open(
+            raster_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=2,
+            dtype='float32',
+            crs='EPSG:2193',
+            transform=transform,
+            nodata=-9999.0,
+        ) as dst:
+            dst.write(vs30_data, 1)
+            dst.write(stdv_data, 2)
+
+        return raster_path
+
+    def test_unknown_model_type_raises(self, sample_vs30_raster, temp_dir):
+        """Test that unknown model type raises ValueError."""
+        import pandas as pd
+        from vs30.spatial import RasterData, prepare_observation_data
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+        observations = pd.DataFrame({
+            'easting': [1502000],
+            'northing': [5102000],
+            'vs30': [300],
+            'uncertainty': [30],
+        })
+        model_table = np.array([[300, 30], [400, 40]])
+
+        with pytest.raises(ValueError, match="Unknown model type"):
+            prepare_observation_data(
+                observations=observations,
+                raster_data=raster_data,
+                updated_model_table=model_table,
+                model_type="invalid_model",
+                output_dir=temp_dir,
+            )
+
+
+class TestSelectObservationsForPixelAdditional:
+    """Additional tests for select_observations_for_pixel."""
+
+    def test_select_no_nearby_observations(self):
+        """Test when no observations are within max_dist_m."""
+        pixel = PixelData(
+            location=np.array([0.0, 0.0]),
+            vs30=300.0,
+            stdv=30.0,
+            index=0,
+        )
+
+        obs_data = ObservationData(
+            locations=np.array([[1000000.0, 1000000.0]]),  # Very far away
+            vs30=np.array([350.0]),
+            model_vs30=np.array([300.0]),
+            model_stdv=np.array([30.0]),
+            residuals=np.array([0.15]),
+            omega=np.array([1.0]),
+            uncertainty=np.array([25.0]),
+        )
+
+        selected = select_observations_for_pixel(
+            pixel, obs_data, max_dist_m=1000, max_points=10
+        )
+
+        assert len(selected.locations) == 0
+
+    def test_select_limited_by_max_points_additional(self):
+        """Test that max_points limits selection."""
+        pixel = PixelData(
+            location=np.array([0.0, 0.0]),
+            vs30=300.0,
+            stdv=30.0,
+            index=0,
+        )
+
+        # Create 10 nearby observations
+        n_obs = 10
+        np.random.seed(42)  # For reproducibility
+        obs_data = ObservationData(
+            locations=np.random.uniform(-100, 100, (n_obs, 2)),
+            vs30=np.random.uniform(250, 350, n_obs),
+            model_vs30=np.full(n_obs, 300.0),
+            model_stdv=np.full(n_obs, 30.0),
+            residuals=np.random.uniform(-0.1, 0.1, n_obs),
+            omega=np.ones(n_obs),
+            uncertainty=np.full(n_obs, 25.0),
+        )
+
+        selected = select_observations_for_pixel(
+            pixel, obs_data, max_dist_m=10000, max_points=5
+        )
+
+        # Should select at most max_points
+        assert len(selected.locations) <= 5
+
+
+class TestBuildCovarianceMatrixAdditional:
+    """Additional tests for build_covariance_matrix."""
+
+    def test_build_basic_covariance(self):
+        """Test building a basic covariance matrix."""
+        pixel = PixelData(
+            location=np.array([0.0, 0.0]),
+            vs30=300.0,
+            stdv=30.0,
+            index=0,
+        )
+
+        obs_data = ObservationData(
+            locations=np.array([[100.0, 0.0], [0.0, 100.0]]),
+            vs30=np.array([310.0, 290.0]),
+            model_vs30=np.array([300.0, 300.0]),
+            model_stdv=np.array([30.0, 30.0]),
+            residuals=np.array([0.033, -0.034]),
+            omega=np.array([1.0, 1.0]),
+            uncertainty=np.array([25.0, 25.0]),
+        )
+
+        cov = build_covariance_matrix(
+            pixel, obs_data, "geology",
+            phi=1000.0, noisy=False, cov_reduc=0.0
+        )
+
+        # Should be 3x3 (1 pixel + 2 observations)
+        assert cov.shape == (3, 3)
+        # Should be symmetric
+        np.testing.assert_array_almost_equal(cov, cov.T)
+        # Diagonal should be positive
+        assert np.all(np.diag(cov) > 0)
+
+
+class TestSubsampleByClusterAdditional:
+    """Additional tests for subsample_by_cluster."""
+
+    def test_subsample_unclustered_all_kept(self):
+        """Test that unclustered observations (label=-1) are all kept."""
+        # All unclustered
+        labels = np.array([-1, -1, -1, -1, -1])
+        selected = subsample_by_cluster(labels, step=2)
+
+        # All should be kept
+        assert len(selected) == 5
+        np.testing.assert_array_equal(selected, [0, 1, 2, 3, 4])
+
+    def test_subsample_clustered_subsampled(self):
+        """Test that clustered observations are subsampled."""
+        # Two clusters
+        labels = np.array([0, 0, 0, 0, 1, 1, 1, 1])
+        selected = subsample_by_cluster(labels, step=2)
+
+        # Should take every 2nd from each cluster: indices 0, 2, 4, 6
+        assert len(selected) == 4
+
+    def test_subsample_mixed(self):
+        """Test mixed unclustered and clustered."""
+        # Mix of unclustered (-1) and clustered (0, 1)
+        labels = np.array([-1, 0, 0, 0, -1, 1, 1])
+        selected = subsample_by_cluster(labels, step=2)
+
+        # Unclustered indices [0, 4] all kept
+        # Cluster 0 indices [1, 2, 3] -> [1, 3] (step=2)
+        # Cluster 1 indices [5, 6] -> [5] (step=2)
+        assert 0 in selected  # unclustered
+        assert 4 in selected  # unclustered
+        assert 1 in selected  # first of cluster 0
+
+
+class TestFindAffectedPixels:
+    """Tests for find_affected_pixels function."""
+
+    @pytest.fixture
+    def temp_dir(self):
+        """Create a temporary directory for test outputs."""
+        import tempfile
+        import shutil
+        tmpdir = tempfile.mkdtemp(prefix="vs30_spatial_test_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
+
+    @pytest.fixture
+    def sample_vs30_raster(self, temp_dir):
+        """Create a sample 2-band VS30 raster for testing."""
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        raster_path = temp_dir / "test_vs30.tif"
+
+        width, height = 10, 10
+        transform = from_bounds(1500000, 5100000, 1505000, 5105000, width, height)
+
+        vs30_data = np.random.uniform(200, 600, (height, width)).astype(np.float32)
+        stdv_data = np.random.uniform(20, 60, (height, width)).astype(np.float32)
+
+        with rasterio.open(
+            raster_path,
+            'w',
+            driver='GTiff',
+            height=height,
+            width=width,
+            count=2,
+            dtype='float32',
+            crs='EPSG:2193',
+            transform=transform,
+            nodata=-9999.0,
+        ) as dst:
+            dst.write(vs30_data, 1)
+            dst.write(stdv_data, 2)
+
+        return raster_path
+
+    def test_find_affected_pixels_with_observations(self, sample_vs30_raster):
+        """Test with some observations that affect pixels."""
+        from vs30.spatial import RasterData, find_affected_pixels
+
+        raster_data = RasterData.from_file(sample_vs30_raster)
+
+        # Create observation near the raster center
+        obs_data = ObservationData(
+            locations=np.array([[1502500.0, 5102500.0]]),  # Center of raster
+            vs30=np.array([350.0]),
+            model_vs30=np.array([300.0]),
+            model_stdv=np.array([30.0]),
+            residuals=np.array([0.15]),
+            omega=np.array([1.0]),
+            uncertainty=np.array([25.0]),
+        )
+
+        result = find_affected_pixels(raster_data, obs_data, max_dist_m=5000)
+
+        # Should find some affected pixels
+        assert result.n_affected_pixels > 0
+
+
+class TestGridPointsInBboxAdditional:
+    """Additional tests for grid_points_in_bbox."""
+
+    def test_grid_points_basic_additional(self):
+        """Test basic bounding box calculation."""
+        # Simple grid
+        grid_locs = np.array([
+            [0.0, 0.0],
+            [100.0, 0.0],
+            [200.0, 0.0],
+            [0.0, 100.0],
+            [100.0, 100.0],
+        ])
+
+        # Single observation at (100, 50) with max_dist=75
+        obs_eastings_min = np.array([[25.0]])
+        obs_eastings_max = np.array([[175.0]])
+        obs_northings_min = np.array([[-25.0]])
+        obs_northings_max = np.array([[125.0]])
+
+        mask, obs_to_grid = grid_points_in_bbox(
+            grid_locs,
+            obs_eastings_min, obs_eastings_max,
+            obs_northings_min, obs_northings_max
+        )
+
+        # Points 1 (100, 0) and 4 (100, 100) should be in bbox
+        assert mask[1]  # (100, 0) is in bbox
+        assert mask[4]  # (100, 100) is in bbox
+
+
+class TestCalculateChunkSizeAdditional:
+    """Additional tests for calculate_chunk_size."""
+
+    def test_chunk_size_calculation(self):
+        """Test chunk size calculation."""
+        # With 1000 observations and 1GB memory
+        chunk_size = calculate_chunk_size(1000, 1.0)
+
+        # Should be approximately 1GB / 1000 bytes = 1M grid points
+        assert chunk_size > 0
+        assert chunk_size < 10_000_000_000  # Reasonable upper bound
+
+    def test_chunk_size_minimum_one(self):
+        """Test chunk size is at least 1."""
+        # Very small memory, many observations
+        chunk_size = calculate_chunk_size(10_000_000, 0.000001)
+
+        assert chunk_size >= 1

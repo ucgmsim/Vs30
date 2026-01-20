@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from vs30.config import Vs30Config, get_default_config, reset_default_config
+from vs30.config import Vs30Config, get_default_config
+from conftest import reset_default_config
 
 
 class TestVs30Config:
@@ -251,3 +252,39 @@ class TestHybridVs30Param:
             # Keys are strings in YAML but should be usable as ints
             assert isinstance(factor, float)
             assert 0 <= factor <= 1
+
+
+# =============================================================================
+# Additional Tests from Coverage Improvements
+# =============================================================================
+
+
+class TestConfigEdgeCases:
+    """Tests for config module edge cases."""
+
+    def test_config_phi_access(self):
+        """Test accessing phi values from config."""
+        cfg = get_default_config()
+
+        assert "geology" in cfg.phi
+        assert "terrain" in cfg.phi
+        assert cfg.phi["geology"] > 0
+        assert cfg.phi["terrain"] > 0
+
+    def test_config_hybrid_params(self):
+        """Test accessing hybrid parameters."""
+        cfg = get_default_config()
+
+        assert cfg.hybrid_mod6_dist_min is not None
+        assert cfg.hybrid_mod6_dist_max > cfg.hybrid_mod6_dist_min
+        assert cfg.hybrid_mod6_vs30_min is not None
+        assert cfg.hybrid_mod6_vs30_max > cfg.hybrid_mod6_vs30_min
+
+    def test_config_output_filenames(self):
+        """Test accessing output filenames."""
+        cfg = get_default_config()
+
+        assert "geology" in cfg.output_filenames
+        assert "terrain" in cfg.output_filenames
+        assert cfg.output_filenames["geology"].endswith(".tif")
+        assert cfg.output_filenames["terrain"].endswith(".tif")

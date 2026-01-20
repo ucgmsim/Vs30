@@ -3,57 +3,60 @@ Tests for the VS30 compute-at-locations command.
 
 These tests verify that the compute-at-locations command produces
 consistent Vs30 values for known locations (major NZ cities).
+
+Uses CliRunner for in-process invocation to enable coverage tracking.
 """
 
-import subprocess
+import shutil
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+from typer.testing import CliRunner
+
+from vs30.cli import app
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
+
+runner = CliRunner()
 
 
 class TestComputeAtLocations:
     """Tests for the compute-at-locations CLI command."""
 
     @pytest.fixture
-    def output_csv(self):
-        """Create temporary output file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False
-        ) as f:
-            yield Path(f.name)
-        Path(f.name).unlink(missing_ok=True)
+    def output_dir(self):
+        """Create temporary output directory."""
+        tmpdir = tempfile.mkdtemp(prefix="vs30_test_locations_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
 
-    def test_nz_cities_single_process(self, output_csv):
+    def test_nz_cities_single_process(self, output_dir):
         """Test compute-at-locations with major NZ cities."""
         input_csv = FIXTURES_DIR / "nz_cities.csv"
         expected_csv = BENCHMARKS_DIR / "nz_cities_vs30.csv"
+        output_csv = output_dir / "output.csv"
 
         # Run command
-        result = subprocess.run(
-            [
-                "vs30",
-                "compute-at-locations",
-                "--locations-csv", str(input_csv),
-                "--output-csv", str(output_csv),
-                "--lat-column", "latitude",
-                "--lon-column", "longitude",
-                "--include-intermediate",
-                "--n-proc", "1",
-            ],
-            capture_output=True,
-            text=True,
-        )
+        result = runner.invoke(app, [
+            "compute-at-locations",
+            "--locations-csv", str(input_csv),
+            "--output-csv", str(output_csv),
+            "--lat-column", "latitude",
+            "--lon-column", "longitude",
+            "--include-intermediate",
+            "--n-proc", "1",
+        ])
 
-        if result.returncode != 0:
-            print(f"STDOUT:\n{result.stdout}")
-            print(f"STDERR:\n{result.stderr}")
-            pytest.fail(f"Command failed with return code {result.returncode}")
+        if result.exit_code != 0:
+            print(f"Output:\n{result.output}")
+            if result.exception:
+                import traceback
+                print(f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
+            pytest.fail(f"Command failed with exit code {result.exit_code}")
 
         # Compare outputs
         actual_df = pd.read_csv(output_csv)
@@ -90,26 +93,22 @@ class TestComputeAtLocations:
                     equal_nan=True,
                 ), f"Column '{col}' values differ beyond tolerance"
 
-    def test_vs30_values_reasonable(self, output_csv):
+    def test_vs30_values_reasonable(self, output_dir):
         """Test that computed Vs30 values are within reasonable range."""
         input_csv = FIXTURES_DIR / "nz_cities.csv"
+        output_csv = output_dir / "output.csv"
 
         # Run command
-        result = subprocess.run(
-            [
-                "vs30",
-                "compute-at-locations",
-                "--locations-csv", str(input_csv),
-                "--output-csv", str(output_csv),
-                "--lat-column", "latitude",
-                "--lon-column", "longitude",
-                "--n-proc", "1",
-            ],
-            capture_output=True,
-            text=True,
-        )
+        result = runner.invoke(app, [
+            "compute-at-locations",
+            "--locations-csv", str(input_csv),
+            "--output-csv", str(output_csv),
+            "--lat-column", "latitude",
+            "--lon-column", "longitude",
+            "--n-proc", "1",
+        ])
 
-        assert result.returncode == 0, f"Command failed: {result.stderr}"
+        assert result.exit_code == 0, f"Command failed: {result.output}"
 
         # Check Vs30 values are reasonable (typically 100-1000 m/s for NZ)
         df = pd.read_csv(output_csv)
@@ -131,26 +130,22 @@ class TestComputeAtLocations:
             f"Too many NaN values: {len(df) - len(valid_df)} of {len(df)}"
         )
 
-    def test_christchurch_values(self, output_csv):
+    def test_christchurch_values(self, output_dir):
         """Test that Christchurch has expected low Vs30 (soft soils)."""
         input_csv = FIXTURES_DIR / "nz_cities.csv"
+        output_csv = output_dir / "output.csv"
 
         # Run command
-        result = subprocess.run(
-            [
-                "vs30",
-                "compute-at-locations",
-                "--locations-csv", str(input_csv),
-                "--output-csv", str(output_csv),
-                "--lat-column", "latitude",
-                "--lon-column", "longitude",
-                "--n-proc", "1",
-            ],
-            capture_output=True,
-            text=True,
-        )
+        result = runner.invoke(app, [
+            "compute-at-locations",
+            "--locations-csv", str(input_csv),
+            "--output-csv", str(output_csv),
+            "--lat-column", "latitude",
+            "--lon-column", "longitude",
+            "--n-proc", "1",
+        ])
 
-        assert result.returncode == 0, f"Command failed: {result.stderr}"
+        assert result.exit_code == 0, f"Command failed: {result.output}"
 
         df = pd.read_csv(output_csv)
         chch_row = df[df["city"] == "Christchurch"].iloc[0]
@@ -168,39 +163,35 @@ class TestComputeAtLocationsMultiprocess:
     """Tests for compute-at-locations with multiple processes."""
 
     @pytest.fixture
-    def output_csv(self):
-        """Create temporary output file."""
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False
-        ) as f:
-            yield Path(f.name)
-        Path(f.name).unlink(missing_ok=True)
+    def output_dir(self):
+        """Create temporary output directory."""
+        tmpdir = tempfile.mkdtemp(prefix="vs30_test_locations_mp_")
+        yield Path(tmpdir)
+        shutil.rmtree(tmpdir)
 
-    def test_multiprocess_matches_single(self, output_csv):
+    def test_multiprocess_matches_single(self, output_dir):
         """Test that multiprocess results match single-process results."""
         input_csv = FIXTURES_DIR / "nz_cities.csv"
         expected_csv = BENCHMARKS_DIR / "nz_cities_vs30.csv"
+        output_csv = output_dir / "output.csv"
 
         # Run with multiple processes
-        result = subprocess.run(
-            [
-                "vs30",
-                "compute-at-locations",
-                "--locations-csv", str(input_csv),
-                "--output-csv", str(output_csv),
-                "--lat-column", "latitude",
-                "--lon-column", "longitude",
-                "--include-intermediate",
-                "--n-proc", "-1",  # Use all cores
-            ],
-            capture_output=True,
-            text=True,
-        )
+        result = runner.invoke(app, [
+            "compute-at-locations",
+            "--locations-csv", str(input_csv),
+            "--output-csv", str(output_csv),
+            "--lat-column", "latitude",
+            "--lon-column", "longitude",
+            "--include-intermediate",
+            "--n-proc", "-1",  # Use all cores
+        ])
 
-        if result.returncode != 0:
-            print(f"STDOUT:\n{result.stdout}")
-            print(f"STDERR:\n{result.stderr}")
-            pytest.fail(f"Command failed with return code {result.returncode}")
+        if result.exit_code != 0:
+            print(f"Output:\n{result.output}")
+            if result.exception:
+                import traceback
+                print(f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
+            pytest.fail(f"Command failed with exit code {result.exit_code}")
 
         # Compare with single-process benchmark
         actual_df = pd.read_csv(output_csv)

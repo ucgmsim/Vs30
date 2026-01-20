@@ -130,3 +130,167 @@ class TestParallelProcessingInfrastructure:
 
         assert cpu_count >= 1
         assert cpu_count <= 1024  # Reasonable upper bound
+
+
+# =============================================================================
+# Additional Tests from Coverage Improvements
+# =============================================================================
+import pandas as pd
+
+
+class TestLocationsChunkConfig:
+    """Tests for LocationsChunkConfig dataclass."""
+
+    def test_config_creation(self):
+        """Test creating LocationsChunkConfig."""
+        from vs30.parallel import LocationsChunkConfig
+
+        config = LocationsChunkConfig(
+            lon_column="longitude",
+            lat_column="latitude",
+            include_intermediate=True,
+            combination_method="0.5",
+            coast_distance_raster=None,
+        )
+
+        assert config.lon_column == "longitude"
+        assert config.lat_column == "latitude"
+        assert config.include_intermediate is True
+        assert config.combination_method == "0.5"
+        assert config.coast_distance_raster is None
+
+
+class TestProcessLocationsChunkDirect:
+    """Tests for _process_locations_chunk worker function (called directly)."""
+
+    def test_process_empty_chunk(self):
+        """Test processing an empty chunk."""
+        from vs30.parallel import _process_locations_chunk, LocationsChunkConfig
+
+        # Empty DataFrame
+        chunk_df = pd.DataFrame({
+            'longitude': [],
+            'latitude': [],
+        })
+
+        observations_df = pd.DataFrame({
+            'easting': [],
+            'northing': [],
+            'vs30': [],
+            'uncertainty': [],
+        })
+
+        geol_model_df = pd.DataFrame({
+            'id': [1, 2],
+            'mean_vs30_km_per_s': [300.0, 400.0],
+            'standard_deviation_vs30_km_per_s': [30.0, 40.0],
+        })
+
+        config = LocationsChunkConfig(
+            lon_column='longitude',
+            lat_column='latitude',
+            include_intermediate=False,
+            combination_method='0.5',
+            coast_distance_raster=None,
+        )
+
+        # This should handle empty chunk gracefully
+        args = (chunk_df, 0, observations_df, geol_model_df, geol_model_df, config)
+
+        chunk_id, result_df = _process_locations_chunk(args)
+
+        assert chunk_id == 0
+        assert len(result_df) == 0
+
+
+class TestProcessPixelsChunkDirect:
+    """Tests for _process_pixels_chunk worker function (called directly)."""
+
+    def test_process_single_pixel(self):
+        """Test processing a single pixel chunk."""
+        from vs30.parallel import _process_pixels_chunk
+
+        # Simple pixel data
+        pixel_data_dict = {
+            0: {
+                "location": np.array([1500000.0, 5100000.0]),
+                "vs30": 300.0,
+                "stdv": 30.0,
+                "index": 0,
+            }
+        }
+
+        # Observation data dict
+        obs_data_dict = {
+            "locations": np.array([[1500100.0, 5100100.0]]),
+            "vs30": np.array([350.0]),
+            "model_vs30": np.array([300.0]),
+            "model_stdv": np.array([30.0]),
+            "residuals": np.array([0.15]),
+            "omega": np.array([1.0]),
+            "uncertainty": np.array([25.0]),
+        }
+
+        config_params = {
+            "model_type": "geology",
+            "phi": 1000.0,
+            "max_dist_m": 5000.0,
+            "max_points": 50,
+            "noisy": False,
+            "cov_reduc": 0.0,
+        }
+
+        args = ([0], 0, pixel_data_dict, obs_data_dict, config_params)
+
+        chunk_id, updates = _process_pixels_chunk(args)
+
+        assert chunk_id == 0
+        # Should produce one update for the pixel
+        assert len(updates) == 1
+        assert updates[0].pixel_index == 0
+
+    def test_process_multiple_pixels(self):
+        """Test processing multiple pixels."""
+        from vs30.parallel import _process_pixels_chunk
+
+        # Multiple pixels
+        pixel_data_dict = {
+            0: {
+                "location": np.array([1500000.0, 5100000.0]),
+                "vs30": 300.0,
+                "stdv": 30.0,
+                "index": 0,
+            },
+            1: {
+                "location": np.array([1500500.0, 5100500.0]),
+                "vs30": 350.0,
+                "stdv": 35.0,
+                "index": 1,
+            },
+        }
+
+        obs_data_dict = {
+            "locations": np.array([[1500100.0, 5100100.0]]),
+            "vs30": np.array([320.0]),
+            "model_vs30": np.array([300.0]),
+            "model_stdv": np.array([30.0]),
+            "residuals": np.array([0.065]),
+            "omega": np.array([1.0]),
+            "uncertainty": np.array([25.0]),
+        }
+
+        config_params = {
+            "model_type": "terrain",
+            "phi": 993.0,
+            "max_dist_m": 5000.0,
+            "max_points": 50,
+            "noisy": True,
+            "cov_reduc": 0.5,
+        }
+
+        args = ([0, 1], 0, pixel_data_dict, obs_data_dict, config_params)
+
+        chunk_id, updates = _process_pixels_chunk(args)
+
+        assert chunk_id == 0
+        assert len(updates) == 2

@@ -162,6 +162,11 @@ combination_method: 1.0
 # Only used if combination_method is "standard_deviation_weighting"
 k_value: 3.0
 
+# Small epsilon value added to variance when computing inverse-variance weights
+# for combining geology and terrain models. Prevents division by zero when
+# standard deviation is exactly zero.
+weight_epsilon_div_by_zero: 1.0e-10
+
 # --- Parameters for creating the "hybrid" geology Vs30 model that adjusts with slope and coastal distance ---
 hybrid_mod6_dist_min: 8000.0
 hybrid_mod6_dist_max: 20000.0
@@ -213,5 +218,19 @@ nztm_crs: "EPSG:2193"
 # --- Plotting ---
 plot_figsize: [12, 8]
 plot_dpi: 300
+
+# --- DataFrame Column Names ---
+# Column names used in categorical model DataFrames for Bayesian updates.
+# These are used to identify posterior/prior values at different stages.
+col_posterior_mean_independent: "posterior_mean_vs30_km_per_s_independent_observations"
+col_posterior_stdv_independent: "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+col_posterior_mean_clustered: "posterior_mean_vs30_km_per_s_clustered_observations"
+col_posterior_stdv_clustered: "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+col_posterior_mean: "posterior_mean_vs30_km_per_s"
+col_posterior_stdv: "posterior_standard_deviation_vs30_km_per_s"
+col_prior_mean: "prior_mean_vs30_km_per_s"
+col_prior_stdv: "prior_standard_deviation_vs30_km_per_s"
+col_mean: "mean_vs30_km_per_s"
+col_stdv: "standard_deviation_vs30_km_per_s"
 
 
