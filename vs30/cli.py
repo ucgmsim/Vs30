@@ -1538,14 +1538,14 @@ def compute_at_locations(
     """
     from qcore import coordinates
 
-    from vs30.category import get_vs30_for_points
     from vs30.parallel import (
         LocationsChunkConfig,
+        process_geology_at_points,
+        process_terrain_at_points,
         resolve_n_proc,
         run_parallel_locations,
     )
-    from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
-    from vs30.spatial import compute_spatial_adjustment_at_points
+    from vs30.utils import combine_models_at_points
 
     try:
         # Get config
@@ -1676,58 +1676,27 @@ def compute_at_locations(
                 return
 
             # ================================================================
-            # Sequential Processing Path (original code)
+            # Sequential Processing Path
             # ================================================================
             typer.echo("\nProcessing geology model...")
-
-            # Get initial Vs30 values at points
-            geol_vs30, geol_stdv, geol_ids = get_vs30_for_points(
-                points, "geology", geol_model_df
-            )
-            df["geology_id"] = geol_ids
-
-            # Apply hybrid modifications (slope and coastal distance)
-            if coast_distance_raster is not None and coast_distance_raster.exists():
-                geol_vs30_hybrid, geol_stdv_hybrid = (
-                    apply_hybrid_modifications_at_points(
-                        points,
-                        geol_vs30,
-                        geol_stdv,
-                        geol_ids,
-                        slope_raster_path=SLOPE_RASTER,
-                        coast_distance_raster_path=coast_distance_raster,
-                    )
-                )
-            else:
+            if coast_distance_raster is None or not coast_distance_raster.exists():
                 typer.echo(
                     "  Warning: No coastal distance raster provided, skipping hybrid modifications"
                 )
-                geol_vs30_hybrid = geol_vs30
-                geol_stdv_hybrid = geol_stdv
 
-            # Get model values at observation locations for spatial adjustment
-            if len(observations_df) > 0:
-                obs_locs = observations_df[["easting", "northing"]].values
-                obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
-                    obs_locs, "geology", geol_model_df
-                )
+            (
+                geol_ids,
+                geol_vs30,
+                geol_stdv,
+                geol_vs30_hybrid,
+                geol_stdv_hybrid,
+                geol_mvn_vs30,
+                geol_mvn_stdv,
+            ) = process_geology_at_points(
+                points, geol_model_df, observations_df, coast_distance_raster
+            )
 
-                # Apply spatial adjustment
-                geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
-                    points=points,
-                    model_vs30=geol_vs30_hybrid,
-                    model_stdv=geol_stdv_hybrid,
-                    obs_locations=obs_locs,
-                    obs_vs30=observations_df["vs30"].values,
-                    obs_model_vs30=obs_geol_vs30,
-                    obs_model_stdv=obs_geol_stdv,
-                    obs_uncertainty=observations_df["uncertainty"].values,
-                    model_type="geology",
-                )
-            else:
-                geol_mvn_vs30 = geol_vs30_hybrid
-                geol_mvn_stdv = geol_stdv_hybrid
-
+            df["geology_id"] = geol_ids
             if include_intermediate:
                 df["geology_vs30"] = geol_vs30
                 df["geology_stdv"] = geol_stdv
@@ -1736,77 +1705,31 @@ def compute_at_locations(
             df["geology_mvn_vs30"] = geol_mvn_vs30
             df["geology_mvn_stdv"] = geol_mvn_stdv
 
-            # ================================================================
-            # Process Terrain Model
-            # ================================================================
             typer.echo("Processing terrain model...")
+            (
+                terr_ids,
+                terr_vs30,
+                terr_stdv,
+                terr_mvn_vs30,
+                terr_mvn_stdv,
+            ) = process_terrain_at_points(points, terr_model_df, observations_df)
 
-            # Get initial Vs30 values at points
-            terr_vs30, terr_stdv, terr_ids = get_vs30_for_points(
-                points, "terrain", terr_model_df
-            )
             df["terrain_id"] = terr_ids
-
-            # Get model values at observation locations for spatial adjustment
-            if len(observations_df) > 0:
-                obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
-                    obs_locs, "terrain", terr_model_df
-                )
-
-                # Apply spatial adjustment (no hybrid modifications for terrain)
-                terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
-                    points=points,
-                    model_vs30=terr_vs30,
-                    model_stdv=terr_stdv,
-                    obs_locations=obs_locs,
-                    obs_vs30=observations_df["vs30"].values,
-                    obs_model_vs30=obs_terr_vs30,
-                    obs_model_stdv=obs_terr_stdv,
-                    obs_uncertainty=observations_df["uncertainty"].values,
-                    model_type="terrain",
-                )
-            else:
-                terr_mvn_vs30 = terr_vs30
-                terr_mvn_stdv = terr_stdv
-
             if include_intermediate:
                 df["terrain_vs30"] = terr_vs30
                 df["terrain_stdv"] = terr_stdv
             df["terrain_mvn_vs30"] = terr_mvn_vs30
             df["terrain_mvn_stdv"] = terr_mvn_stdv
 
-            # ================================================================
-            # Combine Models
-            # ================================================================
             typer.echo("Combining models...")
-
-            # Use the same combination logic as the grid pipeline
-            try:
-                # Check if combination_method is a ratio (float)
-                ratio = float(combination_method)
-                # Simple ratio-based combination
-                combined_vs30 = geol_mvn_vs30 * ratio + terr_mvn_vs30 * (1 - ratio)
-                combined_stdv = np.sqrt(
-                    (geol_mvn_stdv * ratio) ** 2 + (terr_mvn_stdv * (1 - ratio)) ** 2
-                )
-            except ValueError:
-                # Standard deviation weighting
-                if combination_method == "standard_deviation_weighting":
-                    # Inverse variance weighting
-                    geol_weight = 1 / (geol_mvn_stdv**2 + cfg.weight_epsilon_div_by_zero)
-                    terr_weight = 1 / (terr_mvn_stdv**2 + cfg.weight_epsilon_div_by_zero)
-                    total_weight = geol_weight + terr_weight
-
-                    combined_vs30 = (
-                        geol_mvn_vs30 * geol_weight + terr_mvn_vs30 * terr_weight
-                    ) / total_weight
-                    combined_stdv = np.sqrt(1 / total_weight)
-                else:
-                    typer.echo(
-                        f"Warning: Unknown combination method '{combination_method}', using 0.5 ratio"
-                    )
-                    combined_vs30 = (geol_mvn_vs30 + terr_mvn_vs30) / 2
-                    combined_stdv = np.sqrt((geol_mvn_stdv**2 + terr_mvn_stdv**2) / 4)
+            combined_vs30, combined_stdv = combine_models_at_points(
+                geol_mvn_vs30,
+                geol_mvn_stdv,
+                terr_mvn_vs30,
+                terr_mvn_stdv,
+                combination_method,
+                cfg.weight_epsilon_div_by_zero,
+            )
 
             df["vs30"] = combined_vs30
             df["stdv"] = combined_stdv

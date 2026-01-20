@@ -29,6 +29,7 @@ from vs30.spatial import (
     compute_spatial_adjustment_at_points,
     compute_spatial_adjustment_for_pixel,
 )
+from vs30.utils import combine_models_at_points
 
 
 @contextmanager
@@ -89,6 +90,167 @@ def resolve_n_proc(n_proc: int | None) -> int:
 # GDAL is not fork-safe; using spawn starts fresh processes without inheriting
 # the parent's GDAL state, which prevents deadlocks
 _spawn_context = mp.get_context('spawn')
+
+
+# =============================================================================
+# Point Processing Helper Functions
+# =============================================================================
+
+
+def process_geology_at_points(
+    points: np.ndarray,
+    model_df: pd.DataFrame,
+    observations_df: pd.DataFrame,
+    coast_distance_raster: Path | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Process geology model at points, including hybrid modifications and spatial adjustment.
+
+    This function encapsulates the full geology processing pipeline:
+    1. Get initial Vs30 values from categorical model
+    2. Apply hybrid modifications (slope and coastal distance) if coast raster provided
+    3. Apply spatial adjustment using observations
+
+    Parameters
+    ----------
+    points : ndarray
+        Array of shape (n_points, 2) with (easting, northing) coordinates.
+    model_df : DataFrame
+        Categorical geology model with Vs30 mean and standard deviation per category.
+    observations_df : DataFrame
+        Observation data with columns: easting, northing, vs30, uncertainty.
+    coast_distance_raster : Path, optional
+        Path to coastal distance raster. If None, hybrid modifications are skipped.
+
+    Returns
+    -------
+    geol_ids : ndarray
+        Geology category IDs at each point.
+    geol_vs30 : ndarray
+        Initial geology Vs30 values (before hybrid mods).
+    geol_stdv : ndarray
+        Initial geology standard deviation (before hybrid mods).
+    geol_vs30_hybrid : ndarray
+        Geology Vs30 after hybrid modifications.
+    geol_stdv_hybrid : ndarray
+        Geology standard deviation after hybrid modifications.
+    geol_mvn_vs30 : ndarray
+        Final geology Vs30 after spatial adjustment.
+    geol_mvn_stdv : ndarray
+        Final geology standard deviation after spatial adjustment.
+    """
+    # Get initial Vs30 values at points
+    geol_vs30, geol_stdv, geol_ids = get_vs30_for_points(
+        points, "geology", model_df
+    )
+
+    # Apply hybrid modifications (slope and coastal distance)
+    if coast_distance_raster is not None and coast_distance_raster.exists():
+        geol_vs30_hybrid, geol_stdv_hybrid = apply_hybrid_modifications_at_points(
+            points,
+            geol_vs30,
+            geol_stdv,
+            geol_ids,
+            slope_raster_path=SLOPE_RASTER,
+            coast_distance_raster_path=coast_distance_raster,
+        )
+    else:
+        geol_vs30_hybrid = geol_vs30
+        geol_stdv_hybrid = geol_stdv
+
+    # Apply spatial adjustment if observations are available
+    if len(observations_df) > 0:
+        obs_locs = observations_df[["easting", "northing"]].values
+        obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
+            obs_locs, "geology", model_df
+        )
+        geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
+            points=points,
+            model_vs30=geol_vs30_hybrid,
+            model_stdv=geol_stdv_hybrid,
+            obs_locations=obs_locs,
+            obs_vs30=observations_df["vs30"].values,
+            obs_model_vs30=obs_geol_vs30,
+            obs_model_stdv=obs_geol_stdv,
+            obs_uncertainty=observations_df["uncertainty"].values,
+            model_type="geology",
+        )
+    else:
+        geol_mvn_vs30 = geol_vs30_hybrid
+        geol_mvn_stdv = geol_stdv_hybrid
+
+    return (
+        geol_ids,
+        geol_vs30,
+        geol_stdv,
+        geol_vs30_hybrid,
+        geol_stdv_hybrid,
+        geol_mvn_vs30,
+        geol_mvn_stdv,
+    )
+
+
+def process_terrain_at_points(
+    points: np.ndarray,
+    model_df: pd.DataFrame,
+    observations_df: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Process terrain model at points, including spatial adjustment.
+
+    This function encapsulates the full terrain processing pipeline:
+    1. Get initial Vs30 values from categorical model
+    2. Apply spatial adjustment using observations (no hybrid modifications for terrain)
+
+    Parameters
+    ----------
+    points : ndarray
+        Array of shape (n_points, 2) with (easting, northing) coordinates.
+    model_df : DataFrame
+        Categorical terrain model with Vs30 mean and standard deviation per category.
+    observations_df : DataFrame
+        Observation data with columns: easting, northing, vs30, uncertainty.
+
+    Returns
+    -------
+    terr_ids : ndarray
+        Terrain category IDs at each point.
+    terr_vs30 : ndarray
+        Initial terrain Vs30 values.
+    terr_stdv : ndarray
+        Initial terrain standard deviation.
+    terr_mvn_vs30 : ndarray
+        Final terrain Vs30 after spatial adjustment.
+    terr_mvn_stdv : ndarray
+        Final terrain standard deviation after spatial adjustment.
+    """
+    # Get initial Vs30 values at points
+    terr_vs30, terr_stdv, terr_ids = get_vs30_for_points(
+        points, "terrain", model_df
+    )
+
+    # Apply spatial adjustment if observations are available
+    if len(observations_df) > 0:
+        obs_locs = observations_df[["easting", "northing"]].values
+        obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
+            obs_locs, "terrain", model_df
+        )
+        terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
+            points=points,
+            model_vs30=terr_vs30,
+            model_stdv=terr_stdv,
+            obs_locations=obs_locs,
+            obs_vs30=observations_df["vs30"].values,
+            obs_model_vs30=obs_terr_vs30,
+            obs_model_stdv=obs_terr_stdv,
+            obs_uncertainty=observations_df["uncertainty"].values,
+            model_type="terrain",
+        )
+    else:
+        terr_mvn_vs30 = terr_vs30
+        terr_mvn_stdv = terr_stdv
+
+    return terr_ids, terr_vs30, terr_stdv, terr_mvn_vs30, terr_mvn_stdv
 
 
 # =============================================================================
@@ -158,57 +320,20 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     chunk_df["northing"] = northing
     points = np.column_stack([easting, northing])
 
-    # Get observation locations if available
-    if len(observations_df) > 0:
-        obs_locs = observations_df[["easting", "northing"]].values
-    else:
-        obs_locs = np.empty((0, 2))
-
-    # ================================================================
-    # Process Geology Model
-    # ================================================================
-    geol_vs30, geol_stdv, geol_ids = get_vs30_for_points(
-        points, "geology", geol_model_df
+    # Process geology model
+    (
+        geol_ids,
+        geol_vs30,
+        geol_stdv,
+        geol_vs30_hybrid,
+        geol_stdv_hybrid,
+        geol_mvn_vs30,
+        geol_mvn_stdv,
+    ) = process_geology_at_points(
+        points, geol_model_df, observations_df, config.coast_distance_raster
     )
+
     chunk_df["geology_id"] = geol_ids
-
-    # Apply hybrid modifications (slope and coastal distance)
-    if (
-        config.coast_distance_raster is not None
-        and config.coast_distance_raster.exists()
-    ):
-        geol_vs30_hybrid, geol_stdv_hybrid = apply_hybrid_modifications_at_points(
-            points,
-            geol_vs30,
-            geol_stdv,
-            geol_ids,
-            slope_raster_path=SLOPE_RASTER,
-            coast_distance_raster_path=config.coast_distance_raster,
-        )
-    else:
-        geol_vs30_hybrid = geol_vs30
-        geol_stdv_hybrid = geol_stdv
-
-    # Get model values at observation locations and apply spatial adjustment
-    if len(observations_df) > 0:
-        obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
-            obs_locs, "geology", geol_model_df
-        )
-        geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
-            points=points,
-            model_vs30=geol_vs30_hybrid,
-            model_stdv=geol_stdv_hybrid,
-            obs_locations=obs_locs,
-            obs_vs30=observations_df["vs30"].values,
-            obs_model_vs30=obs_geol_vs30,
-            obs_model_stdv=obs_geol_stdv,
-            obs_uncertainty=observations_df["uncertainty"].values,
-            model_type="geology",
-        )
-    else:
-        geol_mvn_vs30 = geol_vs30_hybrid
-        geol_mvn_stdv = geol_stdv_hybrid
-
     if config.include_intermediate:
         chunk_df["geology_vs30"] = geol_vs30
         chunk_df["geology_stdv"] = geol_stdv
@@ -217,63 +342,31 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     chunk_df["geology_mvn_vs30"] = geol_mvn_vs30
     chunk_df["geology_mvn_stdv"] = geol_mvn_stdv
 
-    # ================================================================
-    # Process Terrain Model
-    # ================================================================
-    terr_vs30, terr_stdv, terr_ids = get_vs30_for_points(
-        points, "terrain", terr_model_df
-    )
+    # Process terrain model
+    (
+        terr_ids,
+        terr_vs30,
+        terr_stdv,
+        terr_mvn_vs30,
+        terr_mvn_stdv,
+    ) = process_terrain_at_points(points, terr_model_df, observations_df)
+
     chunk_df["terrain_id"] = terr_ids
-
-    # Get model values at observation locations and apply spatial adjustment
-    if len(observations_df) > 0:
-        obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
-            obs_locs, "terrain", terr_model_df
-        )
-        terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
-            points=points,
-            model_vs30=terr_vs30,
-            model_stdv=terr_stdv,
-            obs_locations=obs_locs,
-            obs_vs30=observations_df["vs30"].values,
-            obs_model_vs30=obs_terr_vs30,
-            obs_model_stdv=obs_terr_stdv,
-            obs_uncertainty=observations_df["uncertainty"].values,
-            model_type="terrain",
-        )
-    else:
-        terr_mvn_vs30 = terr_vs30
-        terr_mvn_stdv = terr_stdv
-
     if config.include_intermediate:
         chunk_df["terrain_vs30"] = terr_vs30
         chunk_df["terrain_stdv"] = terr_stdv
     chunk_df["terrain_mvn_vs30"] = terr_mvn_vs30
     chunk_df["terrain_mvn_stdv"] = terr_mvn_stdv
 
-    # ================================================================
-    # Combine Models
-    # ================================================================
-    combination_method = config.combination_method
-    try:
-        ratio = float(combination_method)
-        combined_vs30 = geol_mvn_vs30 * ratio + terr_mvn_vs30 * (1 - ratio)
-        combined_stdv = np.sqrt(
-            (geol_mvn_stdv * ratio) ** 2 + (terr_mvn_stdv * (1 - ratio)) ** 2
-        )
-    except (ValueError, TypeError):
-        if combination_method == "standard_deviation_weighting":
-            geol_weight = 1 / (geol_mvn_stdv**2 + config.weight_epsilon_div_by_zero)
-            terr_weight = 1 / (terr_mvn_stdv**2 + config.weight_epsilon_div_by_zero)
-            total_weight = geol_weight + terr_weight
-            combined_vs30 = (
-                geol_mvn_vs30 * geol_weight + terr_mvn_vs30 * terr_weight
-            ) / total_weight
-            combined_stdv = np.sqrt(1 / total_weight)
-        else:
-            # Default to 0.5 ratio
-            combined_vs30 = (geol_mvn_vs30 + terr_mvn_vs30) / 2
-            combined_stdv = np.sqrt((geol_mvn_stdv**2 + terr_mvn_stdv**2) / 4)
+    # Combine models
+    combined_vs30, combined_stdv = combine_models_at_points(
+        geol_mvn_vs30,
+        geol_mvn_stdv,
+        terr_mvn_vs30,
+        terr_mvn_stdv,
+        config.combination_method,
+        config.weight_epsilon_div_by_zero,
+    )
 
     chunk_df["vs30"] = combined_vs30
     chunk_df["stdv"] = combined_stdv
