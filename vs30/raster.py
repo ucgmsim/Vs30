@@ -23,6 +23,7 @@ applied to geology categories 2, 3, 4, and 6 (slope-based) and categories 4 and 
 """
 
 import importlib.resources
+import logging
 import tarfile
 from pathlib import Path
 
@@ -33,6 +34,8 @@ import rasterio
 from osgeo import gdal
 from rasterio import features
 from rasterio.enums import Resampling
+
+logger = logging.getLogger(__name__)
 from rasterio.transform import from_bounds
 from rasterio.warp import reproject
 from tqdm import tqdm
@@ -57,50 +60,77 @@ SLOPE_RASTER = DATA_DIR / "slope.tif"
 SHAPEFILES_ARCHIVE = DATA_DIR / "shapefiles.tar.xz"
 
 
-def _ensure_qmap_shapefile_extracted() -> None:
+def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
     """
-    Ensure qmap.shp shapefile is extracted from shapefiles.tar.xz.
+    Ensure a shapefile is extracted from shapefiles.tar.xz.
 
-    Checks if qmap.shp exists. If not, extracts it from shapefiles.tar.xz.
-    This is needed because qmap.shp is required for geology ID raster creation
-    but may not be present by default (it must be extracted from the archive).
+    Checks if the shapefile exists. If not, extracts it from shapefiles.tar.xz.
+    This is needed because shapefiles are stored compressed in the archive and
+    may not be present by default.
+
+    Parameters
+    ----------
+    shapefile_path : Path
+        Full path to the shapefile to check/extract.
+    directory_prefix : str
+        Directory prefix within the archive (e.g., "qmap" or "coast").
 
     Raises
     ------
     FileNotFoundError
-        If shapefiles.tar.xz is not found.
+        If shapefiles.tar.xz is not found or extraction fails.
+    ValueError
+        If the directory is not found in the archive.
     """
-    # Check if qmap.shp already exists
-    if GEOLOGY_SHAPEFILE.exists():
+    # Check if shapefile already exists
+    if shapefile_path.exists():
         return
 
     # Check if archive exists
     if not SHAPEFILES_ARCHIVE.exists():
         raise FileNotFoundError(
             f"Shapefile archive not found: {SHAPEFILES_ARCHIVE}. "
-            f"Cannot extract qmap.shp. Please ensure shapefiles.tar.xz exists."
+            f"Cannot extract {shapefile_path.name}. Please ensure shapefiles.tar.xz exists."
         )
 
-    # Extract qmap directory from archive
-    # The archive contains both 'coast' and 'qmap' directories
-    # We only need to extract 'qmap' to get qmap.shp
+    # Extract directory from archive
     with tarfile.open(SHAPEFILES_ARCHIVE, "r:xz") as tar:
-        # Extract only files in the qmap directory
-        qmap_members = [
-            member for member in tar.getmembers() if member.name.startswith("qmap/")
+        # Extract only files in the specified directory
+        members = [
+            member
+            for member in tar.getmembers()
+            if member.name.startswith(f"{directory_prefix}/")
         ]
-        if not qmap_members:
+        if not members:
             raise ValueError(
-                f"No 'qmap' directory found in archive {SHAPEFILES_ARCHIVE}"
+                f"No '{directory_prefix}' directory found in archive {SHAPEFILES_ARCHIVE}"
             )
-        tar.extractall(path=DATA_DIR, members=qmap_members)
+        tar.extractall(path=DATA_DIR, members=members)
 
     # Verify extraction was successful
-    if not GEOLOGY_SHAPEFILE.exists():
+    if not shapefile_path.exists():
         raise FileNotFoundError(
-            f"Failed to extract qmap.shp from {SHAPEFILES_ARCHIVE}. "
-            f"Expected file at {GEOLOGY_SHAPEFILE} but it was not created."
+            f"Failed to extract {shapefile_path.name} from {SHAPEFILES_ARCHIVE}. "
+            f"Expected file at {shapefile_path} but it was not created."
         )
+
+
+def _ensure_qmap_shapefile_extracted() -> None:
+    """
+    Ensure qmap.shp shapefile is extracted from shapefiles.tar.xz.
+
+    This shapefile is required for geology ID raster creation.
+    """
+    _ensure_shapefile_extracted(GEOLOGY_SHAPEFILE, "qmap")
+
+
+def _ensure_coast_shapefile_extracted() -> None:
+    """
+    Ensure coast shapefile is extracted from shapefiles.tar.xz.
+
+    This shapefile is required for creating coastal distance rasters.
+    """
+    _ensure_shapefile_extracted(COAST_SHAPEFILE, "coast")
 
 
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
@@ -139,27 +169,23 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
                 f"Expected path relative to resources directory: {csv_path}"
             )
 
-        # Read CSV - first read all columns to check what's available
+        # Read CSV and check what columns are available
         # Use skipinitialspace=True to handle spaces after commas in CSV
-        df_all = pd.read_csv(csv_file_path, skipinitialspace=True)
+        df = pd.read_csv(csv_file_path, skipinitialspace=True)
 
         # Check if required columns exist
         required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
-        missing_cols = [col for col in required_cols if col not in df_all.columns]
+        missing_cols = [col for col in required_cols if col not in df.columns]
 
         if missing_cols:
-            available_cols = list(df_all.columns)
             raise ValueError(
                 f"CSV file {csv_file_path} is missing required columns. "
                 f"Missing columns: {missing_cols}. "
-                f"Available columns: {available_cols}"
+                f"Available columns: {list(df.columns)}"
             )
 
-        # Select only the columns we need
-        df = df_all[required_cols]
-
-        # Convert DataFrame to numpy array
-        return df.values
+        # Return only the required columns as numpy array
+        return df[required_cols].values
 
 
 def create_category_id_raster(
@@ -289,7 +315,7 @@ def create_category_id_raster(
     return output_path
 
 
-def _determine_vs30_columns(columns: list[str]) -> tuple[str, str]:
+def _select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
     """
     Determine which columns to use for VS30 mean and standard deviation.
 
@@ -315,32 +341,19 @@ def _determine_vs30_columns(columns: list[str]) -> tuple[str, str]:
     ValueError
         If no suitable column pair is found.
     """
+    cfg = get_default_config()
+
     priorities = [
         # 1. Independent observations posterior
-        (
-            "posterior_mean_vs30_km_per_s_independent_observations",
-            "posterior_standard_deviation_vs30_km_per_s_independent_observations",
-        ),
+        (cfg.col_posterior_mean_independent, cfg.col_posterior_stdv_independent),
         # 2. Clustered observations posterior
-        (
-            "posterior_mean_vs30_km_per_s_clustered_observations",
-            "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
-        ),
+        (cfg.col_posterior_mean_clustered, cfg.col_posterior_stdv_clustered),
         # 3. Generic posterior
-        (
-            "posterior_mean_vs30_km_per_s",
-            "posterior_standard_deviation_vs30_km_per_s",
-        ),
+        (cfg.col_posterior_mean, cfg.col_posterior_stdv),
         # 4. Explicit prior
-        (
-            "prior_mean_vs30_km_per_s",
-            "prior_standard_deviation_vs30_km_per_s",
-        ),
+        (cfg.col_prior_mean, cfg.col_prior_stdv),
         # 5. Standard/Original names
-        (
-            "mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s",
-        ),
+        (cfg.col_mean, cfg.col_stdv),
     ]
 
     for mean_col, std_col in priorities:
@@ -392,7 +405,7 @@ def create_vs30_raster_from_ids(
     # Get config
     cfg = get_default_config()
 
-    print(f"Creating VS30 raster: {output_path}")
+    logger.info(f"Creating VS30 raster: {output_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _ensure_qmap_shapefile_extracted()
@@ -409,7 +422,7 @@ def create_vs30_raster_from_ids(
         df = pd.read_csv(csv_file_path, skipinitialspace=True)
         df.columns = df.columns.str.strip()
 
-        mean_col, std_col = _determine_vs30_columns(list(df.columns))
+        mean_col, std_col = _select_vs30_columns_by_priority(list(df.columns))
 
         required_cols = ["id", mean_col, std_col]
         missing_cols = [col for col in required_cols if col not in df.columns]
@@ -470,7 +483,7 @@ def create_vs30_raster_from_ids(
         dst.write(stdv_array, 2)
         dst.descriptions = ("Vs30", "Standard Deviation")
 
-    print(f"Completed VS30 raster: {output_path}")
+    logger.info(f"Completed VS30 raster: {output_path}")
     return output_path
 
 
@@ -502,9 +515,8 @@ def create_coast_distance_raster(
     # Get config
     cfg = get_default_config()
 
-    print("  Creating coast distance raster...")
-    if not COAST_SHAPEFILE.exists():
-        raise FileNotFoundError(f"Coast shapefile not found: {COAST_SHAPEFILE}")
+    logger.info("Creating coast distance raster...")
+    _ensure_coast_shapefile_extracted()
 
     # Get template bounds for final output extent
     dx = template_profile["transform"].a
@@ -609,7 +621,7 @@ def create_slope_raster(
         - The updated profile used for saving.
     """
     cfg = get_default_config()
-    print("  Creating slope raster...")
+    logger.info("Creating slope raster...")
     if not SLOPE_RASTER.exists():
         raise FileNotFoundError(f"Slope raster not found: {SLOPE_RASTER}")
 
@@ -693,7 +705,7 @@ def apply_hybrid_geology_modifications(
         Modified (vs30_array, stdv_array).
     """
     cfg = get_default_config()
-    print("  Applying slope and coastal distance based geology modifications...")
+    logger.info("Applying slope and coastal distance based geology modifications...")
 
     # Validate required params if mods are active
     if mod6 and (

@@ -8,7 +8,7 @@ Commands
 - update-categorical-vs30-models: Bayesian update of categorical Vs30 values
 - make-initial-vs30-raster: Create initial Vs30 rasters from categories
 - adjust-geology-vs30-by-slope-and-coastal-distance: Apply hybrid modifications
-- spatial-fit: MVN-based spatial adjustment
+- spatial-fit: Spatial adjustment using observations
 - combine: Combine geology and terrain models
 - full-pipeline: Run the complete workflow
 
@@ -644,7 +644,7 @@ def spatial_fit(
     ),
 ) -> None:
     """
-    Adjust a VS30 raster based on measurements using MVN spatial fitting.
+    Adjust a VS30 raster based on measurements using spatial conditioning.
 
     This command performs a spatial adjustment of an input raster by:
     1. Loading the 2-band input raster (VS30 mean and stdv)
@@ -709,7 +709,7 @@ def spatial_fit(
         # category.py functions usually handle this.
         model_df = pd.read_csv(model_values_csv, skipinitialspace=True)
         # Determine columns
-        mean_col, std_col = raster._determine_vs30_columns(list(model_df.columns))
+        mean_col, std_col = raster._select_vs30_columns_by_priority(list(model_df.columns))
 
         # Build table indexed by category ID
         max_id = model_df["id"].max()
@@ -720,8 +720,8 @@ def spatial_fit(
                 updated_model_table[idx, 0] = row[mean_col]
                 updated_model_table[idx, 1] = row[std_col]
 
-        # 4. Prepare Observation Data for MVN
-        logger.info("Preparing observation data for MVN processing...")
+        # 4. Prepare Observation Data for Spatial Adjustment
+        logger.info("Preparing observation data for spatial adjustment...")
 
         if model_type == "geology":
             # Geology models use hybrid parameters from config
@@ -817,7 +817,7 @@ def spatial_fit(
         )
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
 
-        # 6. Compute MVN Updates
+        # 6. Compute Spatial Adjustments
         logger.info("Computing spatial updates...")
         if n_proc_resolved > 1:
             logger.info(f"Using {n_proc_resolved} parallel workers")
@@ -835,7 +835,7 @@ def spatial_fit(
                 n_proc=n_proc_resolved,
             )
         else:
-            updates = spatial.compute_mvn_updates(
+            updates = spatial.compute_spatial_adjustments(
                 raster_data,
                 obs_data,
                 bbox_result,
@@ -1030,7 +1030,7 @@ def full_pipeline_for_geology_or_terrain(
         None, "--nproc", help="Number of processes for clustering"
     ),
     n_proc: int | None = Option(
-        None, "--n-proc", help="Number of parallel processes for MVN spatial adjustment"
+        None, "--n-proc", help="Number of parallel processes for spatial adjustment"
     ),
 ) -> None:
     """
@@ -1039,7 +1039,7 @@ def full_pipeline_for_geology_or_terrain(
     1. update-categorical-vs30-models: (Conditional) Updates categorical priors with observations if do_bayesian_update is enabled.
     2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using posteriors (or priors if updates skipped).
     3. create-hybrid-raster: (Geology only) Applies slope/coastal modifications.
-    4. spatial-fit: Final spatial adjustment using MVN and observations.
+    4. spatial-fit: Final spatial adjustment using observations.
     """
     try:
         output_dir = output_dir.resolve()
@@ -1156,7 +1156,7 @@ def full_pipeline_for_geology_or_terrain(
                 raise FileNotFoundError(f"Step 3 failed to produce {current_raster}")
 
         # --- Step 4: Spatial Fit ---
-        logger.info("\n=== STEP 4: Spatial Adjustment (MVN) ===")
+        logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
         spatial_fit(
             input_raster=current_raster,
@@ -1347,7 +1347,7 @@ def full_pipeline(
     n_proc: int = Option(
         None,
         "--n-proc",
-        help="Number of parallel processes for MVN spatial adjustment (default from config, -1 for all cores)",
+        help="Number of parallel processes for spatial adjustment (default from config, -1 for all cores)",
     ),
 ) -> None:
     """
@@ -1545,7 +1545,7 @@ def compute_at_locations(
         run_parallel_locations,
     )
     from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
-    from vs30.spatial import compute_mvn_at_points
+    from vs30.spatial import compute_spatial_adjustment_at_points
 
     try:
         # Get config
@@ -1594,7 +1594,7 @@ def compute_at_locations(
             if terrain_categorical_csv is None:
                 terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
 
-            # Load observations for MVN adjustment
+            # Load observations for spatial adjustment
             # Note: config paths already include the 'observations/' prefix
             if clustered_observations_csv is None:
                 clustered_obs_path = res_dir / cfg.clustered_observations_file
@@ -1656,6 +1656,7 @@ def compute_at_locations(
                     include_intermediate=include_intermediate,
                     combination_method=combination_method,
                     coast_distance_raster=coast_distance_raster,
+                    weight_epsilon_div_by_zero=cfg.weight_epsilon_div_by_zero,
                 )
 
                 df = run_parallel_locations(
@@ -1704,15 +1705,15 @@ def compute_at_locations(
                 geol_vs30_hybrid = geol_vs30
                 geol_stdv_hybrid = geol_stdv
 
-            # Get model values at observation locations for MVN
+            # Get model values at observation locations for spatial adjustment
             if len(observations_df) > 0:
                 obs_locs = observations_df[["easting", "northing"]].values
                 obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
                     obs_locs, "geology", geol_model_df
                 )
 
-                # Apply MVN spatial adjustment
-                geol_mvn_vs30, geol_mvn_stdv = compute_mvn_at_points(
+                # Apply spatial adjustment
+                geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
                     points=points,
                     model_vs30=geol_vs30_hybrid,
                     model_stdv=geol_stdv_hybrid,
@@ -1746,14 +1747,14 @@ def compute_at_locations(
             )
             df["terrain_id"] = terr_ids
 
-            # Get model values at observation locations for MVN
+            # Get model values at observation locations for spatial adjustment
             if len(observations_df) > 0:
                 obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
                     obs_locs, "terrain", terr_model_df
                 )
 
-                # Apply MVN spatial adjustment (no hybrid modifications for terrain)
-                terr_mvn_vs30, terr_mvn_stdv = compute_mvn_at_points(
+                # Apply spatial adjustment (no hybrid modifications for terrain)
+                terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
                     points=points,
                     model_vs30=terr_vs30,
                     model_stdv=terr_stdv,
@@ -1792,8 +1793,8 @@ def compute_at_locations(
                 # Standard deviation weighting
                 if combination_method == "standard_deviation_weighting":
                     # Inverse variance weighting
-                    geol_weight = 1 / (geol_mvn_stdv**2 + 1e-10)
-                    terr_weight = 1 / (terr_mvn_stdv**2 + 1e-10)
+                    geol_weight = 1 / (geol_mvn_stdv**2 + cfg.weight_epsilon_div_by_zero)
+                    terr_weight = 1 / (terr_mvn_stdv**2 + cfg.weight_epsilon_div_by_zero)
                     total_weight = geol_weight + terr_weight
 
                     combined_vs30 = (
@@ -1822,5 +1823,5 @@ def compute_at_locations(
         raise typer.Exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app()

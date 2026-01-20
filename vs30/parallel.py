@@ -2,11 +2,12 @@
 Multiprocessing support for VS30 computation.
 
 This module provides parallel processing capabilities for the computationally
-expensive MVN spatial adjustment. It divides input data into chunks and
+expensive spatial adjustment. It divides input data into chunks and
 processes them in parallel using Python's multiprocessing module.
 
-The core MVN functions in spatial.py remain unchanged - each worker process
-simply calls them with a smaller input, unaware it's part of a parallel job.
+The core spatial adjustment functions in spatial.py remain unchanged - each
+worker process simply calls them with a smaller input, unaware it's part of
+a parallel job.
 """
 
 from contextlib import contextmanager
@@ -22,11 +23,11 @@ from tqdm import tqdm
 from vs30.category import get_vs30_for_points
 from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
 from vs30.spatial import (
-    MVNUpdateResult,
+    SpatialAdjustmentResult,
     ObservationData,
     PixelData,
-    compute_mvn_at_points,
-    compute_mvn_update_for_pixel,
+    compute_spatial_adjustment_at_points,
+    compute_spatial_adjustment_for_pixel,
 )
 
 
@@ -104,6 +105,7 @@ class LocationsChunkConfig:
     include_intermediate: bool
     combination_method: str | float
     coast_distance_raster: Path | None
+    weight_epsilon_div_by_zero: float = 1e-10
 
 
 # =============================================================================
@@ -111,12 +113,15 @@ class LocationsChunkConfig:
 # =============================================================================
 
 
-def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:
+def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma: no cover
     """
     Worker function: process a chunk of locations through the full pipeline.
 
     This function runs in a separate process and processes a subset of
     locations through the complete VS30 pipeline (geology + terrain + combine).
+
+    Note: This function is excluded from coverage because it runs in a
+    spawned subprocess which cannot be tracked by pytest-cov.
 
     Parameters
     ----------
@@ -184,12 +189,12 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:
         geol_vs30_hybrid = geol_vs30
         geol_stdv_hybrid = geol_stdv
 
-    # Get model values at observation locations and apply MVN
+    # Get model values at observation locations and apply spatial adjustment
     if len(observations_df) > 0:
         obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
             obs_locs, "geology", geol_model_df
         )
-        geol_mvn_vs30, geol_mvn_stdv = compute_mvn_at_points(
+        geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
@@ -220,12 +225,12 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:
     )
     chunk_df["terrain_id"] = terr_ids
 
-    # Get model values at observation locations and apply MVN
+    # Get model values at observation locations and apply spatial adjustment
     if len(observations_df) > 0:
         obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
             obs_locs, "terrain", terr_model_df
         )
-        terr_mvn_vs30, terr_mvn_stdv = compute_mvn_at_points(
+        terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,
@@ -258,8 +263,8 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:
         )
     except (ValueError, TypeError):
         if combination_method == "standard_deviation_weighting":
-            geol_weight = 1 / (geol_mvn_stdv**2 + 1e-10)
-            terr_weight = 1 / (terr_mvn_stdv**2 + 1e-10)
+            geol_weight = 1 / (geol_mvn_stdv**2 + config.weight_epsilon_div_by_zero)
+            terr_weight = 1 / (terr_mvn_stdv**2 + config.weight_epsilon_div_by_zero)
             total_weight = geol_weight + terr_weight
             combined_vs30 = (
                 geol_mvn_vs30 * geol_weight + terr_mvn_vs30 * terr_weight
@@ -276,12 +281,15 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:
     return chunk_id, chunk_df
 
 
-def _process_pixels_chunk(args: tuple) -> tuple[int, list[MVNUpdateResult]]:
+def _process_pixels_chunk(args: tuple) -> tuple[int, list[SpatialAdjustmentResult]]:  # pragma: no cover
     """
-    Worker function: compute MVN updates for a chunk of affected pixels.
+    Worker function: compute spatial adjustments for a chunk of affected pixels.
 
-    This function runs in a separate process and computes MVN updates
+    This function runs in a separate process and computes spatial adjustments
     for a subset of affected pixels.
+
+    Note: This function is excluded from coverage because it runs in a
+    spawned subprocess which cannot be tracked by pytest-cov.
 
     Parameters
     ----------
@@ -291,7 +299,7 @@ def _process_pixels_chunk(args: tuple) -> tuple[int, list[MVNUpdateResult]]:
     Returns
     -------
     tuple
-        (chunk_id, list of MVNUpdateResult)
+        (chunk_id, list of SpatialAdjustmentResult)
     """
     pixel_indices, chunk_id, pixel_data_dict, obs_data_dict, config_params = args
 
@@ -317,7 +325,7 @@ def _process_pixels_chunk(args: tuple) -> tuple[int, list[MVNUpdateResult]]:
             index=pixel_info["index"],
         )
 
-        update = compute_mvn_update_for_pixel(
+        update = compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
             config_params["model_type"],
@@ -358,7 +366,7 @@ def run_parallel_locations(
     locations_df : DataFrame
         Input locations with lon/lat columns (not yet converted to NZTM)
     observations_df : DataFrame
-        Observation data for MVN adjustment (must have easting, northing, vs30, uncertainty)
+        Observation data for spatial adjustment (must have easting, northing, vs30, uncertainty)
     geol_model_df : DataFrame
         Geology categorical model
     terr_model_df : DataFrame
@@ -414,9 +422,9 @@ def run_parallel_spatial_fit(
     noisy: bool,
     cov_reduc: float,
     n_proc: int,
-) -> list[MVNUpdateResult]:
+) -> list[SpatialAdjustmentResult]:
     """
-    Compute MVN updates for affected pixels in parallel.
+    Compute spatial adjustments for affected pixels in parallel.
 
     Divides the affected pixels into chunks and processes each chunk
     in a separate process.
@@ -428,7 +436,7 @@ def run_parallel_spatial_fit(
     raster_data : RasterData
         Raster data object with vs30, stdv, and coordinate info
     obs_data : ObservationData
-        Observation data for MVN adjustment
+        Observation data for spatial adjustment
     model_type : str
         Model type ("geology" or "terrain")
     phi : float
@@ -446,7 +454,7 @@ def run_parallel_spatial_fit(
 
     Returns
     -------
-    list[MVNUpdateResult]
+    list[SpatialAdjustmentResult]
         Updates for all affected pixels
     """
     total_pixels = len(affected_flat_indices)

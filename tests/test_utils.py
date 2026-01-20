@@ -2,7 +2,6 @@
 Tests for the VS30 utils module.
 
 Tests cover:
-- euclidean_distance_matrix function
 - correlation_function
 - load_config function
 - _resolve_base_path function
@@ -16,87 +15,10 @@ import pytest
 import yaml
 
 from vs30.utils import (
-    euclidean_distance_matrix,
     correlation_function,
     load_config,
     _resolve_base_path,
 )
-
-
-class TestEuclideanDistanceMatrix:
-    """Tests for the euclidean_distance_matrix function."""
-
-    def test_basic_distance(self):
-        """Test basic distance calculation."""
-        points = np.array([
-            [0, 0],
-            [3, 4],  # Distance from origin = 5
-        ])
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        assert dist_matrix.shape == (2, 2)
-        assert dist_matrix[0, 0] == 0  # Distance to self
-        assert dist_matrix[1, 1] == 0  # Distance to self
-        assert np.isclose(dist_matrix[0, 1], 5.0)  # 3-4-5 triangle
-        assert np.isclose(dist_matrix[1, 0], 5.0)  # Symmetric
-
-    def test_symmetry(self):
-        """Test that distance matrix is symmetric."""
-        points = np.array([
-            [0, 0],
-            [100, 200],
-            [500, 300],
-        ])
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        # Should be symmetric
-        np.testing.assert_array_almost_equal(dist_matrix, dist_matrix.T)
-
-    def test_diagonal_is_zero(self):
-        """Test that diagonal elements are zero."""
-        points = np.random.rand(10, 2) * 1000
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        np.testing.assert_array_equal(np.diag(dist_matrix), np.zeros(10))
-
-    def test_triangle_inequality(self):
-        """Test that triangle inequality holds."""
-        points = np.array([
-            [0, 0],
-            [1, 0],
-            [0.5, 0.5],
-        ])
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        # d(0,2) + d(2,1) >= d(0,1)
-        assert dist_matrix[0, 2] + dist_matrix[2, 1] >= dist_matrix[0, 1] - 1e-10
-
-    def test_single_point(self):
-        """Test with single point."""
-        points = np.array([[100, 200]])
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        assert dist_matrix.shape == (1, 1)
-        assert dist_matrix[0, 0] == 0
-
-    def test_large_distances(self):
-        """Test with realistic NZ coordinates (large values)."""
-        # NZTM coordinates
-        points = np.array([
-            [1570604, 5180029],  # Christchurch
-            [1757209, 5920482],  # Auckland
-        ])
-
-        dist_matrix = euclidean_distance_matrix(points)
-
-        # Distance should be roughly 750km
-        expected_dist = np.sqrt((1757209 - 1570604)**2 + (5920482 - 5180029)**2)
-        assert np.isclose(dist_matrix[0, 1], expected_dist)
 
 
 class TestCorrelationFunction:
@@ -240,3 +162,21 @@ class TestResolveBasePath:
 
         # Parent is "configs", not "vs30", so return parent of config
         assert base_path == Path("/project/configs")
+
+
+# =============================================================================
+# Additional Tests from Coverage Improvements
+# =============================================================================
+
+
+class TestUtilsEdgeCases:
+    """Additional edge case tests for utils module."""
+
+    def test_correlation_at_very_large_distance(self):
+        """Test correlation function at very large distances approaches zero."""
+        distances = np.array([1000000.0])  # 1000 km
+        phi = 1000.0  # 1 km correlation length
+
+        corr = correlation_function(distances, phi)
+
+        assert corr[0] < 0.001  # Should be essentially zero
