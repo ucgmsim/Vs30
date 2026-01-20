@@ -164,6 +164,10 @@ class Vs30Config(BaseModel):
     k_value: float = Field(
         description="K value for standard deviation based weighting"
     )
+    weight_epsilon_div_by_zero: float = Field(
+        default=1e-10,
+        description="Small epsilon added to variance to prevent division by zero in weight calculation"
+    )
     do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: bool = Field(
         description="Whether to perform Bayesian update of categorical values"
     )
@@ -200,6 +204,48 @@ class Vs30Config(BaseModel):
     # --- Plotting ---
     plot_figsize: list[int] = Field(description="Figure size [width, height] in inches")
     plot_dpi: int = Field(description="Plot resolution in DPI")
+
+    # --- DataFrame Column Names ---
+    col_posterior_mean_independent: str = Field(
+        default="posterior_mean_vs30_km_per_s_independent_observations",
+        description="Column name for posterior mean after independent observations update"
+    )
+    col_posterior_stdv_independent: str = Field(
+        default="posterior_standard_deviation_vs30_km_per_s_independent_observations",
+        description="Column name for posterior stdv after independent observations update"
+    )
+    col_posterior_mean_clustered: str = Field(
+        default="posterior_mean_vs30_km_per_s_clustered_observations",
+        description="Column name for posterior mean after clustered observations update"
+    )
+    col_posterior_stdv_clustered: str = Field(
+        default="posterior_standard_deviation_vs30_km_per_s_clustered_observations",
+        description="Column name for posterior stdv after clustered observations update"
+    )
+    col_posterior_mean: str = Field(
+        default="posterior_mean_vs30_km_per_s",
+        description="Column name for generic posterior mean"
+    )
+    col_posterior_stdv: str = Field(
+        default="posterior_standard_deviation_vs30_km_per_s",
+        description="Column name for generic posterior stdv"
+    )
+    col_prior_mean: str = Field(
+        default="prior_mean_vs30_km_per_s",
+        description="Column name for prior mean"
+    )
+    col_prior_stdv: str = Field(
+        default="prior_standard_deviation_vs30_km_per_s",
+        description="Column name for prior stdv"
+    )
+    col_mean: str = Field(
+        default="mean_vs30_km_per_s",
+        description="Column name for original/raw mean"
+    )
+    col_stdv: str = Field(
+        default="standard_deviation_vs30_km_per_s",
+        description="Column name for original/raw stdv"
+    )
 
     # =========================================================================
     # Computed/derived properties
@@ -325,12 +371,3 @@ def get_default_config() -> Vs30Config:
     return _default_config
 
 
-def reset_default_config() -> None:
-    """
-    Reset the cached default configuration.
-
-    Call this if you need to reload the default config from disk
-    (e.g., after modifying config.yaml during testing).
-    """
-    global _default_config
-    _default_config = None

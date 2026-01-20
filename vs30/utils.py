@@ -2,7 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import yaml
-from scipy.spatial.distance import cdist
 
 from vs30.config import get_default_config
 
@@ -53,25 +52,8 @@ def load_config(config_path: Path) -> dict:
 
 
 # ============================================================================
-# Helper Functions for Distance and Correlation
+# Helper Functions for Correlation
 # ============================================================================
-
-
-def euclidean_distance_matrix(points: np.ndarray) -> np.ndarray:
-    """
-    Calculate full distance matrix between points.
-
-    Parameters
-    ----------
-    points : ndarray
-        Array of point coordinates (N, 2) where each row is [easting, northing].
-
-    Returns
-    -------
-    ndarray
-        Distance matrix (N, N) where element [i, j] is distance between points i and j.
-    """
-    return cdist(points, points, metric="euclidean")
 
 
 def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:

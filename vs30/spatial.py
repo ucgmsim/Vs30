@@ -38,7 +38,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rasterio
-from scipy.spatial.distance import cdist
+import scipy
 from tqdm import tqdm
 
 from vs30 import utils
@@ -94,7 +94,7 @@ class PixelData:
 
 
 @dataclass
-class MVNUpdateResult:
+class SpatialAdjustmentResult:
     """Result of an MVN update for a single pixel."""
 
     updated_vs30: float
@@ -236,15 +236,17 @@ def validate_raster_data(raster_data: RasterData) -> None:
 
     Raises
     ------
-    AssertionError
+    ValueError
         If raster data is invalid.
     """
-    assert raster_data.vs30.shape == raster_data.stdv.shape, "Band shapes must match"
-    assert np.all(np.isfinite(raster_data.vs30[raster_data.valid_mask])), (
-        "Valid pixels must be finite"
-    )
-    assert np.all(raster_data.vs30[raster_data.valid_mask] > 0), "Vs30 must be positive"
-    assert np.all(raster_data.stdv[raster_data.valid_mask] > 0), "Stdv must be positive"
+    if raster_data.vs30.shape != raster_data.stdv.shape:
+        raise ValueError("Band shapes must match")
+    if not np.all(np.isfinite(raster_data.vs30[raster_data.valid_mask])):
+        raise ValueError("Valid pixels must be finite")
+    if not np.all(raster_data.vs30[raster_data.valid_mask] > 0):
+        raise ValueError("Vs30 must be positive")
+    if not np.all(raster_data.stdv[raster_data.valid_mask] > 0):
+        raise ValueError("Stdv must be positive")
 
 
 def validate_observations(observations: pd.DataFrame) -> None:
@@ -258,22 +260,28 @@ def validate_observations(observations: pd.DataFrame) -> None:
 
     Raises
     ------
-    AssertionError
+    ValueError
         If observation data is invalid.
     """
-    assert "easting" in observations.columns, "Missing 'easting' column"
-    assert "northing" in observations.columns, "Missing 'northing' column"
-    assert "vs30" in observations.columns, "Missing 'vs30' column"
-    assert "uncertainty" in observations.columns, "Missing 'uncertainty' column"
-    assert np.all(observations["vs30"] > 0), "Vs30 must be positive"
-    assert np.all(observations["uncertainty"] > 0), "Uncertainty must be positive"
+    if "easting" not in observations.columns:
+        raise ValueError("Missing 'easting' column")
+    if "northing" not in observations.columns:
+        raise ValueError("Missing 'northing' column")
+    if "vs30" not in observations.columns:
+        raise ValueError("Missing 'vs30' column")
+    if "uncertainty" not in observations.columns:
+        raise ValueError("Missing 'uncertainty' column")
+    if not np.all(observations["vs30"] > 0):
+        raise ValueError("Vs30 must be positive")
+    if not np.all(observations["uncertainty"] > 0):
+        raise ValueError("Uncertainty must be positive")
 
 
 def prepare_observation_data(
     observations: pd.DataFrame,
     raster_data: RasterData,
     updated_model_table: np.ndarray,
-    model_name: str,
+    model_type: str,
     output_dir: Path,
     noisy: bool | None = None,
     # Hybrid Modification Parameters (optional, for geology)
@@ -297,8 +305,8 @@ def prepare_observation_data(
         Raster data object.
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
-    model_name : str
-        Model name ("geology" or "terrain").
+    model_type : str
+        Model type ("geology" or "terrain").
 
     Returns
     -------
@@ -313,12 +321,12 @@ def prepare_observation_data(
     obs_locs = observations[["easting", "northing"]].values
 
     # Interpolate model values at observation locations
-    if model_name == "geology":
+    if model_type == "geology":
         model_ids = _assign_to_category_geology(obs_locs)
-    elif model_name == "terrain":
+    elif model_type == "terrain":
         model_ids = _assign_to_category_terrain(obs_locs)
     else:
-        raise ValueError(f"Unknown model name: {model_name}")
+        raise ValueError(f"Unknown model type: {model_type}")
 
     # Get model vs30 and stdv from updated model table
     # Model IDs are 1-indexed in the raster, but 0-indexed in the model table
@@ -346,7 +354,7 @@ def prepare_observation_data(
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
-    if model_name == "geology":
+    if model_type == "geology":
         from vs30.raster import (
             apply_hybrid_geology_modifications,
             create_coast_distance_raster,
@@ -561,7 +569,7 @@ def _process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
-    model_name: str,
+    model_type: str,
     phi: float | None = None,
     noisy: bool | None = None,
     cov_reduc: float | None = None,
@@ -575,8 +583,8 @@ def build_covariance_matrix(
         Pixel data for the pixel being updated.
     selected_observations : ObservationData
         Selected observations for this pixel.
-    model_name : str
-        Model name ("geology" or "terrain").
+    model_type : str
+        Model type ("geology" or "terrain").
 
     Returns
     -------
@@ -593,11 +601,11 @@ def build_covariance_matrix(
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
         np.float64
     )
-    distance_matrix = utils.euclidean_distance_matrix(all_points)
+    distance_matrix = scipy.spatial.distance.cdist(all_points, all_points, metric="euclidean")
 
     # Step 2: Apply correlation function
     if phi is None:
-        phi = cfg.phi[model_name]
+        phi = cfg.phi[model_type]
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
@@ -623,7 +631,7 @@ def build_covariance_matrix(
 
 
 # ============================================================================
-# MVN Update Computation
+# Spatial Adjustment Computation
 # ============================================================================
 
 
@@ -695,16 +703,16 @@ def select_observations_for_pixel(
     return selected_obs
 
 
-def compute_mvn_update_for_pixel(
+def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
-    model_name: str,
+    model_type: str,
     phi: float | None = None,
     max_dist_m: float | None = None,
     max_points: int | None = None,
     noisy: bool | None = None,
     cov_reduc: float | None = None,
-) -> MVNUpdateResult | None:
+) -> SpatialAdjustmentResult | None:
     """
     Compute MVN update for a single pixel.
 
@@ -714,12 +722,12 @@ def compute_mvn_update_for_pixel(
         Pixel data.
     obs_data : ObservationData
         Full observation data.
-    model_name : str
-        Model name ("geology" or "terrain").
+    model_type : str
+        Model type ("geology" or "terrain").
 
     Returns
     -------
-    MVNUpdateResult or None
+    SpatialAdjustmentResult or None
         Update result, or None if pixel should be skipped.
     """
     # Resolve config defaults
@@ -733,7 +741,7 @@ def compute_mvn_update_for_pixel(
     if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
         return None
 
-    phi_val = phi if phi is not None else cfg.phi[model_name]
+    phi_val = phi if phi is not None else cfg.phi[model_type]
     corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
     initial_var = (pixel.stdv**2) * corr_zero
 
@@ -747,7 +755,7 @@ def compute_mvn_update_for_pixel(
 
     if len(selected_obs.locations) == 0:
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
-        return MVNUpdateResult(
+        return SpatialAdjustmentResult(
             updated_vs30=pixel.vs30,
             updated_stdv=sqrt(initial_var),
             n_observations_used=0,
@@ -759,7 +767,7 @@ def compute_mvn_update_for_pixel(
     cov_matrix = build_covariance_matrix(
         pixel,
         selected_obs,
-        model_name,
+        model_type,
         phi=phi,
         noisy=noisy,
         cov_reduc=cov_reduc,
@@ -784,14 +792,14 @@ def compute_mvn_update_for_pixel(
     new_stdv = sqrt(var)
 
     # Calculate minimum distance
-    distances = cdist(
+    distances = scipy.spatial.distance.cdist(
         pixel.location.reshape(1, -1),
         selected_obs.locations,
         metric="euclidean",
     )[0]
     min_distance = np.min(distances) if len(distances) > 0 else np.inf
 
-    return MVNUpdateResult(
+    return SpatialAdjustmentResult(
         updated_vs30=float(new_vs30),
         updated_stdv=float(new_stdv),
         n_observations_used=len(selected_obs.locations),
@@ -1007,21 +1015,21 @@ def find_affected_pixels(
 
 
 # ============================================================================
-# Main MVN Updates Computation
+# Main Spatial Adjustments Computation
 # ============================================================================
 
 
-def compute_mvn_updates(
+def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_result: BoundingBoxResult,
-    model_name: str,
+    model_type: str,
     phi: float | None = None,
     max_dist_m: float | None = None,
     max_points: int | None = None,
     noisy: bool | None = None,
     cov_reduc: float | None = None,
-) -> list[MVNUpdateResult]:
+) -> list[SpatialAdjustmentResult]:
     """
     Compute MVN updates for all affected pixels.
 
@@ -1033,13 +1041,13 @@ def compute_mvn_updates(
         Observation data.
     bbox_result : BoundingBoxResult
         Bounding box result.
-    model_name : str
-        Model name ("geology" or "terrain").
+    model_type : str
+        Model type ("geology" or "terrain").
 
     Returns
     -------
     list
-        List of MVNUpdateResult objects.
+        List of SpatialAdjustmentResult objects.
     """
     # Resolve config defaults
     cfg = get_default_config()
@@ -1117,10 +1125,10 @@ def compute_mvn_updates(
                 index=flat_idx,
             )
 
-            update_result = compute_mvn_update_for_pixel(
+            update_result = compute_spatial_adjustment_for_pixel(
                 pixel,
                 obs_data,
-                model_name,
+                model_type,
                 phi=phi,
                 max_dist_m=max_dist_m,
                 max_points=max_points,
@@ -1160,8 +1168,8 @@ def compute_mvn_updates(
 
 def apply_and_write_updates(
     raster_data: RasterData,
-    updates: list[MVNUpdateResult],
-    model_name: str,
+    updates: list[SpatialAdjustmentResult],
+    model_type: str,
     output_dir: Path,
 ) -> None:
     """
@@ -1172,9 +1180,9 @@ def apply_and_write_updates(
     raster_data : RasterData
         Raster data object.
     updates : list
-        List of MVNUpdateResult objects.
-    model_name : str
-        Model name ("geology" or "terrain").
+        List of SpatialAdjustmentResult objects.
+    model_type : str
+        Model type ("geology" or "terrain").
     output_dir : Path
         Directory where output raster will be saved.
     """
@@ -1189,7 +1197,7 @@ def apply_and_write_updates(
 
     # Write output using filename from config
     cfg = get_default_config()
-    output_filename = cfg.output_filenames[model_name]
+    output_filename = cfg.output_filenames[model_type]
     output_path = output_dir / output_filename
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
@@ -1201,11 +1209,11 @@ def apply_and_write_updates(
 
 
 # ============================================================================
-# Point-Based MVN Computation
+# Point-Based Spatial Adjustment Computation
 # ============================================================================
 
 
-def compute_mvn_at_points(
+def compute_spatial_adjustment_at_points(
     points: np.ndarray,
     model_vs30: np.ndarray,
     model_stdv: np.ndarray,
@@ -1223,7 +1231,7 @@ def compute_mvn_at_points(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute MVN spatial adjustment at specific query points.
 
-    This is the point-based equivalent of compute_mvn_updates(). It applies
+    This is the point-based equivalent of compute_spatial_adjustments(). It applies
     the same MVN conditioning algorithm but for arbitrary query points instead
     of raster pixels.
 
@@ -1374,7 +1382,7 @@ def compute_mvn_at_points(
         # Build covariance matrix
         # First element is query point, rest are nearby observations
         all_locs = np.vstack([point, nearby_locs])
-        dist_matrix = utils.euclidean_distance_matrix(all_locs)
+        dist_matrix = scipy.spatial.distance.cdist(all_locs, all_locs, metric="euclidean")
 
         # Apply correlation function
         corr_matrix = utils.correlation_function(dist_matrix, phi)
