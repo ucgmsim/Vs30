@@ -29,7 +29,7 @@ from vs30.spatial import (
     compute_spatial_adjustment_at_points,
     compute_spatial_adjustment_for_pixel,
 )
-from vs30.utils import combine_models_at_points
+from vs30.utils import combine_vs30_models
 
 
 @contextmanager
@@ -267,7 +267,8 @@ class LocationsChunkConfig:
     include_intermediate: bool
     combination_method: str | float
     coast_distance_raster: Path | None
-    weight_epsilon_div_by_zero: float = 1e-10
+    k_value: float = 3.0
+    epsilon: float = 1e-10
 
 
 # =============================================================================
@@ -359,13 +360,14 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     chunk_df["terrain_mvn_stdv"] = terr_mvn_stdv
 
     # Combine models
-    combined_vs30, combined_stdv = combine_models_at_points(
+    combined_vs30, combined_stdv = combine_vs30_models(
         geol_mvn_vs30,
         geol_mvn_stdv,
         terr_mvn_vs30,
         terr_mvn_stdv,
         config.combination_method,
-        config.weight_epsilon_div_by_zero,
+        k_value=config.k_value,
+        epsilon=config.epsilon,
     )
 
     chunk_df["vs30"] = combined_vs30
