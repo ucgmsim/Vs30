@@ -30,8 +30,8 @@ import pandas as pd
 import rasterio
 import typer
 from matplotlib import pyplot as plt
-from typer import Option
 
+from qcore import cli
 from vs30 import raster, spatial, utils
 from vs30.config import Vs30Config
 
@@ -68,7 +68,7 @@ def get_config() -> Vs30Config:
 def main(
     config: Annotated[
         Optional[Path],
-        Option(
+        typer.Option(
             "--config",
             "-c",
             help="Path to config.yaml file (default: package config.yaml)",
@@ -76,10 +76,23 @@ def main(
     ] = None,
     verbose: Annotated[
         bool,
-        Option("--verbose", "-v", help="Enable verbose logging"),
+        typer.Option("--verbose", "-v", help="Enable verbose logging"),
     ] = False,
-):
-    """VS30 map generation and categorical model updates."""
+) -> None:
+    """
+    VS30 map generation and categorical model updates.
+
+    This is the main entry point for the VS30 CLI. Global options like config
+    file path and verbosity are specified here and apply to all subcommands.
+
+    Parameters
+    ----------
+    config : Path, optional
+        Path to config.yaml file. If not specified, uses the default
+        configuration bundled with the package.
+    verbose : bool, optional
+        Enable verbose (DEBUG level) logging output.
+    """
     global _cli_config
 
     if verbose:
@@ -97,63 +110,22 @@ def main(
         logger.debug(f"Using default config from {Vs30Config.default_config_path()}")
 
 
-@app.command()
+@cli.from_docstring(app)
 def update_categorical_vs30_models(
-    categorical_model_csv: Path = Option(
-        ...,
-        "--categorical-model-csv",
-        "-m",
-        help="Path to CSV file with categorical vs30 mean and standard deviation values (e.g., geology_model_prior_mean_and_standard_deviation.csv)",
-    ),
-    clustered_observations_csv: Path = Option(
-        None,
-        "--clustered-observations-csv",
-        "-c",
-        help="Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv). These will be processed with spatial clustering.",
-    ),
-    independent_observations_csv: Path = Option(
-        None,
-        "--independent-observations-csv",
-        "-o",
-        help="Path to CSV file with independent observations (e.g., measured_vs30_independent_observations.csv). These will be processed without clustering.",
-    ),
-    output_dir: Path = Option(
-        ...,
-        "--output-dir",
-        "-d",
-        help="Path to output directory (will be created if it does not exist)",
-    ),
-    model_type: str = Option(
-        ...,
-        "--model-type",
-        "-t",
-        help="Model type: either 'geology' or 'terrain'",
-    ),
-    n_prior: int = Option(
-        None,
-        "--n-prior",
-        help="Effective number of prior observations (default from config)",
-    ),
-    min_sigma: float = Option(
-        None,
-        "--min-sigma",
-        help="Minimum standard deviation allowed (default from config)",
-    ),
-    min_group: int = Option(
-        None,
-        "--min-group",
-        help="Minimum group size for DBSCAN clustering (default from config)",
-    ),
-    eps: float = Option(
-        None,
-        "--eps",
-        help="Maximum distance (metres) for points to be considered in same cluster (default from config)",
-    ),
-    nproc: int = Option(
-        None,
-        "--nproc",
-        help="Number of processes for DBSCAN clustering. -1 to use all available cores (default from config)",
-    ),
+    categorical_model_csv: Annotated[Path, typer.Option("--categorical-model-csv", "-m")],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    model_type: Annotated[str, typer.Option("--model-type", "-t")],
+    clustered_observations_csv: Annotated[
+        Path | None, typer.Option("--clustered-observations-csv", "-c")
+    ] = None,
+    independent_observations_csv: Annotated[
+        Path | None, typer.Option("--independent-observations-csv", "-o")
+    ] = None,
+    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
+    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
+    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
+    eps: Annotated[float | None, typer.Option("--eps")] = None,
+    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
 ) -> None:
     """
     Update categorical model values using Bayesian updates and save to CSV files.
@@ -168,10 +140,40 @@ def update_categorical_vs30_models(
     independent observations.
 
     The order (clustered first, then independent) is scientifically motivated:
-    - Clustered observations (e.g., CPT data) may have spatial sampling biases from
-      geotechnical investigations; clustering corrects for over-weighting dense samples
-    - Independent observations (e.g., direct Vs30 measurements) are typically higher-quality
-      and more representative; they refine the bias-corrected model from clustered data
+    clustered observations (e.g., CPT data) may have spatial sampling biases from
+    geotechnical investigations, so clustering corrects for over-weighting dense
+    samples. Independent observations (e.g., direct Vs30 measurements) are typically
+    higher-quality and more representative, so they refine the bias-corrected model
+    from clustered data.
+
+    Parameters
+    ----------
+    categorical_model_csv : Path
+        Path to CSV file with categorical Vs30 mean and standard deviation values
+        (e.g., geology_model_prior_mean_and_standard_deviation.csv).
+    output_dir : Path
+        Path to output directory. Will be created if it does not exist.
+    model_type : str
+        Model type: either 'geology' or 'terrain'.
+    clustered_observations_csv : Path, optional
+        Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv).
+        These will be processed with spatial clustering.
+    independent_observations_csv : Path, optional
+        Path to CSV file with independent observations
+        (e.g., measured_vs30_independent_observations.csv).
+        These will be processed without clustering.
+    n_prior : int, optional
+        Effective number of prior observations. Default from config.
+    min_sigma : float, optional
+        Minimum standard deviation allowed. Default from config.
+    min_group : int, optional
+        Minimum group size for DBSCAN clustering. Default from config.
+    eps : float, optional
+        Maximum distance (metres) for points to be considered in same cluster.
+        Default from config.
+    nproc : int, optional
+        Number of processes for DBSCAN clustering. Use -1 for all available cores.
+        Default from config.
     """
     try:
         # Get config and resolve defaults
@@ -386,32 +388,38 @@ def update_categorical_vs30_models(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def make_initial_vs30_raster(
-    terrain: bool = Option(False, "--terrain", help="Create terrain VS30 raster"),
-    geology: bool = Option(False, "--geology", help="Create geology VS30 raster"),
-    output_dir: Path = Option(
-        None,
-        "--output-dir",
-        "-o",
-        help="Output directory (default: output_dir from config.yaml)",
-    ),
-    geology_csv: Path = Option(
-        None, "--geology-csv", help="Custom geology model CSV (optional)"
-    ),
-    terrain_csv: Path = Option(
-        None, "--terrain-csv", help="Custom terrain model CSV (optional)"
-    ),
+    terrain: Annotated[bool, typer.Option("--terrain")] = False,
+    geology: Annotated[bool, typer.Option("--geology")] = False,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-o")] = None,
+    geology_csv: Annotated[Path | None, typer.Option("--geology-csv")] = None,
+    terrain_csv: Annotated[Path | None, typer.Option("--terrain-csv")] = None,
 ) -> None:
     """
     Create initial VS30 mean and standard deviation rasters from category IDs.
 
     This command generates initial VS30 rasters by:
+
     1. Creating category ID rasters (from terrain raster or geology shapefile)
     2. Mapping category IDs to VS30 mean and standard deviation values from CSV files
     3. Writing 2-band GeoTIFFs with VS30 mean (band 1) and standard deviation (band 2)
 
-    Output files are saved as terrain_initial_vs30_with_uncertainty.tif and/or geology_initial_vs30_with_uncertainty.tif.
+    Output files are saved as terrain_initial_vs30_with_uncertainty.tif and/or
+    geology_initial_vs30_with_uncertainty.tif.
+
+    Parameters
+    ----------
+    terrain : bool, optional
+        Create terrain VS30 raster.
+    geology : bool, optional
+        Create geology VS30 raster.
+    output_dir : Path, optional
+        Output directory. Default from config.yaml.
+    geology_csv : Path, optional
+        Custom geology model CSV file.
+    terrain_csv : Path, optional
+        Custom terrain model CSV file.
     """
     try:
         # Validate that at least one model type is specified
@@ -484,35 +492,28 @@ def make_initial_vs30_raster(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def adjust_geology_vs30_by_slope_and_coastal_distance(
-    input_raster: Path = Option(
-        ...,
-        "--input-raster",
-        "-i",
-        help="Path to initial geology VS30 raster (created by make-initial-vs30-raster)",
-    ),
-    id_raster: Path = Option(
-        ...,
-        "--id-raster",
-        help="Path to category ID raster (e.g. gid.tif used to create the input raster)",
-    ),
-    output_dir: Path = Option(
-        ...,
-        "--output-dir",
-        "-o",
-        help="Directory to save output hybrid raster and intermediate files",
-    ),
+    input_raster: Annotated[Path, typer.Option("--input-raster", "-i")],
+    id_raster: Annotated[Path, typer.Option("--id-raster")],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
 ) -> None:
     """
     Apply hybrid geology modifications to an initial VS30 raster.
 
-    This command adds slope-based and coast-distance-based modifications to the geology model.
-    It generates intermediate slope and coast distance rasters in the output directory.
+    This command adds slope-based and coast-distance-based modifications to the
+    geology model. It generates intermediate slope and coast distance rasters
+    in the output directory.
 
-    Requires:
-    - Input geology VS30 raster (2 bands: Vs30, Stdv)
-    - Corresponding ID raster (gid.tif)
+    Parameters
+    ----------
+    input_raster : Path
+        Path to initial geology VS30 raster (created by make-initial-vs30-raster).
+        Must be a 2-band raster with Vs30 and standard deviation.
+    id_raster : Path
+        Path to category ID raster (e.g., gid.tif used to create the input raster).
+    output_dir : Path
+        Directory to save output hybrid raster and intermediate files.
     """
     try:
         if not input_raster.exists():
@@ -753,52 +754,41 @@ def _apply_clustered_subsampling(
     return obs_data_for_bbox
 
 
-@app.command()
+@cli.from_docstring(app)
 def spatial_fit(
-    input_raster: Path = Option(
-        ...,
-        "--input-raster",
-        "-i",
-        help="Path to input 2-band VS30 raster (Vs30 mean and stdv)",
-    ),
-    observations_csv: Path = Option(
-        ...,
-        "--observations-csv",
-        "-o",
-        help="Path to CSV file with measured VS30 values (easting, northing, vs30, uncertainty)",
-    ),
-    model_values_csv: Path = Option(
-        ...,
-        "--model-values-csv",
-        "-m",
-        help="Path to CSV file with updated categorical vs30 values (e.g., updated_geology_model.csv)",
-    ),
-    output_dir: Path = Option(
-        ...,
-        "--output-dir",
-        "-d",
-        help="Directory to save the adjusted raster",
-    ),
-    model_type: str = Option(
-        ...,
-        "--model-type",
-        "-t",
-        help="Model type: either 'geology' or 'terrain'",
-    ),
-    n_proc: int = Option(
-        None,
-        "--n-proc",
-        help="Number of parallel processes (default from config, -1 for all cores)",
-    ),
+    input_raster: Annotated[Path, typer.Option("--input-raster", "-i")],
+    observations_csv: Annotated[Path, typer.Option("--observations-csv", "-o")],
+    model_values_csv: Annotated[Path, typer.Option("--model-values-csv", "-m")],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    model_type: Annotated[str, typer.Option("--model-type", "-t")],
+    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Adjust a VS30 raster based on measurements using spatial conditioning.
 
     This command performs a spatial adjustment of an input raster by:
+
     1. Loading the 2-band input raster (VS30 mean and stdv)
     2. Loading measurements and mapping them to categories
     3. Computing spatial fits to update pixels affected by measurements
     4. Applying updates and saving the resulting 2-band GeoTIFF
+
+    Parameters
+    ----------
+    input_raster : Path
+        Path to input 2-band VS30 raster (Vs30 mean and standard deviation).
+    observations_csv : Path
+        Path to CSV file with measured VS30 values. Must contain columns:
+        easting, northing, vs30, uncertainty.
+    model_values_csv : Path
+        Path to CSV file with updated categorical Vs30 values
+        (e.g., updated_geology_model.csv).
+    output_dir : Path
+        Directory to save the adjusted raster.
+    model_type : str
+        Model type: either 'geology' or 'terrain'.
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores. Default from config.
     """
     try:
         if not input_raster.exists():
@@ -938,26 +928,24 @@ def spatial_fit(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def plot_posterior_values(
-    csv_path: Path = Option(
-        ...,
-        "--csv-path",
-        "-c",
-        help="Path to CSV file with prior and posterior values",
-    ),
-    output_dir: Path = Option(
-        ...,
-        "--output-dir",
-        "-o",
-        help="Path to output directory for plots (will be created if it does not exist)",
-    ),
+    csv_path: Annotated[Path, typer.Option("--csv-path", "-c")],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
 ) -> None:
     """
-    Plot prior and posterior vs30 mean values with error bars.
+    Plot prior and posterior Vs30 mean values with error bars.
 
-    Creates a plot showing vs30 mean values (y-axis) vs category ID (x-axis)
-    for both prior and posterior values, with error bars showing standard deviation.
+    Creates a plot showing Vs30 mean values (y-axis) vs category ID (x-axis)
+    for both prior and posterior values, with error bars showing standard
+    deviation.
+
+    Parameters
+    ----------
+    csv_path : Path
+        Path to CSV file with prior and posterior values.
+    output_dir : Path
+        Path to output directory for plots. Will be created if it does not exist.
     """
     try:
         # Validate input file exists
@@ -1065,59 +1053,60 @@ def plot_posterior_values(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def full_pipeline_for_geology_or_terrain(
-    model_type: str = Option(
-        ..., "--model-type", "-t", help="Model type: either 'geology' or 'terrain'"
-    ),
-    categorical_model_csv: Path = Option(
-        ...,
-        "--categorical-model-csv",
-        "-m",
-        help="Path to CSV file with categorical vs30 values",
-    ),
-    clustered_observations_csv: Path = Option(
-        None,
-        "--clustered-observations-csv",
-        "-c",
-        help="Path to CSV file with clustered observations (e.g., CPT)",
-    ),
-    independent_observations_csv: Path = Option(
-        None,
-        "--independent-observations-csv",
-        "-o",
-        help="Path to CSV file with independent observations (e.g., measured filtered)",
-    ),
-    output_dir: Path = Option(
-        ..., "--output-dir", "-d", help="Directory to save all pipeline outputs"
-    ),
-    # Bayesian Update Parameters (None defaults)
-    n_prior: int | None = Option(
-        None, "--n-prior", help="Effective number of prior observations"
-    ),
-    min_sigma: float | None = Option(
-        None, "--min-sigma", help="Minimum standard deviation allowed"
-    ),
-    min_group: int | None = Option(
-        None, "--min-group", help="Minimum group size for DBSCAN"
-    ),
-    eps: float | None = Option(
-        None, "--eps", help="Max distance for DBSCAN clustering"
-    ),
-    nproc: int | None = Option(
-        None, "--nproc", help="Number of processes for clustering"
-    ),
-    n_proc: int | None = Option(
-        None, "--n-proc", help="Number of parallel processes for spatial adjustment"
-    ),
+    model_type: Annotated[str, typer.Option("--model-type", "-t")],
+    categorical_model_csv: Annotated[Path, typer.Option("--categorical-model-csv", "-m")],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    clustered_observations_csv: Annotated[
+        Path | None, typer.Option("--clustered-observations-csv", "-c")
+    ] = None,
+    independent_observations_csv: Annotated[
+        Path | None, typer.Option("--independent-observations-csv", "-o")
+    ] = None,
+    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
+    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
+    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
+    eps: Annotated[float | None, typer.Option("--eps")] = None,
+    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
+    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
-    Run the full VS30 generation pipeline in sequence.
+    Run the full VS30 generation pipeline for a single model type.
 
-    1. update-categorical-vs30-models: (Conditional) Updates categorical priors with observations if do_bayesian_update is enabled.
-    2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using posteriors (or priors if updates skipped).
+    Executes the complete pipeline in sequence:
+
+    1. update-categorical-vs30-models: (Conditional) Updates categorical priors
+       with observations if do_bayesian_update is enabled in config.
+    2. make-initial-vs30-raster: Creates initial 2-band VS30 raster using
+       posteriors (or priors if updates skipped).
     3. create-hybrid-raster: (Geology only) Applies slope/coastal modifications.
     4. spatial-fit: Final spatial adjustment using observations.
+
+    Parameters
+    ----------
+    model_type : str
+        Model type: either 'geology' or 'terrain'.
+    categorical_model_csv : Path
+        Path to CSV file with categorical Vs30 values.
+    output_dir : Path
+        Directory to save all pipeline outputs.
+    clustered_observations_csv : Path, optional
+        Path to CSV file with clustered observations (e.g., CPT data).
+    independent_observations_csv : Path, optional
+        Path to CSV file with independent observations (e.g., measured filtered).
+    n_prior : int, optional
+        Effective number of prior observations for Bayesian update.
+    min_sigma : float, optional
+        Minimum standard deviation allowed.
+    min_group : int, optional
+        Minimum group size for DBSCAN clustering.
+    eps : float, optional
+        Maximum distance for DBSCAN clustering.
+    nproc : int, optional
+        Number of processes for clustering.
+    n_proc : int, optional
+        Number of parallel processes for spatial adjustment.
     """
     try:
         output_dir = output_dir.resolve()
@@ -1256,25 +1245,31 @@ def full_pipeline_for_geology_or_terrain(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def combine(
-    geology_tif: Path = Option(
-        ..., "--geology-tif", help="Path to geology VS30 raster"
-    ),
-    terrain_tif: Path = Option(
-        ..., "--terrain-tif", help="Path to terrain VS30 raster"
-    ),
-    output_path: Path = Option(
-        ..., "--output-path", "-o", help="Path to combined raster"
-    ),
-    combination_method: str | None = Option(
-        None,
-        "--combination-method",
-        help="Method for combining models: Ratio (float) or 'standard_deviation_weighting'",
-    ),
+    geology_tif: Annotated[Path, typer.Option("--geology-tif")],
+    terrain_tif: Annotated[Path, typer.Option("--terrain-tif")],
+    output_path: Annotated[Path, typer.Option("--output-path", "-o")],
+    combination_method: Annotated[str | None, typer.Option("--combination-method")] = None,
 ) -> None:
     """
     Combine geology and terrain VS30 rasters using a weighted average.
+
+    Combines the two model outputs in log-space using the specified weighting
+    method. The output is a 2-band GeoTIFF with combined Vs30 mean and standard
+    deviation.
+
+    Parameters
+    ----------
+    geology_tif : Path
+        Path to geology VS30 raster.
+    terrain_tif : Path
+        Path to terrain VS30 raster.
+    output_path : Path
+        Path to combined output raster.
+    combination_method : str, optional
+        Method for combining models. Either a ratio (float, e.g., '1.0' for equal
+        weighting) or 'standard_deviation_weighting'. Default from config.
     """
     try:
         if not geology_tif.exists():
@@ -1343,63 +1338,60 @@ def combine(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def full_pipeline(
-    geology_categorical_csv: Path = Option(
-        None,
-        "--geology-csv",
-        help="Path to geology categorical CSV (default from config/resources)",
-    ),
-    terrain_categorical_csv: Path = Option(
-        None,
-        "--terrain-csv",
-        help="Path to terrain categorical CSV (default from config/resources)",
-    ),
-    clustered_observations_csv: Path = Option(
-        None,
-        "--clustered-observations-csv",
-        "-c",
-        help="Path to CSV file with clustered observations (e.g., CPT)",
-    ),
-    independent_observations_csv: Path = Option(
-        None,
-        "--independent-observations-csv",
-        "-o",
-        help="Path to CSV file with independent observations (e.g., measured filtered)",
-    ),
-    output_dir: Path | None = Option(
-        None, "--output-dir", "-d", help="Directory to save all pipeline outputs"
-    ),
-    # Bayesian Update Parameters
-    n_prior: int | None = Option(
-        None, "--n-prior", help="Effective number of prior observations"
-    ),
-    min_sigma: float | None = Option(
-        None, "--min-sigma", help="Minimum standard deviation allowed"
-    ),
-    min_group: int | None = Option(
-        None, "--min-group", help="Minimum group size for DBSCAN"
-    ),
-    eps: float | None = Option(
-        None, "--eps", help="Max distance for DBSCAN clustering"
-    ),
-    nproc: int | None = Option(
-        None, "--nproc", help="Number of processes for clustering"
-    ),
-    combination_method: str | None = Option(
-        None,
-        "--combination-method",
-        help="Method for combining models: Ratio (float) or 'standard_deviation_weighting'",
-    ),
-    n_proc: int = Option(
-        None,
-        "--n-proc",
-        help="Number of parallel processes for spatial adjustment (default from config, -1 for all cores)",
-    ),
+    geology_categorical_csv: Annotated[Path | None, typer.Option("--geology-csv")] = None,
+    terrain_categorical_csv: Annotated[Path | None, typer.Option("--terrain-csv")] = None,
+    clustered_observations_csv: Annotated[
+        Path | None, typer.Option("--clustered-observations-csv", "-c")
+    ] = None,
+    independent_observations_csv: Annotated[
+        Path | None, typer.Option("--independent-observations-csv", "-o")
+    ] = None,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-d")] = None,
+    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
+    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
+    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
+    eps: Annotated[float | None, typer.Option("--eps")] = None,
+    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
+    combination_method: Annotated[str | None, typer.Option("--combination-method")] = None,
+    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
-    Run the full VS30 generation pipeline for both geology and terrain models,
-    then average the results into a final combined raster.
+    Run the full VS30 generation pipeline for both geology and terrain models.
+
+    Executes the complete pipeline for both geology and terrain models, then
+    combines the results into a final averaged raster. This is the main entry
+    point for generating VS30 maps.
+
+    Parameters
+    ----------
+    geology_categorical_csv : Path, optional
+        Path to geology categorical CSV. Default from config/resources.
+    terrain_categorical_csv : Path, optional
+        Path to terrain categorical CSV. Default from config/resources.
+    clustered_observations_csv : Path, optional
+        Path to CSV file with clustered observations (e.g., CPT data).
+    independent_observations_csv : Path, optional
+        Path to CSV file with independent observations (e.g., measured filtered).
+    output_dir : Path, optional
+        Directory to save all pipeline outputs. Default from config.
+    n_prior : int, optional
+        Effective number of prior observations for Bayesian update.
+    min_sigma : float, optional
+        Minimum standard deviation allowed.
+    min_group : int, optional
+        Minimum group size for DBSCAN clustering.
+    eps : float, optional
+        Maximum distance for DBSCAN clustering.
+    nproc : int, optional
+        Number of processes for clustering.
+    combination_method : str, optional
+        Method for combining models. Either a ratio (float) or
+        'standard_deviation_weighting'.
+    n_proc : int, optional
+        Number of parallel processes for spatial adjustment. Use -1 for all cores.
+        Default from config.
     """
     import time
 
@@ -1501,72 +1493,34 @@ def full_pipeline(
         raise typer.Exit(1)
 
 
-@app.command()
+@cli.from_docstring(app)
 def compute_at_locations(
-    locations_csv: Path = Option(
-        ...,
-        "--locations-csv",
-        "-l",
-        help="CSV file with latitude/longitude columns (WGS84)",
-    ),
-    output_csv: Path = Option(
-        ...,
-        "--output-csv",
-        "-o",
-        help="Output CSV file path",
-    ),
-    lon_column: str = Option(
-        "longitude",
-        "--lon-column",
-        help="Name of longitude column in input CSV",
-    ),
-    lat_column: str = Option(
-        "latitude",
-        "--lat-column",
-        help="Name of latitude column in input CSV",
-    ),
-    geology_categorical_csv: Path = Option(
-        None,
-        "--geology-csv",
-        help="Path to geology categorical CSV (default from config/resources)",
-    ),
-    terrain_categorical_csv: Path = Option(
-        None,
-        "--terrain-csv",
-        help="Path to terrain categorical CSV (default from config/resources)",
-    ),
-    clustered_observations_csv: Path = Option(
-        None,
-        "--clustered-observations-csv",
-        "-c",
-        help="Path to CSV file with clustered observations (e.g., CPT)",
-    ),
-    independent_observations_csv: Path = Option(
-        None,
-        "--independent-observations-csv",
-        "-i",
-        help="Path to CSV file with independent observations",
-    ),
-    coast_distance_raster: Path = Option(
-        None,
-        "--coast-distance-raster",
-        help="Path to coastal distance raster (required for hybrid geology mods)",
-    ),
-    include_intermediate: bool = Option(
-        True,
-        "--include-intermediate/--final-only",
-        help="Include intermediate values (geology/terrain separately) in output",
-    ),
-    combination_method: str = Option(
-        None,
-        "--combination-method",
-        help="Method for combining: ratio (float) or 'standard_deviation_weighting'",
-    ),
-    n_proc: int = Option(
-        None,
-        "--n-proc",
-        help="Number of parallel processes (default from config, -1 for all cores)",
-    ),
+    locations_csv: Annotated[Path, typer.Option("--locations-csv", "-l", exists=True)],
+    output_csv: Annotated[Path, typer.Option("--output-csv", "-o")],
+    lon_column: Annotated[str, typer.Option("--lon-column")] = "longitude",
+    lat_column: Annotated[str, typer.Option("--lat-column")] = "latitude",
+    geology_categorical_csv: Annotated[
+        Path | None, typer.Option("--geology-csv", exists=True)
+    ] = None,
+    terrain_categorical_csv: Annotated[
+        Path | None, typer.Option("--terrain-csv", exists=True)
+    ] = None,
+    clustered_observations_csv: Annotated[
+        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True)
+    ] = None,
+    independent_observations_csv: Annotated[
+        Path | None, typer.Option("--independent-observations-csv", "-i", exists=True)
+    ] = None,
+    coast_distance_raster: Annotated[
+        Path | None, typer.Option("--coast-distance-raster", exists=True)
+    ] = None,
+    include_intermediate: Annotated[
+        bool, typer.Option("--include-intermediate/--final-only")
+    ] = True,
+    combination_method: Annotated[
+        str | None, typer.Option("--combination-method")
+    ] = None,
+    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1582,6 +1536,33 @@ def compute_at_locations(
         vs30 compute-at-locations \\
             --locations-csv sites.csv \\
             --output-csv results.csv
+
+    Parameters
+    ----------
+    locations_csv : Path
+        CSV file with latitude/longitude columns (WGS84).
+    output_csv : Path
+        Output CSV file path.
+    lon_column : str
+        Name of longitude column in input CSV.
+    lat_column : str
+        Name of latitude column in input CSV.
+    geology_categorical_csv : Path, optional
+        Path to geology categorical CSV (default from config/resources).
+    terrain_categorical_csv : Path, optional
+        Path to terrain categorical CSV (default from config/resources).
+    clustered_observations_csv : Path, optional
+        Path to CSV file with clustered observations (e.g., CPT).
+    independent_observations_csv : Path, optional
+        Path to CSV file with independent observations.
+    coast_distance_raster : Path, optional
+        Path to coastal distance raster (required for hybrid geology mods).
+    include_intermediate : bool
+        Include intermediate values (geology/terrain separately) in output.
+    combination_method : str, optional
+        Method for combining: ratio (float) or 'standard_deviation_weighting'.
+    n_proc : int, optional
+        Number of parallel processes (default from config, -1 for all cores).
     """
     from qcore import coordinates
 

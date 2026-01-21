@@ -19,6 +19,7 @@ dependencies = [
     "typer",
     "pydantic>=2.0",
     "threadpoolctl",
+    "qcore-utils",
 ]
 
 [project.urls]
