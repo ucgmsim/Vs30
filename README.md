@@ -207,11 +207,30 @@ The spatial adjustment stage uses Multivariate Normal (MVN) conditioning to upda
 
 **Module**: `cli.py`
 
-The final stage combines geology and terrain model outputs using weighted averaging in log-space. The combination method can be:
-- A fixed ratio (e.g., 0.5 for equal weighting)
-- Standard deviation weighting (inverse variance weighting)
+The final stage combines geology and terrain model outputs using weighted averaging in log-space. This produces a geometric mean of the two models, which is appropriate for log-normally distributed Vs30 values.
 
-The combined standard deviation accounts for both the individual model uncertainties and the difference between model predictions.
+**Combination methods** (configured via `combination_method` in `config.yaml`):
+
+1. **Ratio-based weighting** (default): Set `combination_method` to a float value representing the ratio of geology weight to terrain weight:
+   - `1.0` = equal weighting (both models contribute equally)
+   - `2.0` = geology has twice the weight of terrain
+   - `0.5` = terrain has twice the weight of geology
+
+   The weights are computed as: `w_geology = ratio / (ratio + 1)`, `w_terrain = 1 / (ratio + 1)`
+
+2. **Standard deviation weighting**: Set `combination_method: "standard_deviation_weighting"` to weight models inversely by their uncertainty (lower uncertainty = more weight). The weighting uses the formula: `weight ~ (sigma^2)^-k`, where `k` is controlled by the `k_value` parameter.
+   - Higher `k_value` (e.g., 5.0) gives more weight to the model with lower uncertainty
+   - Lower `k_value` (e.g., 1.0) makes the weighting less sensitive to uncertainty differences
+   - Default is `k_value: 3.0`
+
+**Log-space combination**: The combination is performed in log-space (geometric averaging):
+```
+combined_vs30 = exp(w_g * log(geology_vs30) + w_t * log(terrain_vs30))
+```
+
+For example, with equal weighting (`ratio=1.0`) and inputs of 200 and 400 m/s, the result is approximately 283 m/s (geometric mean), not 300 m/s (arithmetic mean).
+
+**Combined standard deviation**: The output uncertainty accounts for both the individual model uncertainties and the difference between model predictions using the mixture of log-normals formula.
 
 ## Configuration
 
