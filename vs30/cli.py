@@ -605,6 +605,154 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         raise typer.Exit(1)
 
 
+# =============================================================================
+# Helper Functions for spatial_fit
+# =============================================================================
+
+
+def _prepare_observations_for_spatial_fit(
+    observations: pd.DataFrame,
+    raster_data: "spatial.RasterData",
+    updated_model_table: np.ndarray,
+    model_type: str,
+    output_dir: Path,
+    cfg: "Vs30Config",
+) -> "spatial.ObservationData | None":
+    """
+    Prepare observation data for spatial adjustment.
+
+    Handles the model-type-specific logic for preparing observations, including
+    hybrid parameters for geology models.
+
+    Parameters
+    ----------
+    observations : DataFrame
+        Raw observation data with easting, northing, vs30, uncertainty columns.
+    raster_data : RasterData
+        Input raster data object.
+    updated_model_table : ndarray
+        Updated categorical model values [mean, stdv] indexed by category ID.
+    model_type : str
+        Either 'geology' or 'terrain'.
+    output_dir : Path
+        Output directory for any intermediate files.
+    cfg : Vs30Config
+        Configuration object.
+
+    Returns
+    -------
+    ObservationData or None
+        Prepared observation data, or None if no valid observations found.
+    """
+    logger.info("Preparing observation data for spatial adjustment...")
+
+    if model_type == "geology":
+        # Geology models use hybrid parameters from config
+        obs_data = spatial.prepare_observation_data(
+            observations,
+            raster_data,
+            updated_model_table,
+            model_type,
+            output_dir,
+            noisy=cfg.noisy,
+            hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
+            hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
+            hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
+            hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
+            hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
+            hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
+            hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
+            hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
+        )
+    else:
+        # Terrain models don't use hybrid parameters
+        obs_data = spatial.prepare_observation_data(
+            observations,
+            raster_data,
+            updated_model_table,
+            model_type,
+            output_dir,
+            noisy=cfg.noisy,
+        )
+
+    logger.info(f"Prepared {len(obs_data.locations)} valid observations")
+
+    if len(obs_data.locations) == 0:
+        return None
+
+    return obs_data
+
+
+def _apply_clustered_subsampling(
+    obs_data: "spatial.ObservationData",
+    is_clustered_obs: bool,
+    cfg: "Vs30Config",
+) -> "spatial.ObservationData":
+    """
+    Apply DBSCAN clustering and subsampling to observations for optimized pixel search.
+
+    For clustered observations (e.g., CPT data), this function identifies spatial
+    clusters and subsamples within each cluster to reduce the number of observations
+    used for the bounding box search, while maintaining spatial coverage.
+
+    Parameters
+    ----------
+    obs_data : ObservationData
+        Full observation data.
+    is_clustered_obs : bool
+        Whether the observations are from a clustered observations file.
+    cfg : Vs30Config
+        Configuration object with clustering parameters.
+
+    Returns
+    -------
+    ObservationData
+        Either the original obs_data (if not clustered) or a subsampled version
+        for use in the affected pixel search.
+    """
+    if not is_clustered_obs:
+        return obs_data
+
+    from sklearn.cluster import DBSCAN
+
+    logger.info("Clustering observations for optimized affected pixel search...")
+
+    # Run DBSCAN directly on the filtered observation locations
+    dbscan = DBSCAN(eps=cfg.eps, min_samples=cfg.min_group, n_jobs=cfg.n_proc)
+    cluster_labels = dbscan.fit_predict(obs_data.locations)
+
+    n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+    n_noise = np.sum(cluster_labels == -1)
+    logger.info(
+        f"Found {n_clusters} clusters and {n_noise} noise points "
+        f"in {len(obs_data.locations)} observations"
+    )
+
+    # Subsample observations within each cluster
+    obs_subsample_step = cfg.obs_subsample_step_for_clustered
+    subsample_indices = spatial.subsample_by_cluster(
+        cluster_labels, step=obs_subsample_step
+    )
+
+    # Create subsampled ObservationData for bbox search only
+    obs_data_for_bbox = spatial.ObservationData(
+        locations=obs_data.locations[subsample_indices],
+        vs30=obs_data.vs30[subsample_indices],
+        model_vs30=obs_data.model_vs30[subsample_indices],
+        model_stdv=obs_data.model_stdv[subsample_indices],
+        residuals=obs_data.residuals[subsample_indices],
+        omega=obs_data.omega[subsample_indices],
+        uncertainty=obs_data.uncertainty[subsample_indices],
+    )
+
+    logger.info(
+        f"Subsampled to {len(subsample_indices)} observations for affected pixel search "
+        f"(step={obs_subsample_step})"
+    )
+
+    return obs_data_for_bbox
+
+
 @app.command()
 def spatial_fit(
     input_raster: Path = Option(
@@ -721,39 +869,11 @@ def spatial_fit(
                 updated_model_table[idx, 1] = row[std_col]
 
         # 4. Prepare Observation Data for Spatial Adjustment
-        logger.info("Preparing observation data for spatial adjustment...")
+        obs_data = _prepare_observations_for_spatial_fit(
+            observations, raster_data, updated_model_table, model_type, output_dir, cfg
+        )
 
-        if model_type == "geology":
-            # Geology models use hybrid parameters from config
-            obs_data = spatial.prepare_observation_data(
-                observations,
-                raster_data,
-                updated_model_table,
-                model_type,
-                output_dir,
-                noisy=noisy,
-                hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
-                hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
-                hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
-                hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
-                hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
-                hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
-                hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
-                hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
-            )
-        else:
-            # Terrain models don't use hybrid parameters
-            obs_data = spatial.prepare_observation_data(
-                observations,
-                raster_data,
-                updated_model_table,
-                model_type,
-                output_dir,
-                noisy=noisy,
-            )
-        logger.info(f"Prepared {len(obs_data.locations)} valid observations")
-
-        if len(obs_data.locations) == 0:
+        if obs_data is None:
             logger.warning(
                 "No valid observations found within model bounds. Copying input raster to output."
             )
@@ -763,50 +883,8 @@ def spatial_fit(
             typer.echo(f"✓ No updates needed. Copied to {output_path}")
             return
 
-        # 5. Find Affected Pixels
-        # For clustered observations, subsample within each cluster before finding affected pixels
-        obs_data_for_bbox = obs_data
-        if is_clustered_obs:
-            from sklearn.cluster import DBSCAN
-
-            logger.info(
-                "Clustering observations for optimized affected pixel search..."
-            )
-            min_group = cfg.min_group
-            eps = cfg.eps
-            nproc_clustering = cfg.n_proc
-
-            # Run DBSCAN directly on the filtered observation locations
-            dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc_clustering)
-            cluster_labels = dbscan.fit_predict(obs_data.locations)
-
-            n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
-            n_noise = np.sum(cluster_labels == -1)
-            logger.info(
-                f"Found {n_clusters} clusters and {n_noise} noise points "
-                f"in {len(obs_data.locations)} observations"
-            )
-
-            # Subsample observations within each cluster
-            obs_subsample_step = cfg.obs_subsample_step_for_clustered
-            subsample_indices = spatial.subsample_by_cluster(
-                cluster_labels, step=obs_subsample_step
-            )
-
-            # Create subsampled ObservationData for bbox search only
-            obs_data_for_bbox = spatial.ObservationData(
-                locations=obs_data.locations[subsample_indices],
-                vs30=obs_data.vs30[subsample_indices],
-                model_vs30=obs_data.model_vs30[subsample_indices],
-                model_stdv=obs_data.model_stdv[subsample_indices],
-                residuals=obs_data.residuals[subsample_indices],
-                omega=obs_data.omega[subsample_indices],
-                uncertainty=obs_data.uncertainty[subsample_indices],
-            )
-            logger.info(
-                f"Subsampled to {len(subsample_indices)} observations for affected pixel search "
-                f"(step={obs_subsample_step})"
-            )
+        # 5. Find Affected Pixels (with optional clustered subsampling)
+        obs_data_for_bbox = _apply_clustered_subsampling(obs_data, is_clustered_obs, cfg)
 
         logger.info("Finding pixels affected by observations...")
         bbox_result = spatial.find_affected_pixels(
@@ -1227,45 +1305,14 @@ def combine(
             vs30_g, stdv_g = geol_data[0], geol_data[1]
             vs30_t, stdv_t = terr_data[0], terr_data[1]
 
-            # Calculate weights based on combination method
-            use_stdv_weight = False
-
-            # Try parsing as float (ratio) first
-            try:
-                ratio = float(combination_method)
-                # It's a ratio R = geology_weight / terrain_weight
-                # w_g = R / (R + 1), w_t = 1 / (R + 1)
-                total_w = ratio + 1.0
-                w_g = ratio / total_w
-                w_t = 1.0 / total_w
-            except ValueError:
-                # Not a float, check for specific string
-                if str(combination_method).strip() == "standard_deviation_weighting":
-                    use_stdv_weight = True
-                    k_val = cfg.k_value
-                else:
-                    raise ValueError(
-                        f"Unknown combination method: {combination_method}"
-                    )
-
-            if use_stdv_weight:
-                # Weighting based on variance: m = (sigma^2)^-k
-                m_g = (stdv_g**2) ** -k_val
-                m_t = (stdv_t**2) ** -k_val
-                w_g = m_g / (m_g + m_t)
-                w_t = m_t / (m_g + m_t)
-
-            # Combine models using log-space mixture (matches legacy logic)
-            log_g = np.log(vs30_g)
-            log_t = np.log(vs30_t)
-
-            log_comb = log_g * w_g + log_t * w_t
-            combined_vs30 = np.exp(log_comb)
-
-            # Combined standard deviation formula for mixture of normals in log-space
-            combined_stdv = np.sqrt(
-                w_g * ((log_g - log_comb) ** 2 + stdv_g**2)
-                + w_t * ((log_t - log_comb) ** 2 + stdv_t**2)
+            # Combine models using shared function (log-space mixture)
+            combined_vs30, combined_stdv = utils.combine_vs30_models(
+                geol_vs30=vs30_g,
+                geol_stdv=stdv_g,
+                terr_vs30=vs30_t,
+                terr_stdv=stdv_t,
+                combination_method=combination_method,
+                k_value=cfg.k_value,
             )
 
             # Create output array correctly restoring nodata where things are NaN
@@ -1545,7 +1592,7 @@ def compute_at_locations(
         resolve_n_proc,
         run_parallel_locations,
     )
-    from vs30.utils import combine_models_at_points
+    from vs30.utils import combine_vs30_models
 
     try:
         # Get config
@@ -1656,7 +1703,8 @@ def compute_at_locations(
                     include_intermediate=include_intermediate,
                     combination_method=combination_method,
                     coast_distance_raster=coast_distance_raster,
-                    weight_epsilon_div_by_zero=cfg.weight_epsilon_div_by_zero,
+                    k_value=cfg.k_value,
+                    epsilon=cfg.weight_epsilon_div_by_zero,
                 )
 
                 df = run_parallel_locations(
@@ -1722,13 +1770,14 @@ def compute_at_locations(
             df["terrain_mvn_stdv"] = terr_mvn_stdv
 
             typer.echo("Combining models...")
-            combined_vs30, combined_stdv = combine_models_at_points(
+            combined_vs30, combined_stdv = combine_vs30_models(
                 geol_mvn_vs30,
                 geol_mvn_stdv,
                 terr_mvn_vs30,
                 terr_mvn_stdv,
                 combination_method,
-                cfg.weight_epsilon_div_by_zero,
+                k_value=cfg.k_value,
+                epsilon=cfg.weight_epsilon_div_by_zero,
             )
 
             df["vs30"] = combined_vs30
