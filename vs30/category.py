@@ -27,10 +27,20 @@ RASTER_ID_NODATA_VALUE = _cfg.raster_id_nodata_value
 # Standard column name used for model IDs in DataFrames
 STANDARD_ID_COLUMN = "id"
 
-# Data paths for category assignment from constants/internal logic
+# Data directory path
 _data_dir = os.path.join(os.path.dirname(__file__), "data")
-QMAP = os.path.join(_data_dir, "qmap", "qmap.shp")
-MODEL_RASTER = os.path.join(_data_dir, "IwahashiPike.tif")
+
+
+def _get_qmap_path() -> str:
+    """Get path to QMAP geology shapefile from config."""
+    cfg = get_default_config()
+    return os.path.join(_data_dir, cfg.geology_shapefile_path)
+
+
+def _get_terrain_raster_path() -> str:
+    """Get path to terrain classification raster from config."""
+    cfg = get_default_config()
+    return os.path.join(_data_dir, cfg.terrain_raster_filename)
 
 
 # ============================================================================
@@ -56,7 +66,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
         Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside polygons).
     """
     # load QMAP polygons (keeps CRS from file)
-    gdf = gpd.read_file(QMAP)[["gid", "geometry"]]
+    gdf = gpd.read_file(_get_qmap_path())[["gid", "geometry"]]
 
     # Build point GeoDataFrame (ensure float64)
     points_shapely = shapely.points(points)
@@ -91,7 +101,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside raster).
     """
-    with rasterio.open(MODEL_RASTER) as src:
+    with rasterio.open(_get_terrain_raster_path()) as src:
         nodata = src.nodata
         dtype = src.dtypes[0]
 
