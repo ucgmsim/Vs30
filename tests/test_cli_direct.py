@@ -36,8 +36,11 @@ class TestCLICallback:
         """Test that nonexistent config file gives error."""
         # Use a command that will actually try to use the config
         result = runner.invoke(app, ["--config", "/nonexistent/config.yaml", "full-pipeline"])
-        # Should fail with exit code 1 due to missing config
-        assert result.exit_code == 1 or "not found" in result.stdout.lower()
+        # Should fail with non-zero exit code due to missing config
+        # Typer validation returns exit code 2 with "does not exist" message
+        # Note: message may wrap across lines, so check for "not exist" substring
+        assert result.exit_code != 0
+        assert "not exist" in result.output.lower()
 
 
 class TestGetConfig:

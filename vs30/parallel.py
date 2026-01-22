@@ -21,7 +21,7 @@ from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 
 from vs30.category import get_vs30_for_points
-from vs30.raster import SLOPE_RASTER, apply_hybrid_modifications_at_points
+from vs30.raster import _get_slope_raster_path, apply_hybrid_modifications_at_points
 from vs30.spatial import (
     SpatialAdjustmentResult,
     ObservationData,
@@ -151,7 +151,7 @@ def process_geology_at_points(
             geol_vs30,
             geol_stdv,
             geol_ids,
-            slope_raster_path=SLOPE_RASTER,
+            slope_raster_path=_get_slope_raster_path(),
             coast_distance_raster_path=coast_distance_raster,
         )
     else:

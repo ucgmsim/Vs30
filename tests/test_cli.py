@@ -65,7 +65,7 @@ class TestGlobalConfigOption:
         """Test that nonexistent config file causes error."""
         result = runner.invoke(app, ["--config", "/nonexistent/config.yaml", "full-pipeline", "--help"])
         # Should fail when trying to load nonexistent config
-        assert result.exit_code != 0 or "not found" in result.output.lower()
+        assert result.exit_code != 0 or "does not exist" in result.output.lower()
 
     def test_custom_config_loads(self):
         """Test that custom config file is loaded."""
@@ -401,7 +401,7 @@ class TestUpdateCategoricalVs30ModelsErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_clustered_observations_csv(self, temp_dir):
         """Test error when clustered observations CSV doesn't exist."""
@@ -421,7 +421,7 @@ class TestUpdateCategoricalVs30ModelsErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_independent_observations_csv(self, temp_dir):
         """Test error when independent observations CSV doesn't exist."""
@@ -441,7 +441,7 @@ class TestUpdateCategoricalVs30ModelsErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_invalid_model_type(self, temp_dir):
         """Test error when model_type is invalid."""
@@ -552,7 +552,7 @@ class TestAdjustGeologyErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_id_raster(self, temp_dir):
         """Test error when ID raster doesn't exist."""
@@ -580,7 +580,7 @@ class TestAdjustGeologyErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
 
 class TestSpatialFitErrors:
@@ -605,7 +605,7 @@ class TestSpatialFitErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_observations_csv(self, temp_dir):
         """Test error when observations CSV doesn't exist."""
@@ -635,7 +635,7 @@ class TestSpatialFitErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_model_values_csv(self, temp_dir):
         """Test error when model values CSV doesn't exist."""
@@ -672,7 +672,7 @@ class TestSpatialFitErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
 
 class TestCombineErrors:
@@ -695,7 +695,7 @@ class TestCombineErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_missing_terrain_raster(self, temp_dir):
         """Test error when terrain raster doesn't exist."""
@@ -723,7 +723,7 @@ class TestCombineErrors:
         ])
 
         assert result.exit_code != 0
-        assert "not found" in result.output.lower()
+        assert "does not exist" in result.output.lower()
 
     def test_unknown_combination_method(self, temp_dir):
         """Test error when combination method is invalid."""
