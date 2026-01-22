@@ -1,11 +1,13 @@
-# Vs30 config file
+# Vs30 configuration file
+# This file defines all inputs for the Vs30 package.
 
-# Number of processors for DBSCAN clustering, finding affected pixels, and spatial updates.
-# -1 uses all available cores.
-n_proc: -1
+# Parameters that users should change are at the top of the file
+# while parameters that users should not change are at the bottom.
 
-# --- Grid Parameters ---
-# For tiny domain
+
+# For optional 2D Vs30 map production, set the domain bounds and resolution here.
+# These parameters have no effect if Vs30 is being calculated at a list of specified locations.
+# For a tiny domain
 grid_xmin: 1570050
 grid_xmax: 1571050
 grid_ymin: 5180050
@@ -13,7 +15,7 @@ grid_ymax: 5181050
 grid_dx: 100
 grid_dy: 100
 
-# For full NZ domain
+# For a full NZ domain
 # grid_xmin: 1060050
 # grid_xmax: 2120050
 # grid_ymin: 4730050
@@ -21,46 +23,31 @@ grid_dy: 100
 # grid_dx: 100
 # grid_dy: 100
 
-# --- Full New Zealand Land Extent Bounds (for coastal distance calculations) ---
-# IMPORTANT: These values define the full extent of New Zealand land coverage
-# and MUST NOT be changed. They are used to ensure coastal distance calculations
-# are computed on the full NZ land extent, regardless of the configured study
-# domain bounds (grid_xmin/max/ymin/max above). This is critical because:
-# 1. Observations used in MVN spatial adjustment may fall anywhere within NZ
-# 2. Coastal distances must be accurate for all observation locations
-# 3. Computing distances only on a small domain leads to incorrect values for
-#    observations outside that domain, causing errors in MVN calculations
-# These bounds match the legacy _full_land_grid() function behavior
-full_nz_land_xmin: 1060050
-full_nz_land_xmax: 2120050
-full_nz_land_ymin: 4730050
-full_nz_land_ymax: 6250050
+# Number of processors to use for DBSCAN clustering, finding affected pixels, and spatial updates.
+# -1 uses all available cores.
+n_proc: -1
 
-# --- NoData and Placeholder Values ---
-raster_id_nodata_value: 255 # No data value in the provided categorical rasters
-# No-data value used for slope rasters, model outputs, and CSV placeholders
-# -32767 is a traditional no-data value in many GIS applications (minimum value for signed 16-bit integers)
-nodata_value: -32767
-
-# --- filenames and Prefixes ---
-posterior_prefix: "posterior_"
-terrain_initial_vs30_filename: "initial_terrain_vs30_with_uncertainty.tif"
-geology_initial_vs30_filename: "initial_geology_vs30_with_uncertainty.tif"
-slope_raster_filename: "slope.tif"
-coast_distance_raster_filename: "coast_distance.tif"
-geology_vs30_slope_and_coastal_distance_adjusted_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif"
-geology_id_filename: "gid.tif"
-terrain_id_filename: "tid.tif"
-
-# Final output filenames (after spatially adjusting by the fitted multivariate normal distribution (MVN))
-terrain_vs30_mean_stddev_filename: "terrain_vs30_spatially_adjusted_with_uncertainty.tif"
-geology_vs30_mean_stddev_filename: "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
-combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_coastal_distance_and_spatial_adjustment_and_terrain_vs30_after_spatial_adjustment.tif"
-
-# --- General Configuration ---
-
-# Whether to perform Bayesian update of geology and terrain categorical vs30 values
+# Whether to perform Bayesian update of geology and terrain categorical Vs30 values
 do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+
+# Whether measurements are "noisy" (affects noise weighting in the spatial multivariate normal (MVN) update).
+# When true, observations with higher uncertainty contribute less to pixel updates.
+noisy: true
+
+# Output directory for all output files
+output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
+
+# Observational data files:
+
+# The independent observations file contains observed vs30 values
+# that should be treated independently (without clustering).
+# Set to none (without quotes) to use no independent observations.
+independent_observations_file: observations/measured_vs30_independent_observations.csv
+
+# The clustered observations file contains observed vs30 values
+# that should be treated with spatial clustering (e.g. CPT measurements).
+# Set to none (without quotes) to use no clustered observations.
+clustered_observations_file: observations/measured_vs30_cpt.csv
 
 # Maximum distance (meters) for considering observations in MVN spatial adjustment.
 # Observations further than this distance from a pixel will not influence its update.
@@ -71,15 +58,10 @@ max_dist_m: 10000
 # maintaining accuracy (observations far away have minimal influence anyway).
 max_points: 500
 
-
 # Covariance reduction factor for dissimilar Vs30 values (dimensionless).
 # Controls how much the correlation between two points is reduced when their
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 cov_reduc: 1.5
-
-# Whether measurements are "noisy" (affects noise weighting in MVN update).
-# When true, observations with higher uncertainty contribute less to pixel updates.
-noisy: true
 
 # Correlation length parameters (phi) in meters.
 # Phi represents the distance at which spatial correlation decays to ~37% (1/e).
@@ -88,11 +70,10 @@ noisy: true
 phi_geology: 1407
 phi_terrain: 993
 
-# Maximum memory in GB for spatial boolean arrays during chunked processing per process.
-# Note: Total process memory usage will be several GB more than this limit
+# Maximum memory in GB for spatial Boolean arrays during chunked processing per process.
+# Note: Total process memory usage per process will be several GB more than this limit
 # due to raster data, observation arrays, and other data structures.
 # When using parallel processing (n_proc > 1), each process uses up to this amount.
-# See docs/spatial_processing_optimization.md for benchmarking results.
 max_spatial_boolean_array_memory_gb: 1
 
 # Observation subsampling step for find_affected_pixels when using clustered observations.
@@ -125,23 +106,6 @@ min_group: 5
 # Maximum distance (meters) between observations to be in the same cluster
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 eps: 15000.0
-
-# Paths relative to the resources directory
-# Observational data that should be treated independently (without clustering)
-# Set to "none" to disable, or provide a filename relative to resources directory
-#independent_observations_file: none
-independent_observations_file: observations/measured_vs30_independent_observations.csv
-
-# Observational data that should be treated with spatial clustering
-# Set to "none" to disable, or provide a filename relative to resources directory
-#clustered_observations_file : none
-clustered_observations_file: observations/measured_vs30_cpt.csv
-
-#output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_observations
-#output_dir: /tmp/refactored_vs30_output_tiny_domain_clustered_observations
-#output_dir: /tmp/refactored_vs30_output_full_domain_clustered_observations
-output_dir: /tmp/refactored_vs30_output_tiny_domain_independent_and_clustered_observations
-# output_dir: /tmp/large_domain_clustered_observations
 
 # Options for geology Vs30 models
 # geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv
@@ -234,3 +198,34 @@ col_mean: "mean_vs30_km_per_s"
 col_stdv: "standard_deviation_vs30_km_per_s"
 
 
+# --- NoData and Placeholder Values ---
+raster_id_nodata_value: 255 # No data value in the provided categorical rasters
+# No-data value used for slope rasters, model outputs, and CSV placeholders
+# -32767 is a traditional no-data value in many GIS applications (minimum value for signed 16-bit integers)
+nodata_value: -32767
+
+# --- filenames and Prefixes ---
+posterior_prefix: "posterior_"
+terrain_initial_vs30_filename: "initial_terrain_vs30_with_uncertainty.tif"
+geology_initial_vs30_filename: "initial_geology_vs30_with_uncertainty.tif"
+slope_raster_filename: "slope.tif"
+coast_distance_raster_filename: "coast_distance.tif"
+geology_vs30_slope_and_coastal_distance_adjusted_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif"
+geology_id_filename: "gid.tif"
+terrain_id_filename: "tid.tif"
+
+# Final output filenames (after spatially adjusting by the fitted multivariate normal distribution (MVN))
+terrain_vs30_mean_stddev_filename: "terrain_vs30_spatially_adjusted_with_uncertainty.tif"
+geology_vs30_mean_stddev_filename: "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_coastal_distance_and_spatial_adjustment_and_terrain_vs30_after_spatial_adjustment.tif"
+
+# --- Full New Zealand Land Extent Bounds (for coastal distance calculations) ---
+# IMPORTANT: These values define the full extent of New Zealand land coverage
+# and MUST NOT be changed. They are used to ensure coastal distance calculations
+# are computed on the full NZ land extent, regardless of the configured study
+# domain bounds (grid_xmin/max/ymin/max above). 
+# These bounds match the legacy _full_land_grid() function behavior
+full_nz_land_xmin: 1060050
+full_nz_land_xmax: 2120050
+full_nz_land_ymin: 4730050
+full_nz_land_ymax: 6250050
