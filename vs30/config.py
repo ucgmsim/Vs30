@@ -130,6 +130,28 @@ class Vs30Config(BaseModel):
         description="Path to terrain categorical model CSV"
     )
 
+    # --- Internal data files (relative to data directory) ---
+    terrain_raster_filename: str = Field(
+        default="IwahashiPike.tif",
+        description="Terrain classification raster filename (relative to data dir)"
+    )
+    geology_shapefile_path: str = Field(
+        default="qmap/qmap.shp",
+        description="Geology shapefile path (relative to data dir)"
+    )
+    coastline_shapefile_path: str = Field(
+        default="coast/nz-coastlines-and-islands-polygons-topo-1500k.shp",
+        description="Coastline shapefile path (relative to data dir)"
+    )
+    slope_source_raster_filename: str = Field(
+        default="slope.tif",
+        description="Source slope raster filename (relative to data dir)"
+    )
+    shapefiles_archive_filename: str = Field(
+        default="shapefiles.tar.xz",
+        description="Shapefiles archive filename (relative to data dir)"
+    )
+
     # --- Output filenames ---
     posterior_prefix: str = Field(description="Prefix for posterior output files")
     terrain_initial_vs30_filename: str = Field(

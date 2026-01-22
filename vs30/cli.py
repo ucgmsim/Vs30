@@ -71,6 +71,8 @@ def main(
         typer.Option(
             "--config",
             "-c",
+            exists=True,
+            dir_okay=False,
             help="Path to config.yaml file (default: package config.yaml)",
         ),
     ] = None,
@@ -112,14 +114,16 @@ def main(
 
 @cli.from_docstring(app)
 def update_categorical_vs30_models(
-    categorical_model_csv: Annotated[Path, typer.Option("--categorical-model-csv", "-m")],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    categorical_model_csv: Annotated[
+        Path, typer.Option("--categorical-model-csv", "-m", exists=True, dir_okay=False)
+    ],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
     model_type: Annotated[str, typer.Option("--model-type", "-t")],
     clustered_observations_csv: Annotated[
-        Path | None, typer.Option("--clustered-observations-csv", "-c")
+        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
     independent_observations_csv: Annotated[
-        Path | None, typer.Option("--independent-observations-csv", "-o")
+        Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
     n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
     min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
@@ -392,9 +396,13 @@ def update_categorical_vs30_models(
 def make_initial_vs30_raster(
     terrain: Annotated[bool, typer.Option("--terrain")] = False,
     geology: Annotated[bool, typer.Option("--geology")] = False,
-    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-o")] = None,
-    geology_csv: Annotated[Path | None, typer.Option("--geology-csv")] = None,
-    terrain_csv: Annotated[Path | None, typer.Option("--terrain-csv")] = None,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-o", file_okay=False)] = None,
+    geology_csv: Annotated[
+        Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
+    ] = None,
+    terrain_csv: Annotated[
+        Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
+    ] = None,
 ) -> None:
     """
     Create initial VS30 mean and standard deviation rasters from category IDs.
@@ -494,9 +502,11 @@ def make_initial_vs30_raster(
 
 @cli.from_docstring(app)
 def adjust_geology_vs30_by_slope_and_coastal_distance(
-    input_raster: Annotated[Path, typer.Option("--input-raster", "-i")],
-    id_raster: Annotated[Path, typer.Option("--id-raster")],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
+    input_raster: Annotated[
+        Path, typer.Option("--input-raster", "-i", exists=True, dir_okay=False)
+    ],
+    id_raster: Annotated[Path, typer.Option("--id-raster", exists=True, dir_okay=False)],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
 ) -> None:
     """
     Apply hybrid geology modifications to an initial VS30 raster.
@@ -756,10 +766,16 @@ def _apply_clustered_subsampling(
 
 @cli.from_docstring(app)
 def spatial_fit(
-    input_raster: Annotated[Path, typer.Option("--input-raster", "-i")],
-    observations_csv: Annotated[Path, typer.Option("--observations-csv", "-o")],
-    model_values_csv: Annotated[Path, typer.Option("--model-values-csv", "-m")],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    input_raster: Annotated[
+        Path, typer.Option("--input-raster", "-i", exists=True, dir_okay=False)
+    ],
+    observations_csv: Annotated[
+        Path, typer.Option("--observations-csv", "-o", exists=True, dir_okay=False)
+    ],
+    model_values_csv: Annotated[
+        Path, typer.Option("--model-values-csv", "-m", exists=True, dir_okay=False)
+    ],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
     model_type: Annotated[str, typer.Option("--model-type", "-t")],
     n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
@@ -930,8 +946,8 @@ def spatial_fit(
 
 @cli.from_docstring(app)
 def plot_posterior_values(
-    csv_path: Annotated[Path, typer.Option("--csv-path", "-c")],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-o")],
+    csv_path: Annotated[Path, typer.Option("--csv-path", "-c", exists=True, dir_okay=False)],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
 ) -> None:
     """
     Plot prior and posterior Vs30 mean values with error bars.
@@ -1056,13 +1072,15 @@ def plot_posterior_values(
 @cli.from_docstring(app)
 def full_pipeline_for_geology_or_terrain(
     model_type: Annotated[str, typer.Option("--model-type", "-t")],
-    categorical_model_csv: Annotated[Path, typer.Option("--categorical-model-csv", "-m")],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d")],
+    categorical_model_csv: Annotated[
+        Path, typer.Option("--categorical-model-csv", "-m", exists=True, dir_okay=False)
+    ],
+    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
     clustered_observations_csv: Annotated[
-        Path | None, typer.Option("--clustered-observations-csv", "-c")
+        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
     independent_observations_csv: Annotated[
-        Path | None, typer.Option("--independent-observations-csv", "-o")
+        Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
     n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
     min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
@@ -1247,9 +1265,9 @@ def full_pipeline_for_geology_or_terrain(
 
 @cli.from_docstring(app)
 def combine(
-    geology_tif: Annotated[Path, typer.Option("--geology-tif")],
-    terrain_tif: Annotated[Path, typer.Option("--terrain-tif")],
-    output_path: Annotated[Path, typer.Option("--output-path", "-o")],
+    geology_tif: Annotated[Path, typer.Option("--geology-tif", exists=True, dir_okay=False)],
+    terrain_tif: Annotated[Path, typer.Option("--terrain-tif", exists=True, dir_okay=False)],
+    output_path: Annotated[Path, typer.Option("--output-path", "-o", dir_okay=False)],
     combination_method: Annotated[str | None, typer.Option("--combination-method")] = None,
 ) -> None:
     """
@@ -1340,15 +1358,19 @@ def combine(
 
 @cli.from_docstring(app)
 def full_pipeline(
-    geology_categorical_csv: Annotated[Path | None, typer.Option("--geology-csv")] = None,
-    terrain_categorical_csv: Annotated[Path | None, typer.Option("--terrain-csv")] = None,
+    geology_categorical_csv: Annotated[
+        Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
+    ] = None,
+    terrain_categorical_csv: Annotated[
+        Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
+    ] = None,
     clustered_observations_csv: Annotated[
-        Path | None, typer.Option("--clustered-observations-csv", "-c")
+        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
     independent_observations_csv: Annotated[
-        Path | None, typer.Option("--independent-observations-csv", "-o")
+        Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
-    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-d")] = None,
+    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-d", file_okay=False)] = None,
     n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
     min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
     min_group: Annotated[int | None, typer.Option("--min-group")] = None,
@@ -1495,24 +1517,26 @@ def full_pipeline(
 
 @cli.from_docstring(app)
 def compute_at_locations(
-    locations_csv: Annotated[Path, typer.Option("--locations-csv", "-l", exists=True)],
-    output_csv: Annotated[Path, typer.Option("--output-csv", "-o")],
+    locations_csv: Annotated[
+        Path, typer.Option("--locations-csv", "-l", exists=True, dir_okay=False)
+    ],
+    output_csv: Annotated[Path, typer.Option("--output-csv", "-o", dir_okay=False)],
     lon_column: Annotated[str, typer.Option("--lon-column")] = "longitude",
     lat_column: Annotated[str, typer.Option("--lat-column")] = "latitude",
     geology_categorical_csv: Annotated[
-        Path | None, typer.Option("--geology-csv", exists=True)
+        Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
     terrain_categorical_csv: Annotated[
-        Path | None, typer.Option("--terrain-csv", exists=True)
+        Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
     ] = None,
     clustered_observations_csv: Annotated[
-        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True)
+        Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
     independent_observations_csv: Annotated[
-        Path | None, typer.Option("--independent-observations-csv", "-i", exists=True)
+        Path | None, typer.Option("--independent-observations-csv", "-i", exists=True, dir_okay=False)
     ] = None,
     coast_distance_raster: Annotated[
-        Path | None, typer.Option("--coast-distance-raster", exists=True)
+        Path | None, typer.Option("--coast-distance-raster", exists=True, dir_okay=False)
     ] = None,
     include_intermediate: Annotated[
         bool, typer.Option("--include-intermediate/--final-only")

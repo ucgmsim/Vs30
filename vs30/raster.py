@@ -48,16 +48,36 @@ RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
 
 # Data directory path
 DATA_DIR = Path(__file__).parent / "data"
-TERRAIN_RASTER = DATA_DIR / "IwahashiPike.tif"
-GEOLOGY_SHAPEFILE = DATA_DIR / "qmap" / "qmap.shp"
-COAST_SHAPEFILE = (
-    DATA_DIR / "coast" / "nz-coastlines-and-islands-polygons-topo-1500k.shp"
-)
-SLOPE_RASTER = DATA_DIR / "slope.tif"
 
 
-# Path to shapefiles archive
-SHAPEFILES_ARCHIVE = DATA_DIR / "shapefiles.tar.xz"
+def _get_terrain_raster_path() -> Path:
+    """Get path to terrain classification raster from config."""
+    cfg = get_default_config()
+    return DATA_DIR / cfg.terrain_raster_filename
+
+
+def _get_geology_shapefile_path() -> Path:
+    """Get path to geology shapefile from config."""
+    cfg = get_default_config()
+    return DATA_DIR / cfg.geology_shapefile_path
+
+
+def _get_coastline_shapefile_path() -> Path:
+    """Get path to coastline shapefile from config."""
+    cfg = get_default_config()
+    return DATA_DIR / cfg.coastline_shapefile_path
+
+
+def _get_slope_raster_path() -> Path:
+    """Get path to source slope raster from config."""
+    cfg = get_default_config()
+    return DATA_DIR / cfg.slope_source_raster_filename
+
+
+def _get_shapefiles_archive_path() -> Path:
+    """Get path to shapefiles archive from config."""
+    cfg = get_default_config()
+    return DATA_DIR / cfg.shapefiles_archive_filename
 
 
 def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
@@ -87,14 +107,15 @@ def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> 
         return
 
     # Check if archive exists
-    if not SHAPEFILES_ARCHIVE.exists():
+    archive_path = _get_shapefiles_archive_path()
+    if not archive_path.exists():
         raise FileNotFoundError(
-            f"Shapefile archive not found: {SHAPEFILES_ARCHIVE}. "
+            f"Shapefile archive not found: {archive_path}. "
             f"Cannot extract {shapefile_path.name}. Please ensure shapefiles.tar.xz exists."
         )
 
     # Extract directory from archive
-    with tarfile.open(SHAPEFILES_ARCHIVE, "r:xz") as tar:
+    with tarfile.open(archive_path, "r:xz") as tar:
         # Extract only files in the specified directory
         members = [
             member
@@ -103,14 +124,14 @@ def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> 
         ]
         if not members:
             raise ValueError(
-                f"No '{directory_prefix}' directory found in archive {SHAPEFILES_ARCHIVE}"
+                f"No '{directory_prefix}' directory found in archive {archive_path}"
             )
         tar.extractall(path=DATA_DIR, members=members)
 
     # Verify extraction was successful
     if not shapefile_path.exists():
         raise FileNotFoundError(
-            f"Failed to extract {shapefile_path.name} from {SHAPEFILES_ARCHIVE}. "
+            f"Failed to extract {shapefile_path.name} from {archive_path}. "
             f"Expected file at {shapefile_path} but it was not created."
         )
 
@@ -121,7 +142,7 @@ def _ensure_qmap_shapefile_extracted() -> None:
 
     This shapefile is required for geology ID raster creation.
     """
-    _ensure_shapefile_extracted(GEOLOGY_SHAPEFILE, "qmap")
+    _ensure_shapefile_extracted(_get_geology_shapefile_path(), "qmap")
 
 
 def _ensure_coast_shapefile_extracted() -> None:
@@ -130,7 +151,7 @@ def _ensure_coast_shapefile_extracted() -> None:
 
     This shapefile is required for creating coastal distance rasters.
     """
-    _ensure_shapefile_extracted(COAST_SHAPEFILE, "coast")
+    _ensure_shapefile_extracted(_get_coastline_shapefile_path(), "coast")
 
 
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
@@ -262,11 +283,12 @@ def create_category_id_raster(
 
     if model_type == "terrain":
         # Resample terrain raster to target grid
-        if not TERRAIN_RASTER.exists():
-            raise FileNotFoundError(f"Terrain raster not found: {TERRAIN_RASTER}")
+        terrain_raster_path = _get_terrain_raster_path()
+        if not terrain_raster_path.exists():
+            raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
 
         # Read source raster and reproject
-        with rasterio.open(TERRAIN_RASTER) as src:
+        with rasterio.open(terrain_raster_path) as src:
             with rasterio.open(output_path, "w", **profile) as dst:
                 reproject(
                     source=rasterio.band(src, 1),
@@ -284,13 +306,14 @@ def create_category_id_raster(
         _ensure_qmap_shapefile_extracted()
 
         # Rasterize geology shapefile to target grid
-        if not GEOLOGY_SHAPEFILE.exists():
-            raise FileNotFoundError(f"Geology shapefile not found: {GEOLOGY_SHAPEFILE}")
+        geology_shapefile_path = _get_geology_shapefile_path()
+        if not geology_shapefile_path.exists():
+            raise FileNotFoundError(f"Geology shapefile not found: {geology_shapefile_path}")
 
         # Read shapefile
-        gdf = gpd.read_file(GEOLOGY_SHAPEFILE)
+        gdf = gpd.read_file(geology_shapefile_path)
         if "gid" not in gdf.columns:
-            raise ValueError(f"Shapefile {GEOLOGY_SHAPEFILE} missing 'gid' column")
+            raise ValueError(f"Shapefile {geology_shapefile_path} missing 'gid' column")
 
         # Ensure shapefile is in NZTM CRS (EPSG:2193)
         if gdf.crs is None or str(gdf.crs) != cfg.nztm_crs:
@@ -540,7 +563,7 @@ def create_coast_distance_raster(
     # Use UInt16 data type as in legacy code (sufficient for distance range)
     ds = gdal.Rasterize(
         str(output_path),
-        str(COAST_SHAPEFILE),
+        str(_get_coastline_shapefile_path()),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
         xRes=dx,
@@ -622,13 +645,14 @@ def create_slope_raster(
     """
     cfg = get_default_config()
     logger.info("Creating slope raster...")
-    if not SLOPE_RASTER.exists():
-        raise FileNotFoundError(f"Slope raster not found: {SLOPE_RASTER}")
+    slope_raster_path = _get_slope_raster_path()
+    if not slope_raster_path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
     # Initialize destination array
     destination = np.zeros((template_profile["height"], template_profile["width"]))
 
-    with rasterio.open(SLOPE_RASTER) as src:
+    with rasterio.open(slope_raster_path) as src:
         reproject(
             source=rasterio.band(src, 1),
             destination=destination,
@@ -855,7 +879,7 @@ def apply_hybrid_modifications_at_points(
     cfg = get_default_config()
     # Use source slope raster if not specified
     if slope_raster_path is None:
-        slope_raster_path = SLOPE_RASTER
+        slope_raster_path = _get_slope_raster_path()
 
     # Coast distance raster is required for mod6/mod13
     if (mod6 or mod13) and coast_distance_raster_path is None:
