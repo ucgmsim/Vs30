@@ -142,32 +142,23 @@ def combine_vs30_models(
     For ratio=1.0 with inputs (200, 400), the result is ~283 (geometric mean),
     not 300 (arithmetic mean).
     """
-    use_stdv_weight = False
-
     # Determine weights based on combination method
     try:
-        # Try parsing as float (ratio-based combination)
-        # ratio = geology_weight / terrain_weight
-        # w_g = ratio / (ratio + 1), w_t = 1 / (ratio + 1)
+        # Ratio-based: ratio = geology_weight / terrain_weight
         ratio = float(combination_method)
         total_w = ratio + 1.0
         w_g = ratio / total_w
         w_t = 1.0 / total_w
     except (ValueError, TypeError):
-        # String-based combination method
         if str(combination_method).strip() == "standard_deviation_weighting":
-            use_stdv_weight = True
+            # Variance-based weighting: lower stdv gets higher weight
+            m_g = (geol_stdv**2 + epsilon) ** -k_value
+            m_t = (terr_stdv**2 + epsilon) ** -k_value
+            total_m = m_g + m_t
+            w_g = m_g / total_m
+            w_t = m_t / total_m
         else:
             raise ValueError(f"Unknown combination method: {combination_method}")
-
-    if use_stdv_weight:
-        # Weighting based on variance: weight = (sigma^2)^(-k)
-        # Lower stdv → higher weight
-        m_g = (geol_stdv**2 + epsilon) ** -k_value
-        m_t = (terr_stdv**2 + epsilon) ** -k_value
-        total_m = m_g + m_t
-        w_g = m_g / total_m
-        w_t = m_t / total_m
 
     # Combine in log-space (geometric weighting)
     log_g = np.log(geol_vs30)

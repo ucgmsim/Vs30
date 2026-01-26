@@ -42,15 +42,15 @@ import scipy
 from tqdm import tqdm
 
 from vs30 import utils
-from vs30.config import get_default_config
-
-# Use spawn context to avoid GDAL fork issues
-_spawn_context = mp.get_context("spawn")
 from vs30.category import (
     RASTER_ID_NODATA_VALUE,
     _assign_to_category_geology,
     _assign_to_category_terrain,
 )
+from vs30.config import get_default_config
+
+# Use spawn context to avoid GDAL fork issues
+_spawn_context = mp.get_context("spawn")
 
 logger = logging.getLogger(__name__)
 
@@ -158,24 +158,17 @@ class RasterData:
         valid_rows, valid_cols = np.where(self.valid_mask)
 
         # Rasterio Affine: [a, b, c, d, e, f] = [x_scale, x_shear, x_origin, y_shear, y_scale, y_origin]
-        x_scale, x_shear, x_origin = (
-            self.transform[0],
-            self.transform[1],
-            self.transform[2],
-        )
-        y_shear, y_scale, y_origin = (
-            self.transform[3],
-            self.transform[4],
-            self.transform[5],
-        )
+        x_scale = self.transform[0]
+        x_origin = self.transform[2]
+        y_scale = self.transform[4]
+        y_origin = self.transform[5]
 
         # Pixel centers: add 0.5 to row/col indices (following legacy implementation)
-        rows_center = valid_rows.astype(float) + 0.5
         cols_center = valid_cols.astype(float) + 0.5
+        rows_center = valid_rows.astype(float) + 0.5
 
-        # Apply affine transformation (matching legacy GDAL calculation)
-        xs = x_origin + cols_center * x_scale  # col controls easting
-        ys = y_origin + rows_center * y_scale  # row controls northing
+        xs = x_origin + cols_center * x_scale
+        ys = y_origin + rows_center * y_scale
 
         return np.column_stack((xs, ys)).astype(np.float32)
 
@@ -263,14 +256,10 @@ def validate_observations(observations: pd.DataFrame) -> None:
     ValueError
         If observation data is invalid.
     """
-    if "easting" not in observations.columns:
-        raise ValueError("Missing 'easting' column")
-    if "northing" not in observations.columns:
-        raise ValueError("Missing 'northing' column")
-    if "vs30" not in observations.columns:
-        raise ValueError("Missing 'vs30' column")
-    if "uncertainty" not in observations.columns:
-        raise ValueError("Missing 'uncertainty' column")
+    required_columns = ["easting", "northing", "vs30", "uncertainty"]
+    missing = [col for col in required_columns if col not in observations.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
     if not np.all(observations["vs30"] > 0):
         raise ValueError("Vs30 must be positive")
     if not np.all(observations["uncertainty"] > 0):
@@ -844,7 +833,6 @@ def subsample_by_cluster(
     - Within each cluster, observations are subsampled by taking every Nth.
     - At least one observation is always kept from each cluster.
     """
-    n_obs = len(cluster_labels)
     unique_labels = np.unique(cluster_labels)
 
     selected_indices = []
