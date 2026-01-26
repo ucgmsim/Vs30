@@ -476,9 +476,6 @@ def run_parallel_locations(
     DataFrame
         Results with vs30, stdv, and intermediate columns (if requested)
     """
-    n_locations = len(locations_df)
-
-    # Divide locations into chunks
     chunks = np.array_split(locations_df, n_proc)
     chunk_args = [
         (chunk.reset_index(drop=True), i, observations_df, geol_model_df, terr_model_df, config)
@@ -552,8 +549,6 @@ def run_parallel_spatial_fit(
     list[SpatialAdjustmentResult]
         Updates for all affected pixels
     """
-    total_pixels = len(affected_flat_indices)
-
     # Prepare pixel data as a dict (for pickling)
     grid_locs = raster_data.get_coordinates()
     pixel_data_dict = {}
