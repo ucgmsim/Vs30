@@ -180,7 +180,6 @@ def update_categorical_vs30_models(
         Default from config.
     """
     try:
-        # Get config and resolve defaults
         cfg = get_config()
         n_prior = n_prior if n_prior is not None else cfg.n_prior
         min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
@@ -188,7 +187,6 @@ def update_categorical_vs30_models(
         eps = eps if eps is not None else cfg.eps
         nproc = nproc if nproc is not None else cfg.n_proc
 
-        # Validate that at least one observations CSV is provided
         if clustered_observations_csv is None and independent_observations_csv is None:
             typer.echo(
                 "Error: At least one of --clustered-observations-csv or --independent-observations-csv must be provided",
@@ -196,35 +194,6 @@ def update_categorical_vs30_models(
             )
             raise typer.Exit(1)
 
-        # Validate input files exist
-        if not categorical_model_csv.exists():
-            typer.echo(
-                f"Error: Categorical model CSV file not found: {categorical_model_csv}",
-                err=True,
-            )
-            raise typer.Exit(1)
-
-        if (
-            clustered_observations_csv is not None
-            and not clustered_observations_csv.exists()
-        ):
-            typer.echo(
-                f"Error: Clustered observations CSV file not found: {clustered_observations_csv}",
-                err=True,
-            )
-            raise typer.Exit(1)
-
-        if (
-            independent_observations_csv is not None
-            and not independent_observations_csv.exists()
-        ):
-            typer.echo(
-                f"Error: Independent observations CSV file not found: {independent_observations_csv}",
-                err=True,
-            )
-            raise typer.Exit(1)
-
-        # Validate model_type parameter
         if model_type not in ["geology", "terrain"]:
             typer.echo(
                 f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
@@ -235,7 +204,6 @@ def update_categorical_vs30_models(
         logger.info(f"Model type: {model_type}")
         logger.info(f"Loading categorical model from: {categorical_model_csv}")
 
-        # Load categorical model CSV (absolute path)
         categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
@@ -430,7 +398,6 @@ def make_initial_vs30_raster(
         Custom terrain model CSV file.
     """
     try:
-        # Validate that at least one model type is specified
         if not terrain and not geology:
             typer.echo(
                 "Error: At least one of --terrain or --geology must be specified",
@@ -438,10 +405,8 @@ def make_initial_vs30_raster(
             )
             raise typer.Exit(1)
 
-        # Get config
         cfg = get_config()
 
-        # Determine output directory
         if output_dir is None:
             output_dir = Path(cfg.output_dir)
 
@@ -449,7 +414,6 @@ def make_initial_vs30_raster(
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Output directory: {output_dir}")
 
-        # Load grid parameters from config
         grid_params = {
             "xmin": cfg.grid_xmin,
             "xmax": cfg.grid_xmax,
@@ -526,14 +490,8 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         Directory to save output hybrid raster and intermediate files.
     """
     try:
-        if not input_raster.exists():
-            raise FileNotFoundError(f"Input raster not found: {input_raster}")
-        if not id_raster.exists():
-            raise FileNotFoundError(f"ID raster not found: {id_raster}")
-
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get config
         cfg = get_config()
 
         logger.info(
@@ -545,8 +503,6 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
             vs30_array = src.read(1)
             stdv_array = src.read(2)
             profile = src.profile.copy()
-            # Ensure profile uses float64 for output calculations
-            # (though input might be float32 or float64)
 
             # Check dimensions against ID raster
             with rasterio.open(id_raster) as id_src:
@@ -807,27 +763,17 @@ def spatial_fit(
         Number of parallel processes. Use -1 for all cores. Default from config.
     """
     try:
-        if not input_raster.exists():
-            raise FileNotFoundError(f"Input raster not found: {input_raster}")
-        if not observations_csv.exists():
-            raise FileNotFoundError(f"Observations CSV not found: {observations_csv}")
-        if not model_values_csv.exists():
-            raise FileNotFoundError(f"Model values CSV not found: {model_values_csv}")
-
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get config
         cfg = get_config()
 
-        # Get parameters from config
         max_dist_m = cfg.max_dist_m
         max_points = cfg.max_points
         phi = cfg.phi[model_type]
         noisy = cfg.noisy
         cov_reduc = cfg.cov_reduc
 
-        # Resolve n_proc from CLI or config
         from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
 
         n_proc_resolved = resolve_n_proc(
@@ -964,17 +910,10 @@ def plot_posterior_values(
         Path to output directory for plots. Will be created if it does not exist.
     """
     try:
-        # Validate input file exists
-        if not csv_path.exists():
-            typer.echo(f"Error: CSV file not found: {csv_path}", err=True)
-            raise typer.Exit(1)
-
         logger.info(f"Loading data from: {csv_path}")
 
-        # Load CSV
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
-        # Get config
         cfg = get_config()
 
         # Filter out rows with placeholder values for excluded categories (e.g., water)
@@ -1133,36 +1072,29 @@ def full_pipeline_for_geology_or_terrain(
         logger.info(f"Starting full pipeline for {model_type}")
         logger.info(f"Output directory: {output_dir}")
 
-        # Get config
         cfg = get_config()
 
-        # Resolve parameters
         n_prior = n_prior if n_prior is not None else cfg.n_prior
         min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
         min_group = min_group if min_group is not None else cfg.min_group
         eps = eps if eps is not None else cfg.eps
         nproc = nproc if nproc is not None else cfg.n_proc
 
-        # Resolve Bayesian update flag
         do_bayesian_update = cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values
 
         # Resolve observations from config if not provided
-        if clustered_observations_csv is None:
-            clustered_obs_file = cfg.clustered_observations_file
-            if clustered_obs_file and clustered_obs_file.lower() != "none":
-                # Find observation file relative to package resources
-                resource_path = importlib.resources.files("vs30") / "resources"
-                with importlib.resources.as_file(resource_path) as res_dir:
+        resource_path = importlib.resources.files("vs30") / "resources"
+        with importlib.resources.as_file(resource_path) as res_dir:
+            if clustered_observations_csv is None:
+                clustered_obs_file = cfg.clustered_observations_file
+                if clustered_obs_file and clustered_obs_file.lower() != "none":
                     candidate = res_dir / clustered_obs_file
                     if candidate.exists():
                         clustered_observations_csv = candidate
 
-        if independent_observations_csv is None:
-            indep_obs_file = cfg.independent_observations_file
-            if indep_obs_file and indep_obs_file.lower() != "none":
-                # Find observation file relative to package resources
-                resource_path = importlib.resources.files("vs30") / "resources"
-                with importlib.resources.as_file(resource_path) as res_dir:
+            if independent_observations_csv is None:
+                indep_obs_file = cfg.independent_observations_file
+                if indep_obs_file and indep_obs_file.lower() != "none":
                     candidate = res_dir / indep_obs_file
                     if candidate.exists():
                         independent_observations_csv = candidate
@@ -1254,7 +1186,7 @@ def full_pipeline_for_geology_or_terrain(
             n_proc=n_proc,
         )
 
-        typer.echo("\n✓ Full pipeline for {model_type} completed successfully")
+        typer.echo(f"\n✓ Full pipeline for {model_type} completed successfully")
         typer.echo(f"  Final output available in: {output_dir}")
 
     except Exception as e:
@@ -1290,12 +1222,6 @@ def combine(
         weighting) or 'standard_deviation_weighting'. Default from config.
     """
     try:
-        if not geology_tif.exists():
-            raise FileNotFoundError(f"Geology raster not found: {geology_tif}")
-        if not terrain_tif.exists():
-            raise FileNotFoundError(f"Terrain raster not found: {terrain_tif}")
-
-        # Get config
         cfg = get_config()
 
         if combination_method is None:
@@ -1420,17 +1346,13 @@ def full_pipeline(
     start_time = time.time()
 
     try:
-        # Get config
         cfg = get_config()
 
-        # Resolve output_dir
         if output_dir is None:
             output_dir = Path(cfg.output_dir)
-
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Resolve parameters
         n_prior = n_prior if n_prior is not None else cfg.n_prior
         min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
         min_group = min_group if min_group is not None else cfg.min_group
@@ -1441,7 +1363,7 @@ def full_pipeline(
             if combination_method is not None
             else cfg.combination_method
         )
-        # Resolve n_proc for MVN spatial adjustment
+
         from vs30.parallel import resolve_n_proc
 
         n_proc_resolved = resolve_n_proc(
@@ -1600,22 +1522,14 @@ def compute_at_locations(
     from vs30.utils import combine_vs30_models
 
     try:
-        # Get config
         cfg = get_config()
 
-        # Resolve combination method
         if combination_method is None:
             combination_method = cfg.combination_method
 
-        # Load input locations
         typer.echo(f"Loading locations from {locations_csv}...")
-        if not locations_csv.exists():
-            typer.echo(f"Error: Locations file not found: {locations_csv}", err=True)
-            raise typer.Exit(1)
-
         df = pd.read_csv(locations_csv)
 
-        # Validate columns
         if lon_column not in df.columns:
             typer.echo(
                 f"Error: Column '{lon_column}' not found in {locations_csv}", err=True

@@ -34,13 +34,13 @@ import rasterio
 from osgeo import gdal
 from rasterio import features
 from rasterio.enums import Resampling
-
-logger = logging.getLogger(__name__)
 from rasterio.transform import from_bounds
 from rasterio.warp import reproject
 from tqdm import tqdm
 
 from vs30.config import get_default_config
+
+logger = logging.getLogger(__name__)
 
 
 # Resources directory path using importlib.resources
@@ -465,8 +465,6 @@ def create_vs30_raster_from_ids(
     with rasterio.open(id_raster_path) as src:
         id_array = src.read(1)
         profile = src.profile.copy()
-        transform = src.transform
-        crs = src.crs
 
     # Create output arrays
     vs30_array = np.full(id_array.shape, cfg.nodata_value, dtype=np.float32)
@@ -488,18 +486,13 @@ def create_vs30_raster_from_ids(
                 f"Available IDs in CSV: {sorted(id_to_vs30_values.keys())}"
             )
 
-    # Write output raster
-    output_profile = {
-        "driver": "GTiff",
-        "width": profile["width"],
-        "height": profile["height"],
+    output_profile = profile.copy()
+    output_profile.update({
         "count": 2,
         "dtype": "float32",
-        "crs": crs,
-        "transform": transform,
         "nodata": cfg.nodata_value,
         "compress": "deflate",
-    }
+    })
 
     with rasterio.open(output_path, "w", **output_profile) as dst:
         dst.write(vs30_array, 1)

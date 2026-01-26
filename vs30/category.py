@@ -8,8 +8,8 @@ This module is self-contained and includes all functionality needed to:
 3. Perform Bayesian updates of category mean and standard deviation values
 """
 
-import os
 from math import exp, log, sqrt
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -20,27 +20,24 @@ from sklearn.cluster import DBSCAN
 
 from vs30.config import get_default_config
 
-# Get nodata value from config
 _cfg = get_default_config()
 RASTER_ID_NODATA_VALUE = _cfg.raster_id_nodata_value
 
-# Standard column name used for model IDs in DataFrames
 STANDARD_ID_COLUMN = "id"
 
-# Data directory path
-_data_dir = os.path.join(os.path.dirname(__file__), "data")
+_data_dir = Path(__file__).parent / "data"
 
 
-def _get_qmap_path() -> str:
+def _get_qmap_path() -> Path:
     """Get path to QMAP geology shapefile from config."""
     cfg = get_default_config()
-    return os.path.join(_data_dir, cfg.geology_shapefile_path)
+    return _data_dir / cfg.geology_shapefile_path
 
 
-def _get_terrain_raster_path() -> str:
+def _get_terrain_raster_path() -> Path:
     """Get path to terrain classification raster from config."""
     cfg = get_default_config()
-    return os.path.join(_data_dir, cfg.terrain_raster_filename)
+    return _data_dir / cfg.terrain_raster_filename
 
 
 # ============================================================================
@@ -105,9 +102,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
         nodata = src.nodata
         dtype = src.dtypes[0]
 
-        # Sample raster values at point locations
-        coords = [(points[i, 0], points[i, 1]) for i in range(len(points))]
-        sampled = list(src.sample(coords))
+        sampled = list(src.sample(points))
         terrain_ids = np.array([s[0] for s in sampled], dtype=dtype)
 
         # Handle nodata values
@@ -591,43 +586,11 @@ def get_vs30_for_points(
             f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
         )
 
-    cfg = get_default_config()
+    from vs30.raster import _select_vs30_columns_by_priority
 
-    # Detect mean column (prefer posterior over prior)
-    mean_col_candidates = [
-        cfg.col_posterior_mean_independent,
-        cfg.col_posterior_mean_clustered,
-        cfg.col_prior_mean,
-        cfg.col_mean,
-    ]
-    mean_col = None
-    for col in mean_col_candidates:
-        if col in categorical_model_df.columns:
-            mean_col = col
-            break
-    if mean_col is None:
-        raise ValueError(
-            f"No mean column found in categorical model. "
-            f"Expected one of: {mean_col_candidates}"
-        )
-
-    # Detect stddev column (prefer posterior over prior)
-    stdv_col_candidates = [
-        cfg.col_posterior_stdv_independent,
-        cfg.col_posterior_stdv_clustered,
-        cfg.col_prior_stdv,
-        cfg.col_stdv,
-    ]
-    stdv_col = None
-    for col in stdv_col_candidates:
-        if col in categorical_model_df.columns:
-            stdv_col = col
-            break
-    if stdv_col is None:
-        raise ValueError(
-            f"No stddev column found in categorical model. "
-            f"Expected one of: {stdv_col_candidates}"
-        )
+    mean_col, stdv_col = _select_vs30_columns_by_priority(
+        list(categorical_model_df.columns)
+    )
 
     # Build lookup dictionaries from category ID to Vs30 values
     id_to_vs30 = dict(
