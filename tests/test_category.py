@@ -11,15 +11,13 @@ Tests cover:
 import numpy as np
 import pandas as pd
 import pytest
-from math import exp, log, sqrt
+from math import sqrt
 
-from vs30 import category
 from vs30.category import (
     _compute_bayesian_posterior_mean,
     _compute_bayesian_posterior_variance,
     perform_clustering,
     update_with_independent_data,
-    posterior_from_bayesian_update,
     get_vs30_for_points,
     RASTER_ID_NODATA_VALUE,
     STANDARD_ID_COLUMN,
@@ -167,7 +165,6 @@ class TestUpdateWithIndependentData:
         )
 
         # All posteriors should have stddev >= min_sigma
-        stddev_col = "posterior_standard_deviation_vs30_km_per_s_independent_observations"
         # Note: posteriors can go below min_sigma, but prior is floored at min_sigma
         assert result["enforced_min_sigma"].iloc[0] == min_sigma
 

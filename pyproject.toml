@@ -10,17 +10,23 @@ requires-python = ">=3.7"
 dependencies = [
     "numpy",
     "pandas",
-    "pyproj",
     "scikit-learn",
     "scipy",
     "matplotlib",
-    "pytest",
     "geopandas",
     "typer",
     "pydantic>=2.0",
     "threadpoolctl",
     "qcore-utils",
+    "rasterio",
+    "tqdm",
+    "pyyaml",
+    "shapely",
+    "GDAL",
 ]
+
+[project.optional-dependencies]
+test = ["pytest"]
 
 [project.urls]
 Repository = "https://github.com/ucgmsim/Vs30"
@@ -29,7 +35,7 @@ Repository = "https://github.com/ucgmsim/Vs30"
 vs30 = "vs30.cli:app"
 
 [tool.setuptools]
-packages = ["vs30", "VsViewer"]
+packages = ["vs30"]
 
 [tool.setuptools.package-data]
 vs30 = [
@@ -44,3 +50,14 @@ vs30 = [
     "resources/**/*.yaml",
     "resources/**/*.npy",
 ]
+
+[tool.ruff]
+exclude = ["VsViewer", "build", "temp"]
+
+[tool.deptry]
+exclude = ["VsViewer", "build", "temp"]
+
+[tool.deptry.per_rule_ignores]
+DEP001 = ["conftest"]
+DEP003 = ["setuptools"]
+DEP004 = ["pytest"]

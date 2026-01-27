@@ -5,11 +5,7 @@ These tests invoke CLI commands directly in-process rather than
 via subprocess, allowing proper coverage tracking.
 """
 
-import tempfile
-from pathlib import Path
 
-import pytest
-import yaml
 from typer.testing import CliRunner
 
 from vs30.cli import app, get_config
@@ -48,7 +44,6 @@ class TestGetConfig:
 
     def test_get_config_returns_config(self):
         """Test that get_config returns a config object."""
-        from vs30.cli import _cli_config, get_config
         from vs30.config import Vs30Config
 
         # Reset config state
