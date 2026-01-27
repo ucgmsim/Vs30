@@ -459,8 +459,8 @@ def make_initial_vs30_raster(
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            csv_path = terrain_csv if terrain_csv else cfg.terrain_csv
-            logger.info(f"Using terrain model values from {csv_path}")
+            terrain_model_csv = terrain_csv if terrain_csv else cfg.terrain_csv
+            logger.info(f"Using terrain model values from {terrain_model_csv}")
 
             logger.info("Creating terrain category ID raster...")
             id_raster = raster.create_category_id_raster(
@@ -469,14 +469,14 @@ def make_initial_vs30_raster(
 
             logger.info("Creating terrain VS30 raster...")
             vs30_raster = output_dir / cfg.terrain_initial_vs30_filename
-            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
+            raster.create_vs30_raster_from_ids(id_raster, terrain_model_csv, vs30_raster)
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            csv_path = geology_csv if geology_csv else cfg.geology_csv
-            logger.info(f"Using geology model values from {csv_path}")
+            geology_model_csv = geology_csv if geology_csv else cfg.geology_csv
+            logger.info(f"Using geology model values from {geology_model_csv}")
 
             logger.info("Creating geology category ID raster...")
             id_raster = raster.create_category_id_raster(
@@ -485,7 +485,7 @@ def make_initial_vs30_raster(
 
             logger.info("Creating geology VS30 raster...")
             vs30_raster = output_dir / cfg.geology_initial_vs30_filename
-            raster.create_vs30_raster_from_ids(id_raster, csv_path, vs30_raster)
+            raster.create_vs30_raster_from_ids(id_raster, geology_model_csv, vs30_raster)
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
         typer.echo("✓ Successfully created initial VS30 rasters")
@@ -1159,11 +1159,12 @@ def full_pipeline_for_geology_or_terrain(
         # --- Step 4: Spatial Fit ---
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
+        # Prefer independent observations for spatial fit; fall back to clustered
+        spatial_obs_csv = independent_observations_csv or clustered_observations_csv
+
         spatial_fit(
             input_raster=current_raster,
-            observations_csv=independent_observations_csv
-            if independent_observations_csv
-            else clustered_observations_csv,
+            observations_csv=spatial_obs_csv,
             model_values_csv=posterior_csv,
             output_dir=output_dir,
             model_type=model_type,
@@ -1579,21 +1580,17 @@ def compute_at_locations(
             independent_observations_csv, cfg.independent_observations_file, res_dir
         )
 
-        # Combine observations
-        obs_dfs = []
-        if (
-            clustered_observations_csv is not None
-            and clustered_observations_csv.exists()
-        ):
-            obs_dfs.append(pd.read_csv(clustered_observations_csv))
-        if (
-            independent_observations_csv is not None
-            and independent_observations_csv.exists()
-        ):
-            obs_dfs.append(pd.read_csv(independent_observations_csv))
+        # Load and combine all available observation files
+        observation_csvs = [
+            csv for csv in [clustered_observations_csv, independent_observations_csv]
+            if csv is not None and csv.exists()
+        ]
 
-        if obs_dfs:
-            observations_df = pd.concat(obs_dfs, ignore_index=True)
+        if observation_csvs:
+            observations_df = pd.concat(
+                [pd.read_csv(csv) for csv in observation_csvs],
+                ignore_index=True,
+            )
         else:
             observations_df = pd.DataFrame(
                 columns=["easting", "northing", "vs30", "uncertainty"]
