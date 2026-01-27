@@ -62,7 +62,7 @@ vs30 compute-at-locations \
     --output-csv results.csv
 ```
 
-Input CSV must have `longitude` and `latitude` columns (WGS84). Use `--lon-column` and `--lat-column` to specify different column names.
+Input CSV must have `longitude` and `latitude` columns in WGS84 (EPSG:4326). Coordinates are converted internally to NZTM2000 (EPSG:2193) for processing. Use `--lon-column` and `--lat-column` to specify different column names.
 
 Options:
 - `--coast-distance-raster`: Required for hybrid geology modifications
