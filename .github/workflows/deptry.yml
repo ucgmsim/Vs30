@@ -1,0 +1,17 @@
+name: Deptry Dependency Check
+
+on: [pull_request]
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deptry
+        run: pip install deptry
+      - name: Run deptry to check that all dependencies are present
+        run: deptry . -ddg test,types
