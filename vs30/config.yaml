@@ -1,0 +1,312 @@
+# ============================================================================
+# Vs30 CONFIGURATION FILE
+# This file defines all inputs, outputs, and parameters for Vs30 calculations.
+# Parameters are ordered from most frequently changed (top) to rarely
+# modified (bottom).
+# ============================================================================
+
+# Output directory for all output files
+output_dir: /tmp/refactored_vs30_output
+
+# ============================================================================
+# RASTER GRID DOMAIN
+# Domain bounds and resolution for 2D Vs30 raster map production.
+# Only required for raster operations (full-pipeline, make-initial-vs30-raster, etc.).
+# These have no effect when computing Vs30 at a list of specified locations.
+# This example defines a small 100m x 100m domain.
+# ============================================================================
+grid_xmin: 1570050
+grid_xmax: 1571050
+grid_ymin: 5180050
+grid_ymax: 5181050
+grid_dx: 100
+grid_dy: 100
+
+# ============================================================================
+# COMPUTE-AT-LOCATIONS PARAMETERS
+# These parameters are only used by the compute-at-locations command, which
+# computes Vs30 at specific latitude/longitude locations without generating
+# raster grids. They have no effect on other commands (full-pipeline, etc.).
+# All can be overridden by CLI arguments (--locations-csv, --output-csv, etc.).
+# ============================================================================
+
+# Path to input CSV file containing locations (latitude/longitude in WGS84).
+# Set to null if not using compute-at-locations,
+# or if providing the path via CLI argument instead.
+locations_csv: null
+
+# Path to output CSV file for computed Vs30 results.
+# Set to null if not using compute-at-locations,
+# or if providing the path via CLI argument instead.
+locations_output_csv: null
+
+# Column names for longitude and latitude in the input locations CSV.
+locations_lon_column: "longitude"
+locations_lat_column: "latitude"
+
+# ============================================================================
+# OBSERVATION FILES
+# ============================================================================
+
+# Input files containing the observed Vs30 values.
+# Paths are relative to the resources directory.
+
+# Path to file containing observed Vs30 values that
+# should be treated independently (without clustering).
+# Set to none (without quotes) to run without independent observations.
+independent_observations_file: observations/measured_vs30_independent_observations.csv
+
+# Path to a file containing observed Vs30 values that
+# should be treated with spatial clustering (e.g. Vs30 inferred from dense CPT measurements).
+# Set to none (without quotes) to run without clustered observations.
+clustered_observations_file: observations/measured_vs30_cpt.csv
+
+# ============================================================================
+# GENERAL PIPELINE SETTINGS
+# ============================================================================
+
+# Number of processors to use for finding affected pixels, spatial updates, and DBSCAN clustering.
+# -1 uses all available cores.
+n_proc: -1
+
+# Whether to perform Bayesian update of geology and terrain categorical Vs30 values
+do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+
+# ============================================================================
+# MODEL COMBINATION PARAMETERS
+# ============================================================================
+
+# Method for combining geology and terrain models
+# value can be:
+# - float: Ratio of geology weight to terrain weight (e.g. 1.0 = equal weight, 2.0 = geology has 2x weight)
+# - string: "standard_deviation_weighting" (uses k_value below)
+combination_method: 1.0
+
+# K value for standard deviation based weighting
+# Represents the exponent for inverse variance weighting: weight ~ (sigma^2)^-k
+# Only used if combination_method is "standard_deviation_weighting"
+k_value: 3.0
+
+# Small epsilon value added to variance when computing inverse-variance weights
+# for combining geology and terrain models. Prevents division by zero when
+# standard deviation is exactly zero.
+weight_epsilon_div_by_zero: 1.0e-10
+
+# ============================================================================
+# SPATIAL UPDATE PARAMETERS
+# ============================================================================
+
+# Maximum distance (meters) for considering observations in multivariate normal (MVN) spatial adjustment.
+# Observations further than this distance from a pixel will not influence its update.
+max_dist_m: 10000
+
+# Maximum number of observations to consider per pixel during multivariate normal (MVN) spatial adjustment.
+# If a pixel is within `max_dist_m` of more than `max_points` observations, only the `max_points` closest observations will be considered.
+max_points: 500
+
+# Whether measurements are "noisy" (affects noise weighting in the spatial multivariate normal (MVN) update).
+# When true, observations with higher uncertainty contribute less to pixel updates.
+noisy: true
+
+# Maximum memory in GB for spatial Boolean arrays during chunked processing per process.
+# Note: Total memory usage per process will be several GB more than this limit.
+max_spatial_boolean_array_memory_gb: 1
+
+# Observation subsampling step for find_affected_pixels when using clustered observations.
+# When observations are spatially clustered, nearby observations affect the same pixels.
+# Using every Nth observation (e.g., 100) significantly reduces computation time
+# while producing nearly identical results for the affected pixel mask.
+# Set to 1 for no subsampling (use all observations).
+# Only applies to clustered observations; independent observations always use step=1.
+obs_subsample_step_for_clustered: 100
+
+# ============================================================================
+# SPATIAL CORRELATION PARAMETERS
+# ============================================================================
+
+# Covariance reduction factor for dissimilar Vs30 values (dimensionless).
+# Controls how much the correlation between two points is reduced when their
+# model Vs30 values differ. Higher values = more reduction for dissimilar values.
+cov_reduc: 1.5
+
+# Correlation length parameters (phi) in meters.
+# Phi represents the distance at which spatial correlation decays to ~37% (1/e).
+# Larger phi = smoother spatial interpolation, smaller phi = more localized updates.
+# These values were calibrated for New Zealand geology and terrain data.
+phi_geology: 1407
+phi_terrain: 993
+
+# Minimum distance (meters) enforced in correlation calculations to prevent
+# division by zero or correlation=1 when points are exactly co-located.
+# The correlation function uses exp(-distance/phi), so distance=0 gives correlation=1.
+min_dist_enforced: 0.1
+
+# ============================================================================
+# BAYESIAN UPDATE PARAMETERS
+# ============================================================================
+
+# Assumed initial number of prior observations (n0 in Bayesian formulas)
+# for Bayesian update of Vs30 mean and standard deviation values
+# for each geology and terrain category.
+n_prior: 3
+
+# Minimum standard deviation (log-space) allowed after Bayesian update.
+# Prevents over-confidence when many observations are available.
+min_sigma: 0.5
+
+# ============================================================================
+# DBSCAN CLUSTERING PARAMETERS
+# ============================================================================
+
+# DBSCAN clustering parameters for spatially clustered observations
+# such as Vs30 inferred from dense CPT measurements.
+# Minimum number of observations to form a cluster (DBSCAN min_samples parameter)
+min_group: 5
+# Maximum distance (meters) between observations to be in the same cluster
+# (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
+eps: 15000.0
+
+# ============================================================================
+# PARAMETERS BELOW RARELY NEED MODIFICATION
+# ============================================================================
+
+# ============================================================================
+# CATEGORICAL MODEL FILES
+# Mean and standard deviation of Vs30 values for each geology and terrain category.
+# Paths are relative to the resources directory.
+# ============================================================================
+
+geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+
+# ============================================================================
+# INTERNAL DATA FILES
+# Filenames for input data files bundled with the package.
+# These are relative to the vs30/data directory.
+# Users should not need to change these unless using custom data sources.
+# ============================================================================
+
+# Terrain classification raster (IwahashiPike terrain categories)
+terrain_raster_filename: "IwahashiPike.tif"
+
+# Geology shapefile (QMAP geology polygons)
+geology_shapefile_path: "qmap/qmap.shp"
+
+# Coastline shapefile for coastal distance calculations
+coastline_shapefile_path: "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
+
+# Source slope raster (used if slope.tif needs to be generated)
+slope_source_raster_filename: "slope.tif"
+
+# Archive containing shapefiles (extracted on first use)
+shapefiles_archive_filename: "shapefiles.tar.xz"
+
+# ============================================================================
+# OUTPUT FILENAMES
+# ============================================================================
+
+posterior_prefix: "posterior_" # prefix used to indicate that Bayesian updates have been performed.
+terrain_initial_vs30_filename: "initial_terrain_vs30_with_uncertainty.tif" # initial Vs30 map constructed from terrain classifications
+geology_initial_vs30_filename: "initial_geology_vs30_with_uncertainty.tif" # initial Vs30 map constructed from geology classifications
+slope_raster_filename: "slope.tif" # slopes used for hybrid geology Vs30 model
+coast_distance_raster_filename: "coast_distance.tif" # coastal distance used for hybrid geology Vs30 model
+geology_vs30_slope_and_coastal_distance_adjusted_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif" # geology Vs30 map adjusted for slope and coastal distance
+geology_id_filename: "gid.tif" # Map showing the geology category ID for each pixel
+terrain_id_filename: "tid.tif" # Map showing the terrain category ID for each pixel
+
+terrain_vs30_mean_stddev_filename: "terrain_vs30_spatially_adjusted_with_uncertainty.tif"
+geology_vs30_mean_stddev_filename: "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+combined_vs30_filename: "weighted_combination_of_geology_vs30_after_slope_and_coastal_distance_and_spatial_adjustment_and_terrain_vs30_after_spatial_adjustment.tif"
+
+# ============================================================================
+# HYBRID GEOLOGY Vs30 MODEL PARAMETERS
+# (Adjusts according to slope and coastal distance)
+# ============================================================================
+
+hybrid_mod6_dist_min: 8000.0
+hybrid_mod6_dist_max: 20000.0
+hybrid_mod6_vs30_min: 240.0
+hybrid_mod6_vs30_max: 500.0
+
+hybrid_mod13_dist_min: 8000.0
+hybrid_mod13_dist_max: 20000.0
+hybrid_mod13_vs30_min: 197.0
+hybrid_mod13_vs30_max: 500.0
+
+# Hybrid slope-based Vs30 interpolation parameters
+# Each entry contains: geology group ID, log10(slope) limits, Vs30 values (linear, log10 computed at runtime)
+# Format: [group_id, [slope_log10_min, slope_log10_max], [vs30_min, vs30_max]]
+hybrid_vs30_params:
+  - gid: 2
+    slope_limits: [-1.85, -1.22]
+    vs30_values: [242, 418]
+  - gid: 3
+    slope_limits: [-2.70, -1.35]
+    vs30_values: [171, 228]
+  - gid: 4
+    slope_limits: [-3.44, -0.88]
+    vs30_values: [252, 275]
+  - gid: 6
+    slope_limits: [-3.56, -0.93]
+    vs30_values: [183, 239]
+
+# Hybrid standard deviation reduction factors for specific geology groups
+# Maps geology group ID to sigma reduction factor
+hybrid_sigma_reduction_factors:
+  2: 0.4888
+  3: 0.7103
+  4: 0.9988
+  6: 0.9348
+
+# Minimum slope value used to prevent log10(0) when calculating hybrid Vs30.
+min_slope_for_log: 1.0e-9
+
+# ============================================================================
+# NODATA AND PLACEHOLDER VALUES
+# ============================================================================
+
+raster_id_nodata_value: 255 # No data value in the provided categorical rasters
+# No-data value used for slope rasters, model outputs, and CSV placeholders
+# -32767 is a traditional no-data value in many GIS applications (minimum value for signed 16-bit integers)
+nodata_value: -32767
+
+# ============================================================================
+# FULL NEW ZEALAND LAND EXTENT BOUNDS
+# (For coastal distance calculations)
+# ============================================================================
+# IMPORTANT: These values define the full extent of New Zealand land coverage
+# and MUST NOT be changed. They are used to ensure coastal distance calculations
+# are computed on the full NZ land extent, regardless of the configured study
+# domain bounds (grid_xmin/max/ymin/max above).
+# These bounds match the legacy _full_land_grid() function behavior
+full_nz_land_xmin: 1060050
+full_nz_land_xmax: 2120050
+full_nz_land_ymin: 4730050
+full_nz_land_ymax: 6250050
+
+# ============================================================================
+# DATAFRAME COLUMN NAMES
+# ============================================================================
+
+# Column names used in categorical model DataFrames for Bayesian updates.
+# These are used to identify posterior/prior values at different stages.
+col_posterior_mean_independent: "posterior_mean_vs30_km_per_s_independent_observations"
+col_posterior_stdv_independent: "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+col_posterior_mean_clustered: "posterior_mean_vs30_km_per_s_clustered_observations"
+col_posterior_stdv_clustered: "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+col_posterior_mean: "posterior_mean_vs30_km_per_s"
+col_posterior_stdv: "posterior_standard_deviation_vs30_km_per_s"
+col_prior_mean: "prior_mean_vs30_km_per_s"
+col_prior_stdv: "prior_standard_deviation_vs30_km_per_s"
+col_mean: "mean_vs30_km_per_s"
+col_stdv: "standard_deviation_vs30_km_per_s"
+
+# Coordinate Reference System for New Zealand Transverse Mercator 2000
+nztm_crs: "EPSG:2193"
+
+# ============================================================================
+# PLOTTING PARAMETERS
+# ============================================================================
+
+plot_figsize: [12, 8]
+plot_dpi: 300

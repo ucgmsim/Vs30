@@ -1,0 +1,103 @@
+# Test configuration - Both independent and clustered observations
+# 10km x 10km domain centered on University of Canterbury, Christchurch
+
+n_proc: 1
+
+# --- Grid Parameters ---
+grid_xmin: 1565300
+grid_xmax: 1575300
+grid_ymin: 5175500
+grid_ymax: 5185500
+grid_dx: 100
+grid_dy: 100
+
+# --- Full New Zealand Land Extent Bounds ---
+full_nz_land_xmin: 1060050
+full_nz_land_xmax: 2120050
+full_nz_land_ymin: 4730050
+full_nz_land_ymax: 6250050
+
+# --- NoData Values ---
+raster_id_nodata_value: 255
+nodata_value: -32767
+
+# --- Filenames ---
+posterior_prefix: "posterior_"
+terrain_initial_vs30_filename: "initial_terrain_vs30_with_uncertainty.tif"
+geology_initial_vs30_filename: "initial_geology_vs30_with_uncertainty.tif"
+slope_raster_filename: "slope.tif"
+coast_distance_raster_filename: "coast_distance.tif"
+geology_vs30_slope_and_coastal_distance_adjusted_filename: "geology_vs30_slope_and_coastal_distance_adjusted_with_uncertainty.tif"
+geology_id_filename: "gid.tif"
+terrain_id_filename: "tid.tif"
+terrain_vs30_mean_stddev_filename: "terrain_vs30_spatially_adjusted_with_uncertainty.tif"
+geology_vs30_mean_stddev_filename: "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+combined_vs30_filename: "combined_vs30.tif"
+
+# --- General Configuration ---
+do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+max_dist_m: 10000
+max_points: 500
+cov_reduc: 1.5
+noisy: true
+phi_geology: 1407
+phi_terrain: 993
+max_spatial_boolean_array_memory_gb: 1
+obs_subsample_step_for_clustered: 100
+
+# --- Bayesian Update Parameters ---
+n_prior: 3
+min_sigma: 0.5
+min_group: 5
+eps: 15000.0
+
+# --- Observation files ---
+independent_observations_file: observations/test_independent_observations.csv
+clustered_observations_file: observations/test_cpt_observations.csv
+
+# Output directory - set at runtime
+output_dir: /tmp/vs30_test_both
+
+# Category model files
+geology_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_mean_and_standard_deviation_per_category_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+
+# Combination method
+combination_method: 1.0
+k_value: 3.0
+
+# --- Hybrid geology parameters ---
+hybrid_mod6_dist_min: 8000.0
+hybrid_mod6_dist_max: 20000.0
+hybrid_mod6_vs30_min: 240.0
+hybrid_mod6_vs30_max: 500.0
+hybrid_mod13_dist_min: 8000.0
+hybrid_mod13_dist_max: 20000.0
+hybrid_mod13_vs30_min: 197.0
+hybrid_mod13_vs30_max: 500.0
+
+hybrid_vs30_params:
+  - gid: 2
+    slope_limits: [-1.85, -1.22]
+    vs30_values: [242, 418]
+  - gid: 3
+    slope_limits: [-2.70, -1.35]
+    vs30_values: [171, 228]
+  - gid: 4
+    slope_limits: [-3.44, -0.88]
+    vs30_values: [252, 275]
+  - gid: 6
+    slope_limits: [-3.56, -0.93]
+    vs30_values: [183, 239]
+
+hybrid_sigma_reduction_factors:
+  2: 0.4888
+  3: 0.7103
+  4: 0.9988
+  6: 0.9348
+
+min_slope_for_log: 1.0e-9
+min_dist_enforced: 0.1
+nztm_crs: "EPSG:2193"
+plot_figsize: [12, 8]
+plot_dpi: 300

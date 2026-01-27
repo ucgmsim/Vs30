@@ -1,0 +1,1395 @@
+"""
+Multivariate Normal (MVN) distribution-based spatial adjustment for Vs30 values.
+
+This module implements spatial interpolation using MVN conditioning, which
+adjusts model Vs30 predictions based on nearby measurements. The approach:
+
+1. For each pixel near observations, builds a covariance matrix relating
+   the pixel to nearby measurements
+2. Uses MVN conditioning to compute the posterior (updated) Vs30 and
+   uncertainty given the observations
+3. Applies updates to create spatially-adjusted Vs30 maps
+
+The covariance structure uses an exponential correlation function, with
+separate correlation lengths (phi) for geology and terrain models.
+
+Key Parameters (from config.yaml)
+---------------------------------
+- phi: Correlation length controlling spatial smoothness (different for geology/terrain)
+- max_dist_m: Maximum distance (meters) to consider observations
+- max_points: Maximum number of observations per pixel update
+- noisy: Whether to apply noise weighting based on observation uncertainty
+- cov_reduc: Covariance reduction factor for dissimilar Vs30 values
+
+Scientific Background
+---------------------
+The MVN conditioning approach assumes that Vs30 residuals (log(measured/model))
+are spatially correlated following an exponential correlation model. Near
+observation points, the model prediction is adjusted toward the measured value,
+with the adjustment magnitude depending on distance and correlation structure.
+"""
+
+import logging
+import multiprocessing as mp
+from dataclasses import dataclass
+from math import sqrt
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import rasterio
+import scipy
+from tqdm import tqdm
+
+from vs30 import utils
+from vs30.category import (
+    RASTER_ID_NODATA_VALUE,
+    _assign_to_category_geology,
+    _assign_to_category_terrain,
+)
+from vs30.config import get_default_config
+
+# Use spawn context to avoid GDAL fork issues
+_spawn_context = mp.get_context("spawn")
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ObservationData:
+    """Bundled observation data for spatial processing."""
+
+    locations: np.ndarray  # (n_obs, 2) array of [easting, northing]
+    vs30: np.ndarray  # (n_obs,) measured vs30 values
+    model_vs30: np.ndarray  # (n_obs,) model vs30 at observation locations
+    model_stdv: np.ndarray  # (n_obs,) model stdv at observation locations
+    residuals: np.ndarray  # (n_obs,) log residuals: log(vs30 / model_vs30)
+    omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
+    uncertainty: np.ndarray  # (n_obs,) observation uncertainties
+    cluster_labels: np.ndarray | None = None  # (n_obs,) cluster labels from DBSCAN, -1 = unclustered
+
+    @classmethod
+    def empty(cls) -> "ObservationData":
+        """Create an empty ObservationData object with zero observations."""
+        return cls(
+            locations=np.empty((0, 2)),
+            vs30=np.empty(0),
+            model_vs30=np.empty(0),
+            model_stdv=np.empty(0),
+            residuals=np.empty(0),
+            omega=np.empty(0),
+            uncertainty=np.empty(0),
+            cluster_labels=None,
+        )
+
+
+@dataclass
+class PixelData:
+    """Data for a single pixel."""
+
+    location: np.ndarray  # [easting, northing]
+    vs30: float  # prior vs30 value
+    stdv: float  # prior stdv value
+    index: int  # flat index in the raster
+
+
+@dataclass
+class SpatialAdjustmentResult:
+    """Result of an MVN update for a single pixel."""
+
+    updated_vs30: float
+    updated_stdv: float
+    n_observations_used: int
+    min_distance: float
+    pixel_index: int
+
+
+@dataclass
+class RasterData:
+    """Raster data and metadata."""
+
+    vs30: np.ndarray  # Band 1: Vs30 mean
+    stdv: np.ndarray  # Band 2: Vs30 stdv
+    transform: rasterio.transform.Affine
+    crs: rasterio.crs.CRS
+    nodata: float | None
+    valid_mask: np.ndarray  # Boolean mask of non-nodata pixels
+    valid_flat_indices: np.ndarray  # Flat indices of non-nodata pixels
+
+    @classmethod
+    def from_file(cls, path: Path) -> "RasterData":
+        """Load 2-band VS30 raster."""
+        with rasterio.open(path) as src:
+            vs30 = src.read(1)
+            stdv = src.read(2)
+            transform = src.transform
+            crs = src.crs
+            nodata = src.nodata
+
+            # Create mask of valid pixels (not nodata, not nan, and positive)
+            valid_mask = (
+                (vs30 != nodata)
+                & (~np.isnan(vs30))
+                & (~np.isnan(stdv))
+                & (vs30 > 0)
+                & (stdv > 0)
+            )
+            valid_flat_indices = np.where(valid_mask.flatten())[0]
+
+            return cls(
+                vs30=vs30,
+                stdv=stdv,
+                transform=transform,
+                crs=crs,
+                nodata=nodata,
+                valid_mask=valid_mask,
+                valid_flat_indices=valid_flat_indices,
+            )
+
+    def get_coordinates(self) -> np.ndarray:
+        """
+        Get coordinates for all valid pixels using GDAL affine transform.
+
+        Returns
+        -------
+        ndarray
+            (N_valid, 2) array of [easting, northing] coordinates.
+        """
+        valid_rows, valid_cols = np.where(self.valid_mask)
+
+        # Rasterio Affine: [a, b, c, d, e, f] = [x_scale, x_shear, x_origin, y_shear, y_scale, y_origin]
+        x_scale = self.transform[0]
+        x_origin = self.transform[2]
+        y_scale = self.transform[4]
+        y_origin = self.transform[5]
+
+        # Pixel centers: add 0.5 to row/col indices (following legacy implementation)
+        cols_center = valid_cols.astype(float) + 0.5
+        rows_center = valid_rows.astype(float) + 0.5
+
+        xs = x_origin + cols_center * x_scale
+        ys = y_origin + rows_center * y_scale
+
+        return np.column_stack((xs, ys)).astype(np.float32)
+
+    def write_updated(
+        self, path: Path, updated_vs30: np.ndarray, updated_stdv: np.ndarray
+    ) -> None:
+        """
+        Write updated raster to file.
+
+        Parameters
+        ----------
+        path : Path
+            Output file path.
+        updated_vs30 : ndarray
+            Updated vs30 values (same shape as self.vs30).
+        updated_stdv : ndarray
+            Updated stdv values (same shape as self.stdv).
+        """
+        # Write using rasterio with compression
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            height=self.vs30.shape[0],
+            width=self.vs30.shape[1],
+            count=2,
+            dtype=self.vs30.dtype,
+            crs=self.crs,
+            transform=self.transform,
+            nodata=self.nodata,
+            compress="deflate",
+            tiled=True,
+            bigtiff="yes",
+        ) as dst:
+            dst.write(updated_vs30, 1)
+            dst.write(updated_stdv, 2)
+
+
+@dataclass
+class BoundingBoxResult:
+    """Result of bounding box search for affected pixels."""
+
+    mask: np.ndarray  # Boolean mask of pixels in any observation's bounding box
+    obs_to_grid_indices: list[
+        np.ndarray
+    ]  # For each observation, flat indices of pixels in its bounding box
+    n_affected_pixels: int
+
+
+def validate_raster_data(raster_data: RasterData) -> None:
+    """
+    Validate raster data before processing.
+
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data object.
+
+    Raises
+    ------
+    ValueError
+        If raster data is invalid.
+    """
+    if raster_data.vs30.shape != raster_data.stdv.shape:
+        raise ValueError("Band shapes must match")
+    if not np.all(np.isfinite(raster_data.vs30[raster_data.valid_mask])):
+        raise ValueError("Valid pixels must be finite")
+    if not np.all(raster_data.vs30[raster_data.valid_mask] > 0):
+        raise ValueError("Vs30 must be positive")
+    if not np.all(raster_data.stdv[raster_data.valid_mask] > 0):
+        raise ValueError("Stdv must be positive")
+
+
+def validate_observations(observations: pd.DataFrame) -> None:
+    """
+    Validate observation data.
+
+    Parameters
+    ----------
+    observations : DataFrame
+        Observation data.
+
+    Raises
+    ------
+    ValueError
+        If observation data is invalid.
+    """
+    required_columns = ["easting", "northing", "vs30", "uncertainty"]
+    missing = [col for col in required_columns if col not in observations.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+    if not np.all(observations["vs30"] > 0):
+        raise ValueError("Vs30 must be positive")
+    if not np.all(observations["uncertainty"] > 0):
+        raise ValueError("Uncertainty must be positive")
+
+
+def prepare_observation_data(
+    observations: pd.DataFrame,
+    raster_data: RasterData,
+    updated_model_table: np.ndarray,
+    model_type: str,
+    output_dir: Path,
+    noisy: bool | None = None,
+) -> ObservationData:
+    """
+    Prepare observation data for MVN processing.
+
+    For geology models, hybrid modifications (slope and coastal distance)
+    are applied to model values at observation locations before computing
+    residuals.
+
+    Parameters
+    ----------
+    observations : DataFrame
+        Observations with vs30, uncertainty, easting, northing columns.
+    raster_data : RasterData
+        Raster data object (used for transform/profile info).
+    updated_model_table : ndarray
+        Updated model table (n_categories, 2) array of [vs30, stdv].
+    model_type : str
+        Model type ("geology" or "terrain").
+    output_dir : Path
+        Output directory for intermediate rasters (slope, coast distance).
+    noisy : bool, optional
+        Whether to apply noise weighting. Default from config.
+
+    Returns
+    -------
+    ObservationData
+        Prepared observation data object.
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    noisy = noisy if noisy is not None else cfg.noisy
+
+    # Get observation locations
+    obs_locs = observations[["easting", "northing"]].values
+
+    # Interpolate model values at observation locations
+    if model_type == "geology":
+        model_ids = _assign_to_category_geology(obs_locs)
+    elif model_type == "terrain":
+        model_ids = _assign_to_category_terrain(obs_locs)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+    # Get model vs30 and stdv from updated model table
+    # Model IDs are 1-indexed in the raster, but 0-indexed in the model table
+    # RASTER_ID_NODATA_VALUE is 255, valid IDs are 1-15 for geology, 1-16 for terrain
+    valid_mask = (
+        (model_ids != RASTER_ID_NODATA_VALUE)
+        & (model_ids > 0)
+        & (model_ids <= len(updated_model_table))
+    )
+    model_vs30 = np.full(len(observations), np.nan)
+    model_stdv = np.full(len(observations), np.nan)
+
+    # Convert 1-indexed model IDs to 0-indexed array indices
+    valid_model_ids = model_ids[valid_mask] - 1
+    model_vs30[valid_mask] = updated_model_table[valid_model_ids, 0]
+    model_stdv[valid_mask] = updated_model_table[valid_model_ids, 1]
+
+    # Filter out observations where model values are NaN/NoData
+    valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
+    obs_locs = obs_locs[valid_obs_mask]
+    vs30_obs = observations.vs30.values[valid_obs_mask]
+    model_vs30 = model_vs30[valid_obs_mask]
+    model_stdv = model_stdv[valid_obs_mask]
+    uncertainty = observations.uncertainty.values[valid_obs_mask]
+
+    # Calculate log residuals
+    # For geology, we must apply hybrid modifications to model values at observation points
+    if model_type == "geology":
+        from vs30.raster import (
+            apply_hybrid_geology_modifications,
+            create_coast_distance_raster,
+            create_slope_raster,
+        )
+
+        # 1. Get slope and coast distance at points
+        # Use existing rasters in output_dir if possible, otherwise create temporary ones
+        slope_path = output_dir / cfg.slope_raster_filename
+        coast_path = output_dir / cfg.coast_distance_raster_filename
+
+        profile = {
+            "transform": raster_data.transform,
+            "width": raster_data.vs30.shape[1],
+            "height": raster_data.vs30.shape[0],
+            "crs": rasterio.crs.CRS.from_string(cfg.nztm_crs),
+        }
+
+        if not slope_path.exists():
+            create_slope_raster(slope_path, profile)
+        if not coast_path.exists():
+            create_coast_distance_raster(coast_path, profile)
+
+        # Sample rasters at observation locations
+        with rasterio.open(slope_path) as src:
+            slope_obs = np.array([v[0] for v in src.sample(obs_locs)])
+        with rasterio.open(coast_path) as src:
+            coast_obs = np.array([v[0] for v in src.sample(obs_locs)])
+
+        # Apply modifications to model_vs30 and model_stdv at points
+        model_vs30, model_stdv = apply_hybrid_geology_modifications(
+            model_vs30,
+            model_stdv,
+            model_ids[valid_obs_mask],
+            slope_obs,
+            coast_obs,
+        )
+
+    residuals = np.log(vs30_obs / model_vs30)
+
+    # Apply noise weighting (if noisy=True)
+    if noisy:
+        omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
+        residuals *= omega
+    else:
+        omega = np.ones(len(residuals))  # Defaults to float64
+
+    return ObservationData(
+        locations=obs_locs,
+        vs30=vs30_obs,
+        model_vs30=model_vs30,
+        model_stdv=model_stdv,
+        residuals=residuals,
+        omega=omega,
+        uncertainty=uncertainty,
+    )
+
+
+def grid_points_in_bbox(
+    grid_locs: np.ndarray,
+    obs_eastings_min: np.ndarray,
+    obs_eastings_max: np.ndarray,
+    obs_northings_min: np.ndarray,
+    obs_northings_max: np.ndarray,
+    start_grid_idx: int = 0,
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """
+    Find grid points within bounding boxes of observations using fully vectorized NumPy.
+
+    Uses broadcasting to compute all observation-grid pairs simultaneously.
+    Returns collapsed mask and per-observation grid indices.
+
+    Parameters
+    ----------
+    grid_locs : array_like, shape (M, 2)
+        Grid point coordinates as (easting, northing) in NZTM.
+    obs_eastings_min : ndarray, shape (N, 1)
+        Precomputed obs_eastings - max_dist.
+    obs_eastings_max : ndarray, shape (N, 1)
+        Precomputed obs_eastings + max_dist.
+    obs_northings_min : ndarray, shape (N, 1)
+        Precomputed obs_northings - max_dist.
+    obs_northings_max : ndarray, shape (N, 1)
+        Precomputed obs_northings + max_dist.
+    start_grid_idx : int, optional
+        Starting index of grid_locs in the full grid (for offsetting indices).
+        Default is 0.
+
+    Returns
+    -------
+    chunk_mask : ndarray, shape (M,), dtype=bool
+        Boolean array indicating which grid points in this chunk are affected
+        by any observation (collapsed with np.any(axis=0)).
+    obs_to_grid_indices : list of ndarray
+        List of length n_obs. Each element is an array of grid point indices
+        (in the full grid) that are within that observation's bounding box.
+    """
+    # Extract coordinates
+    grid_eastings = grid_locs[:, 0]  # (n_grid,)
+    grid_northings = grid_locs[:, 1]  # (n_grid,)
+
+    # Vectorized bounding box check using broadcasting
+    # (n_obs, 1) operation against (n_grid,) -> (n_obs, n_grid)
+    # Checks: for each observation, which grid points are in its bounding box
+    in_bbox = (
+        (grid_eastings >= obs_eastings_min)
+        & (grid_eastings <= obs_eastings_max)
+        & (grid_northings >= obs_northings_min)
+        & (grid_northings <= obs_northings_max)
+    )
+
+    # Collapse to single mask: which grid points are affected by any observation
+    chunk_mask = np.any(in_bbox, axis=0)
+
+    # For each observation, get the grid point indices within its bounding box
+    # in_bbox shape: (n_obs, n_grid_chunk)
+    n_obs = in_bbox.shape[0]
+    obs_to_grid_indices = []
+
+    for obs_idx in range(n_obs):
+        # Get grid indices within this observation's bounding box
+        grid_indices_in_chunk = np.where(in_bbox[obs_idx])[0]
+        # Convert to full grid indices by adding start_grid_idx
+        full_grid_indices = grid_indices_in_chunk + start_grid_idx
+        obs_to_grid_indices.append(full_grid_indices)
+
+    return chunk_mask, obs_to_grid_indices
+
+
+def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float) -> int:
+    """
+    Calculate the maximum number of grid points per chunk based on available memory for spatial boolean arrays.
+
+    The memory-intensive operation is the boolean array of shape (n_obs, n_grid_chunk)
+    used to determine which grid points are within bounding boxes of observations.
+    NumPy boolean arrays use 1 byte per element.
+    Memory usage per chunk: n_obs * n_grid_chunk * 1 byte
+
+    Parameters
+    ----------
+    n_obs : int
+        Number of observations.
+    max_spatial_boolean_array_memory_gb : float
+        Maximum memory in GB allocated for spatial boolean arrays during chunked processing.
+
+    Returns
+    -------
+    chunk_size : int
+        Maximum number of grid points per chunk.
+    """
+    memory_per_chunk_bytes = max_spatial_boolean_array_memory_gb * 1024 * 1024 * 1024
+    # Memory needed: n_obs * n_grid_chunk * 1 byte (NumPy boolean arrays are 1 byte/element)
+    # Solve for n_grid_chunk: n_grid_chunk = memory_per_chunk_bytes / n_obs
+    chunk_size = int(memory_per_chunk_bytes / n_obs)
+    # Ensure at least 1 grid point per chunk
+    return max(1, chunk_size)
+
+
+def _process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
+    """
+    Worker function for parallel bounding box processing.
+
+    Processes a single chunk of grid points to find which are affected by observations.
+
+    Parameters
+    ----------
+    args : tuple
+        (chunk_idx, grid_locs_chunk, start_idx, obs_bounds)
+        where obs_bounds is (obs_eastings_min, obs_eastings_max,
+                            obs_northings_min, obs_northings_max)
+
+    Returns
+    -------
+    tuple
+        (chunk_idx, chunk_mask, obs_to_grid_indices)
+    """
+    chunk_idx, grid_locs_chunk, start_idx, obs_bounds = args
+    obs_eastings_min, obs_eastings_max, obs_northings_min, obs_northings_max = (
+        obs_bounds
+    )
+
+    chunk_mask, obs_to_grid_indices = grid_points_in_bbox(
+        grid_locs=grid_locs_chunk,
+        obs_eastings_min=obs_eastings_min,
+        obs_eastings_max=obs_eastings_max,
+        obs_northings_min=obs_northings_min,
+        obs_northings_max=obs_northings_max,
+        start_grid_idx=start_idx,
+    )
+
+    return chunk_idx, chunk_mask, obs_to_grid_indices
+
+
+# ============================================================================
+# Covariance Matrix Building
+# ============================================================================
+
+
+def build_covariance_matrix(
+    pixel: PixelData,
+    selected_observations: ObservationData,
+    model_type: str,
+    phi: float | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
+) -> np.ndarray:
+    """
+    Build covariance matrix through clear pipeline of steps.
+
+    Parameters
+    ----------
+    pixel : PixelData
+        Pixel data for the pixel being updated.
+    selected_observations : ObservationData
+        Selected observations for this pixel.
+    model_type : str
+        Model type ("geology" or "terrain").
+
+    Returns
+    -------
+    ndarray
+        Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
+        First row/column is for the pixel, rest are for observations.
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
+    # Step 1: Compute Euclidean distance matrix
+    all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
+        np.float64
+    )
+    distance_matrix = scipy.spatial.distance.cdist(all_points, all_points, metric="euclidean")
+
+    # Step 2: Apply correlation function
+    if phi is None:
+        phi = cfg.phi[model_type]
+    corr = utils.correlation_function(distance_matrix, phi)
+
+    # Step 3: Scale by standard deviations
+    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
+    cov = corr * np.outer(stdvs, stdvs)
+
+    # Step 4: Apply noise weighting (if enabled)
+    if noisy:
+        omega = np.insert(selected_observations.omega, 0, 1.0)
+        omega_matrix = np.outer(omega, omega)
+        np.fill_diagonal(omega_matrix, 1.0)
+        cov *= omega_matrix
+
+    # Step 5: Apply covariance reduction (if enabled)
+    if cov_reduc > 0:
+        log_vs30s = np.insert(
+            np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
+        )
+        log_dist_matrix = np.abs(log_vs30s[:, np.newaxis] - log_vs30s)
+        cov *= np.exp(-cov_reduc * log_dist_matrix)
+
+    return cov
+
+
+# ============================================================================
+# Spatial Adjustment Computation
+# ============================================================================
+
+
+def select_observations_for_pixel(
+    pixel: PixelData,
+    obs_data: ObservationData,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+) -> ObservationData:
+    """
+    Select observations for a pixel using distance filtering.
+
+    Uses accurate distance-based selection to find the closest observations
+    within the maximum distance limit.
+
+    Parameters
+    ----------
+    pixel : PixelData
+        Pixel data.
+    obs_data : ObservationData
+        Full observation data.
+    max_dist_m : float
+        Maximum distance in meters to consider observations.
+    max_points : int
+        Maximum number of observations to select.
+
+    Returns
+    -------
+    ObservationData
+        Selected observations (subset of obs_data).
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+
+    # Calculate distances from pixel to all observations
+    distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
+
+    # Select observations using distance-based filtering
+    max_points_i = min(max_points, len(distances)) - 1
+    if max_points_i < 0:
+        return ObservationData.empty()
+
+    min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
+        [0, max_points_i]
+    ]
+    if min_dist > max_dist_m:
+        # Not close enough to any observed locations
+        return ObservationData.empty()
+
+    # Include all observations within cutoff distance (may exceed max_points for accuracy)
+    loc_mask = distances <= min(max_dist_m, cutoff_dist)
+    filtered_indices = np.where(loc_mask)[0]
+
+    # Create subset of ObservationData
+    selected_obs = ObservationData(
+        locations=obs_data.locations[filtered_indices],
+        vs30=obs_data.vs30[filtered_indices],
+        model_vs30=obs_data.model_vs30[filtered_indices],
+        model_stdv=obs_data.model_stdv[filtered_indices],
+        residuals=obs_data.residuals[filtered_indices],
+        omega=obs_data.omega[filtered_indices],
+        uncertainty=obs_data.uncertainty[filtered_indices],
+    )
+
+    return selected_obs
+
+
+def compute_spatial_adjustment_for_pixel(
+    pixel: PixelData,
+    obs_data: ObservationData,
+    model_type: str,
+    phi: float | None = None,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
+) -> SpatialAdjustmentResult | None:
+    """
+    Compute MVN update for a single pixel.
+
+    Parameters
+    ----------
+    pixel : PixelData
+        Pixel data.
+    obs_data : ObservationData
+        Full observation data.
+    model_type : str
+        Model type ("geology" or "terrain").
+
+    Returns
+    -------
+    SpatialAdjustmentResult or None
+        Update result, or None if pixel should be skipped.
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
+    # Handle NaN/NoData pixels
+    if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
+        return None
+
+    phi_val = phi if phi is not None else cfg.phi[model_type]
+
+    # Correlation at zero distance is slightly less than 1.0 due to the
+    # enforced minimum distance (nugget effect). This shrinks the prior
+    # variance to match the legacy implementation's behavior.
+    corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
+    initial_var = (pixel.stdv**2) * corr_zero
+
+    # Select observations for this pixel
+    selected_obs = select_observations_for_pixel(
+        pixel,
+        obs_data,
+        max_dist_m=max_dist_m,
+        max_points=max_points,
+    )
+
+    if len(selected_obs.locations) == 0:
+        # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
+        return SpatialAdjustmentResult(
+            updated_vs30=pixel.vs30,
+            updated_stdv=sqrt(initial_var),
+            n_observations_used=0,
+            min_distance=np.inf,
+            pixel_index=pixel.index,
+        )
+
+    # Build covariance matrix
+    cov_matrix = build_covariance_matrix(
+        pixel,
+        selected_obs,
+        model_type,
+        phi=phi,
+        noisy=noisy,
+        cov_reduc=cov_reduc,
+    )
+
+    # Invert covariance matrix (observations only)
+    inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
+
+    # Calculate prediction update
+    pred_update = np.dot(
+        np.dot(cov_matrix[0, 1:], inv_cov),
+        selected_obs.residuals,
+    )
+
+    # Calculate variance
+    var = cov_matrix[0, 0] - np.dot(
+        np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
+    )
+
+    # Update vs30 and stdv
+    new_vs30 = pixel.vs30 * np.exp(pred_update)
+    new_stdv = sqrt(var)
+
+    # Calculate minimum distance
+    distances = scipy.spatial.distance.cdist(
+        pixel.location.reshape(1, -1),
+        selected_obs.locations,
+        metric="euclidean",
+    )[0]
+    min_distance = np.min(distances) if len(distances) > 0 else np.inf
+
+    return SpatialAdjustmentResult(
+        updated_vs30=float(new_vs30),
+        updated_stdv=float(new_stdv),
+        n_observations_used=len(selected_obs.locations),
+        min_distance=float(min_distance),
+        pixel_index=pixel.index,
+    )
+
+
+# ============================================================================
+# Find Affected Pixels
+# ============================================================================
+
+
+def subsample_by_cluster(
+    cluster_labels: np.ndarray,
+    step: int = 100,
+) -> np.ndarray:
+    """
+    Subsample observation indices by taking every Nth observation within each cluster.
+
+    For clustered observations, nearby observations affect the same pixels.
+    This function ensures representative sampling from each cluster rather
+    than global subsampling which might miss small clusters entirely.
+
+    Parameters
+    ----------
+    cluster_labels : ndarray
+        Array of cluster labels for each observation. -1 indicates unclustered
+        observations (noise points from DBSCAN).
+    step : int, optional
+        Take every Nth observation within each cluster. Default is 100.
+
+    Returns
+    -------
+    ndarray
+        Indices of the subsampled observations.
+
+    Notes
+    -----
+    - Unclustered observations (label=-1) are all included since they are
+      spatially isolated and each may affect different pixels.
+    - Within each cluster, observations are subsampled by taking every Nth.
+    - At least one observation is always kept from each cluster.
+    """
+    unique_labels = np.unique(cluster_labels)
+
+    selected_indices = []
+
+    for label in unique_labels:
+        cluster_mask = cluster_labels == label
+        cluster_indices = np.where(cluster_mask)[0]
+
+        if label == -1:
+            # Unclustered observations - include all
+            selected_indices.extend(cluster_indices.tolist())
+        else:
+            # Clustered observations - take every Nth
+            subsampled = cluster_indices[::step]
+            selected_indices.extend(subsampled.tolist())
+
+    # Sort to maintain original order
+    selected_indices = np.array(sorted(selected_indices), dtype=np.int64)
+
+    return selected_indices
+
+
+def _accumulate_bbox_results(
+    valid_points_in_bbox_mask: np.ndarray,
+    obs_to_grid_indices: list[np.ndarray],
+    chunk_idx: int,
+    chunk_size: int,
+    chunk_mask: np.ndarray,
+    chunk_obs_to_grid: list[np.ndarray],
+    valid_flat_indices: np.ndarray,
+) -> None:
+    """
+    Merge a single chunk's bounding box results into the running accumulators.
+
+    Updates valid_points_in_bbox_mask and obs_to_grid_indices in place.
+    """
+    start_idx = chunk_idx * chunk_size
+    valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
+
+    for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
+        if len(grid_indices) > 0:
+            full_raster_indices = valid_flat_indices[grid_indices]
+            obs_to_grid_indices[obs_idx] = np.concatenate(
+                [obs_to_grid_indices[obs_idx], full_raster_indices]
+            )
+
+
+def find_affected_pixels(
+    raster_data: RasterData,
+    obs_data: ObservationData,
+    max_dist_m: float | None = None,
+    n_proc: int = 1,
+) -> BoundingBoxResult:
+    """
+    Find pixels affected by observations using bounding boxes.
+
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data object.
+    obs_data : ObservationData
+        Observation data.
+    max_dist_m : float, optional
+        Maximum distance for considering observations.
+    n_proc : int, optional
+        Number of parallel processes. 1 for sequential (default),
+        >1 for parallel processing.
+
+    Returns
+    -------
+    BoundingBoxResult
+        Result containing mask and observation-to-grid mappings.
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+
+    # Get coordinates for valid pixels
+    grid_locs = raster_data.get_coordinates()
+
+    n_obs = len(obs_data.locations)
+
+    # Calculate chunk size based on observation count
+    chunk_size = calculate_chunk_size(
+        n_obs, cfg.max_spatial_boolean_array_memory_gb
+    )
+    n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
+
+    # Precompute observation bounds
+    obs_eastings = obs_data.locations[:, 0:1]  # (n_obs, 1)
+    obs_northings = obs_data.locations[:, 1:2]  # (n_obs, 1)
+    obs_eastings_min = obs_eastings - max_dist_m
+    obs_eastings_max = obs_eastings + max_dist_m
+    obs_northings_min = obs_northings - max_dist_m
+    obs_northings_max = obs_northings + max_dist_m
+
+    # Bundle observation bounds for passing to workers
+    obs_bounds = (
+        obs_eastings_min,
+        obs_eastings_max,
+        obs_northings_min,
+        obs_northings_max,
+    )
+
+    # Initialize mask and obs_to_grid_indices
+    valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
+    obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(n_obs)]
+
+    logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
+
+    if n_proc > 1 and n_chunks > 1:
+        # Parallel processing
+        logger.info(f"Using {min(n_proc, n_chunks)} parallel workers")
+
+        # Prepare chunk arguments
+        chunk_args = []
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+            grid_locs_chunk = grid_locs[start_idx:end_idx]
+            chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds))
+
+        # Process in parallel using spawn context
+        actual_n_proc = min(n_proc, n_chunks)
+        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+            results = list(
+                tqdm(
+                    pool.imap(_process_bbox_chunk, chunk_args),
+                    total=n_chunks,
+                    desc=f"Finding affected pixels ({actual_n_proc} workers)",
+                    unit="chunk",
+                )
+            )
+
+        # Merge results
+        for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
+            _accumulate_bbox_results(
+                valid_points_in_bbox_mask, obs_to_grid_indices,
+                chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
+                raster_data.valid_flat_indices,
+            )
+    else:
+        # Sequential processing
+        for chunk_idx in tqdm(
+            range(n_chunks),
+            desc="Finding affected pixels",
+            unit="chunk",
+        ):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+            grid_locs_chunk = grid_locs[start_idx:end_idx]
+
+            chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
+                grid_locs=grid_locs_chunk,
+                obs_eastings_min=obs_eastings_min,
+                obs_eastings_max=obs_eastings_max,
+                obs_northings_min=obs_northings_min,
+                obs_northings_max=obs_northings_max,
+                start_grid_idx=start_idx,
+            )
+
+            _accumulate_bbox_results(
+                valid_points_in_bbox_mask, obs_to_grid_indices,
+                chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
+                raster_data.valid_flat_indices,
+            )
+
+    # Create full-size mask
+    grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
+    grid_points_in_bbox_mask[raster_data.valid_flat_indices] = valid_points_in_bbox_mask
+
+    n_affected = np.sum(valid_points_in_bbox_mask)
+    logger.info(
+        f"Bounding box search complete: {n_affected:,} pixels affected "
+        f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
+    )
+
+    return BoundingBoxResult(
+        mask=grid_points_in_bbox_mask,
+        obs_to_grid_indices=obs_to_grid_indices,
+        n_affected_pixels=n_affected,
+    )
+
+
+# ============================================================================
+# Main Spatial Adjustments Computation
+# ============================================================================
+
+
+def compute_spatial_adjustments(
+    raster_data: RasterData,
+    obs_data: ObservationData,
+    bbox_result: BoundingBoxResult,
+    model_type: str,
+    phi: float | None = None,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
+) -> list[SpatialAdjustmentResult]:
+    """
+    Compute MVN updates for all affected pixels.
+
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data object.
+    obs_data : ObservationData
+        Observation data.
+    bbox_result : BoundingBoxResult
+        Bounding box result.
+    model_type : str
+        Model type ("geology" or "terrain").
+
+    Returns
+    -------
+    list
+        List of SpatialAdjustmentResult objects.
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
+    # Get affected pixel indices
+    affected_flat_indices = np.where(bbox_result.mask)[0]
+    affected_valid_indices = np.where(bbox_result.mask[raster_data.valid_flat_indices])[
+        0
+    ]
+
+    # Get coordinates for affected pixels
+    grid_locs = raster_data.get_coordinates()
+    affected_locs = grid_locs[affected_valid_indices]
+
+    # Get model values for affected pixels
+    affected_vs30 = raster_data.vs30.flat[affected_flat_indices]
+    affected_stdv = raster_data.stdv.flat[affected_flat_indices]
+
+    # Process in chunks for memory efficiency
+    chunk_size = calculate_chunk_size(
+        len(obs_data.locations), cfg.max_spatial_boolean_array_memory_gb
+    )
+    n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
+
+    all_updates = []
+
+    logger.info(
+        f"Processing {n_chunks} chunks of up to {chunk_size:,} pixels each "
+        f"({len(affected_flat_indices):,} total pixels to update)"
+    )
+
+    # Process all affected pixels with a single progress bar
+    with tqdm(
+        total=len(affected_flat_indices),
+        desc="Computing spatial updates",
+        unit="pixel",
+    ) as pbar:
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(affected_flat_indices))
+
+            chunk_flat_indices = affected_flat_indices[start_idx:end_idx]
+            chunk_affected_locs = affected_locs[start_idx:end_idx]
+            chunk_affected_vs30 = affected_vs30[start_idx:end_idx]
+            chunk_affected_stdv = affected_stdv[start_idx:end_idx]
+
+            for i, flat_idx in enumerate(chunk_flat_indices):
+                pixel = PixelData(
+                    location=chunk_affected_locs[i],
+                    vs30=float(chunk_affected_vs30[i]),
+                    stdv=float(chunk_affected_stdv[i]),
+                    index=flat_idx,
+                )
+
+                update_result = compute_spatial_adjustment_for_pixel(
+                    pixel,
+                    obs_data,
+                    model_type,
+                    phi=phi,
+                    max_dist_m=max_dist_m,
+                    max_points=max_points,
+                    noisy=noisy,
+                    cov_reduc=cov_reduc,
+                )
+
+                if update_result is not None:
+                    all_updates.append(update_result)
+
+                pbar.update(1)
+
+    logger.info(f"Completed processing all chunks: {len(all_updates):,} pixels updated")
+
+    return all_updates
+
+
+# ============================================================================
+# Apply Updates and Write Output
+# ============================================================================
+
+
+def apply_and_write_updates(
+    raster_data: RasterData,
+    updates: list[SpatialAdjustmentResult],
+    model_type: str,
+    output_dir: Path,
+) -> None:
+    """
+    Apply updates to raster and write output file.
+
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data object.
+    updates : list
+        List of SpatialAdjustmentResult objects.
+    model_type : str
+        Model type ("geology" or "terrain").
+    output_dir : Path
+        Directory where output raster will be saved.
+    """
+    # Initialize output arrays with original values
+    updated_vs30 = raster_data.vs30.copy()
+    updated_stdv = raster_data.stdv.copy()
+
+    # Apply updates
+    for update in updates:
+        updated_vs30.flat[update.pixel_index] = update.updated_vs30
+        updated_stdv.flat[update.pixel_index] = update.updated_stdv
+
+    # Write output using filename from config
+    cfg = get_default_config()
+    output_filename = cfg.output_filenames[model_type]
+    output_path = output_dir / output_filename
+
+    raster_data.write_updated(output_path, updated_vs30, updated_stdv)
+
+    logger.info(
+        f"Wrote updated raster to {output_path} "
+        f"({len(updates):,} pixels updated out of {np.sum(raster_data.valid_mask):,} valid)"
+    )
+
+
+# ============================================================================
+# Point-Based Spatial Adjustment Computation
+# ============================================================================
+
+
+def compute_spatial_adjustment_at_points(
+    points: np.ndarray,
+    model_vs30: np.ndarray,
+    model_stdv: np.ndarray,
+    obs_locations: np.ndarray,
+    obs_vs30: np.ndarray,
+    obs_model_vs30: np.ndarray,
+    obs_model_stdv: np.ndarray,
+    obs_uncertainty: np.ndarray,
+    model_type: str,
+    phi: float | None = None,
+    max_dist_m: float | None = None,
+    max_points: int | None = None,
+    noisy: bool | None = None,
+    cov_reduc: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute MVN spatial adjustment at specific query points.
+
+    This is the point-based equivalent of compute_spatial_adjustments(). It applies
+    the same MVN conditioning algorithm but for arbitrary query points instead
+    of raster pixels.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] query locations in NZTM.
+    model_vs30 : np.ndarray
+        (N,) array of model Vs30 values at query points (before MVN adjustment).
+    model_stdv : np.ndarray
+        (N,) array of model standard deviation at query points.
+    obs_locations : np.ndarray
+        (M, 2) array of observation [easting, northing] locations.
+    obs_vs30 : np.ndarray
+        (M,) array of measured Vs30 values at observations.
+    obs_model_vs30 : np.ndarray
+        (M,) array of model Vs30 values at observation locations.
+    obs_model_stdv : np.ndarray
+        (M,) array of model standard deviation at observation locations.
+    obs_uncertainty : np.ndarray
+        (M,) array of observation uncertainties.
+    model_type : str
+        Either "geology" or "terrain" (determines phi correlation length).
+    phi : float, optional
+        Correlation length parameter. If None, uses value from config.
+    max_dist_m : float, optional
+        Maximum distance (meters) to consider observations. Default from config.
+    max_points : int, optional
+        Maximum number of observations per point. Default from config.
+    noisy : bool, optional
+        Whether to apply noise weighting. Default from config.
+    cov_reduc : float, optional
+        Covariance reduction factor. Default from config.
+
+    Returns
+    -------
+    mvn_vs30 : np.ndarray
+        (N,) array of spatially adjusted Vs30 values.
+    mvn_stdv : np.ndarray
+        (N,) array of spatially adjusted standard deviation values.
+
+    Notes
+    -----
+    The algorithm for each query point:
+    1. Find observations within max_dist_m (limited to max_points closest)
+    2. Compute log residuals: log(obs_vs30 / obs_model_vs30)
+    3. Build covariance matrix using exponential correlation function
+    4. Apply MVN conditioning to get posterior mean and variance
+    5. Convert back from log-space to linear Vs30
+    """
+    # Resolve config defaults
+    cfg = get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    max_points = max_points if max_points is not None else cfg.max_points
+    noisy = noisy if noisy is not None else cfg.noisy
+    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+
+    if phi is None:
+        phi = cfg.phi[model_type]
+
+    n_points = len(points)
+    n_obs = len(obs_locations)
+
+    # Initialize output arrays with prior values
+    mvn_vs30 = model_vs30.copy()
+    mvn_stdv = model_stdv.copy()
+
+    if n_obs == 0:
+        logger.warning("No observations provided for MVN adjustment")
+        return mvn_vs30, mvn_stdv
+
+    # Compute log residuals at observation locations
+    # Filter out invalid observations (NaN model values)
+    valid_obs_mask = (
+        ~np.isnan(obs_model_vs30)
+        & ~np.isnan(obs_model_stdv)
+        & (obs_model_vs30 > 0)
+        & (obs_model_stdv > 0)
+    )
+
+    if not np.any(valid_obs_mask):
+        logger.warning("No valid observations for MVN adjustment")
+        return mvn_vs30, mvn_stdv
+
+    # Filter to valid observations
+    obs_locs = obs_locations[valid_obs_mask]
+    obs_vs30_valid = obs_vs30[valid_obs_mask]
+    obs_model_vs30_valid = obs_model_vs30[valid_obs_mask]
+    obs_model_stdv_valid = obs_model_stdv[valid_obs_mask]
+    obs_uncertainty_valid = obs_uncertainty[valid_obs_mask]
+
+    # Compute residuals
+    obs_residuals = np.log(obs_vs30_valid / obs_model_vs30_valid)
+
+    # Apply noise weighting if enabled
+    if noisy:
+        omega_obs = np.sqrt(
+            obs_model_stdv_valid**2
+            / (obs_model_stdv_valid**2 + obs_uncertainty_valid**2)
+        )
+        obs_residuals = obs_residuals * omega_obs
+    else:
+        omega_obs = np.ones(len(obs_residuals))
+
+    # Compute correlation at distance 0 for default variance
+    corr_zero = utils.correlation_function(np.array([0.0]), phi)[0]
+
+    # Process each query point
+    for i in tqdm(range(n_points), desc="Computing MVN at points", unit="point"):
+        point = points[i]
+        prior_vs30 = model_vs30[i]
+        prior_stdv = model_stdv[i]
+
+        # Skip invalid points
+        if (
+            np.isnan(prior_vs30)
+            or np.isnan(prior_stdv)
+            or prior_vs30 <= 0
+            or prior_stdv <= 0
+        ):
+            continue
+
+        # Calculate distances from this point to all observations
+        distances = np.sqrt(np.sum((obs_locs - point) ** 2, axis=1))
+
+        # Find nearby observations
+        nearby_mask = distances <= max_dist_m
+
+        if not np.any(nearby_mask):
+            # No nearby observations - apply default variance shrinkage (matching legacy)
+            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            continue
+
+        # Limit to max_points closest observations
+        nearby_indices = np.where(nearby_mask)[0]
+        if len(nearby_indices) > max_points:
+            nearby_distances = distances[nearby_indices]
+            closest_indices = np.argsort(nearby_distances)[:max_points]
+            nearby_indices = nearby_indices[closest_indices]
+
+        # Extract data for nearby observations
+        nearby_locs = obs_locs[nearby_indices]
+        nearby_residuals = obs_residuals[nearby_indices]
+        nearby_model_stdv = obs_model_stdv_valid[nearby_indices]
+        nearby_omega = omega_obs[nearby_indices]
+        nearby_model_vs30 = obs_model_vs30_valid[nearby_indices]
+
+        # Build covariance matrix
+        # First element is query point, rest are nearby observations
+        all_locs = np.vstack([point, nearby_locs])
+        dist_matrix = scipy.spatial.distance.cdist(all_locs, all_locs, metric="euclidean")
+
+        # Apply correlation function
+        corr_matrix = utils.correlation_function(dist_matrix, phi)
+
+        # Scale by standard deviations to get covariance
+        stdv_vector = np.concatenate([[prior_stdv], nearby_model_stdv])
+        cov_matrix = corr_matrix * np.outer(stdv_vector, stdv_vector)
+
+        # Apply noise weighting if enabled
+        if noisy:
+            omega_vector = np.concatenate([[1.0], nearby_omega])
+            omega_matrix = np.outer(omega_vector, omega_vector)
+            np.fill_diagonal(omega_matrix, 1.0)
+            cov_matrix *= omega_matrix
+
+        # Apply covariance reduction for dissimilar Vs30 values
+        if cov_reduc > 0:
+            vs30_vector = np.concatenate([[prior_vs30], nearby_model_vs30])
+            log_vs30_dist = np.abs(
+                np.log(vs30_vector[:, np.newaxis]) - np.log(vs30_vector)
+            )
+            cov_matrix *= np.exp(-cov_reduc * log_vs30_dist)
+
+        # MVN conditioning
+        # Partition: C = [[C_pp, C_po], [C_op, C_oo]]
+        C_pp = cov_matrix[0, 0]  # point-point covariance
+        C_po = cov_matrix[0, 1:]  # point-observation covariance
+        C_oo = cov_matrix[1:, 1:]  # observation-observation covariance
+
+        try:
+            C_oo_inv = np.linalg.inv(C_oo)
+            C_op = cov_matrix[1:, 0]  # observation-to-point covariance
+
+            # Posterior mean adjustment: C_po @ inv(C_oo) @ residuals
+            pred_adjustment = C_po @ C_oo_inv @ nearby_residuals
+
+            # Posterior variance: C_pp - C_po @ inv(C_oo) @ C_op
+            var_reduction = C_po @ C_oo_inv @ C_op
+            posterior_var = C_pp - var_reduction
+
+            # Update vs30 in log-space, then convert back
+            log_vs30_posterior = np.log(prior_vs30) + pred_adjustment
+            mvn_vs30[i] = np.exp(log_vs30_posterior)
+            mvn_stdv[i] = sqrt(max(0, posterior_var))
+
+        except np.linalg.LinAlgError:
+            # Singular matrix - keep prior values with default variance shrinkage
+            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            logger.debug(
+                f"Singular covariance matrix at point {i}, keeping prior values"
+            )
+
+    return mvn_vs30, mvn_stdv
