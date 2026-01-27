@@ -379,12 +379,21 @@ def perform_clustering(
 
 
 def update_with_clustered_data(
-    prior_df: pd.DataFrame, sites_df: pd.DataFrame, model_type: str
+    prior_df: pd.DataFrame,
+    sites_df: pd.DataFrame,
+    model_type: str = "",
 ) -> pd.DataFrame:
     """
     Perform Bayesian update for clustered CPT data.
 
-    model_type is deprecated but kept for compatibility.
+    Parameters
+    ----------
+    prior_df : DataFrame
+        Prior categorical model with mean and standard deviation columns.
+    sites_df : DataFrame
+        Clustered observation sites with vs30, cluster, and category ID columns.
+    model_type : str, optional
+        Unused. Retained for call-site compatibility.
     """
     cfg = get_default_config()
 
@@ -448,10 +457,12 @@ def update_with_clustered_data(
         idtable = valid_sites[valid_sites[STANDARD_ID_COLUMN] == category_id_int]
         clusters = idtable["cluster"].value_counts()
 
-        # Overall N is one per cluster, clusters labeled -1 are individual clusters
+        # Effective sample size: one per cluster, but each noise point (-1) counts individually.
+        # len(clusters) counts distinct cluster IDs. If -1 is present, it was counted once
+        # but represents clusters[-1] individual observations, so add the extra count.
         n = len(clusters)
         if -1 in clusters.index:
-            n += clusters[-1] - 1
+            n += clusters[-1] - 1  # -1 was already counted once, add remaining
 
         if n == 0:
             continue
@@ -518,8 +529,6 @@ def posterior_from_bayesian_update(
     if clustered_observations_df is not None:
         df = update_with_clustered_data(df, clustered_observations_df, model_type)
 
-    # Step 2: Update with independent data (if provided)
-    # Independent observations refine the already bias-corrected model from clustered data
     if independent_observations_df is not None:
         df = update_with_independent_data(
             df, independent_observations_df, n_prior, min_sigma
