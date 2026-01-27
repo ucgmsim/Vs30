@@ -402,13 +402,13 @@ def prepare_observation_data(
 
 
 def grid_points_in_bbox(
-    grid_locs,  # Mx2 array of grid point coordinates in NZTM
-    obs_eastings_min,  # (n_obs, 1) precomputed obs_eastings - max_dist
-    obs_eastings_max,  # (n_obs, 1) precomputed obs_eastings + max_dist
-    obs_northings_min,  # (n_obs, 1) precomputed obs_northings - max_dist
-    obs_northings_max,  # (n_obs, 1) precomputed obs_northings + max_dist
-    start_grid_idx=0,  # Starting index of grid_locs in the full grid
-):
+    grid_locs: np.ndarray,
+    obs_eastings_min: np.ndarray,
+    obs_eastings_max: np.ndarray,
+    obs_northings_min: np.ndarray,
+    obs_northings_max: np.ndarray,
+    start_grid_idx: int = 0,
+) -> tuple[np.ndarray, list[np.ndarray]]:
     """
     Find grid points within bounding boxes of observations using fully vectorized NumPy.
 
@@ -472,7 +472,7 @@ def grid_points_in_bbox(
     return chunk_mask, obs_to_grid_indices
 
 
-def calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb):
+def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float) -> int:
     """
     Calculate the maximum number of grid points per chunk based on available memory for spatial boolean arrays.
 
@@ -852,7 +852,11 @@ def _accumulate_bbox_results(
     chunk_obs_to_grid: list[np.ndarray],
     valid_flat_indices: np.ndarray,
 ) -> None:
-    """Merge a single chunk's bounding box results into the running accumulators."""
+    """
+    Merge a single chunk's bounding box results into the running accumulators.
+
+    Updates valid_points_in_bbox_mask and obs_to_grid_indices in place.
+    """
     start_idx = chunk_idx * chunk_size
     valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
 
@@ -1367,12 +1371,13 @@ def compute_spatial_adjustment_at_points(
 
         try:
             C_oo_inv = np.linalg.inv(C_oo)
+            C_op = cov_matrix[1:, 0]  # observation-to-point covariance
 
             # Posterior mean adjustment: C_po @ inv(C_oo) @ residuals
             pred_adjustment = C_po @ C_oo_inv @ nearby_residuals
 
             # Posterior variance: C_pp - C_po @ inv(C_oo) @ C_op
-            var_reduction = C_po @ C_oo_inv @ C_po
+            var_reduction = C_po @ C_oo_inv @ C_op
             posterior_var = C_pp - var_reduction
 
             # Update vs30 in log-space, then convert back
