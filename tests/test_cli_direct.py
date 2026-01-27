@@ -5,13 +5,20 @@ These tests invoke CLI commands directly in-process rather than
 via subprocess, allowing proper coverage tracking.
 """
 
+import re
 
 from typer.testing import CliRunner
 
 from vs30.cli import app, get_config
 
-
 runner = CliRunner()
+
+# Strip ANSI escape codes from output (Rich/Typer may emit them in CI)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 class TestCLICallback:
@@ -72,8 +79,9 @@ class TestComputeAtLocationsCommand:
         """Test compute-at-locations --help."""
         result = runner.invoke(app, ["compute-at-locations", "--help"])
         assert result.exit_code == 0
-        assert "--locations-csv" in result.stdout
-        assert "--output-csv" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "--locations-csv" in output
+        assert "--output-csv" in output
 
     def test_compute_at_locations_missing_args(self):
         """Test that missing required args gives error."""

@@ -9,6 +9,7 @@ These tests verify that:
 Uses CliRunner for in-process invocation to enable coverage tracking.
 """
 
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -22,6 +23,13 @@ from vs30.cli import app
 
 runner = CliRunner()
 
+# Strip ANSI escape codes from output (Rich/Typer may emit them in CI)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
+
 
 class TestCLIHelp:
     """Tests for CLI help and command availability."""
@@ -30,22 +38,25 @@ class TestCLIHelp:
         """Test that main help is available."""
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "VS30 map generation" in result.output
-        assert "--config" in result.output
-        assert "--verbose" in result.output
+        output = strip_ansi(result.output)
+        assert "VS30 map generation" in output
+        assert "--config" in output
+        assert "--verbose" in output
 
     def test_full_pipeline_help(self):
         """Test full-pipeline command help."""
         result = runner.invoke(app, ["full-pipeline", "--help"])
         assert result.exit_code == 0
-        assert "full-pipeline" in result.output.lower() or "pipeline" in result.output.lower()
+        output = strip_ansi(result.output).lower()
+        assert "full-pipeline" in output or "pipeline" in output
 
     def test_compute_at_locations_help(self):
         """Test compute-at-locations command help."""
         result = runner.invoke(app, ["compute-at-locations", "--help"])
         assert result.exit_code == 0
-        assert "--locations-csv" in result.output
-        assert "--output-csv" in result.output
+        output = strip_ansi(result.output)
+        assert "--locations-csv" in output
+        assert "--output-csv" in output
 
     def test_spatial_fit_help(self):
         """Test spatial-fit command help."""
@@ -189,7 +200,7 @@ class TestCLICommandHelpAdditional:
         """Test update-categorical-vs30-models help."""
         result = runner.invoke(app, ["update-categorical-vs30-models", "--help"])
         assert result.exit_code == 0
-        assert "--categorical-model-csv" in result.output
+        assert "--categorical-model-csv" in strip_ansi(result.output)
 
     def test_make_initial_raster_help(self):
         """Test make-initial-vs30-raster help."""
@@ -205,7 +216,7 @@ class TestCLICommandHelpAdditional:
         """Test full-pipeline-for-geology-or-terrain help."""
         result = runner.invoke(app, ["full-pipeline-for-geology-or-terrain", "--help"])
         assert result.exit_code == 0
-        assert "--model-type" in result.output
+        assert "--model-type" in strip_ansi(result.output)
 
 
 class TestPlotPosteriorValuesCommand:
