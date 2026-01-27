@@ -1,57 +1,6 @@
-from pathlib import Path
-
 import numpy as np
-import yaml
 
 from vs30.config import get_default_config
-
-
-# ============================================================================
-# Legacy Utility Functions
-# ============================================================================
-
-
-def _resolve_base_path(config_path: Path) -> Path:
-    """
-    Resolve base path from config file location.
-
-    .. deprecated::
-        Use Vs30Config.from_yaml() for configuration loading instead.
-
-    Parameters
-    ----------
-    config_path : Path
-        Path to config.yaml file.
-
-    Returns
-    -------
-    Path
-        Base path for input/output files.
-    """
-    if config_path.name == "config.yaml" and config_path.parent.name == "vs30":
-        return config_path.parent.parent
-    return config_path.parent
-
-
-def load_config(config_path: Path) -> dict:
-    """
-    Load configuration from YAML file.
-
-    .. deprecated::
-        Use Vs30Config.from_yaml() for typed configuration loading instead.
-
-    Parameters
-    ----------
-    config_path : Path
-        Path to config.yaml file.
-
-    Returns
-    -------
-    dict
-        Configuration dictionary.
-    """
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
 
 
 # ============================================================================
@@ -59,9 +8,13 @@ def load_config(config_path: Path) -> dict:
 # ============================================================================
 
 
-def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
+def correlation_function(
+    distances: np.ndarray,
+    phi: float,
+    min_dist: float | None = None,
+) -> np.ndarray:
     """
-    Calculate correlation function from distances.
+    Calculate exponential correlation from distances.
 
     Parameters
     ----------
@@ -69,6 +22,8 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
         Array of distances in meters. Can be scalar, 1D, or 2D (distance matrix).
     phi : float
         Correlation length parameter in meters.
+    min_dist : float, optional
+        Minimum distance enforced to prevent division issues. Default from config.
 
     Returns
     -------
@@ -77,10 +32,13 @@ def correlation_function(distances: np.ndarray, phi: float) -> np.ndarray:
 
     Notes
     -----
-    Uses exponential correlation function: 1 / exp(distance / phi)
+    Uses exponential correlation function: exp(-distance / phi).
+    A small minimum distance (default 0.1 m) is enforced to prevent
+    exact-zero distances from producing correlation = 1.0.
     """
-    cfg = get_default_config()
-    return 1 / np.exp(np.maximum(cfg.min_dist_enforced, distances) / phi)
+    if min_dist is None:
+        min_dist = get_default_config().min_dist_enforced
+    return np.exp(-np.maximum(min_dist, distances) / phi)
 
 
 # ============================================================================

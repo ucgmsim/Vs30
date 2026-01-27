@@ -273,29 +273,28 @@ def prepare_observation_data(
     model_type: str,
     output_dir: Path,
     noisy: bool | None = None,
-    # Hybrid Modification Parameters (optional, for geology)
-    hybrid_mod6_dist_min: float | None = None,
-    hybrid_mod6_dist_max: float | None = None,
-    hybrid_mod6_vs30_min: float | None = None,
-    hybrid_mod6_vs30_max: float | None = None,
-    hybrid_mod13_dist_min: float | None = None,
-    hybrid_mod13_dist_max: float | None = None,
-    hybrid_mod13_vs30_min: float | None = None,
-    hybrid_mod13_vs30_max: float | None = None,
 ) -> ObservationData:
     """
     Prepare observation data for MVN processing.
 
+    For geology models, hybrid modifications (slope and coastal distance)
+    are applied to model values at observation locations before computing
+    residuals.
+
     Parameters
     ----------
     observations : DataFrame
-        Observations with vs30, uncertainty, easting, northing, and model ID.
+        Observations with vs30, uncertainty, easting, northing columns.
     raster_data : RasterData
-        Raster data object.
+        Raster data object (used for transform/profile info).
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_type : str
         Model type ("geology" or "terrain").
+    output_dir : Path
+        Output directory for intermediate rasters (slope, coast distance).
+    noisy : bool, optional
+        Whether to apply noise weighting. Default from config.
 
     Returns
     -------
@@ -374,25 +373,12 @@ def prepare_observation_data(
             coast_obs = np.array([v[0] for v in src.sample(obs_locs)])
 
         # Apply modifications to model_vs30 and model_stdv at points
-        # Note: we only need to modify where category IDs match hybrid types
         model_vs30, model_stdv = apply_hybrid_geology_modifications(
             model_vs30,
             model_stdv,
             model_ids[valid_obs_mask],
             slope_obs,
             coast_obs,
-            mod6=True,
-            mod13=True,
-            hybrid=True,
-            # Pass hybrid parameters
-            hybrid_mod6_dist_min=hybrid_mod6_dist_min,
-            hybrid_mod6_dist_max=hybrid_mod6_dist_max,
-            hybrid_mod6_vs30_min=hybrid_mod6_vs30_min,
-            hybrid_mod6_vs30_max=hybrid_mod6_vs30_max,
-            hybrid_mod13_dist_min=hybrid_mod13_dist_min,
-            hybrid_mod13_dist_max=hybrid_mod13_dist_max,
-            hybrid_mod13_vs30_min=hybrid_mod13_vs30_min,
-            hybrid_mod13_vs30_max=hybrid_mod13_vs30_max,
         )
 
     residuals = np.log(vs30_obs / model_vs30)
@@ -657,26 +643,24 @@ def select_observations_for_pixel(
     max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
     max_points = max_points if max_points is not None else cfg.max_points
 
-    # Calculate distances from pixel to all observations (O(N) efficient calculation)
+    # Calculate distances from pixel to all observations
     distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
 
-    candidate_obs_indices = np.arange(len(obs_data.locations))  # All observations
-
-    # Select observations using accurate distance-based filtering
+    # Select observations using distance-based filtering
     max_points_i = min(max_points, len(distances)) - 1
-    if max_points_i >= 0:
-        min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
-            [0, max_points_i]
-        ]
-        if min_dist > max_dist_m:
-            # Not close enough to any observed locations
-            return ObservationData.empty()
-        # Include all observations within cutoff distance (may exceed max_points for accuracy)
-        loc_mask = distances <= min(max_dist_m, cutoff_dist)
-        filtered_indices = np.array(candidate_obs_indices)[loc_mask]
-    else:
-        # No observations available
+    if max_points_i < 0:
         return ObservationData.empty()
+
+    min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
+        [0, max_points_i]
+    ]
+    if min_dist > max_dist_m:
+        # Not close enough to any observed locations
+        return ObservationData.empty()
+
+    # Include all observations within cutoff distance (may exceed max_points for accuracy)
+    loc_mask = distances <= min(max_dist_m, cutoff_dist)
+    filtered_indices = np.where(loc_mask)[0]
 
     # Create subset of ObservationData
     selected_obs = ObservationData(
@@ -731,6 +715,10 @@ def compute_spatial_adjustment_for_pixel(
         return None
 
     phi_val = phi if phi is not None else cfg.phi[model_type]
+
+    # Correlation at zero distance is slightly less than 1.0 due to the
+    # enforced minimum distance (nugget effect). This shrinks the prior
+    # variance to match the legacy implementation's behavior.
     corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
     initial_var = (pixel.stdv**2) * corr_zero
 
@@ -1082,75 +1070,44 @@ def compute_spatial_adjustments(
         f"({len(affected_flat_indices):,} total pixels to update)"
     )
 
-    # Create a single progress bar that tracks pixels across all chunks
-    total_pixels = len(affected_flat_indices)
-    pixel_pbar = tqdm(
-        total=total_pixels,
+    # Process all affected pixels with a single progress bar
+    with tqdm(
+        total=len(affected_flat_indices),
         desc="Computing spatial updates",
         unit="pixel",
-        mininterval=0.1,  # Update at least every 0.1 seconds for responsiveness
-        maxinterval=1.0,  # But don't update more than once per second
-    )
+    ) as pbar:
+        for chunk_idx in range(n_chunks):
+            start_idx = chunk_idx * chunk_size
+            end_idx = min((chunk_idx + 1) * chunk_size, len(affected_flat_indices))
 
-    pixels_processed = 0
+            chunk_flat_indices = affected_flat_indices[start_idx:end_idx]
+            chunk_affected_locs = affected_locs[start_idx:end_idx]
+            chunk_affected_vs30 = affected_vs30[start_idx:end_idx]
+            chunk_affected_stdv = affected_stdv[start_idx:end_idx]
 
-    for chunk_idx in range(n_chunks):
-        start_idx = chunk_idx * chunk_size
-        end_idx = min((chunk_idx + 1) * chunk_size, len(affected_flat_indices))
-
-        chunk_flat_indices = affected_flat_indices[start_idx:end_idx]
-
-        # Process each pixel in chunk
-        chunk_affected_locs = affected_locs[start_idx:end_idx]
-        chunk_affected_vs30 = affected_vs30[start_idx:end_idx]
-        chunk_affected_stdv = affected_stdv[start_idx:end_idx]
-
-        pixel_pbar.set_postfix(
-            {
-                "status": "processing",
-                "chunk": f"{chunk_idx + 1}/{n_chunks}",
-                "updated": len(all_updates),
-            }
-        )
-
-        for i, flat_idx in enumerate(chunk_flat_indices):
-            pixel = PixelData(
-                location=chunk_affected_locs[i],
-                vs30=float(chunk_affected_vs30[i]),
-                stdv=float(chunk_affected_stdv[i]),
-                index=flat_idx,
-            )
-
-            update_result = compute_spatial_adjustment_for_pixel(
-                pixel,
-                obs_data,
-                model_type,
-                phi=phi,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
-            )
-
-            if update_result is not None:
-                all_updates.append(update_result)
-
-            pixels_processed += 1
-            pixel_pbar.update(1)
-
-            # Update progress bar with stats every 1000 pixels
-            if pixels_processed % 1000 == 0:
-                rate = pixel_pbar.format_dict.get("rate", 0)
-                pixel_pbar.set_postfix(
-                    {
-                        "status": "processing",
-                        "chunk": f"{chunk_idx + 1}/{n_chunks}",
-                        "updated": f"{len(all_updates):,}",
-                        "rate": f"{rate:.0f} pix/s" if rate else "calculating...",
-                    }
+            for i, flat_idx in enumerate(chunk_flat_indices):
+                pixel = PixelData(
+                    location=chunk_affected_locs[i],
+                    vs30=float(chunk_affected_vs30[i]),
+                    stdv=float(chunk_affected_stdv[i]),
+                    index=flat_idx,
                 )
 
-    pixel_pbar.close()
+                update_result = compute_spatial_adjustment_for_pixel(
+                    pixel,
+                    obs_data,
+                    model_type,
+                    phi=phi,
+                    max_dist_m=max_dist_m,
+                    max_points=max_points,
+                    noisy=noisy,
+                    cov_reduc=cov_reduc,
+                )
+
+                if update_result is not None:
+                    all_updates.append(update_result)
+
+                pbar.update(1)
 
     logger.info(f"Completed processing all chunks: {len(all_updates):,} pixels updated")
 

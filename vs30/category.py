@@ -303,16 +303,10 @@ def update_with_independent_data(
             current_std = sqrt(new_variance)
             current_n += 1
 
-            # Update the DataFrame with the latest posterior values
-            updated_categorical_model_df.at[category_row_idx, post_mean_col] = (
-                current_mean
-            )
-
-            updated_categorical_model_df.at[category_row_idx, post_std_col] = (
-                current_std
-            )
-
-            updated_categorical_model_df.at[category_row_idx, post_n_col] = current_n
+        # Write final posterior values for this category
+        updated_categorical_model_df.at[category_row_idx, post_mean_col] = current_mean
+        updated_categorical_model_df.at[category_row_idx, post_std_col] = current_std
+        updated_categorical_model_df.at[category_row_idx, post_n_col] = current_n
 
     return updated_categorical_model_df
 
@@ -386,6 +380,11 @@ def update_with_clustered_data(
     """
     Perform Bayesian update for clustered CPT data.
 
+    Each DBSCAN cluster contributes a single effective observation
+    (the geometric mean of its members), preventing spatially dense
+    geotechnical investigations from dominating the posterior.
+    Unclustered points (label = -1) each count as one observation.
+
     Parameters
     ----------
     prior_df : DataFrame
@@ -393,7 +392,12 @@ def update_with_clustered_data(
     sites_df : DataFrame
         Clustered observation sites with vs30, cluster, and category ID columns.
     model_type : str, optional
-        Unused. Retained for call-site compatibility.
+        Unused. Retained for backward compatibility.
+
+    Returns
+    -------
+    DataFrame
+        Updated DataFrame with posterior mean and standard deviation columns.
     """
     cfg = get_default_config()
 
