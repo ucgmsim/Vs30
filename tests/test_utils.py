@@ -4,22 +4,14 @@ Tests for the VS30 utils module.
 Tests cover:
 - combine_vs30_models: Model combination in log-space
 - correlation_function: Exponential correlation calculation
-- load_config function
-- _resolve_base_path function
 """
-
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
-import yaml
 
 from vs30.utils import (
     combine_vs30_models,
     correlation_function,
-    load_config,
-    _resolve_base_path,
 )
 
 
@@ -102,73 +94,6 @@ class TestCorrelationFunction:
 
         # Larger phi means slower decay, so higher correlation at same distance
         assert corr_large_phi[0] > corr_small_phi[0]
-
-
-class TestLoadConfig:
-    """Tests for the load_config function."""
-
-    def test_load_valid_yaml(self):
-        """Test loading a valid YAML config."""
-        config_data = {
-            "key1": "value1",
-            "key2": 42,
-            "nested": {"a": 1, "b": 2},
-        }
-
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", delete=False
-        ) as f:
-            yaml.dump(config_data, f)
-            config_path = Path(f.name)
-
-        try:
-            loaded = load_config(config_path)
-
-            assert loaded["key1"] == "value1"
-            assert loaded["key2"] == 42
-            assert loaded["nested"]["a"] == 1
-        finally:
-            config_path.unlink()
-
-    def test_load_nonexistent_file_raises(self):
-        """Test that loading nonexistent file raises error."""
-        with pytest.raises(FileNotFoundError):
-            load_config(Path("/nonexistent/config.yaml"))
-
-
-class TestResolveBasePath:
-    """Tests for the _resolve_base_path function."""
-
-    def test_vs30_config_path(self):
-        """Test with standard vs30/config.yaml path."""
-        config_path = Path("/some/project/vs30/config.yaml")
-
-        base_path = _resolve_base_path(config_path)
-
-        assert base_path == Path("/some/project")
-
-    def test_custom_config_path(self):
-        """Test with custom config path."""
-        config_path = Path("/custom/location/my_config.yaml")
-
-        base_path = _resolve_base_path(config_path)
-
-        # Should return parent of config file
-        assert base_path == Path("/custom/location")
-
-    def test_config_in_different_dir(self):
-        """Test with config.yaml not in vs30 directory."""
-        config_path = Path("/project/configs/config.yaml")
-
-        base_path = _resolve_base_path(config_path)
-
-        # Parent is "configs", not "vs30", so return parent of config
-        assert base_path == Path("/project/configs")
-
-
-# =============================================================================
-# Additional Tests from Coverage Improvements
-# =============================================================================
 
 
 class TestUtilsEdgeCases:

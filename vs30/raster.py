@@ -247,7 +247,6 @@ def create_category_id_raster(
             f"model_type must be 'terrain' or 'geology', got '{model_type}'"
         )
 
-    # Resolve config defaults
     cfg = get_default_config()
     xmin = xmin if xmin is not None else cfg.grid_xmin
     xmax = xmax if xmax is not None else cfg.grid_xmax
@@ -452,12 +451,10 @@ def create_vs30_raster_from_ids(
                 f"CSV file {csv_file_path} is missing required columns: {missing_cols}"
             )
 
-        id_to_vs30_values = {}
-        for _, row in df.iterrows():
-            category_id = int(row["id"])
-            mean_vs30 = float(row[mean_col])
-            stddev_vs30 = float(row[std_col])
-            id_to_vs30_values[category_id] = (mean_vs30, stddev_vs30)
+        id_to_vs30_values = {
+            int(row["id"]): (float(row[mean_col]), float(row[std_col]))
+            for _, row in df.iterrows()
+        }
 
     # Read ID raster
     with rasterio.open(id_raster_path) as src:
@@ -484,15 +481,14 @@ def create_vs30_raster_from_ids(
                 f"Available IDs in CSV: {sorted(id_to_vs30_values.keys())}"
             )
 
-    output_profile = profile.copy()
-    output_profile.update({
+    profile.update({
         "count": 2,
         "dtype": "float32",
         "nodata": cfg.nodata_value,
         "compress": "deflate",
     })
 
-    with rasterio.open(output_path, "w", **output_profile) as dst:
+    with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(vs30_array, 1)
         dst.write(stdv_array, 2)
         dst.descriptions = ("Vs30", "Standard Deviation")
@@ -707,7 +703,6 @@ def apply_hybrid_geology_modifications(
     mod6: bool = True,
     mod13: bool = True,
     hybrid: bool = True,
-    # Hybrid parameters (required)
     hybrid_mod6_dist_min: float | None = None,
     hybrid_mod6_dist_max: float | None = None,
     hybrid_mod6_vs30_min: float | None = None,
@@ -720,8 +715,9 @@ def apply_hybrid_geology_modifications(
     """
     Apply hybrid model modifications to VS30 and standard deviation arrays.
 
-    Implements the logic from `_hyb_calc` in the old `model_geology.py`.
-    Modifies arrays in-place where possible but returns them for clarity.
+    Implements slope-based Vs30 interpolation and coastal distance adjustments
+    for specific geology categories. Modifies arrays in-place but also returns
+    them for clarity.
 
     Parameters
     ----------
@@ -736,14 +732,27 @@ def apply_hybrid_geology_modifications(
     coast_dist_array : np.ndarray
         Distance to coast array (float).
     mod6 : bool, optional
-        Whether to apply modification for Group 6 (Alluvium), by default True.
+        Whether to apply modification for Group 6 (Alluvium). Default True.
     mod13 : bool, optional
-        Whether to apply modification for Group 13 (Floodplain), by default True.
+        Whether to apply modification for Group 13 (Floodplain). Default True.
     hybrid : bool, optional
-        Whether to apply general hybrid slope-based modifications, by default True.
+        Whether to apply general hybrid slope-based modifications. Default True.
     hybrid_mod6_dist_min : float, optional
-        Min distance threshold for mod6.
-    ...
+        Min distance threshold for mod6. Default from config.
+    hybrid_mod6_dist_max : float, optional
+        Max distance threshold for mod6. Default from config.
+    hybrid_mod6_vs30_min : float, optional
+        Min Vs30 for mod6. Default from config.
+    hybrid_mod6_vs30_max : float, optional
+        Max Vs30 for mod6. Default from config.
+    hybrid_mod13_dist_min : float, optional
+        Min distance threshold for mod13. Default from config.
+    hybrid_mod13_dist_max : float, optional
+        Max distance threshold for mod13. Default from config.
+    hybrid_mod13_vs30_min : float, optional
+        Min Vs30 for mod13. Default from config.
+    hybrid_mod13_vs30_max : float, optional
+        Max Vs30 for mod13. Default from config.
 
     Returns
     -------
@@ -753,21 +762,17 @@ def apply_hybrid_geology_modifications(
     cfg = get_default_config()
     logger.info("Applying slope and coastal distance based geology modifications...")
 
-    # Validate required params if mods are active
-    if mod6 and (
-        hybrid_mod6_dist_min is None
-        or hybrid_mod6_dist_max is None
-        or hybrid_mod6_vs30_min is None
-        or hybrid_mod6_vs30_max is None
-    ):
-        raise ValueError("Missing required parameters for modification 6 (Alluvium)")
-    if mod13 and (
-        hybrid_mod13_dist_min is None
-        or hybrid_mod13_dist_max is None
-        or hybrid_mod13_vs30_min is None
-        or hybrid_mod13_vs30_max is None
-    ):
-        raise ValueError("Missing required parameters for modification 13 (Floodplain)")
+    # Fill in defaults from config for any unspecified parameters
+    if mod6:
+        hybrid_mod6_dist_min = hybrid_mod6_dist_min if hybrid_mod6_dist_min is not None else cfg.hybrid_mod6_dist_min
+        hybrid_mod6_dist_max = hybrid_mod6_dist_max if hybrid_mod6_dist_max is not None else cfg.hybrid_mod6_dist_max
+        hybrid_mod6_vs30_min = hybrid_mod6_vs30_min if hybrid_mod6_vs30_min is not None else cfg.hybrid_mod6_vs30_min
+        hybrid_mod6_vs30_max = hybrid_mod6_vs30_max if hybrid_mod6_vs30_max is not None else cfg.hybrid_mod6_vs30_max
+    if mod13:
+        hybrid_mod13_dist_min = hybrid_mod13_dist_min if hybrid_mod13_dist_min is not None else cfg.hybrid_mod13_dist_min
+        hybrid_mod13_dist_max = hybrid_mod13_dist_max if hybrid_mod13_dist_max is not None else cfg.hybrid_mod13_dist_max
+        hybrid_mod13_vs30_min = hybrid_mod13_vs30_min if hybrid_mod13_vs30_min is not None else cfg.hybrid_mod13_vs30_min
+        hybrid_mod13_vs30_max = hybrid_mod13_vs30_max if hybrid_mod13_vs30_max is not None else cfg.hybrid_mod13_vs30_max
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:

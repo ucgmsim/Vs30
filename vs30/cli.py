@@ -21,9 +21,9 @@ Usage
 
 import importlib.resources
 import logging
-from pathlib import Path
 import shutil
-from typing import Annotated, Optional
+from pathlib import Path
+from typing import Annotated
 
 import numpy as np
 import pandas as pd
@@ -47,6 +47,37 @@ app = typer.Typer(
 # =============================================================================
 # Helpers
 # =============================================================================
+
+
+def _resolve_observation_csv(
+    csv_path: Path | None,
+    config_filename: str | None,
+    res_dir: Path,
+) -> Path | None:
+    """
+    Resolve an observation CSV path from CLI argument or config default.
+
+    Parameters
+    ----------
+    csv_path : Path or None
+        Explicitly provided path (from CLI argument).
+    config_filename : str or None
+        Filename from config (e.g., cfg.clustered_observations_file).
+    res_dir : Path
+        Resources directory to look for config-specified files.
+
+    Returns
+    -------
+    Path or None
+        Resolved path, or None if no valid file found.
+    """
+    if csv_path is not None:
+        return csv_path
+    if config_filename and config_filename.lower() != "none":
+        candidate = res_dir / config_filename
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _validate_csv_columns(
@@ -93,7 +124,7 @@ def get_config() -> Vs30Config:
 @app.callback()
 def main(
     config: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--config",
             "-c",
@@ -429,7 +460,7 @@ def make_initial_vs30_raster(
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            csv_path = terrain_csv if terrain_csv else cfg.TERRAIN_MEAN_STDDEV_CSV
+            csv_path = terrain_csv if terrain_csv else cfg.terrain_csv
             logger.info(f"Using terrain model values from {csv_path}")
 
             logger.info("Creating terrain category ID raster...")
@@ -445,7 +476,7 @@ def make_initial_vs30_raster(
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            csv_path = geology_csv if geology_csv else cfg.GEOLOGY_MEAN_STDDEV_CSV
+            csv_path = geology_csv if geology_csv else cfg.geology_csv
             logger.info(f"Using geology model values from {csv_path}")
 
             logger.info("Creating geology category ID raster...")
@@ -534,18 +565,6 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=True,  # Enable all mods by default for hybrid model
-            mod13=True,
-            hybrid=True,
-            # Pass parameters from config
-            hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
-            hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
-            hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
-            hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
-            hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
-            hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
-            hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
-            hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
         )
 
         # 4. Save Output
@@ -590,9 +609,6 @@ def _prepare_observations_for_spatial_fit(
     """
     Prepare observation data for spatial adjustment.
 
-    Handles the model-type-specific logic for preparing observations, including
-    hybrid parameters for geology models.
-
     Parameters
     ----------
     observations : DataFrame
@@ -615,20 +631,6 @@ def _prepare_observations_for_spatial_fit(
     """
     logger.info("Preparing observation data for spatial adjustment...")
 
-    # Geology models require hybrid modification parameters; terrain does not
-    hybrid_params = {}
-    if model_type == "geology":
-        hybrid_params = {
-            "hybrid_mod6_dist_min": cfg.hybrid_mod6_dist_min,
-            "hybrid_mod6_dist_max": cfg.hybrid_mod6_dist_max,
-            "hybrid_mod6_vs30_min": cfg.hybrid_mod6_vs30_min,
-            "hybrid_mod6_vs30_max": cfg.hybrid_mod6_vs30_max,
-            "hybrid_mod13_dist_min": cfg.hybrid_mod13_dist_min,
-            "hybrid_mod13_dist_max": cfg.hybrid_mod13_dist_max,
-            "hybrid_mod13_vs30_min": cfg.hybrid_mod13_vs30_min,
-            "hybrid_mod13_vs30_max": cfg.hybrid_mod13_vs30_max,
-        }
-
     obs_data = spatial.prepare_observation_data(
         observations,
         raster_data,
@@ -636,7 +638,6 @@ def _prepare_observations_for_spatial_fit(
         model_type,
         output_dir,
         noisy=cfg.noisy,
-        **hybrid_params,
     )
 
     logger.info(f"Prepared {len(obs_data.locations)} valid observations")
@@ -1078,19 +1079,12 @@ def full_pipeline_for_geology_or_terrain(
         # Resolve observations from config if not provided
         resource_path = importlib.resources.files("vs30") / "resources"
         with importlib.resources.as_file(resource_path) as res_dir:
-            if clustered_observations_csv is None:
-                clustered_obs_file = cfg.clustered_observations_file
-                if clustered_obs_file and clustered_obs_file.lower() != "none":
-                    candidate = res_dir / clustered_obs_file
-                    if candidate.exists():
-                        clustered_observations_csv = candidate
-
-            if independent_observations_csv is None:
-                indep_obs_file = cfg.independent_observations_file
-                if indep_obs_file and indep_obs_file.lower() != "none":
-                    candidate = res_dir / indep_obs_file
-                    if candidate.exists():
-                        independent_observations_csv = candidate
+            clustered_observations_csv = _resolve_observation_csv(
+                clustered_observations_csv, cfg.clustered_observations_file, res_dir
+            )
+            independent_observations_csv = _resolve_observation_csv(
+                independent_observations_csv, cfg.independent_observations_file, res_dir
+            )
 
         # --- Step 1: Update Categorical Models (conditional) ---
         if do_bayesian_update:
@@ -1250,15 +1244,12 @@ def combine(
             combined_data = np.stack([combined_vs30, combined_stdv])
             combined_data[np.isnan(combined_data)] = nodata
 
-            # Update profile for output
-            profile.update(
-                {
-                    "dtype": "float32",
-                    "count": geol_data.shape[0],
-                    "nodata": nodata,
-                    "compress": "deflate",
-                }
-            )
+            profile.update({
+                "dtype": "float32",
+                "count": 2,
+                "nodata": nodata,
+                "compress": "deflate",
+            })
 
             logger.info(f"Saving combined raster to: {output_path}")
             with rasterio.open(output_path, "w", **profile) as dst:
@@ -1367,9 +1358,9 @@ def full_pipeline(
 
         with importlib.resources.as_file(resource_path) as res_dir:
             if geology_categorical_csv is None:
-                geology_categorical_csv = res_dir / cfg.GEOLOGY_MEAN_STDDEV_CSV
+                geology_categorical_csv = res_dir / cfg.geology_csv
             if terrain_categorical_csv is None:
-                terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
+                terrain_categorical_csv = res_dir / cfg.terrain_csv
 
             # 1. Run Geology Pipeline
             logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
@@ -1582,24 +1573,17 @@ def compute_at_locations(
 
         with importlib.resources.as_file(resource_path) as res_dir:
             if geology_categorical_csv is None:
-                geology_categorical_csv = res_dir / cfg.GEOLOGY_MEAN_STDDEV_CSV
+                geology_categorical_csv = res_dir / cfg.geology_csv
             if terrain_categorical_csv is None:
-                terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
+                terrain_categorical_csv = res_dir / cfg.terrain_csv
 
             # Load observations for spatial adjustment
-            # Resolve observation files from config defaults (matching full_pipeline logic)
-            if clustered_observations_csv is None:
-                clustered_obs_file = cfg.clustered_observations_file
-                if clustered_obs_file and clustered_obs_file.lower() != "none":
-                    clustered_obs_path = res_dir / clustered_obs_file
-                    if clustered_obs_path.exists():
-                        clustered_observations_csv = clustered_obs_path
-            if independent_observations_csv is None:
-                indep_obs_file = cfg.independent_observations_file
-                if indep_obs_file and indep_obs_file.lower() != "none":
-                    independent_obs_path = res_dir / indep_obs_file
-                    if independent_obs_path.exists():
-                        independent_observations_csv = independent_obs_path
+            clustered_observations_csv = _resolve_observation_csv(
+                clustered_observations_csv, cfg.clustered_observations_file, res_dir
+            )
+            independent_observations_csv = _resolve_observation_csv(
+                independent_observations_csv, cfg.independent_observations_file, res_dir
+            )
 
             # Combine observations
             obs_dfs = []
