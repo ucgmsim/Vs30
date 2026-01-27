@@ -22,7 +22,6 @@ applied to geology categories 2, 3, 4, and 6 (slope-based) and categories 4 and 
 (coastal distance-based).
 """
 
-import importlib.resources
 import logging
 import tarfile
 from pathlib import Path
@@ -43,10 +42,8 @@ from vs30.config import get_default_config
 logger = logging.getLogger(__name__)
 
 
-# Resources directory path using importlib.resources
-RESOURCE_PATH = importlib.resources.files("vs30") / "resources"
-
-# Data directory path
+# Resources and data directory paths
+RESOURCE_PATH = Path(__file__).parent / "resources"
 DATA_DIR = Path(__file__).parent / "data"
 
 
@@ -176,35 +173,31 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     ValueError
         If CSV file is malformed or missing required columns.
     """
-    # Resolve CSV file path using importlib.resources
-    csv_file_traversable = RESOURCE_PATH / csv_path
+    csv_file_path = RESOURCE_PATH / csv_path
 
-    # Use importlib.resources.as_file to get a context manager for file access
-    # This handles both development (files on disk) and installed package scenarios
-    with importlib.resources.as_file(csv_file_traversable) as csv_file_path:
-        if not csv_file_path.exists():
-            raise FileNotFoundError(
-                f"CSV file not found: {csv_file_path}. "
-                f"Expected path relative to resources directory: {csv_path}"
-            )
+    if not csv_file_path.exists():
+        raise FileNotFoundError(
+            f"CSV file not found: {csv_file_path}. "
+            f"Expected path relative to resources directory: {csv_path}"
+        )
 
-        # Read CSV and check what columns are available
-        # Use skipinitialspace=True to handle spaces after commas in CSV
-        df = pd.read_csv(csv_file_path, skipinitialspace=True)
+    # Read CSV and check what columns are available
+    # Use skipinitialspace=True to handle spaces after commas in CSV
+    df = pd.read_csv(csv_file_path, skipinitialspace=True)
 
-        # Check if required columns exist
-        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
-        missing_cols = [col for col in required_cols if col not in df.columns]
+    # Check if required columns exist
+    required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+    missing_cols = [col for col in required_cols if col not in df.columns]
 
-        if missing_cols:
-            raise ValueError(
-                f"CSV file {csv_file_path} is missing required columns. "
-                f"Missing columns: {missing_cols}. "
-                f"Available columns: {list(df.columns)}"
-            )
+    if missing_cols:
+        raise ValueError(
+            f"CSV file {csv_file_path} is missing required columns. "
+            f"Missing columns: {missing_cols}. "
+            f"Available columns: {list(df.columns)}"
+        )
 
-        # Return only the required columns as numpy array
-        return df[required_cols].values
+    # Return only the required columns as numpy array
+    return df[required_cols].values
 
 
 def create_category_id_raster(
@@ -431,30 +424,29 @@ def create_vs30_raster_from_ids(
     _ensure_qmap_shapefile_extracted()
 
     # Load CSV and create ID-to-values mapping
-    csv_file_traversable = RESOURCE_PATH / csv_path
-    with importlib.resources.as_file(csv_file_traversable) as csv_file_path:
-        if not csv_file_path.exists():
-            raise FileNotFoundError(
-                f"CSV file not found: {csv_file_path}. "
-                f"Expected path relative to resources directory: {csv_path}"
-            )
+    csv_file_path = RESOURCE_PATH / csv_path
+    if not csv_file_path.exists():
+        raise FileNotFoundError(
+            f"CSV file not found: {csv_file_path}. "
+            f"Expected path relative to resources directory: {csv_path}"
+        )
 
-        df = pd.read_csv(csv_file_path, skipinitialspace=True)
-        df.columns = df.columns.str.strip()
+    df = pd.read_csv(csv_file_path, skipinitialspace=True)
+    df.columns = df.columns.str.strip()
 
-        mean_col, std_col = _select_vs30_columns_by_priority(list(df.columns))
+    mean_col, std_col = _select_vs30_columns_by_priority(list(df.columns))
 
-        required_cols = ["id", mean_col, std_col]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            raise ValueError(
-                f"CSV file {csv_file_path} is missing required columns: {missing_cols}"
-            )
+    required_cols = ["id", mean_col, std_col]
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"CSV file {csv_file_path} is missing required columns: {missing_cols}"
+        )
 
-        id_to_vs30_values = {
-            int(row["id"]): (float(row[mean_col]), float(row[std_col]))
-            for _, row in df.iterrows()
-        }
+    id_to_vs30_values = {
+        int(row["id"]): (float(row[mean_col]), float(row[std_col]))
+        for _, row in df.iterrows()
+    }
 
     # Read ID raster
     with rasterio.open(id_raster_path) as src:
