@@ -158,8 +158,6 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     """
     Load model values (vs30 mean and standard deviation) from CSV file.
 
-    Copied from vs30/model.py and adapted to be self-contained.
-
     Parameters
     ----------
     csv_path : str
@@ -575,41 +573,31 @@ def create_coast_distance_raster(
     band = None
     ds = None
 
-    # If grid was extended, resample back to template bounds
+    # Output profile (shared by both branches)
+    profile = template_profile.copy()
+    profile.update(
+        {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
+    )
+
+    # If grid was extended, crop back to template bounds
     if gridmod:
-        # Read the extended raster
         with rasterio.open(output_path) as src:
             extended_data = src.read(1)
 
-        # Calculate offsets for template region
         col_off = round((s_xmin - g_xmin) / dx)
         row_off = round((g_ymax - s_ymax) / dy)
 
-        # Extract template region
         distance_meters = extended_data[
             row_off : row_off + template_profile["height"],
             col_off : col_off + template_profile["width"],
-        ]
-
-        # Overwrite file with cropped data
-        profile = template_profile.copy()
-        profile.update(
-            {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
-        )
+        ].astype(np.float32)
 
         with rasterio.open(output_path, "w", **profile) as dst:
-            dst.write(distance_meters.astype(np.float32), 1)
+            dst.write(distance_meters, 1)
             dst.descriptions = ("Distance to Coast (m)",)
     else:
-        # No resampling needed, just read the data
         with rasterio.open(output_path) as src:
             distance_meters = src.read(1).astype(np.float32)
-
-        # Update profile for consistency
-        profile = template_profile.copy()
-        profile.update(
-            {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
-        )
 
     return distance_meters, profile
 
@@ -667,6 +655,47 @@ def create_slope_raster(
         dst.descriptions = ("Slope",)
 
     return destination, profile
+
+
+def _apply_coastal_distance_modification(
+    vs30_array: np.ndarray,
+    id_array: np.ndarray,
+    coast_dist_array: np.ndarray,
+    gid: int,
+    dist_min: float,
+    dist_max: float,
+    vs30_min: float,
+    vs30_max: float,
+) -> None:
+    """
+    Apply linear coastal distance interpolation to a specific geology group.
+
+    Modifies vs30_array in-place for pixels matching the given geology group ID.
+    The Vs30 value is linearly interpolated between vs30_min and vs30_max based
+    on distance from coast, clamped to [vs30_min, vs30_max].
+
+    Parameters
+    ----------
+    vs30_array : ndarray
+        VS30 array to modify in-place.
+    id_array : ndarray
+        Category ID array.
+    coast_dist_array : ndarray
+        Coastal distance array (meters).
+    gid : int
+        Geology group ID to modify.
+    dist_min, dist_max : float
+        Distance range (meters) for linear interpolation.
+    vs30_min, vs30_max : float
+        Vs30 range (m/s) for linear interpolation.
+    """
+    mask = id_array == gid
+    if not np.any(mask):
+        return
+
+    dist_vals = coast_dist_array[mask]
+    val = vs30_min + (vs30_max - vs30_min) * (dist_vals - dist_min) / (dist_max - dist_min)
+    vs30_array[mask] = np.clip(val, vs30_min, vs30_max)
 
 
 def apply_hybrid_geology_modifications(
@@ -778,43 +807,22 @@ def apply_hybrid_geology_modifications(
                 )
                 vs30_array[mask] = 10**interpolated_val
 
-    # 3. Distance-based modification for alluvium (GID 4)
+    # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6:
-        # GID 4 = "06_alluvium"
-        mask = id_array == 4
-        if np.any(mask):
-            # Formula: 240 + (500-240) * (dist - 8000) / (20000 - 8000)
-            # Clamped between 240 and 500
-            # dist is in meters.
-
-            dist_vals = coast_dist_array[mask]
-
-            val = hybrid_mod6_vs30_min + (
-                hybrid_mod6_vs30_max - hybrid_mod6_vs30_min
-            ) * (dist_vals - hybrid_mod6_dist_min) / (
-                hybrid_mod6_dist_max - hybrid_mod6_dist_min
-            )
-            val = np.clip(val, hybrid_mod6_vs30_min, hybrid_mod6_vs30_max)
-
-            vs30_array[mask] = val
+        _apply_coastal_distance_modification(
+            vs30_array, id_array, coast_dist_array,
+            gid=4,
+            dist_min=hybrid_mod6_dist_min, dist_max=hybrid_mod6_dist_max,
+            vs30_min=hybrid_mod6_vs30_min, vs30_max=hybrid_mod6_vs30_max,
+        )
 
     if mod13:
-        # GID 10 = "13_floodplain"
-        mask = id_array == 10
-        if np.any(mask):
-            # Formula: 197 + (500-197) * (dist - 8000) / (20000 - 8000)
-            # Clamped between 197 and 500
-
-            dist_vals = coast_dist_array[mask]
-
-            val = hybrid_mod13_vs30_min + (
-                hybrid_mod13_vs30_max - hybrid_mod13_vs30_min
-            ) * (dist_vals - hybrid_mod13_dist_min) / (
-                hybrid_mod13_dist_max - hybrid_mod13_dist_min
-            )
-            val = np.clip(val, hybrid_mod13_vs30_min, hybrid_mod13_vs30_max)
-
-            vs30_array[mask] = val
+        _apply_coastal_distance_modification(
+            vs30_array, id_array, coast_dist_array,
+            gid=10,
+            dist_min=hybrid_mod13_dist_min, dist_max=hybrid_mod13_dist_max,
+            vs30_min=hybrid_mod13_vs30_min, vs30_max=hybrid_mod13_vs30_max,
+        )
 
     return vs30_array, stdv_array
 
@@ -941,30 +949,21 @@ def apply_hybrid_modifications_at_points(
                 )
                 modified_vs30[mask] = 10**interpolated_val
 
-    # 3. Distance-based modification for alluvium (GID 4)
+    # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6 and coast_dist_values is not None:
-        mask = geology_ids == 4
-        if np.any(mask):
-            dist_vals = coast_dist_values[mask]
-            val = cfg.hybrid_mod6_vs30_min + (
-                cfg.hybrid_mod6_vs30_max - cfg.hybrid_mod6_vs30_min
-            ) * (dist_vals - cfg.hybrid_mod6_dist_min) / (
-                cfg.hybrid_mod6_dist_max - cfg.hybrid_mod6_dist_min
-            )
-            val = np.clip(val, cfg.hybrid_mod6_vs30_min, cfg.hybrid_mod6_vs30_max)
-            modified_vs30[mask] = val
+        _apply_coastal_distance_modification(
+            modified_vs30, geology_ids, coast_dist_values,
+            gid=4,
+            dist_min=cfg.hybrid_mod6_dist_min, dist_max=cfg.hybrid_mod6_dist_max,
+            vs30_min=cfg.hybrid_mod6_vs30_min, vs30_max=cfg.hybrid_mod6_vs30_max,
+        )
 
-    # 4. Distance-based modification for floodplain (GID 10)
     if mod13 and coast_dist_values is not None:
-        mask = geology_ids == 10
-        if np.any(mask):
-            dist_vals = coast_dist_values[mask]
-            val = cfg.hybrid_mod13_vs30_min + (
-                cfg.hybrid_mod13_vs30_max - cfg.hybrid_mod13_vs30_min
-            ) * (dist_vals - cfg.hybrid_mod13_dist_min) / (
-                cfg.hybrid_mod13_dist_max - cfg.hybrid_mod13_dist_min
-            )
-            val = np.clip(val, cfg.hybrid_mod13_vs30_min, cfg.hybrid_mod13_vs30_max)
-            modified_vs30[mask] = val
+        _apply_coastal_distance_modification(
+            modified_vs30, geology_ids, coast_dist_values,
+            gid=10,
+            dist_min=cfg.hybrid_mod13_dist_min, dist_max=cfg.hybrid_mod13_dist_max,
+            vs30_min=cfg.hybrid_mod13_vs30_min, vs30_max=cfg.hybrid_mod13_vs30_max,
+        )
 
     return modified_vs30, modified_stdv

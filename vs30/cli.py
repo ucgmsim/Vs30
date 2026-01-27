@@ -45,6 +45,32 @@ app = typer.Typer(
 )
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _validate_csv_columns(
+    df: pd.DataFrame, required_cols: list[str], label: str
+) -> None:
+    """
+    Raise typer.Exit if the DataFrame is missing any required columns.
+
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame to validate.
+    required_cols : list[str]
+        Column names that must be present.
+    label : str
+        Descriptive label used in the error message (e.g. "Clustered observations CSV").
+    """
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        typer.echo(f"Error: {label} missing required columns: {missing}", err=True)
+        raise typer.Exit(1)
+
+
+# =============================================================================
 # Global Config State
 # =============================================================================
 
@@ -101,10 +127,8 @@ def main(
         logging.basicConfig(level=logging.DEBUG)
 
     # Load config from specified path or default
+    # Note: typer's exists=True already validates the file exists before reaching here
     if config is not None:
-        if not config.exists():
-            typer.echo(f"Error: Config file not found: {config}", err=True)
-            raise typer.Exit(1)
         _cli_config = Vs30Config.from_yaml(config)
         logger.info(f"Loaded config from {config}")
     else:
@@ -211,17 +235,11 @@ def update_categorical_vs30_models(
             categorical_model_df["mean_vs30_km_per_s"] != cfg.nodata_value
         ]
 
-        # Validate required columns
-        required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
-        missing_cols = [
-            col for col in required_cols if col not in categorical_model_df.columns
-        ]
-        if missing_cols:
-            typer.echo(
-                f"Error: CSV file missing required columns: {missing_cols}",
-                err=True,
-            )
-            raise typer.Exit(1)
+        _validate_csv_columns(
+            categorical_model_df,
+            ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"],
+            "Categorical model CSV",
+        )
 
         # Import assignment functions and constants from category
         from vs30.category import (
@@ -246,19 +264,11 @@ def update_categorical_vs30_models(
                 clustered_observations_csv, skipinitialspace=True
             )
 
-            # Validate clustered observations have required columns
-            obs_required_cols = ["easting", "northing", "vs30"]
-            missing_obs_cols = [
-                col
-                for col in obs_required_cols
-                if col not in clustered_observations_df.columns
-            ]
-            if missing_obs_cols:
-                typer.echo(
-                    f"Error: Clustered observations CSV missing required columns: {missing_obs_cols}",
-                    err=True,
-                )
-                raise typer.Exit(1)
+            _validate_csv_columns(
+                clustered_observations_df,
+                ["easting", "northing", "vs30"],
+                "Clustered observations CSV",
+            )
 
             logger.info(
                 f"Loaded {len(clustered_observations_df)} clustered observations"
@@ -305,19 +315,11 @@ def update_categorical_vs30_models(
                 independent_observations_csv, skipinitialspace=True
             )
 
-            # Validate independent observations have required columns
-            obs_required_cols = ["easting", "northing", "vs30", "uncertainty"]
-            missing_obs_cols = [
-                col
-                for col in obs_required_cols
-                if col not in independent_observations_df.columns
-            ]
-            if missing_obs_cols:
-                typer.echo(
-                    f"Error: Independent observations CSV missing required columns: {missing_obs_cols}",
-                    err=True,
-                )
-                raise typer.Exit(1)
+            _validate_csv_columns(
+                independent_observations_df,
+                ["easting", "northing", "vs30", "uncertainty"],
+                "Independent observations CSV",
+            )
 
             logger.info(
                 f"Loaded {len(independent_observations_df)} independent observations"
@@ -613,34 +615,29 @@ def _prepare_observations_for_spatial_fit(
     """
     logger.info("Preparing observation data for spatial adjustment...")
 
+    # Geology models require hybrid modification parameters; terrain does not
+    hybrid_params = {}
     if model_type == "geology":
-        # Geology models use hybrid parameters from config
-        obs_data = spatial.prepare_observation_data(
-            observations,
-            raster_data,
-            updated_model_table,
-            model_type,
-            output_dir,
-            noisy=cfg.noisy,
-            hybrid_mod6_dist_min=cfg.hybrid_mod6_dist_min,
-            hybrid_mod6_dist_max=cfg.hybrid_mod6_dist_max,
-            hybrid_mod6_vs30_min=cfg.hybrid_mod6_vs30_min,
-            hybrid_mod6_vs30_max=cfg.hybrid_mod6_vs30_max,
-            hybrid_mod13_dist_min=cfg.hybrid_mod13_dist_min,
-            hybrid_mod13_dist_max=cfg.hybrid_mod13_dist_max,
-            hybrid_mod13_vs30_min=cfg.hybrid_mod13_vs30_min,
-            hybrid_mod13_vs30_max=cfg.hybrid_mod13_vs30_max,
-        )
-    else:
-        # Terrain models don't use hybrid parameters
-        obs_data = spatial.prepare_observation_data(
-            observations,
-            raster_data,
-            updated_model_table,
-            model_type,
-            output_dir,
-            noisy=cfg.noisy,
-        )
+        hybrid_params = {
+            "hybrid_mod6_dist_min": cfg.hybrid_mod6_dist_min,
+            "hybrid_mod6_dist_max": cfg.hybrid_mod6_dist_max,
+            "hybrid_mod6_vs30_min": cfg.hybrid_mod6_vs30_min,
+            "hybrid_mod6_vs30_max": cfg.hybrid_mod6_vs30_max,
+            "hybrid_mod13_dist_min": cfg.hybrid_mod13_dist_min,
+            "hybrid_mod13_dist_max": cfg.hybrid_mod13_dist_max,
+            "hybrid_mod13_vs30_min": cfg.hybrid_mod13_vs30_min,
+            "hybrid_mod13_vs30_max": cfg.hybrid_mod13_vs30_max,
+        }
+
+    obs_data = spatial.prepare_observation_data(
+        observations,
+        raster_data,
+        updated_model_table,
+        model_type,
+        output_dir,
+        noisy=cfg.noisy,
+        **hybrid_params,
+    )
 
     logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
@@ -919,21 +916,17 @@ def plot_posterior_values(
         # Filter out rows with placeholder values for excluded categories (e.g., water)
         df = df[df["prior_mean_vs30_km_per_s"] != cfg.nodata_value].copy()
 
-        # Validate required columns
-        required_cols = [
-            "id",
-            "prior_mean_vs30_km_per_s",
-            "prior_standard_deviation_vs30_km_per_s",
-            "posterior_mean_vs30_km_per_s",
-            "posterior_standard_deviation_vs30_km_per_s",
-        ]
-        missing_cols = [col for col in required_cols if col not in df.columns]
-        if missing_cols:
-            typer.echo(
-                f"Error: CSV file missing required columns: {missing_cols}",
-                err=True,
-            )
-            raise typer.Exit(1)
+        _validate_csv_columns(
+            df,
+            [
+                "id",
+                "prior_mean_vs30_km_per_s",
+                "prior_standard_deviation_vs30_km_per_s",
+                "posterior_mean_vs30_km_per_s",
+                "posterior_standard_deviation_vs30_km_per_s",
+            ],
+            "Plot input CSV",
+        )
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1153,7 +1146,6 @@ def full_pipeline_for_geology_or_terrain(
 
         # --- Step 3: Hybrid Modification (Geology Only) ---
         current_raster = initial_raster
-        # id_raster was already set above using the correct filename config
 
         if model_type == "geology":
             logger.info(
@@ -1440,11 +1432,13 @@ def full_pipeline(
 @cli.from_docstring(app)
 def compute_at_locations(
     locations_csv: Annotated[
-        Path, typer.Option("--locations-csv", "-l", exists=True, dir_okay=False)
-    ],
-    output_csv: Annotated[Path, typer.Option("--output-csv", "-o", dir_okay=False)],
-    lon_column: Annotated[str, typer.Option("--lon-column")] = "longitude",
-    lat_column: Annotated[str, typer.Option("--lat-column")] = "latitude",
+        Path | None, typer.Option("--locations-csv", "-l", exists=True, dir_okay=False)
+    ] = None,
+    output_csv: Annotated[
+        Path | None, typer.Option("--output-csv", "-o", dir_okay=False)
+    ] = None,
+    lon_column: Annotated[str | None, typer.Option("--lon-column")] = None,
+    lat_column: Annotated[str | None, typer.Option("--lat-column")] = None,
     geology_categorical_csv: Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
@@ -1524,6 +1518,38 @@ def compute_at_locations(
     try:
         cfg = get_config()
 
+        # Resolve parameters from CLI arguments or config defaults
+        if locations_csv is None:
+            if cfg.locations_csv is None:
+                typer.echo(
+                    "Error: Missing required locations_csv. "
+                    "Set in config.yaml or provide --locations-csv.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+            locations_csv = Path(cfg.locations_csv)
+            if not locations_csv.exists():
+                typer.echo(
+                    f"Error: locations_csv from config not found: {locations_csv}",
+                    err=True,
+                )
+                raise typer.Exit(1)
+
+        if output_csv is None:
+            if cfg.locations_output_csv is None:
+                typer.echo(
+                    "Error: Missing required locations_output_csv. "
+                    "Set in config.yaml or provide --output-csv.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+            output_csv = Path(cfg.locations_output_csv)
+
+        if lon_column is None:
+            lon_column = cfg.locations_lon_column
+        if lat_column is None:
+            lat_column = cfg.locations_lat_column
+
         if combination_method is None:
             combination_method = cfg.combination_method
 
@@ -1561,16 +1587,17 @@ def compute_at_locations(
                 terrain_categorical_csv = res_dir / cfg.TERRAIN_MEAN_STDDEV_CSV
 
             # Load observations for spatial adjustment
-            # Note: config paths already include the 'observations/' prefix
+            # Resolve observation files from config defaults (matching full_pipeline logic)
             if clustered_observations_csv is None:
-                clustered_obs_path = res_dir / cfg.clustered_observations_file
-                if clustered_obs_path.exists():
-                    clustered_observations_csv = clustered_obs_path
+                clustered_obs_file = cfg.clustered_observations_file
+                if clustered_obs_file and clustered_obs_file.lower() != "none":
+                    clustered_obs_path = res_dir / clustered_obs_file
+                    if clustered_obs_path.exists():
+                        clustered_observations_csv = clustered_obs_path
             if independent_observations_csv is None:
-                if cfg.independent_observations_file != "none":
-                    independent_obs_path = (
-                        res_dir / cfg.independent_observations_file
-                    )
+                indep_obs_file = cfg.independent_observations_file
+                if indep_obs_file and indep_obs_file.lower() != "none":
+                    independent_obs_path = res_dir / indep_obs_file
                     if independent_obs_path.exists():
                         independent_observations_csv = independent_obs_path
 

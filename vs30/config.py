@@ -23,7 +23,6 @@ Usage
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 import yaml
 from pydantic import BaseModel, Field
@@ -62,6 +61,24 @@ class Vs30Config(BaseModel):
     grid_ymax: int = Field(description="Grid maximum Y coordinate (NZTM, meters)")
     grid_dx: int = Field(description="Grid X spacing (meters)")
     grid_dy: int = Field(description="Grid Y spacing (meters)")
+
+    # --- Compute-at-locations parameters (only used by compute-at-locations) ---
+    locations_csv: str | None = Field(
+        default=None,
+        description="Path to input CSV with locations for compute-at-locations"
+    )
+    locations_output_csv: str | None = Field(
+        default=None,
+        description="Path to output CSV for compute-at-locations results"
+    )
+    locations_lon_column: str = Field(
+        default="longitude",
+        description="Longitude column name in locations CSV"
+    )
+    locations_lat_column: str = Field(
+        default="latitude",
+        description="Latitude column name in locations CSV"
+    )
 
     # --- Full NZ land extent (for coastal distance calculations) ---
     full_nz_land_xmin: int = Field(description="Full NZ land extent minimum X")
@@ -180,7 +197,7 @@ class Vs30Config(BaseModel):
     )
 
     # --- Combination settings ---
-    combination_method: Union[str, float] = Field(
+    combination_method: str | float = Field(
         description="Method for combining models: ratio (float) or 'standard_deviation_weighting'"
     )
     k_value: float = Field(
@@ -295,27 +312,27 @@ class Vs30Config(BaseModel):
         }
 
     # =========================================================================
-    # Convenience aliases matching old constants.py names
+    # Short aliases for frequently-used fields with long names
     # =========================================================================
 
     @property
     def MODEL_NODATA(self) -> int:
-        """Alias for nodata_value (backwards compatibility)."""
+        """Short alias for nodata_value."""
         return self.nodata_value
 
     @property
     def RASTER_ID_NODATA_VALUE(self) -> int:
-        """Alias for raster_id_nodata_value (backwards compatibility)."""
+        """Short alias for raster_id_nodata_value."""
         return self.raster_id_nodata_value
 
     @property
     def GEOLOGY_MEAN_STDDEV_CSV(self) -> str:
-        """Alias for geology CSV path (backwards compatibility)."""
+        """Short alias for geology_mean_and_standard_deviation_per_category_file."""
         return self.geology_mean_and_standard_deviation_per_category_file
 
     @property
     def TERRAIN_MEAN_STDDEV_CSV(self) -> str:
-        """Alias for terrain CSV path (backwards compatibility)."""
+        """Short alias for terrain_mean_and_standard_deviation_per_category_file."""
         return self.terrain_mean_and_standard_deviation_per_category_file
 
     # =========================================================================
