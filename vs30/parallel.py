@@ -476,11 +476,11 @@ def run_parallel_locations(
     DataFrame
         Results with vs30, stdv, and intermediate columns (if requested)
     """
-    chunks = np.array_split(locations_df, n_proc)
+    split_indices = np.array_split(range(len(locations_df)), n_proc)
     chunk_args = [
-        (chunk.reset_index(drop=True), i, observations_df, geol_model_df, terr_model_df, config)
-        for i, chunk in enumerate(chunks)
-        if len(chunk) > 0
+        (locations_df.iloc[idx].reset_index(drop=True), i, observations_df, geol_model_df, terr_model_df, config)
+        for i, idx in enumerate(split_indices)
+        if len(idx) > 0
     ]
 
     actual_n_proc = len(chunk_args)
