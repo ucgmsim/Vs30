@@ -608,9 +608,9 @@ def run_parallel_spatial_fit(
                 )
             )
 
-    # Merge: concatenate update lists
+    # Merge: concatenate update lists (order does not matter; each update carries its pixel_index)
     all_updates = []
-    for chunk_id, chunk_updates in results:
+    for _, chunk_updates in results:
         all_updates.extend(chunk_updates)
 
     return all_updates

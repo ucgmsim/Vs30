@@ -5,8 +5,9 @@ import yaml
 
 from vs30.config import get_default_config
 
+
 # ============================================================================
-# Coordinate Conversion Functions
+# Legacy Utility Functions
 # ============================================================================
 
 
@@ -14,8 +15,8 @@ def _resolve_base_path(config_path: Path) -> Path:
     """
     Resolve base path from config file location.
 
-    The base path is the parent directory of the vs30 package directory.
-    For example, if config is at vs30/config.yaml, base_path is the workspace root.
+    .. deprecated::
+        Use Vs30Config.from_yaml() for configuration loading instead.
 
     Parameters
     ----------
@@ -29,13 +30,15 @@ def _resolve_base_path(config_path: Path) -> Path:
     """
     if config_path.name == "config.yaml" and config_path.parent.name == "vs30":
         return config_path.parent.parent
-    else:
-        return config_path.parent
+    return config_path.parent
 
 
 def load_config(config_path: Path) -> dict:
     """
     Load configuration from YAML file.
+
+    .. deprecated::
+        Use Vs30Config.from_yaml() for typed configuration loading instead.
 
     Parameters
     ----------
@@ -52,7 +55,7 @@ def load_config(config_path: Path) -> dict:
 
 
 # ============================================================================
-# Helper Functions for Correlation
+# Correlation Functions
 # ============================================================================
 
 
@@ -143,22 +146,23 @@ def combine_vs30_models(
     not 300 (arithmetic mean).
     """
     # Determine weights based on combination method
-    try:
-        # Ratio-based: ratio = geology_weight / terrain_weight
-        ratio = float(combination_method)
+    method_str = str(combination_method).strip()
+    if method_str == "standard_deviation_weighting":
+        # Variance-based weighting: lower stdv gets higher weight
+        m_g = (geol_stdv**2 + epsilon) ** -k_value
+        m_t = (terr_stdv**2 + epsilon) ** -k_value
+        total_m = m_g + m_t
+        w_g = m_g / total_m
+        w_t = m_t / total_m
+    else:
+        try:
+            # Ratio-based: ratio = geology_weight / terrain_weight
+            ratio = float(combination_method)
+        except (ValueError, TypeError):
+            raise ValueError(f"Unknown combination method: {combination_method}")
         total_w = ratio + 1.0
         w_g = ratio / total_w
         w_t = 1.0 / total_w
-    except (ValueError, TypeError):
-        if str(combination_method).strip() == "standard_deviation_weighting":
-            # Variance-based weighting: lower stdv gets higher weight
-            m_g = (geol_stdv**2 + epsilon) ** -k_value
-            m_t = (terr_stdv**2 + epsilon) ** -k_value
-            total_m = m_g + m_t
-            w_g = m_g / total_m
-            w_t = m_t / total_m
-        else:
-            raise ValueError(f"Unknown combination method: {combination_method}")
 
     # Combine in log-space (geometric weighting)
     log_g = np.log(geol_vs30)
