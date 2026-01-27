@@ -193,15 +193,12 @@ class TestVs30Config:
         with pytest.raises(FileNotFoundError):
             Vs30Config.from_yaml(Path("/nonexistent/config.yaml"))
 
-    def test_backwards_compat_properties(self):
-        """Test backwards compatibility property aliases."""
+    def test_short_alias_properties(self):
+        """Test short alias properties for frequently-used fields."""
         config = get_default_config()
 
-        # These should match the actual config values
-        assert config.MODEL_NODATA == config.nodata_value
-        assert config.RASTER_ID_NODATA_VALUE == config.raster_id_nodata_value
-        assert config.GEOLOGY_MEAN_STDDEV_CSV == config.geology_mean_and_standard_deviation_per_category_file
-        assert config.TERRAIN_MEAN_STDDEV_CSV == config.terrain_mean_and_standard_deviation_per_category_file
+        assert config.geology_csv == config.geology_mean_and_standard_deviation_per_category_file
+        assert config.terrain_csv == config.terrain_mean_and_standard_deviation_per_category_file
 
 
 class TestConfigCaching:

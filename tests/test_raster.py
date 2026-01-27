@@ -261,22 +261,24 @@ class TestApplyHybridGeologyModifications:
         # Should clamp at maximum (500)
         assert result_vs30[0, 0] == 500.0
 
-    def test_missing_params_raises_error(self, sample_arrays):
-        """Test that missing required parameters raises ValueError."""
+    def test_defaults_from_config_when_params_omitted(self, sample_arrays):
+        """Test that hybrid parameters default from config when not provided."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
-        with pytest.raises(ValueError, match="Missing required parameters"):
-            apply_hybrid_geology_modifications(
-                vs30_array.copy(),
-                stdv_array.copy(),
-                id_array,
-                slope_array,
-                coast_dist_array,
-                mod6=True,
-                mod13=False,
-                hybrid=False,
-                # Missing required params for mod6
-            )
+        # Should not raise -- parameters default from config
+        result_vs30, result_stdv = apply_hybrid_geology_modifications(
+            vs30_array.copy(),
+            stdv_array.copy(),
+            id_array,
+            slope_array,
+            coast_dist_array,
+            mod6=True,
+            mod13=False,
+            hybrid=False,
+        )
+
+        assert result_vs30.shape == vs30_array.shape
+        assert result_stdv.shape == stdv_array.shape
 
     def test_no_modifications_returns_unchanged(self, sample_arrays):
         """Test that disabling all modifications returns unchanged arrays."""
@@ -501,26 +503,28 @@ class TestApplyHybridGeologyModificationsMore:
         # Near coast should have lower VS30, inland higher
         assert modified_vs30[0] <= modified_vs30[1]
 
-    def test_missing_mod13_params_raises_error(self):
-        """Test that missing mod13 parameters raises ValueError."""
+    def test_defaults_from_config_for_mod13(self):
+        """Test that mod13 parameters default from config when not provided."""
         vs30 = np.array([300.0])
         stdv = np.array([30.0])
         id_array = np.array([10])  # Floodplain (mod13 applies)
         slope_array = np.array([5.0])
         coast_dist = np.array([15000.0])
 
-        with pytest.raises(ValueError, match="Missing required parameters.*Floodplain"):
-            apply_hybrid_geology_modifications(
-                vs30_array=vs30.copy(),
-                stdv_array=stdv.copy(),
-                id_array=id_array,
-                slope_array=slope_array,
-                coast_dist_array=coast_dist,
-                mod6=False,
-                mod13=True,  # mod13 enabled but no params
-                hybrid=False,
-                # Missing required params for mod13
-            )
+        # Should not raise -- parameters default from config
+        result_vs30, result_stdv = apply_hybrid_geology_modifications(
+            vs30_array=vs30.copy(),
+            stdv_array=stdv.copy(),
+            id_array=id_array,
+            slope_array=slope_array,
+            coast_dist_array=coast_dist,
+            mod6=False,
+            mod13=True,
+            hybrid=False,
+        )
+
+        assert result_vs30.shape == vs30.shape
+        assert result_stdv.shape == stdv.shape
 
 
 class TestLoadModelValuesFromCSVErrors:

@@ -307,8 +307,8 @@ class Vs30Config(BaseModel):
     def model_csv_paths(self) -> dict[str, str]:
         """Model CSV paths keyed by model type."""
         return {
-            "geology": self.geology_mean_and_standard_deviation_per_category_file,
-            "terrain": self.terrain_mean_and_standard_deviation_per_category_file,
+            "geology": self.geology_csv,
+            "terrain": self.terrain_csv,
         }
 
     # =========================================================================
@@ -316,22 +316,12 @@ class Vs30Config(BaseModel):
     # =========================================================================
 
     @property
-    def MODEL_NODATA(self) -> int:
-        """Short alias for nodata_value."""
-        return self.nodata_value
-
-    @property
-    def RASTER_ID_NODATA_VALUE(self) -> int:
-        """Short alias for raster_id_nodata_value."""
-        return self.raster_id_nodata_value
-
-    @property
-    def GEOLOGY_MEAN_STDDEV_CSV(self) -> str:
+    def geology_csv(self) -> str:
         """Short alias for geology_mean_and_standard_deviation_per_category_file."""
         return self.geology_mean_and_standard_deviation_per_category_file
 
     @property
-    def TERRAIN_MEAN_STDDEV_CSV(self) -> str:
+    def terrain_csv(self) -> str:
         """Short alias for terrain_mean_and_standard_deviation_per_category_file."""
         return self.terrain_mean_and_standard_deviation_per_category_file
 
@@ -363,7 +353,7 @@ class Vs30Config(BaseModel):
         """
         if not path.exists():
             raise FileNotFoundError(f"Configuration file not found: {path}")
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return cls(**data)
 
