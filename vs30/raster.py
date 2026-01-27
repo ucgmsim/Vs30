@@ -535,8 +535,8 @@ def create_coast_distance_raster(
     g_ymin = min(cfg.full_nz_land_ymin, s_ymin)
     g_ymax = max(cfg.full_nz_land_ymax, s_ymax)
 
-    # Check if we need to extend beyond template bounds
-    gridmod = g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
+    # Check if grid was extended beyond template bounds (requires cropping later)
+    grid_was_extended = g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
 
     # Rasterize land polygons using GDAL (legacy approach)
     # Use UInt16 data type as in legacy code (sufficient for distance range)
@@ -568,7 +568,7 @@ def create_coast_distance_raster(
     )
 
     # If grid was extended, crop back to template bounds
-    if gridmod:
+    if grid_was_extended:
         with rasterio.open(output_path) as src:
             extended_data = src.read(1)
 
@@ -756,15 +756,23 @@ def apply_hybrid_geology_modifications(
 
     # Fill in defaults from config for any unspecified parameters
     if mod6:
-        hybrid_mod6_dist_min = hybrid_mod6_dist_min if hybrid_mod6_dist_min is not None else cfg.hybrid_mod6_dist_min
-        hybrid_mod6_dist_max = hybrid_mod6_dist_max if hybrid_mod6_dist_max is not None else cfg.hybrid_mod6_dist_max
-        hybrid_mod6_vs30_min = hybrid_mod6_vs30_min if hybrid_mod6_vs30_min is not None else cfg.hybrid_mod6_vs30_min
-        hybrid_mod6_vs30_max = hybrid_mod6_vs30_max if hybrid_mod6_vs30_max is not None else cfg.hybrid_mod6_vs30_max
+        if hybrid_mod6_dist_min is None:
+            hybrid_mod6_dist_min = cfg.hybrid_mod6_dist_min
+        if hybrid_mod6_dist_max is None:
+            hybrid_mod6_dist_max = cfg.hybrid_mod6_dist_max
+        if hybrid_mod6_vs30_min is None:
+            hybrid_mod6_vs30_min = cfg.hybrid_mod6_vs30_min
+        if hybrid_mod6_vs30_max is None:
+            hybrid_mod6_vs30_max = cfg.hybrid_mod6_vs30_max
     if mod13:
-        hybrid_mod13_dist_min = hybrid_mod13_dist_min if hybrid_mod13_dist_min is not None else cfg.hybrid_mod13_dist_min
-        hybrid_mod13_dist_max = hybrid_mod13_dist_max if hybrid_mod13_dist_max is not None else cfg.hybrid_mod13_dist_max
-        hybrid_mod13_vs30_min = hybrid_mod13_vs30_min if hybrid_mod13_vs30_min is not None else cfg.hybrid_mod13_vs30_min
-        hybrid_mod13_vs30_max = hybrid_mod13_vs30_max if hybrid_mod13_vs30_max is not None else cfg.hybrid_mod13_vs30_max
+        if hybrid_mod13_dist_min is None:
+            hybrid_mod13_dist_min = cfg.hybrid_mod13_dist_min
+        if hybrid_mod13_dist_max is None:
+            hybrid_mod13_dist_max = cfg.hybrid_mod13_dist_max
+        if hybrid_mod13_vs30_min is None:
+            hybrid_mod13_vs30_min = cfg.hybrid_mod13_vs30_min
+        if hybrid_mod13_vs30_max is None:
+            hybrid_mod13_vs30_max = cfg.hybrid_mod13_vs30_max
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:

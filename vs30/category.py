@@ -117,7 +117,12 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 # ============================================================================
 
 
-def _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value):
+def _compute_bayesian_posterior_mean(
+    prior_mean: float,
+    num_prior_observations: float,
+    posterior_variance: float,
+    observation_value: float,
+) -> float:
     """
     Compute posterior mean using Bayesian update formula.
 
@@ -137,13 +142,22 @@ def _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posteri
     float
         Posterior mean (in linear space).
     """
-    return exp(
-        (num_prior_observations / posterior_variance * log(prior_mean) + log(observation_value) / posterior_variance)
-        / (num_prior_observations / posterior_variance + 1 / posterior_variance)
-    )
+    # The posterior_variance terms in numerator and denominator cancel out,
+    # simplifying to a weighted average in log-space:
+    #   log_posterior = (n_prior * log(prior) + log(obs)) / (n_prior + 1)
+    weighted_log_mean = (
+        num_prior_observations * log(prior_mean) + log(observation_value)
+    ) / (num_prior_observations + 1)
+    return exp(weighted_log_mean)
 
 
-def _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value):
+def _compute_bayesian_posterior_variance(
+    prior_stdv: float,
+    num_prior_observations: float,
+    uncertainty: float,
+    prior_mean: float,
+    observation_value: float,
+) -> float:
     """
     Compute posterior variance using Bayesian update formula.
 
@@ -165,8 +179,14 @@ def _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, unc
     float
         Posterior variance.
     """
-    mean_shift = (num_prior_observations / (num_prior_observations + 1)) * (log(observation_value) - log(prior_mean)) ** 2
-    return (num_prior_observations * prior_stdv**2 + uncertainty**2 + mean_shift) / (num_prior_observations + 1)
+    log_residual = log(observation_value) - log(prior_mean)
+    mean_shift = (
+        num_prior_observations / (num_prior_observations + 1)
+    ) * log_residual**2
+    pooled_variance = (
+        num_prior_observations * prior_stdv**2 + uncertainty**2 + mean_shift
+    )
+    return pooled_variance / (num_prior_observations + 1)
 
 
 # ============================================================================
@@ -458,37 +478,38 @@ def update_with_clustered_data(
         if category_id_int not in id_to_idx or category_id_int > max_id:
             continue
 
-        idtable = valid_sites[valid_sites[STANDARD_ID_COLUMN] == category_id_int]
-        clusters = idtable["cluster"].value_counts()
+        category_sites = valid_sites[valid_sites[STANDARD_ID_COLUMN] == category_id_int]
+        cluster_counts = category_sites["cluster"].value_counts()
 
         # Effective sample size: one per cluster, but each noise point (-1) counts individually.
-        # len(clusters) counts distinct cluster IDs. If -1 is present, it was counted once
-        # but represents clusters[-1] individual observations, so add the extra count.
-        n = len(clusters)
-        if -1 in clusters.index:
-            n += clusters[-1] - 1  # -1 was already counted once, add remaining
+        # len(cluster_counts) counts distinct cluster IDs. If -1 is present, it was counted
+        # once but represents cluster_counts[-1] individual observations, so add the extra.
+        effective_n = len(cluster_counts)
+        if -1 in cluster_counts.index:
+            effective_n += cluster_counts[-1] - 1  # -1 was already counted once
 
-        if n == 0:
+        if effective_n == 0:
             continue
 
-        vs_sum = 0
-        w = np.repeat(1 / n, len(idtable))
+        weighted_log_vs30_sum = 0.0
+        weights = np.repeat(1.0 / effective_n, len(category_sites))
 
-        for c in clusters.index:
-            cidx = idtable["cluster"] == c
-            ctable = idtable[cidx]
-            if c == -1:
-                # Values not part of cluster, weight = 1 per value
-                vs_sum += sum(np.log(ctable.vs30.values))
+        for cluster_label in cluster_counts.index:
+            cluster_mask = category_sites["cluster"] == cluster_label
+            cluster_sites = category_sites[cluster_mask]
+            if cluster_label == -1:
+                # Unclustered points: each counts as one observation
+                weighted_log_vs30_sum += np.sum(np.log(cluster_sites.vs30.values))
             else:
-                # Values in cluster, weight = 1 / cluster_size per value
-                vs_sum += sum(np.log(ctable.vs30.values)) / len(ctable)
-                w[cidx] /= len(ctable)
+                # Clustered points: entire cluster counts as one observation
+                weighted_log_vs30_sum += np.sum(np.log(cluster_sites.vs30.values)) / len(cluster_sites)
+                weights[cluster_mask] /= len(cluster_sites)
 
-        # Update posterior array
-        posterior_array[category_id_int, 0] = exp(vs_sum / n)
+        # Compute geometric mean and weighted standard deviation
+        log_geometric_mean = weighted_log_vs30_sum / effective_n
+        posterior_array[category_id_int, 0] = exp(log_geometric_mean)
         posterior_array[category_id_int, 1] = np.sqrt(
-            sum(w * (np.log(idtable.vs30.values) - vs_sum / n) ** 2)
+            np.sum(weights * (np.log(category_sites.vs30.values) - log_geometric_mean) ** 2)
         )
 
     # Convert back to DataFrame format
