@@ -13,9 +13,10 @@ Tests cover:
 - Cluster subsampling
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
-from math import sqrt
 
 from vs30.spatial import (
     ObservationData,
@@ -450,10 +451,10 @@ class TestGridPointsInBbox:
         )
 
         # Points at 100 and 200 should be in bbox
-        assert mask[1] == True  # 100
-        assert mask[2] == True  # 200
-        assert mask[0] == False  # 0 (outside east)
-        assert mask[3] == False  # 300 (outside east)
+        assert mask[1]  # 100
+        assert mask[2]  # 200
+        assert not mask[0]  # 0 (outside east)
+        assert not mask[3]  # 300 (outside east)
 
     def test_multiple_observations(self):
         """Test with multiple observations."""
@@ -478,9 +479,9 @@ class TestGridPointsInBbox:
         )
 
         # First point in first obs bbox, third point in second obs bbox
-        assert mask[0] == True
-        assert mask[1] == False
-        assert mask[2] == True
+        assert mask[0]
+        assert not mask[1]
+        assert mask[2]
 
 
 class TestCalculateChunkSize:
@@ -620,7 +621,6 @@ class TestValidateObservations:
 # =============================================================================
 # Additional Tests from Coverage Improvements
 # =============================================================================
-from pathlib import Path
 
 
 class TestRasterDataClass:

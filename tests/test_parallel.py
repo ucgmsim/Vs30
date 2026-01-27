@@ -8,9 +8,9 @@ Tests cover:
 """
 
 import multiprocessing as mp
-import os
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from vs30.parallel import (
@@ -135,7 +135,6 @@ class TestParallelProcessingInfrastructure:
 # =============================================================================
 # Additional Tests from Coverage Improvements
 # =============================================================================
-import pandas as pd
 
 
 class TestLocationsChunkConfig:

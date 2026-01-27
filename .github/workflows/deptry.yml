@@ -14,4 +14,4 @@ jobs:
       - name: Install deptry
         run: pip install deptry
       - name: Run deptry to check that all dependencies are present
-        run: deptry . -ddg test,types
+        run: deptry . -ddg test

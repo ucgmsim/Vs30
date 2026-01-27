@@ -539,7 +539,6 @@ class TestLoadModelValuesFromCSVErrors:
 
     def test_missing_columns_raises_error(self, tmp_path):
         """Test that CSV missing required columns raises ValueError."""
-        import importlib
         from unittest import mock
 
         from vs30.raster import load_model_values_from_csv
