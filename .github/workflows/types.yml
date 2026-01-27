@@ -1,0 +1,38 @@
+name: Type Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: typecheck-env
+          python-version: "3.12"
+          use-mamba: true
+
+      - name: Install dependencies with mamba
+        shell: bash -el {0}
+        run: |
+          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib geopandas
+          pip install ty
+
+      - name: Install project in dev mode
+        shell: bash -el {0}
+        run: pip install -e .
+
+      - name: Run type checking with ty
+        shell: bash -el {0}
+        run: ty check --exclude setup.py
