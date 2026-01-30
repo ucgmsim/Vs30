@@ -21,6 +21,7 @@ Usage
 
 import logging
 import shutil
+import time
 import typing
 from pathlib import Path
 
@@ -28,11 +29,15 @@ import matplotlib.pyplot
 import numpy as np
 import pandas as pd
 import rasterio
+import sklearn.cluster
 import typer
 
 from qcore import cli
+from qcore import coordinates
+from vs30 import category
 from vs30 import config as config_module
 from vs30 import constants
+from vs30 import parallel
 from vs30 import raster
 from vs30 import spatial
 from vs30 import utils
@@ -256,9 +261,6 @@ def update_categorical_vs30_models(
             ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"],
             "Categorical model CSV",
         )
-
-        # Import category module
-        from vs30 import category
 
         # Current prior (will be updated as we process observations)
         current_prior_df = categorical_model_df.copy()
@@ -652,8 +654,6 @@ def apply_clustered_subsampling(
     if not is_clustered_obs:
         return obs_data
 
-    import sklearn.cluster
-
     logger.info("Clustering observations for optimized affected pixel search...")
 
     # Run DBSCAN directly on the filtered observation locations
@@ -685,7 +685,7 @@ def apply_clustered_subsampling(
 
     logger.info(
         f"Subsampled to {len(subsample_indices)} observations for affected pixel search "
-        f"(step={obs_subsample_step})"
+        f"(step={cfg.obs_subsample_step_for_clustered})"
     )
 
     return obs_data_for_bbox
@@ -744,8 +744,6 @@ def spatial_fit(
         phi = constants.PHI[model_type]
         noisy = cfg.noisy  # noisy is still user-configurable
         cov_reduc = constants.COV_REDUC
-
-        from vs30 import parallel
 
         n_proc_resolved = parallel.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
@@ -1032,7 +1030,7 @@ def full_pipeline_for_geology_or_terrain(
         do_bayesian_update = cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values
 
         # Resolve observations from config if not provided
-        res_dir = Path(__file__).parent / "resources"
+        res_dir = constants.RESOURCE_PATH
         clustered_observations_csv = resolve_observation_csv(
             clustered_observations_csv, cfg.clustered_observations_file, res_dir
         )
@@ -1259,8 +1257,6 @@ def full_pipeline(
         Number of parallel processes for spatial adjustment. Use -1 for all cores.
         Default from config.
     """
-    import time
-
     start_time = time.time()
 
     try:
@@ -1278,14 +1274,12 @@ def full_pipeline(
             else cfg.combination_method
         )
 
-        from vs30 import parallel as parallel_module
-
-        n_proc_resolved = parallel_module.resolve_n_proc(
+        n_proc_resolved = parallel.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
 
         # Resolve CSV paths if not provided
-        res_dir = Path(__file__).parent / "resources"
+        res_dir = constants.RESOURCE_PATH
         if geology_categorical_csv is None:
             geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
         if terrain_categorical_csv is None:
@@ -1416,10 +1410,6 @@ def compute_at_locations(
     n_proc : int, optional
         Number of parallel processes (default from config, -1 for all cores).
     """
-    from qcore import coordinates
-
-    from vs30 import parallel as parallel_locations
-
     try:
         cfg = get_config()
 
@@ -1483,7 +1473,7 @@ def compute_at_locations(
         typer.echo(f"Loaded {len(points)} locations")
 
         # Resolve CSV paths if not provided
-        res_dir = Path(__file__).parent / "resources"
+        res_dir = constants.RESOURCE_PATH
         if geology_categorical_csv is None:
             geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
         if terrain_categorical_csv is None:
@@ -1522,7 +1512,7 @@ def compute_at_locations(
         terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
         # Resolve n_proc from CLI or config
-        n_proc_resolved = parallel_locations.resolve_n_proc(
+        n_proc_resolved = parallel.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
 
@@ -1535,7 +1525,7 @@ def compute_at_locations(
             # Re-read the original CSV (without NZTM conversion - workers will do it)
             locations_df_raw = pd.read_csv(locations_csv)
 
-            loc_config = parallel_locations.LocationsChunkConfig(
+            loc_config = parallel.LocationsChunkConfig(
                 lon_column=lon_column,
                 lat_column=lat_column,
                 include_intermediate=include_intermediate,
@@ -1543,7 +1533,7 @@ def compute_at_locations(
                 coast_distance_raster=coast_distance_raster,
             )
 
-            df = parallel_locations.run_parallel_locations(
+            df = parallel.run_parallel(
                 locations_df=locations_df_raw,
                 observations_df=observations_df,
                 geol_model_df=geol_model_df,
@@ -1576,7 +1566,7 @@ def compute_at_locations(
             geol_stdv_hybrid,
             geol_mvn_vs30,
             geol_mvn_stdv,
-        ) = parallel_locations.process_geology_at_points(
+        ) = parallel.process_geology_at_points(
             points, geol_model_df, observations_df, coast_distance_raster
         )
 
@@ -1596,7 +1586,7 @@ def compute_at_locations(
             terr_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
-        ) = parallel_locations.process_terrain_at_points(points, terr_model_df, observations_df)
+        ) = parallel.process_terrain_at_points(points, terr_model_df, observations_df)
 
         df["terrain_id"] = terr_ids
         if include_intermediate:

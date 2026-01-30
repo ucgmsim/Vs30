@@ -44,6 +44,7 @@ from tqdm import tqdm
 from vs30 import category
 from vs30 import config
 from vs30 import constants
+from vs30 import raster
 from vs30 import utils
 
 # Use spawn context to avoid GDAL fork issues
@@ -340,12 +341,6 @@ def prepare_observation_data(
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
     if model_type == "geology":
-        from vs30.raster import (
-            apply_hybrid_geology_modifications,
-            create_coast_distance_raster,
-            create_slope_raster,
-        )
-
         # 1. Get slope and coast distance at points
         # Use existing rasters in output_dir if possible, otherwise create temporary ones
         slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
@@ -359,9 +354,9 @@ def prepare_observation_data(
         }
 
         if not slope_path.exists():
-            create_slope_raster(slope_path, profile)
+            raster.create_slope_raster(slope_path, profile)
         if not coast_path.exists():
-            create_coast_distance_raster(coast_path, profile)
+            raster.create_coast_distance_raster(coast_path, profile)
 
         # Sample rasters at observation locations
         with rasterio.open(slope_path) as src:
@@ -370,7 +365,7 @@ def prepare_observation_data(
             coast_obs = np.array([v[0] for v in src.sample(obs_locs)])
 
         # Apply modifications to model_vs30 and model_stdv at points
-        model_vs30, model_stdv = apply_hybrid_geology_modifications(
+        model_vs30, model_stdv = raster.apply_hybrid_geology_modifications(
             model_vs30,
             model_stdv,
             model_ids[valid_obs_mask],
