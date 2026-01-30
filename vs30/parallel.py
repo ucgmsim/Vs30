@@ -20,6 +20,7 @@ import pandas as pd
 import threadpoolctl
 from tqdm import tqdm
 
+from qcore import coordinates
 from vs30 import category
 from vs30 import raster
 from vs30 import spatial
@@ -288,8 +289,6 @@ def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma:
     tuple
         (chunk_id, result_df) where result_df has all computed columns
     """
-    from qcore import coordinates
-
     (
         chunk_df,
         chunk_id,

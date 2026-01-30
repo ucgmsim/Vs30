@@ -9,19 +9,18 @@ see vs30/constants.py.
 
 Usage
 -----
-    from vs30.config import Vs30Config, get_default_config
+    from vs30 import config
 
     # Load default config (from package's config.yaml)
-    config = get_default_config()
+    cfg = config.get_default_config()
 
     # Load from custom path
-    config = Vs30Config.from_yaml(Path("/path/to/custom/config.yaml"))
+    cfg = config.Vs30Config.from_yaml(Path("/path/to/custom/config.yaml"))
 
     # Access values with IDE autocomplete
-    max_distance = config.max_dist_m
+    n_processors = cfg.n_proc
+    output_path = cfg.output_dir
 """
-
-from __future__ import annotations
 
 from pathlib import Path
 
@@ -46,21 +45,28 @@ class Vs30Config(pydantic.BaseModel):
     )
 
     # --- Grid parameters ---
-    grid_xmin: int = pydantic.Field(description="Grid minimum X coordinate (NZTM, meters)")
-    grid_xmax: int = pydantic.Field(description="Grid maximum X coordinate (NZTM, meters)")
-    grid_ymin: int = pydantic.Field(description="Grid minimum Y coordinate (NZTM, meters)")
-    grid_ymax: int = pydantic.Field(description="Grid maximum Y coordinate (NZTM, meters)")
+    grid_xmin: int = pydantic.Field(
+        description="Grid minimum X coordinate (NZTM, meters)"
+    )
+    grid_xmax: int = pydantic.Field(
+        description="Grid maximum X coordinate (NZTM, meters)"
+    )
+    grid_ymin: int = pydantic.Field(
+        description="Grid minimum Y coordinate (NZTM, meters)"
+    )
+    grid_ymax: int = pydantic.Field(
+        description="Grid maximum Y coordinate (NZTM, meters)"
+    )
     grid_dx: int = pydantic.Field(description="Grid X spacing (meters)")
     grid_dy: int = pydantic.Field(description="Grid Y spacing (meters)")
 
     # --- Compute-at-locations parameters (only used by compute-at-locations) ---
     locations_csv: str | None = pydantic.Field(
         default=None,
-        description="Path to input CSV with locations for compute-at-locations"
+        description="Path to input CSV with locations for compute-at-locations",
     )
     locations_output_csv: str | None = pydantic.Field(
-        default=None,
-        description="Path to output CSV for compute-at-locations results"
+        default=None, description="Path to output CSV for compute-at-locations results"
     )
 
     # --- General configuration ---
@@ -77,11 +83,11 @@ class Vs30Config(pydantic.BaseModel):
     # --- File paths (relative to resources directory) ---
     independent_observations_file: str | None = pydantic.Field(
         default=None,
-        description="Path to independent observations CSV (relative to resources)"
+        description="Path to independent observations CSV (relative to resources)",
     )
     clustered_observations_file: str | None = pydantic.Field(
         default=None,
-        description="Path to clustered observations CSV (relative to resources)"
+        description="Path to clustered observations CSV (relative to resources)",
     )
     output_dir: str = pydantic.Field(description="Output directory path")
 
@@ -89,8 +95,10 @@ class Vs30Config(pydantic.BaseModel):
     combination_method: str | float = pydantic.Field(
         description="Method for combining models: ratio (float) or 'standard_deviation_weighting'"
     )
-    do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: bool = pydantic.Field(
-        description="Whether to perform Bayesian update of categorical values"
+    do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: bool = (
+        pydantic.Field(
+            description="Whether to perform Bayesian update of categorical values"
+        )
     )
 
     # =========================================================================
@@ -166,5 +174,3 @@ def get_default_config() -> Vs30Config:
     if _default_config is None:
         _default_config = Vs30Config.default()
     return _default_config
-
-

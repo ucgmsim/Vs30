@@ -18,6 +18,7 @@ import shapely
 import sklearn.cluster
 
 from vs30 import constants
+from vs30 import raster
 
 # ============================================================================
 # Category Assignment Functions
@@ -618,8 +619,6 @@ def get_vs30_for_points(
         raise ValueError(
             f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
         )
-
-    from vs30 import raster
 
     mean_col, stdv_col = raster.select_vs30_columns_by_priority(
         list(categorical_model_df.columns)
