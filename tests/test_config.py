@@ -15,6 +15,29 @@ import pytest
 import yaml
 
 from vs30.config import Vs30Config, get_default_config
+from vs30.constants import (
+    COV_REDUC,
+    EPS,
+    HYBRID_MOD6_DIST_MAX,
+    HYBRID_MOD6_DIST_MIN,
+    HYBRID_MOD6_VS30_MAX,
+    HYBRID_MOD6_VS30_MIN,
+    HYBRID_SIGMA_REDUCTION_FACTORS,
+    HYBRID_VS30_PARAMS,
+    K_VALUE,
+    LOCATIONS_LAT_COLUMN,
+    LOCATIONS_LON_COLUMN,
+    MAX_DIST_M,
+    MAX_POINTS,
+    MIN_GROUP,
+    MIN_SIGMA,
+    N_PRIOR,
+    NODATA_VALUE,
+    OUTPUT_FILENAMES,
+    PHI,
+    RASTER_ID_NODATA_VALUE,
+    WEIGHT_EPSILON_DIV_BY_ZERO,
+)
 from conftest import reset_default_config
 
 
@@ -41,19 +64,9 @@ class TestVs30Config:
         assert hasattr(config, "grid_dx")
         assert hasattr(config, "grid_dy")
 
-        # Spatial parameters
-        assert hasattr(config, "max_dist_m")
-        assert hasattr(config, "max_points")
-        assert hasattr(config, "phi_geology")
-        assert hasattr(config, "phi_terrain")
-
-        # Bayesian parameters
-        assert hasattr(config, "n_prior")
-        assert hasattr(config, "min_sigma")
-
-        # NoData values
-        assert hasattr(config, "nodata_value")
-        assert hasattr(config, "raster_id_nodata_value")
+        # Other required parameters
+        assert hasattr(config, "noisy")
+        assert hasattr(config, "combination_method")
 
     def test_config_types(self):
         """Test that config fields have correct types."""
@@ -61,35 +74,11 @@ class TestVs30Config:
 
         assert isinstance(config.grid_xmin, int)
         assert isinstance(config.grid_xmax, int)
-        assert isinstance(config.max_dist_m, int)
-        assert isinstance(config.cov_reduc, float)
         assert isinstance(config.noisy, bool)
-        assert isinstance(config.nztm_crs, str)
-        assert isinstance(config.hybrid_vs30_params, list)
-
-    def test_phi_property(self):
-        """Test that phi property returns correct dictionary."""
-        config = get_default_config()
-
-        phi = config.phi
-        assert isinstance(phi, dict)
-        assert "geology" in phi
-        assert "terrain" in phi
-        assert phi["geology"] == config.phi_geology
-        assert phi["terrain"] == config.phi_terrain
-
-    def test_output_filenames_property(self):
-        """Test output_filenames property."""
-        config = get_default_config()
-
-        filenames = config.output_filenames
-        assert isinstance(filenames, dict)
-        assert "geology" in filenames
-        assert "terrain" in filenames
 
     def test_load_from_yaml(self):
         """Test loading config from a YAML file."""
-        # Create a minimal valid config
+        # Create a minimal valid config (only fields still in config.py)
         config_data = {
             "n_proc": 1,
             "grid_xmin": 1000000,
@@ -98,60 +87,14 @@ class TestVs30Config:
             "grid_ymax": 5100000,
             "grid_dx": 100,
             "grid_dy": 100,
-            "full_nz_land_xmin": 1000000,
-            "full_nz_land_xmax": 2000000,
-            "full_nz_land_ymin": 4700000,
-            "full_nz_land_ymax": 6300000,
-            "max_dist_m": 10000,
-            "max_points": 500,
-            "cov_reduc": 1.5,
             "noisy": True,
             "max_spatial_boolean_array_memory_gb": 1.0,
             "obs_subsample_step_for_clustered": 100,
-            "phi_geology": 1407,
-            "phi_terrain": 993,
-            "n_prior": 3,
-            "min_sigma": 0.5,
-            "min_group": 5,
-            "eps": 15000.0,
-            "raster_id_nodata_value": 255,
-            "nodata_value": -32767,
             "independent_observations_file": "none",
             "clustered_observations_file": "none",
             "output_dir": "/tmp/test",
-            "geology_mean_and_standard_deviation_per_category_file": "test.csv",
-            "terrain_mean_and_standard_deviation_per_category_file": "test.csv",
-            "posterior_prefix": "posterior_",
-            "terrain_initial_vs30_filename": "terrain.tif",
-            "geology_initial_vs30_filename": "geology.tif",
-            "slope_raster_filename": "slope.tif",
-            "coast_distance_raster_filename": "coast.tif",
-            "geology_vs30_slope_and_coastal_distance_adjusted_filename": "hybrid.tif",
-            "geology_id_filename": "gid.tif",
-            "terrain_id_filename": "tid.tif",
-            "terrain_vs30_mean_stddev_filename": "terrain_final.tif",
-            "geology_vs30_mean_stddev_filename": "geology_final.tif",
-            "combined_vs30_filename": "combined.tif",
             "combination_method": 1.0,
-            "k_value": 3.0,
             "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values": True,
-            "hybrid_mod6_dist_min": 8000.0,
-            "hybrid_mod6_dist_max": 20000.0,
-            "hybrid_mod6_vs30_min": 240.0,
-            "hybrid_mod6_vs30_max": 500.0,
-            "hybrid_mod13_dist_min": 8000.0,
-            "hybrid_mod13_dist_max": 20000.0,
-            "hybrid_mod13_vs30_min": 197.0,
-            "hybrid_mod13_vs30_max": 500.0,
-            "hybrid_vs30_params": [
-                {"gid": 2, "slope_limits": [-1.85, -1.22], "vs30_values": [242, 418]}
-            ],
-            "hybrid_sigma_reduction_factors": {2: 0.5},
-            "min_slope_for_log": 1e-9,
-            "min_dist_enforced": 0.1,
-            "nztm_crs": "EPSG:2193",
-            "plot_figsize": [12, 8],
-            "plot_dpi": 300,
         }
 
         with tempfile.NamedTemporaryFile(
@@ -163,8 +106,7 @@ class TestVs30Config:
         try:
             config = Vs30Config.from_yaml(config_path)
             assert config.grid_xmin == 1000000
-            assert config.max_dist_m == 10000
-            assert config.phi_geology == 1407
+            assert config.noisy is True
         finally:
             config_path.unlink()
 
@@ -193,13 +135,6 @@ class TestVs30Config:
         with pytest.raises(FileNotFoundError):
             Vs30Config.from_yaml(Path("/nonexistent/config.yaml"))
 
-    def test_short_alias_properties(self):
-        """Test short alias properties for frequently-used fields."""
-        config = get_default_config()
-
-        assert config.geology_csv == config.geology_mean_and_standard_deviation_per_category_file
-        assert config.terrain_csv == config.terrain_mean_and_standard_deviation_per_category_file
-
 
 class TestConfigCaching:
     """Tests for config caching behavior."""
@@ -221,17 +156,31 @@ class TestConfigCaching:
         # After reset, a new instance should be created
         # (though values should be the same)
         assert config1 is not config2
-        assert config1.max_dist_m == config2.max_dist_m
+        assert config1.grid_xmin == config2.grid_xmin
 
 
-class TestHybridVs30Param:
-    """Tests for HybridVs30Param model."""
+class TestConstants:
+    """Tests for constants module values."""
+
+    def test_phi_values(self):
+        """Test that PHI constant has correct structure."""
+        assert isinstance(PHI, dict)
+        assert "geology" in PHI
+        assert "terrain" in PHI
+        assert PHI["geology"] > 0
+        assert PHI["terrain"] > 0
+
+    def test_output_filenames(self):
+        """Test output_filenames constant."""
+        assert isinstance(OUTPUT_FILENAMES, dict)
+        assert "geology" in OUTPUT_FILENAMES
+        assert "terrain" in OUTPUT_FILENAMES
+        assert OUTPUT_FILENAMES["geology"].endswith(".tif")
+        assert OUTPUT_FILENAMES["terrain"].endswith(".tif")
 
     def test_hybrid_params_structure(self):
         """Test that hybrid params have correct structure."""
-        config = get_default_config()
-
-        for param in config.hybrid_vs30_params:
+        for param in HYBRID_VS30_PARAMS:
             assert hasattr(param, "gid")
             assert hasattr(param, "slope_limits")
             assert hasattr(param, "vs30_values")
@@ -241,47 +190,65 @@ class TestHybridVs30Param:
             assert len(param.vs30_values) == 2
 
     def test_hybrid_sigma_reduction_factors(self):
-        """Test hybrid_sigma_reduction_factors structure."""
-        config = get_default_config()
-
-        assert isinstance(config.hybrid_sigma_reduction_factors, dict)
-        for gid, factor in config.hybrid_sigma_reduction_factors.items():
-            # Keys are strings in YAML but should be usable as ints
+        """Test HYBRID_SIGMA_REDUCTION_FACTORS structure."""
+        assert isinstance(HYBRID_SIGMA_REDUCTION_FACTORS, dict)
+        for gid, factor in HYBRID_SIGMA_REDUCTION_FACTORS.items():
+            assert isinstance(gid, int)
             assert isinstance(factor, float)
             assert 0 <= factor <= 1
 
+    def test_bayesian_constants(self):
+        """Test Bayesian update constants."""
+        assert isinstance(N_PRIOR, int)
+        assert N_PRIOR > 0
+        assert isinstance(MIN_SIGMA, float)
+        assert MIN_SIGMA > 0
 
-# =============================================================================
-# Additional Tests from Coverage Improvements
-# =============================================================================
+    def test_dbscan_constants(self):
+        """Test DBSCAN clustering constants."""
+        assert isinstance(MIN_GROUP, int)
+        assert MIN_GROUP > 0
+        assert isinstance(EPS, float)
+        assert EPS > 0
+
+    def test_nodata_constants(self):
+        """Test NoData constants."""
+        assert isinstance(NODATA_VALUE, int)
+        assert isinstance(RASTER_ID_NODATA_VALUE, int)
+
+    def test_cov_reduc_constant(self):
+        """Test covariance reduction constant."""
+        assert isinstance(COV_REDUC, float)
+        assert COV_REDUC >= 0
+
+    def test_spatial_update_constants(self):
+        """Test spatial update constants."""
+        assert isinstance(MAX_DIST_M, int)
+        assert MAX_DIST_M > 0
+        assert isinstance(MAX_POINTS, int)
+        assert MAX_POINTS > 0
+
+    def test_model_combination_constants(self):
+        """Test model combination constants."""
+        assert isinstance(K_VALUE, float)
+        assert K_VALUE > 0
+        assert isinstance(WEIGHT_EPSILON_DIV_BY_ZERO, float)
+        assert WEIGHT_EPSILON_DIV_BY_ZERO > 0
+
+    def test_location_column_constants(self):
+        """Test location column name constants."""
+        assert isinstance(LOCATIONS_LON_COLUMN, str)
+        assert isinstance(LOCATIONS_LAT_COLUMN, str)
+        assert LOCATIONS_LON_COLUMN == "longitude"
+        assert LOCATIONS_LAT_COLUMN == "latitude"
 
 
-class TestConfigEdgeCases:
-    """Tests for config module edge cases."""
+class TestConstantsEdgeCases:
+    """Tests for constants module edge cases."""
 
-    def test_config_phi_access(self):
-        """Test accessing phi values from config."""
-        cfg = get_default_config()
-
-        assert "geology" in cfg.phi
-        assert "terrain" in cfg.phi
-        assert cfg.phi["geology"] > 0
-        assert cfg.phi["terrain"] > 0
-
-    def test_config_hybrid_params(self):
-        """Test accessing hybrid parameters."""
-        cfg = get_default_config()
-
-        assert cfg.hybrid_mod6_dist_min is not None
-        assert cfg.hybrid_mod6_dist_max > cfg.hybrid_mod6_dist_min
-        assert cfg.hybrid_mod6_vs30_min is not None
-        assert cfg.hybrid_mod6_vs30_max > cfg.hybrid_mod6_vs30_min
-
-    def test_config_output_filenames(self):
-        """Test accessing output filenames."""
-        cfg = get_default_config()
-
-        assert "geology" in cfg.output_filenames
-        assert "terrain" in cfg.output_filenames
-        assert cfg.output_filenames["geology"].endswith(".tif")
-        assert cfg.output_filenames["terrain"].endswith(".tif")
+    def test_hybrid_mod6_params(self):
+        """Test accessing hybrid mod6 parameters."""
+        assert HYBRID_MOD6_DIST_MIN is not None
+        assert HYBRID_MOD6_DIST_MAX > HYBRID_MOD6_DIST_MIN
+        assert HYBRID_MOD6_VS30_MIN is not None
+        assert HYBRID_MOD6_VS30_MAX > HYBRID_MOD6_VS30_MIN

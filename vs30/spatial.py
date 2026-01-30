@@ -29,10 +29,10 @@ observation points, the model prediction is adjusted toward the measured value,
 with the adjustment magnitude depending on distance and correlation structure.
 """
 
-import logging
-import multiprocessing as mp
 from dataclasses import dataclass
-from math import sqrt
+import logging
+import math
+import multiprocessing as mp
 from pathlib import Path
 
 import numpy as np
@@ -41,13 +41,10 @@ import rasterio
 import scipy
 from tqdm import tqdm
 
+from vs30 import category
+from vs30 import config
+from vs30 import constants
 from vs30 import utils
-from vs30.category import (
-    RASTER_ID_NODATA_VALUE,
-    _assign_to_category_geology,
-    _assign_to_category_terrain,
-)
-from vs30.config import get_default_config
 
 # Use spawn context to avoid GDAL fork issues
 _spawn_context = mp.get_context("spawn")
@@ -302,7 +299,7 @@ def prepare_observation_data(
         Prepared observation data object.
     """
     # Resolve config defaults
-    cfg = get_default_config()
+    cfg = config.get_default_config()
     noisy = noisy if noisy is not None else cfg.noisy
 
     # Get observation locations
@@ -310,17 +307,17 @@ def prepare_observation_data(
 
     # Interpolate model values at observation locations
     if model_type == "geology":
-        model_ids = _assign_to_category_geology(obs_locs)
+        model_ids = category._assign_to_category_geology(obs_locs)
     elif model_type == "terrain":
-        model_ids = _assign_to_category_terrain(obs_locs)
+        model_ids = category._assign_to_category_terrain(obs_locs)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
     # Get model vs30 and stdv from updated model table
     # Model IDs are 1-indexed in the raster, but 0-indexed in the model table
-    # RASTER_ID_NODATA_VALUE is 255, valid IDs are 1-15 for geology, 1-16 for terrain
+    # constants.RASTER_ID_NODATA_VALUE is 255, valid IDs are 1-15 for geology, 1-16 for terrain
     valid_mask = (
-        (model_ids != RASTER_ID_NODATA_VALUE)
+        (model_ids != constants.RASTER_ID_NODATA_VALUE)
         & (model_ids > 0)
         & (model_ids <= len(updated_model_table))
     )
@@ -351,14 +348,14 @@ def prepare_observation_data(
 
         # 1. Get slope and coast distance at points
         # Use existing rasters in output_dir if possible, otherwise create temporary ones
-        slope_path = output_dir / cfg.slope_raster_filename
-        coast_path = output_dir / cfg.coast_distance_raster_filename
+        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
+        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
 
         profile = {
             "transform": raster_data.transform,
             "width": raster_data.vs30.shape[1],
             "height": raster_data.vs30.shape[0],
-            "crs": rasterio.crs.CRS.from_string(cfg.nztm_crs),
+            "crs": rasterio.crs.CRS.from_string(constants.NZTM_CRS),
         }
 
         if not slope_path.exists():
@@ -568,9 +565,9 @@ def build_covariance_matrix(
         First row/column is for the pixel, rest are for observations.
     """
     # Resolve config defaults
-    cfg = get_default_config()
+    cfg = config.get_default_config()
     noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
 
     # Step 1: Compute Euclidean distance matrix
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
@@ -580,7 +577,7 @@ def build_covariance_matrix(
 
     # Step 2: Apply correlation function
     if phi is None:
-        phi = cfg.phi[model_type]
+        phi = constants.PHI[model_type]
     corr = utils.correlation_function(distance_matrix, phi)
 
     # Step 3: Scale by standard deviations
@@ -639,9 +636,9 @@ def select_observations_for_pixel(
         Selected observations (subset of obs_data).
     """
     # Resolve config defaults
-    cfg = get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
-    max_points = max_points if max_points is not None else cfg.max_points
+    cfg = config.get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
+    max_points = max_points if max_points is not None else constants.MAX_POINTS
 
     # Calculate distances from pixel to all observations
     distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
@@ -704,17 +701,17 @@ def compute_spatial_adjustment_for_pixel(
         Update result, or None if pixel should be skipped.
     """
     # Resolve config defaults
-    cfg = get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
-    max_points = max_points if max_points is not None else cfg.max_points
+    cfg = config.get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
+    max_points = max_points if max_points is not None else constants.MAX_POINTS
     noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
 
     # Handle NaN/NoData pixels
     if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
         return None
 
-    phi_val = phi if phi is not None else cfg.phi[model_type]
+    phi_val = phi if phi is not None else constants.PHI[model_type]
 
     # Correlation at zero distance is slightly less than 1.0 due to the
     # enforced minimum distance (nugget effect). This shrinks the prior
@@ -734,7 +731,7 @@ def compute_spatial_adjustment_for_pixel(
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
         return SpatialAdjustmentResult(
             updated_vs30=pixel.vs30,
-            updated_stdv=sqrt(initial_var),
+            updated_stdv=math.sqrt(initial_var),
             n_observations_used=0,
             min_distance=np.inf,
             pixel_index=pixel.index,
@@ -766,7 +763,7 @@ def compute_spatial_adjustment_for_pixel(
 
     # Update vs30 and stdv
     new_vs30 = pixel.vs30 * np.exp(pred_update)
-    new_stdv = sqrt(var)
+    new_stdv = math.sqrt(var)
 
     # Calculate minimum distance
     distances = scipy.spatial.distance.cdist(
@@ -895,8 +892,8 @@ def find_affected_pixels(
         Result containing mask and observation-to-grid mappings.
     """
     # Resolve config defaults
-    cfg = get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
+    cfg = config.get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
 
     # Get coordinates for valid pixels
     grid_locs = raster_data.get_coordinates()
@@ -1041,11 +1038,11 @@ def compute_spatial_adjustments(
         List of SpatialAdjustmentResult objects.
     """
     # Resolve config defaults
-    cfg = get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
-    max_points = max_points if max_points is not None else cfg.max_points
+    cfg = config.get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
+    max_points = max_points if max_points is not None else constants.MAX_POINTS
     noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
 
     # Get affected pixel indices
     affected_flat_indices = np.where(bbox_result.mask)[0]
@@ -1152,9 +1149,8 @@ def apply_and_write_updates(
         updated_vs30.flat[update.pixel_index] = update.updated_vs30
         updated_stdv.flat[update.pixel_index] = update.updated_stdv
 
-    # Write output using filename from config
-    cfg = get_default_config()
-    output_filename = cfg.output_filenames[model_type]
+    # Write output using filename from constants
+    output_filename = constants.OUTPUT_FILENAMES[model_type]
     output_path = output_dir / output_filename
 
     raster_data.write_updated(output_path, updated_vs30, updated_stdv)
@@ -1240,14 +1236,14 @@ def compute_spatial_adjustment_at_points(
     5. Convert back from log-space to linear Vs30
     """
     # Resolve config defaults
-    cfg = get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else cfg.max_dist_m
-    max_points = max_points if max_points is not None else cfg.max_points
+    cfg = config.get_default_config()
+    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
+    max_points = max_points if max_points is not None else constants.MAX_POINTS
     noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else cfg.cov_reduc
+    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
 
     if phi is None:
-        phi = cfg.phi[model_type]
+        phi = constants.PHI[model_type]
 
     n_points = len(points)
     n_obs = len(obs_locations)
@@ -1319,7 +1315,7 @@ def compute_spatial_adjustment_at_points(
 
         if not np.any(nearby_mask):
             # No nearby observations - apply default variance shrinkage (matching legacy)
-            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            mvn_stdv[i] = math.sqrt(prior_stdv**2 * corr_zero)
             continue
 
         # Limit to max_points closest observations
@@ -1383,11 +1379,11 @@ def compute_spatial_adjustment_at_points(
             # Update vs30 in log-space, then convert back
             log_vs30_posterior = np.log(prior_vs30) + pred_adjustment
             mvn_vs30[i] = np.exp(log_vs30_posterior)
-            mvn_stdv[i] = sqrt(max(0, posterior_var))
+            mvn_stdv[i] = math.sqrt(max(0, posterior_var))
 
         except np.linalg.LinAlgError:
             # Singular matrix - keep prior values with default variance shrinkage
-            mvn_stdv[i] = sqrt(prior_stdv**2 * corr_zero)
+            mvn_stdv[i] = math.sqrt(prior_stdv**2 * corr_zero)
             logger.debug(
                 f"Singular covariance matrix at point {i}, keeping prior values"
             )

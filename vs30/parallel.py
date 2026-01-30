@@ -10,29 +10,23 @@ worker process simply calls them with a smaller input, unaware it's part of
 a parallel job.
 """
 
-from contextlib import contextmanager
+import contextlib
 from dataclasses import dataclass
 import multiprocessing as mp
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from threadpoolctl import threadpool_limits
+import threadpoolctl
 from tqdm import tqdm
 
-from vs30.category import get_vs30_for_points
-from vs30.raster import _get_slope_raster_path, apply_hybrid_modifications_at_points
-from vs30.spatial import (
-    SpatialAdjustmentResult,
-    ObservationData,
-    PixelData,
-    compute_spatial_adjustment_at_points,
-    compute_spatial_adjustment_for_pixel,
-)
-from vs30.utils import combine_vs30_models
+from vs30 import category
+from vs30 import raster
+from vs30 import spatial
+from vs30 import utils
 
 
-@contextmanager
+@contextlib.contextmanager
 def single_threaded_blas():
     """
     Context manager to restrict BLAS to single-threaded operation.
@@ -51,7 +45,7 @@ def single_threaded_blas():
             with mp.Pool(n_proc) as pool:
                 results = pool.map(worker_func, chunks)
     """
-    with threadpool_limits(limits=1, user_api="blas"):
+    with threadpoolctl.threadpool_limits(limits=1, user_api="blas"):
         yield
 
 
@@ -140,18 +134,18 @@ def process_geology_at_points(
         Final geology standard deviation after spatial adjustment.
     """
     # Get initial Vs30 values at points
-    geol_vs30, geol_stdv, geol_ids = get_vs30_for_points(
+    geol_vs30, geol_stdv, geol_ids = category.get_vs30_for_points(
         points, "geology", model_df
     )
 
     # Apply hybrid modifications (slope and coastal distance)
     if coast_distance_raster is not None and coast_distance_raster.exists():
-        geol_vs30_hybrid, geol_stdv_hybrid = apply_hybrid_modifications_at_points(
+        geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_modifications_at_points(
             points,
             geol_vs30,
             geol_stdv,
             geol_ids,
-            slope_raster_path=_get_slope_raster_path(),
+            slope_raster_path=raster._get_slope_raster_path(),
             coast_distance_raster_path=coast_distance_raster,
         )
     else:
@@ -161,10 +155,10 @@ def process_geology_at_points(
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[["easting", "northing"]].values
-        obs_geol_vs30, obs_geol_stdv, _ = get_vs30_for_points(
+        obs_geol_vs30, obs_geol_stdv, _ = category.get_vs30_for_points(
             obs_locs, "geology", model_df
         )
-        geol_mvn_vs30, geol_mvn_stdv = compute_spatial_adjustment_at_points(
+        geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
@@ -225,17 +219,17 @@ def process_terrain_at_points(
         Final terrain standard deviation after spatial adjustment.
     """
     # Get initial Vs30 values at points
-    terr_vs30, terr_stdv, terr_ids = get_vs30_for_points(
+    terr_vs30, terr_stdv, terr_ids = category.get_vs30_for_points(
         points, "terrain", model_df
     )
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[["easting", "northing"]].values
-        obs_terr_vs30, obs_terr_stdv, _ = get_vs30_for_points(
+        obs_terr_vs30, obs_terr_stdv, _ = category.get_vs30_for_points(
             obs_locs, "terrain", model_df
         )
-        terr_mvn_vs30, terr_mvn_stdv = compute_spatial_adjustment_at_points(
+        terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,
@@ -267,8 +261,6 @@ class LocationsChunkConfig:
     include_intermediate: bool
     combination_method: str | float
     coast_distance_raster: Path | None
-    k_value: float = 3.0
-    epsilon: float = 1e-10
 
 
 # =============================================================================
@@ -311,10 +303,8 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     chunk_df = chunk_df.copy()
 
     # Convert coordinates to NZTM
-    lat_col = config.lat_column
-    lon_col = config.lon_column
     nztm_coords = coordinates.wgs_depth_to_nztm(
-        np.column_stack([chunk_df[lat_col].values, chunk_df[lon_col].values])
+        np.column_stack([chunk_df[config.lat_column].values, chunk_df[config.lon_column].values])
     )
     northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
     chunk_df["easting"] = easting
@@ -360,14 +350,12 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     chunk_df["terrain_mvn_stdv"] = terr_mvn_stdv
 
     # Combine models
-    combined_vs30, combined_stdv = combine_vs30_models(
+    combined_vs30, combined_stdv = utils.combine_vs30_models(
         geol_mvn_vs30,
         geol_mvn_stdv,
         terr_mvn_vs30,
         terr_mvn_stdv,
         config.combination_method,
-        k_value=config.k_value,
-        epsilon=config.epsilon,
     )
 
     chunk_df["vs30"] = combined_vs30
@@ -376,7 +364,7 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     return chunk_id, chunk_df
 
 
-def _process_pixels_chunk(args: tuple) -> tuple[int, list[SpatialAdjustmentResult]]:  # pragma: no cover
+def _process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
     """
     Worker function: compute spatial adjustments for a chunk of affected pixels.
 
@@ -394,12 +382,12 @@ def _process_pixels_chunk(args: tuple) -> tuple[int, list[SpatialAdjustmentResul
     Returns
     -------
     tuple
-        (chunk_id, list of SpatialAdjustmentResult)
+        (chunk_id, list of spatial.SpatialAdjustmentResult)
     """
     pixel_indices, chunk_id, pixel_data_dict, obs_data_dict, config_params = args
 
     # Reconstruct ObservationData from dict (dataclasses can't always be pickled cleanly)
-    obs_data = ObservationData(
+    obs_data = spatial.ObservationData(
         locations=obs_data_dict["locations"],
         vs30=obs_data_dict["vs30"],
         model_vs30=obs_data_dict["model_vs30"],
@@ -413,14 +401,14 @@ def _process_pixels_chunk(args: tuple) -> tuple[int, list[SpatialAdjustmentResul
     for idx in pixel_indices:
         # Get pixel data from the prepared dict
         pixel_info = pixel_data_dict[idx]
-        pixel = PixelData(
+        pixel = spatial.PixelData(
             location=pixel_info["location"],
             vs30=pixel_info["vs30"],
             stdv=pixel_info["stdv"],
             index=pixel_info["index"],
         )
 
-        update = compute_spatial_adjustment_for_pixel(
+        update = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
             config_params["model_type"],
@@ -506,7 +494,7 @@ def run_parallel_locations(
 def run_parallel_spatial_fit(
     affected_flat_indices: np.ndarray,
     raster_data,  # RasterData - avoid import cycle
-    obs_data: ObservationData,
+    obs_data: spatial.ObservationData,
     model_type: str,
     phi: float,
     max_dist_m: float,
@@ -514,7 +502,7 @@ def run_parallel_spatial_fit(
     noisy: bool,
     cov_reduc: float,
     n_proc: int,
-) -> list[SpatialAdjustmentResult]:
+) -> list[spatial.SpatialAdjustmentResult]:
     """
     Compute spatial adjustments for affected pixels in parallel.
 
@@ -546,7 +534,7 @@ def run_parallel_spatial_fit(
 
     Returns
     -------
-    list[SpatialAdjustmentResult]
+    list[spatial.SpatialAdjustmentResult]
         Updates for all affected pixels
     """
     # Prepare pixel data as a dict (for pickling)

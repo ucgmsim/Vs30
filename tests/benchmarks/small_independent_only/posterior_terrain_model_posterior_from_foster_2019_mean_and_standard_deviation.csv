@@ -11,7 +11,7 @@ id,prior_mean_vs30_km_per_s,prior_standard_deviation_vs30_km_per_s,description,c
 10,317.368444092771,0.5,"Valley, till plain, etc.",,3,0.5,317.368444092771,0.5,3
 11,266.870166096091,0.5,"Eroded plain of weak rocks, etc.",,3,0.5,266.870166096091,0.5,3
 12,297.0,0.5,"Desert plain, delta plain, etc.",,3,0.5,297.0,0.5,3
-13,216.62368022053,0.5,"Incised terrace, etc.",Prior mean and standard deviation were estimated by Kevin Foster,3,0.5,212.97806734740897,0.37629197716856344,6
+13,216.62368022053,0.5,"Incised terrace, etc.",Prior mean and standard deviation were estimated by Kevin Foster,3,0.5,212.9780673474088,0.3762919771685635,6
 14,241.80869962047,0.5,"Eroded alluvial fan, till plain, etc.",,3,0.5,241.80869962047,0.5,3
-15,198.64481157494,0.5,"Dune, incised terrace, etc.",,3,0.5,186.43548089692817,0.26584695189502144,24
-16,202.125866002814,0.5,"Fluvial plain, alluvial fan, low-lying flat plains, etc.",,3,0.5,193.87471796750964,0.29644483332101074,19
+15,198.64481157494,0.5,"Dune, incised terrace, etc.",,3,0.5,186.43548089692834,0.26584695189502144,24
+16,202.125866002814,0.5,"Fluvial plain, alluvial fan, low-lying flat plains, etc.",,3,0.5,193.8747179675098,0.29644483332101074,19
