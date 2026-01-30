@@ -10,6 +10,17 @@ see config.yaml and config.py.
 """
 
 from dataclasses import dataclass
+from pathlib import Path
+
+# =============================================================================
+# DIRECTORY PATHS
+# =============================================================================
+
+# Path to the data directory containing shapefiles, rasters, and other input data
+DATA_DIR = Path(__file__).parent / "data"
+
+# Path to the resources directory containing CSV files with categorical model parameters
+RESOURCE_PATH = Path(__file__).parent / "resources"
 
 # =============================================================================
 # SPATIAL CORRELATION PARAMETERS

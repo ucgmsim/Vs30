@@ -498,7 +498,7 @@ def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float)
     return max(1, chunk_size)
 
 
-def _process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
+def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
     """
     Worker function for parallel bounding box processing.
 
@@ -840,7 +840,7 @@ def subsample_by_cluster(
     return selected_indices
 
 
-def _accumulate_bbox_results(
+def accumulate_bbox_results(
     valid_points_in_bbox_mask: np.ndarray,
     obs_to_grid_indices: list[np.ndarray],
     chunk_idx: int,
@@ -945,7 +945,7 @@ def find_affected_pixels(
         with _spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(
-                    pool.imap(_process_bbox_chunk, chunk_args),
+                    pool.imap(process_bbox_chunk, chunk_args),
                     total=n_chunks,
                     desc=f"Finding affected pixels ({actual_n_proc} workers)",
                     unit="chunk",
@@ -954,7 +954,7 @@ def find_affected_pixels(
 
         # Merge results
         for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
-            _accumulate_bbox_results(
+            accumulate_bbox_results(
                 valid_points_in_bbox_mask, obs_to_grid_indices,
                 chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
                 raster_data.valid_flat_indices,
@@ -979,7 +979,7 @@ def find_affected_pixels(
                 start_grid_idx=start_idx,
             )
 
-            _accumulate_bbox_results(
+            accumulate_bbox_results(
                 valid_points_in_bbox_mask, obs_to_grid_indices,
                 chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
                 raster_data.valid_flat_indices,
