@@ -9,7 +9,6 @@ This module is self-contained and includes all functionality needed to:
 """
 
 import math
-from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -20,25 +19,12 @@ import sklearn.cluster
 
 from vs30 import constants
 
-_data_dir = Path(__file__).parent / "data"
-
-
-def _get_qmap_path() -> Path:
-    """Get path to QMAP geology shapefile."""
-    return _data_dir / constants.GEOLOGY_SHAPEFILE_PATH
-
-
-def _get_terrain_raster_path() -> Path:
-    """Get path to terrain classification raster."""
-    return _data_dir / constants.TERRAIN_RASTER_FILENAME
-
-
 # ============================================================================
 # Category Assignment Functions
 # ============================================================================
 
 
-def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
+def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     """
     Assign geology category IDs to points using polygon spatial join.
 
@@ -56,7 +42,9 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
     """
     # load QMAP polygons (keeps CRS from file)
-    gdf = gpd.read_file(_get_qmap_path())[["gid", "geometry"]]
+    gdf = gpd.read_file(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
+        ["gid", "geometry"]
+    ]
 
     # Build point GeoDataFrame (ensure float64)
     points_shapely = shapely.points(points)
@@ -73,7 +61,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     return values
 
 
-def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
+def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     """
     Assign terrain category IDs to points using raster nearest neighbor lookup.
 
@@ -91,16 +79,13 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
-    with rasterio.open(_get_terrain_raster_path()) as src:
-        nodata = src.nodata
-        dtype = src.dtypes[0]
-
+    with rasterio.open(constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
         sampled = list(src.sample(points))
-        terrain_ids = np.array([s[0] for s in sampled], dtype=dtype)
+        terrain_ids = np.array([s[0] for s in sampled], dtype=src.dtypes[0])
 
         # Handle nodata values
-        if nodata is not None:
-            terrain_ids[terrain_ids == nodata] = constants.RASTER_ID_NODATA_VALUE
+        if src.nodata is not None:
+            terrain_ids[terrain_ids == src.nodata] = constants.RASTER_ID_NODATA_VALUE
 
     return terrain_ids
 
@@ -110,7 +95,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 # ============================================================================
 
 
-def _compute_bayesian_posterior_mean(
+def compute_bayesian_posterior_mean(
     prior_mean: float,
     num_prior_observations: float,
     posterior_variance: float,
@@ -126,7 +111,7 @@ def _compute_bayesian_posterior_mean(
     num_prior_observations : float
         Effective number of prior observations.
     posterior_variance : float
-        Posterior variance (computed from _compute_bayesian_posterior_variance).
+        Posterior variance (computed from compute_bayesian_posterior_variance).
     observation_value : float
         New observation value (in linear space).
 
@@ -135,16 +120,14 @@ def _compute_bayesian_posterior_mean(
     float
         Posterior mean (in linear space).
     """
-    # The posterior_variance terms in numerator and denominator cancel out,
-    # simplifying to a weighted average in log-space:
-    #   log_posterior = (n_prior * math.log(prior) + math.log(obs)) / (n_prior + 1)
+
     weighted_log_mean = (
         num_prior_observations * math.log(prior_mean) + math.log(observation_value)
     ) / (num_prior_observations + 1)
     return math.exp(weighted_log_mean)
 
 
-def _compute_bayesian_posterior_variance(
+def compute_bayesian_posterior_variance(
     prior_stdv: float,
     num_prior_observations: float,
     uncertainty: float,
@@ -294,7 +277,7 @@ def update_with_independent_data(
         current_n = category_row[post_n_col]
 
         for _, observation_row in observations_for_category_df.iterrows():
-            new_variance = _compute_bayesian_posterior_variance(
+            new_variance = compute_bayesian_posterior_variance(
                 current_std,
                 current_n,
                 observation_row["uncertainty"],
@@ -302,7 +285,7 @@ def update_with_independent_data(
                 observation_row["vs30"],
             )
 
-            new_mean = _compute_bayesian_posterior_mean(
+            new_mean = compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
                 new_variance,
@@ -372,7 +355,9 @@ def perform_clustering(
             # Can't form any groups
             continue
 
-        dbscan = sklearn.cluster.DBSCAN(eps=constants.EPS, min_samples=min_group, n_jobs=nproc)
+        dbscan = sklearn.cluster.DBSCAN(
+            eps=constants.EPS, min_samples=min_group, n_jobs=nproc
+        )
         dbscan.fit(subset)
 
         # Save labels
@@ -434,7 +419,9 @@ def update_with_clustered_data(
 
     # Convert to numpy array format for computation
     max_id_prior = (
-        int(posterior_df[constants.STANDARD_ID_COLUMN].max()) if len(posterior_df) > 0 else 0
+        int(posterior_df[constants.STANDARD_ID_COLUMN].max())
+        if len(posterior_df) > 0
+        else 0
     )
 
     # Filter out sites with ID_NODATA
@@ -442,7 +429,9 @@ def update_with_clustered_data(
         sites_df[constants.STANDARD_ID_COLUMN] != constants.RASTER_ID_NODATA_VALUE
     ].copy()
     max_id_sites = (
-        int(valid_sites[constants.STANDARD_ID_COLUMN].max()) if len(valid_sites) > 0 else 0
+        int(valid_sites[constants.STANDARD_ID_COLUMN].max())
+        if len(valid_sites) > 0
+        else 0
     )
 
     max_id = max(max_id_prior, max_id_sites)
@@ -465,7 +454,9 @@ def update_with_clustered_data(
         if category_id_int not in id_to_idx or category_id_int > max_id:
             continue
 
-        category_sites = valid_sites[valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int]
+        category_sites = valid_sites[
+            valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int
+        ]
         cluster_counts = category_sites["cluster"].value_counts()
 
         # Effective sample size: one per cluster, but each noise point (-1) counts individually.
@@ -489,14 +480,18 @@ def update_with_clustered_data(
                 weighted_log_vs30_sum += np.sum(np.log(cluster_sites.vs30.values))
             else:
                 # Clustered points: entire cluster counts as one observation
-                weighted_log_vs30_sum += np.sum(np.log(cluster_sites.vs30.values)) / len(cluster_sites)
+                weighted_log_vs30_sum += np.sum(
+                    np.log(cluster_sites.vs30.values)
+                ) / len(cluster_sites)
                 weights[cluster_mask] /= len(cluster_sites)
 
         # Compute geometric mean and weighted standard deviation
         log_geometric_mean = weighted_log_vs30_sum / effective_n
         posterior_array[category_id_int, 0] = math.exp(log_geometric_mean)
         posterior_array[category_id_int, 1] = np.sqrt(
-            np.sum(weights * (np.log(category_sites.vs30.values) - log_geometric_mean) ** 2)
+            np.sum(
+                weights * (np.log(category_sites.vs30.values) - log_geometric_mean) ** 2
+            )
         )
 
     # Convert back to DataFrame format
@@ -616,9 +611,9 @@ def get_vs30_for_points(
     """
     # Assign category IDs to points
     if model_type == "geology":
-        category_ids = _assign_to_category_geology(points)
+        category_ids = assign_to_category_geology(points)
     elif model_type == "terrain":
-        category_ids = _assign_to_category_terrain(points)
+        category_ids = assign_to_category_terrain(points)
     else:
         raise ValueError(
             f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
@@ -626,16 +621,22 @@ def get_vs30_for_points(
 
     from vs30 import raster
 
-    mean_col, stdv_col = raster._select_vs30_columns_by_priority(
+    mean_col, stdv_col = raster.select_vs30_columns_by_priority(
         list(categorical_model_df.columns)
     )
 
     # Build lookup dictionaries from category ID to Vs30 values
     id_to_vs30 = dict(
-        zip(categorical_model_df[constants.STANDARD_ID_COLUMN], categorical_model_df[mean_col])
+        zip(
+            categorical_model_df[constants.STANDARD_ID_COLUMN],
+            categorical_model_df[mean_col],
+        )
     )
     id_to_stdv = dict(
-        zip(categorical_model_df[constants.STANDARD_ID_COLUMN], categorical_model_df[stdv_col])
+        zip(
+            categorical_model_df[constants.STANDARD_ID_COLUMN],
+            categorical_model_df[stdv_col],
+        )
     )
 
     # Look up Vs30 values for each point

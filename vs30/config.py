@@ -75,10 +75,12 @@ class Vs30Config(pydantic.BaseModel):
     )
 
     # --- File paths (relative to resources directory) ---
-    independent_observations_file: str = pydantic.Field(
+    independent_observations_file: str | None = pydantic.Field(
+        default=None,
         description="Path to independent observations CSV (relative to resources)"
     )
-    clustered_observations_file: str = pydantic.Field(
+    clustered_observations_file: str | None = pydantic.Field(
+        default=None,
         description="Path to clustered observations CSV (relative to resources)"
     )
     output_dir: str = pydantic.Field(description="Output directory path")

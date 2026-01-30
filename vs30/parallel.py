@@ -268,7 +268,7 @@ class LocationsChunkConfig:
 # =============================================================================
 
 
-def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma: no cover
+def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma: no cover
     """
     Worker function: process a chunk of locations through the full pipeline.
 
@@ -364,7 +364,7 @@ def _process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma
     return chunk_id, chunk_df
 
 
-def _process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
+def process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
     """
     Worker function: compute spatial adjustments for a chunk of affected pixels.
 
@@ -479,7 +479,7 @@ def run_parallel_locations(
         with _spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(
-                    pool.imap(_process_locations_chunk, chunk_args),
+                    pool.imap(process_locations_chunk, chunk_args),
                     total=actual_n_proc,
                     desc=f"Processing locations ({actual_n_proc} workers)",
                     unit="chunk",
@@ -589,7 +589,7 @@ def run_parallel_spatial_fit(
         with _spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(
-                    pool.imap(_process_pixels_chunk, chunk_args),
+                    pool.imap(process_pixels_chunk, chunk_args),
                     total=actual_n_proc,
                     desc=f"Processing pixels ({actual_n_proc} workers)",
                     unit="chunk",

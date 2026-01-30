@@ -51,7 +51,7 @@ app = typer.Typer(
 # =============================================================================
 
 
-def _resolve_observation_csv(
+def resolve_observation_csv(
     csv_path: Path | None,
     config_filename: str | None,
     res_dir: Path,
@@ -75,14 +75,14 @@ def _resolve_observation_csv(
     """
     if csv_path is not None:
         return csv_path
-    if config_filename and config_filename.lower() != "none":
+    if config_filename is not None:
         candidate = res_dir / config_filename
         if candidate.exists():
             return candidate
     return None
 
 
-def _validate_csv_columns(
+def validate_csv_columns(
     df: pd.DataFrame, required_cols: list[str], label: str
 ) -> None:
     """
@@ -251,7 +251,7 @@ def update_categorical_vs30_models(
             categorical_model_df["mean_vs30_km_per_s"] != constants.NODATA_VALUE
         ]
 
-        _validate_csv_columns(
+        validate_csv_columns(
             categorical_model_df,
             ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"],
             "Categorical model CSV",
@@ -273,7 +273,7 @@ def update_categorical_vs30_models(
                 clustered_observations_csv, skipinitialspace=True
             )
 
-            _validate_csv_columns(
+            validate_csv_columns(
                 clustered_observations_df,
                 ["easting", "northing", "vs30"],
                 "Clustered observations CSV",
@@ -322,7 +322,7 @@ def update_categorical_vs30_models(
                 independent_observations_csv, skipinitialspace=True
             )
 
-            _validate_csv_columns(
+            validate_csv_columns(
                 independent_observations_df,
                 ["easting", "northing", "vs30", "uncertainty"],
                 "Independent observations CSV",
@@ -572,7 +572,7 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
 # =============================================================================
 
 
-def _prepare_observations_for_spatial_fit(
+def prepare_observations_for_spatial_fit(
     observations: pd.DataFrame,
     raster_data: "spatial.RasterData",
     updated_model_table: np.ndarray,
@@ -622,7 +622,7 @@ def _prepare_observations_for_spatial_fit(
     return obs_data
 
 
-def _apply_clustered_subsampling(
+def apply_clustered_subsampling(
     obs_data: "spatial.ObservationData",
     is_clustered_obs: bool,
     cfg: "config_module.Vs30Config",
@@ -668,9 +668,8 @@ def _apply_clustered_subsampling(
     )
 
     # Subsample observations within each cluster
-    obs_subsample_step = cfg.obs_subsample_step_for_clustered
     subsample_indices = spatial.subsample_by_cluster(
-        cluster_labels, step=obs_subsample_step
+        cluster_labels, step=cfg.obs_subsample_step_for_clustered
     )
 
     # Create subsampled ObservationData for bbox search only
@@ -770,8 +769,7 @@ def spatial_fit(
         # Check if this is clustered observations file (for subsampling optimization)
         clustered_obs_file = cfg.clustered_observations_file
         is_clustered_obs = (
-            clustered_obs_file
-            and clustered_obs_file.lower() != "none"
+            clustered_obs_file is not None
             and observations_csv.name in clustered_obs_file
         )
 
@@ -793,7 +791,7 @@ def spatial_fit(
                 updated_model_table[idx, 1] = row[std_col]
 
         # 4. Prepare Observation Data for Spatial Adjustment
-        obs_data = _prepare_observations_for_spatial_fit(
+        obs_data = prepare_observations_for_spatial_fit(
             observations, raster_data, updated_model_table, model_type, output_dir, cfg
         )
 
@@ -808,7 +806,7 @@ def spatial_fit(
             return
 
         # 5. Find Affected Pixels (with optional clustered subsampling)
-        obs_data_for_bbox = _apply_clustered_subsampling(obs_data, is_clustered_obs, cfg)
+        obs_data_for_bbox = apply_clustered_subsampling(obs_data, is_clustered_obs, cfg)
 
         logger.info("Finding pixels affected by observations...")
         bbox_result = spatial.find_affected_pixels(
@@ -891,7 +889,7 @@ def plot_posterior_values(
         # Filter out rows with placeholder values for excluded categories (e.g., water)
         df = df[df["prior_mean_vs30_km_per_s"] != constants.NODATA_VALUE].copy()
 
-        _validate_csv_columns(
+        validate_csv_columns(
             df,
             [
                 "id",
@@ -917,9 +915,8 @@ def plot_posterior_values(
         fig, ax = matplotlib.pyplot.subplots(figsize=constants.PLOT_FIGSIZE)
 
         # Offset for x positions to separate prior and posterior
-        offset = 0.2
-        prior_x = category_ids - offset
-        posterior_x = category_ids + offset
+        prior_x = category_ids - 0.2
+        posterior_x = category_ids + 0.2
 
         # Plot prior values with error bars
         ax.errorbar(
@@ -1036,10 +1033,10 @@ def full_pipeline_for_geology_or_terrain(
 
         # Resolve observations from config if not provided
         res_dir = Path(__file__).parent / "resources"
-        clustered_observations_csv = _resolve_observation_csv(
+        clustered_observations_csv = resolve_observation_csv(
             clustered_observations_csv, cfg.clustered_observations_file, res_dir
         )
-        independent_observations_csv = _resolve_observation_csv(
+        independent_observations_csv = resolve_observation_csv(
             independent_observations_csv, cfg.independent_observations_file, res_dir
         )
 
@@ -1493,10 +1490,10 @@ def compute_at_locations(
             terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
 
         # Load observations for spatial adjustment
-        clustered_observations_csv = _resolve_observation_csv(
+        clustered_observations_csv = resolve_observation_csv(
             clustered_observations_csv, cfg.clustered_observations_file, res_dir
         )
-        independent_observations_csv = _resolve_observation_csv(
+        independent_observations_csv = resolve_observation_csv(
             independent_observations_csv, cfg.independent_observations_file, res_dir
         )
 

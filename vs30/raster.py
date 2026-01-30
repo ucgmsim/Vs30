@@ -43,37 +43,9 @@ from vs30 import constants
 logger = logging.getLogger(__name__)
 
 
-# Resources and data directory paths
-RESOURCE_PATH = Path(__file__).parent / "resources"
-DATA_DIR = Path(__file__).parent / "data"
 
 
-def _get_terrain_raster_path() -> Path:
-    """Get path to terrain classification raster."""
-    return DATA_DIR / constants.TERRAIN_RASTER_FILENAME
-
-
-def _get_geology_shapefile_path() -> Path:
-    """Get path to geology shapefile."""
-    return DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
-
-
-def _get_coastline_shapefile_path() -> Path:
-    """Get path to coastline shapefile."""
-    return DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH
-
-
-def _get_slope_raster_path() -> Path:
-    """Get path to source slope raster."""
-    return DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
-
-
-def _get_shapefiles_archive_path() -> Path:
-    """Get path to shapefiles archive."""
-    return DATA_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
-
-
-def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
+def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
     """
     Ensure a shapefile is extracted from shapefiles.tar.xz.
 
@@ -100,7 +72,7 @@ def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> 
         return
 
     # Check if archive exists
-    archive_path = _get_shapefiles_archive_path()
+    archive_path = constants.DATA_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
     if not archive_path.exists():
         raise FileNotFoundError(
             f"Shapefile archive not found: {archive_path}. "
@@ -119,7 +91,7 @@ def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> 
             raise ValueError(
                 f"No '{directory_prefix}' directory found in archive {archive_path}"
             )
-        tar.extractall(path=DATA_DIR, members=members)
+        tar.extractall(path=constants.DATA_DIR, members=members)
 
     # Verify extraction was successful
     if not shapefile_path.exists():
@@ -129,22 +101,22 @@ def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> 
         )
 
 
-def _ensure_qmap_shapefile_extracted() -> None:
+def ensure_qmap_shapefile_extracted() -> None:
     """
     Ensure qmap.shp shapefile is extracted from shapefiles.tar.xz.
 
     This shapefile is required for geology ID raster creation.
     """
-    _ensure_shapefile_extracted(_get_geology_shapefile_path(), "qmap")
+    ensure_shapefile_extracted(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap")
 
 
-def _ensure_coast_shapefile_extracted() -> None:
+def ensure_coast_shapefile_extracted() -> None:
     """
     Ensure coast shapefile is extracted from shapefiles.tar.xz.
 
     This shapefile is required for creating coastal distance rasters.
     """
-    _ensure_shapefile_extracted(_get_coastline_shapefile_path(), "coast")
+    ensure_shapefile_extracted(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast")
 
 
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
@@ -169,7 +141,7 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     ValueError
         If CSV file is malformed or missing required columns.
     """
-    csv_file_path = RESOURCE_PATH / csv_path
+    csv_file_path = constants.RESOURCE_PATH / csv_path
 
     if not csv_file_path.exists():
         raise FileNotFoundError(
@@ -269,7 +241,7 @@ def create_category_id_raster(
 
     if model_type == "terrain":
         # Resample terrain raster to target grid
-        terrain_raster_path = _get_terrain_raster_path()
+        terrain_raster_path = constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME
         if not terrain_raster_path.exists():
             raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
 
@@ -289,10 +261,10 @@ def create_category_id_raster(
 
     else:  # geology
         # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
-        _ensure_qmap_shapefile_extracted()
+        ensure_qmap_shapefile_extracted()
 
         # Rasterize geology shapefile to target grid
-        geology_shapefile_path = _get_geology_shapefile_path()
+        geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
         if not geology_shapefile_path.exists():
             raise FileNotFoundError(f"Geology shapefile not found: {geology_shapefile_path}")
 
@@ -324,7 +296,7 @@ def create_category_id_raster(
     return output_path
 
 
-def _select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
+def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
     """
     Determine which columns to use for VS30 mean and standard deviation.
 
@@ -412,10 +384,10 @@ def create_vs30_raster_from_ids(
     logger.info(f"Creating VS30 raster: {output_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    _ensure_qmap_shapefile_extracted()
+    ensure_qmap_shapefile_extracted()
 
     # Load CSV and create ID-to-values mapping
-    csv_file_path = RESOURCE_PATH / csv_path
+    csv_file_path = constants.RESOURCE_PATH / csv_path
     if not csv_file_path.exists():
         raise FileNotFoundError(
             f"CSV file not found: {csv_file_path}. "
@@ -425,7 +397,7 @@ def create_vs30_raster_from_ids(
     df = pd.read_csv(csv_file_path, skipinitialspace=True)
     df.columns = df.columns.str.strip()
 
-    mean_col, std_col = _select_vs30_columns_by_priority(list(df.columns))
+    mean_col, std_col = select_vs30_columns_by_priority(list(df.columns))
 
     required_cols = ["id", mean_col, std_col]
     missing_cols = [col for col in required_cols if col not in df.columns]
@@ -506,7 +478,7 @@ def create_coast_distance_raster(
         - The updated profile used for saving.
     """
     logger.info("Creating coast distance raster...")
-    _ensure_coast_shapefile_extracted()
+    ensure_coast_shapefile_extracted()
 
     # Get template bounds for final output extent
     dx = template_profile["transform"].a
@@ -530,7 +502,7 @@ def create_coast_distance_raster(
     # Use UInt16 data type as in legacy code (sufficient for distance range)
     ds = gdal.Rasterize(
         str(output_path),
-        str(_get_coastline_shapefile_path()),
+        str(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH),
         creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
         outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
         xRes=dx,
@@ -601,7 +573,7 @@ def create_slope_raster(
         - The updated profile used for saving.
     """
     logger.info("Creating slope raster...")
-    slope_raster_path = _get_slope_raster_path()
+    slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
@@ -632,7 +604,7 @@ def create_slope_raster(
     return destination, profile
 
 
-def _apply_coastal_distance_modification(
+def apply_coastal_distance_modification(
     vs30_array: np.ndarray,
     id_array: np.ndarray,
     coast_dist_array: np.ndarray,
@@ -799,7 +771,7 @@ def apply_hybrid_geology_modifications(
 
     # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6:
-        _apply_coastal_distance_modification(
+        apply_coastal_distance_modification(
             vs30_array, id_array, coast_dist_array,
             gid=4,
             dist_min=hybrid_mod6_dist_min, dist_max=hybrid_mod6_dist_max,
@@ -807,7 +779,7 @@ def apply_hybrid_geology_modifications(
         )
 
     if mod13:
-        _apply_coastal_distance_modification(
+        apply_coastal_distance_modification(
             vs30_array, id_array, coast_dist_array,
             gid=10,
             dist_min=hybrid_mod13_dist_min, dist_max=hybrid_mod13_dist_max,
@@ -869,7 +841,7 @@ def apply_hybrid_modifications_at_points(
     """
     # Use source slope raster if not specified
     if slope_raster_path is None:
-        slope_raster_path = _get_slope_raster_path()
+        slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
 
     # Coast distance raster is required for mod6/mod13
     if (mod6 or mod13) and coast_distance_raster_path is None:
@@ -939,7 +911,7 @@ def apply_hybrid_modifications_at_points(
 
     # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6 and coast_dist_values is not None:
-        _apply_coastal_distance_modification(
+        apply_coastal_distance_modification(
             modified_vs30, geology_ids, coast_dist_values,
             gid=4,
             dist_min=constants.HYBRID_MOD6_DIST_MIN, dist_max=constants.HYBRID_MOD6_DIST_MAX,
@@ -947,7 +919,7 @@ def apply_hybrid_modifications_at_points(
         )
 
     if mod13 and coast_dist_values is not None:
-        _apply_coastal_distance_modification(
+        apply_coastal_distance_modification(
             modified_vs30, geology_ids, coast_dist_values,
             gid=10,
             dist_min=constants.HYBRID_MOD13_DIST_MIN, dist_max=constants.HYBRID_MOD13_DIST_MAX,
