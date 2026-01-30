@@ -21,18 +21,21 @@ Usage
 
 import logging
 import shutil
+import typing
 from pathlib import Path
-from typing import Annotated
 
+import matplotlib.pyplot
 import numpy as np
 import pandas as pd
 import rasterio
 import typer
-from matplotlib import pyplot as plt
 
 from qcore import cli
-from vs30 import raster, spatial, utils
-from vs30.config import Vs30Config
+from vs30 import config as config_module
+from vs30 import constants
+from vs30 import raster
+from vs30 import spatial
+from vs30 import utils
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +107,10 @@ def _validate_csv_columns(
 # Global Config State
 # =============================================================================
 
-_cli_config: Vs30Config | None = None
+_cli_config: config_module.Vs30Config | None = None
 
 
-def get_config() -> Vs30Config:
+def get_config() -> config_module.Vs30Config:
     """
     Get the current CLI configuration.
 
@@ -116,13 +119,13 @@ def get_config() -> Vs30Config:
     """
     global _cli_config
     if _cli_config is None:
-        _cli_config = Vs30Config.default()
+        _cli_config = config_module.Vs30Config.default()
     return _cli_config
 
 
 @app.callback()
 def main(
-    config: Annotated[
+    config: typing.Annotated[
         Path | None,
         typer.Option(
             "--config",
@@ -132,7 +135,7 @@ def main(
             help="Path to config.yaml file (default: package config.yaml)",
         ),
     ] = None,
-    verbose: Annotated[
+    verbose: typing.Annotated[
         bool,
         typer.Option("--verbose", "-v", help="Enable verbose logging"),
     ] = False,
@@ -159,31 +162,27 @@ def main(
     # Load config from specified path or default
     # Note: typer's exists=True already validates the file exists before reaching here
     if config is not None:
-        _cli_config = Vs30Config.from_yaml(config)
+        _cli_config = config_module.Vs30Config.from_yaml(config)
         logger.info(f"Loaded config from {config}")
     else:
-        _cli_config = Vs30Config.default()
-        logger.debug(f"Using default config from {Vs30Config.default_config_path()}")
+        _cli_config = config_module.Vs30Config.default()
+        logger.debug(f"Using default config from {config_module.Vs30Config.default_config_path()}")
 
 
 @cli.from_docstring(app)
 def update_categorical_vs30_models(
-    categorical_model_csv: Annotated[
+    categorical_model_csv: typing.Annotated[
         Path, typer.Option("--categorical-model-csv", "-m", exists=True, dir_okay=False)
     ],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
-    model_type: Annotated[str, typer.Option("--model-type", "-t")],
-    clustered_observations_csv: Annotated[
+    output_dir: typing.Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
+    model_type: typing.Annotated[str, typer.Option("--model-type", "-t")],
+    clustered_observations_csv: typing.Annotated[
         Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
-    independent_observations_csv: Annotated[
+    independent_observations_csv: typing.Annotated[
         Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
-    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
-    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
-    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
-    eps: Annotated[float | None, typer.Option("--eps")] = None,
-    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
+    nproc: typing.Annotated[int | None, typer.Option("--nproc")] = None,
 ) -> None:
     """
     Update categorical model values using Bayesian updates and save to CSV files.
@@ -220,25 +219,12 @@ def update_categorical_vs30_models(
         Path to CSV file with independent observations
         (e.g., measured_vs30_independent_observations.csv).
         These will be processed without clustering.
-    n_prior : int, optional
-        Effective number of prior observations. Default from config.
-    min_sigma : float, optional
-        Minimum standard deviation allowed. Default from config.
-    min_group : int, optional
-        Minimum group size for DBSCAN clustering. Default from config.
-    eps : float, optional
-        Maximum distance (metres) for points to be considered in same cluster.
-        Default from config.
     nproc : int, optional
         Number of processes for DBSCAN clustering. Use -1 for all available cores.
         Default from config.
     """
     try:
         cfg = get_config()
-        n_prior = n_prior if n_prior is not None else cfg.n_prior
-        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
-        min_group = min_group if min_group is not None else cfg.min_group
-        eps = eps if eps is not None else cfg.eps
         nproc = nproc if nproc is not None else cfg.n_proc
 
         if clustered_observations_csv is None and independent_observations_csv is None:
@@ -262,7 +248,7 @@ def update_categorical_vs30_models(
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"] != cfg.nodata_value
+            categorical_model_df["mean_vs30_km_per_s"] != constants.NODATA_VALUE
         ]
 
         _validate_csv_columns(
@@ -271,15 +257,8 @@ def update_categorical_vs30_models(
             "Categorical model CSV",
         )
 
-        # Import assignment functions and constants from category
-        from vs30.category import (
-            RASTER_ID_NODATA_VALUE,
-            STANDARD_ID_COLUMN,
-            _assign_to_category_geology,
-            _assign_to_category_terrain,
-            perform_clustering,
-            posterior_from_bayesian_update,
-        )
+        # Import category module
+        from vs30 import category
 
         # Current prior (will be updated as we process observations)
         current_prior_df = categorical_model_df.copy()
@@ -307,32 +286,30 @@ def update_categorical_vs30_models(
             # Assign category IDs
             obs_locs = clustered_observations_df[["easting", "northing"]].values
             if model_type == "geology":
-                model_ids = _assign_to_category_geology(obs_locs)
+                model_ids = category._assign_to_category_geology(obs_locs)
             else:  # terrain
-                model_ids = _assign_to_category_terrain(obs_locs)
+                model_ids = category._assign_to_category_terrain(obs_locs)
 
-            clustered_observations_df[STANDARD_ID_COLUMN] = model_ids
+            clustered_observations_df[constants.STANDARD_ID_COLUMN] = model_ids
 
             # Log assignment statistics
-            unique_assigned_ids = clustered_observations_df[STANDARD_ID_COLUMN].unique()
-            valid_assigned = clustered_observations_df[
-                clustered_observations_df[STANDARD_ID_COLUMN] != RASTER_ID_NODATA_VALUE
-            ]
+            unique_assigned_ids = clustered_observations_df[constants.STANDARD_ID_COLUMN].unique()
+            n_valid = np.sum(clustered_observations_df[constants.STANDARD_ID_COLUMN] != constants.RASTER_ID_NODATA_VALUE)
             logger.info(
-                f"Assigned category IDs: {len(valid_assigned)} valid observations "
+                f"Assigned category IDs: {n_valid} valid observations "
                 f"(out of {len(clustered_observations_df)} total)"
             )
             logger.info(
-                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != RASTER_ID_NODATA_VALUE])[:20]}"
+                f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != constants.RASTER_ID_NODATA_VALUE])[:20]}"
             )
             logger.info(
-                f"Category IDs in prior model: {sorted(current_prior_df[STANDARD_ID_COLUMN].unique())}"
+                f"Category IDs in prior model: {sorted(current_prior_df[constants.STANDARD_ID_COLUMN].unique())}"
             )
 
             # Perform clustering
             logger.info("Performing spatial clustering...")
-            clustered_observations_df = perform_clustering(
-                clustered_observations_df, model_type, min_group, eps, nproc
+            clustered_observations_df = category.perform_clustering(
+                clustered_observations_df, model_type, nproc
             )
 
         # Load independent observations if provided
@@ -358,27 +335,25 @@ def update_categorical_vs30_models(
             # Assign category IDs
             obs_locs = independent_observations_df[["easting", "northing"]].values
             if model_type == "geology":
-                model_ids = _assign_to_category_geology(obs_locs)
+                model_ids = category._assign_to_category_geology(obs_locs)
             else:  # terrain
-                model_ids = _assign_to_category_terrain(obs_locs)
+                model_ids = category._assign_to_category_terrain(obs_locs)
 
-            independent_observations_df[STANDARD_ID_COLUMN] = model_ids
+            independent_observations_df[constants.STANDARD_ID_COLUMN] = model_ids
 
         # Perform Bayesian update(s) via dispatcher
         logger.info("Applying Bayesian updates...")
-        current_prior_df = posterior_from_bayesian_update(
+        current_prior_df = category.posterior_from_bayesian_update(
             current_prior_df,
             independent_observations_df=independent_observations_df,
             clustered_observations_df=clustered_observations_df,
-            n_prior=n_prior,
-            min_sigma=min_sigma,
             model_type=model_type,
         )
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_filename = cfg.posterior_prefix + categorical_model_csv.name
+        output_filename = constants.POSTERIOR_PREFIX + categorical_model_csv.name
         output_path = output_dir / output_filename
 
         current_prior_df.to_csv(output_path, index=False)
@@ -394,13 +369,13 @@ def update_categorical_vs30_models(
 
 @cli.from_docstring(app)
 def make_initial_vs30_raster(
-    terrain: Annotated[bool, typer.Option("--terrain")] = False,
-    geology: Annotated[bool, typer.Option("--geology")] = False,
-    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-o", file_okay=False)] = None,
-    geology_csv: Annotated[
+    terrain: typing.Annotated[bool, typer.Option("--terrain")] = False,
+    geology: typing.Annotated[bool, typer.Option("--geology")] = False,
+    output_dir: typing.Annotated[Path | None, typer.Option("--output-dir", "-o", file_okay=False)] = None,
+    geology_csv: typing.Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
-    terrain_csv: Annotated[
+    terrain_csv: typing.Annotated[
         Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
     ] = None,
 ) -> None:
@@ -459,7 +434,7 @@ def make_initial_vs30_raster(
         # Process terrain if requested
         if terrain:
             logger.info("Processing terrain model...")
-            terrain_model_csv = terrain_csv if terrain_csv else cfg.terrain_csv
+            terrain_model_csv = terrain_csv if terrain_csv else constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             logger.info(f"Using terrain model values from {terrain_model_csv}")
 
             logger.info("Creating terrain category ID raster...")
@@ -468,14 +443,14 @@ def make_initial_vs30_raster(
             )
 
             logger.info("Creating terrain VS30 raster...")
-            vs30_raster = output_dir / cfg.terrain_initial_vs30_filename
+            vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
             raster.create_vs30_raster_from_ids(id_raster, terrain_model_csv, vs30_raster)
             typer.echo(f"✓ Created terrain VS30 raster: {vs30_raster}")
 
         # Process geology if requested
         if geology:
             logger.info("Processing geology model...")
-            geology_model_csv = geology_csv if geology_csv else cfg.geology_csv
+            geology_model_csv = geology_csv if geology_csv else constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             logger.info(f"Using geology model values from {geology_model_csv}")
 
             logger.info("Creating geology category ID raster...")
@@ -484,7 +459,7 @@ def make_initial_vs30_raster(
             )
 
             logger.info("Creating geology VS30 raster...")
-            vs30_raster = output_dir / cfg.geology_initial_vs30_filename
+            vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
             raster.create_vs30_raster_from_ids(id_raster, geology_model_csv, vs30_raster)
             typer.echo(f"✓ Created geology VS30 raster: {vs30_raster}")
 
@@ -498,11 +473,11 @@ def make_initial_vs30_raster(
 
 @cli.from_docstring(app)
 def adjust_geology_vs30_by_slope_and_coastal_distance(
-    input_raster: Annotated[
+    input_raster: typing.Annotated[
         Path, typer.Option("--input-raster", "-i", exists=True, dir_okay=False)
     ],
-    id_raster: Annotated[Path, typer.Option("--id-raster", exists=True, dir_okay=False)],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
+    id_raster: typing.Annotated[Path, typer.Option("--id-raster", exists=True, dir_okay=False)],
+    output_dir: typing.Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
 ) -> None:
     """
     Apply hybrid geology modifications to an initial VS30 raster.
@@ -546,11 +521,11 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
                 id_array = id_src.read(1)
 
         # 2. Create/Load Intermediate Rasters
-        slope_path = output_dir / cfg.slope_raster_filename
+        slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
         logger.info(f"Generating slope raster: {slope_path}")
         slope_array, _ = raster.create_slope_raster(slope_path, profile)
 
-        coast_path = output_dir / cfg.coast_distance_raster_filename
+        coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
         logger.info(f"Generating coast distance raster: {coast_path}")
         coast_dist_array, _ = raster.create_coast_distance_raster(coast_path, profile)
 
@@ -569,7 +544,7 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         # 4. Save Output
         output_path = (
             output_dir
-            / cfg.geology_vs30_slope_and_coastal_distance_adjusted_filename
+            / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
         )
 
         # Update profile for output
@@ -603,7 +578,7 @@ def _prepare_observations_for_spatial_fit(
     updated_model_table: np.ndarray,
     model_type: str,
     output_dir: Path,
-    cfg: "Vs30Config",
+    cfg: "config_module.Vs30Config",
 ) -> "spatial.ObservationData | None":
     """
     Prepare observation data for spatial adjustment.
@@ -620,7 +595,7 @@ def _prepare_observations_for_spatial_fit(
         Either 'geology' or 'terrain'.
     output_dir : Path
         Output directory for any intermediate files.
-    cfg : Vs30Config
+    cfg : config_module.Vs30Config
         Configuration object.
 
     Returns
@@ -636,7 +611,7 @@ def _prepare_observations_for_spatial_fit(
         updated_model_table,
         model_type,
         output_dir,
-        noisy=cfg.noisy,
+        noisy=cfg.noisy,  # noisy is still user-configurable
     )
 
     logger.info(f"Prepared {len(obs_data.locations)} valid observations")
@@ -650,7 +625,7 @@ def _prepare_observations_for_spatial_fit(
 def _apply_clustered_subsampling(
     obs_data: "spatial.ObservationData",
     is_clustered_obs: bool,
-    cfg: "Vs30Config",
+    cfg: "config_module.Vs30Config",
 ) -> "spatial.ObservationData":
     """
     Apply DBSCAN clustering and subsampling to observations for optimized pixel search.
@@ -665,7 +640,7 @@ def _apply_clustered_subsampling(
         Full observation data.
     is_clustered_obs : bool
         Whether the observations are from a clustered observations file.
-    cfg : Vs30Config
+    cfg : config_module.Vs30Config
         Configuration object with clustering parameters.
 
     Returns
@@ -677,12 +652,12 @@ def _apply_clustered_subsampling(
     if not is_clustered_obs:
         return obs_data
 
-    from sklearn.cluster import DBSCAN
+    import sklearn.cluster
 
     logger.info("Clustering observations for optimized affected pixel search...")
 
     # Run DBSCAN directly on the filtered observation locations
-    dbscan = DBSCAN(eps=cfg.eps, min_samples=cfg.min_group, n_jobs=cfg.n_proc)
+    dbscan = sklearn.cluster.DBSCAN(eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=cfg.n_proc)
     cluster_labels = dbscan.fit_predict(obs_data.locations)
 
     n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
@@ -719,18 +694,18 @@ def _apply_clustered_subsampling(
 
 @cli.from_docstring(app)
 def spatial_fit(
-    input_raster: Annotated[
+    input_raster: typing.Annotated[
         Path, typer.Option("--input-raster", "-i", exists=True, dir_okay=False)
     ],
-    observations_csv: Annotated[
+    observations_csv: typing.Annotated[
         Path, typer.Option("--observations-csv", "-o", exists=True, dir_okay=False)
     ],
-    model_values_csv: Annotated[
+    model_values_csv: typing.Annotated[
         Path, typer.Option("--model-values-csv", "-m", exists=True, dir_okay=False)
     ],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
-    model_type: Annotated[str, typer.Option("--model-type", "-t")],
-    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
+    output_dir: typing.Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
+    model_type: typing.Annotated[str, typer.Option("--model-type", "-t")],
+    n_proc: typing.Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Adjust a VS30 raster based on measurements using spatial conditioning.
@@ -765,15 +740,15 @@ def spatial_fit(
 
         cfg = get_config()
 
-        max_dist_m = cfg.max_dist_m
-        max_points = cfg.max_points
-        phi = cfg.phi[model_type]
-        noisy = cfg.noisy
-        cov_reduc = cfg.cov_reduc
+        max_dist_m = constants.MAX_DIST_M
+        max_points = constants.MAX_POINTS
+        phi = constants.PHI[model_type]
+        noisy = cfg.noisy  # noisy is still user-configurable
+        cov_reduc = constants.COV_REDUC
 
-        from vs30.parallel import resolve_n_proc, run_parallel_spatial_fit
+        from vs30 import parallel
 
-        n_proc_resolved = resolve_n_proc(
+        n_proc_resolved = parallel.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
 
@@ -826,7 +801,7 @@ def spatial_fit(
             logger.warning(
                 "No valid observations found within model bounds. Copying input raster to output."
             )
-            output_filename = cfg.output_filenames[model_type]
+            output_filename = constants.OUTPUT_FILENAMES[model_type]
             output_path = output_dir / output_filename
             shutil.copyfile(input_raster, output_path)
             typer.echo(f"✓ No updates needed. Copied to {output_path}")
@@ -849,7 +824,7 @@ def spatial_fit(
         if n_proc_resolved > 1:
             logger.info(f"Using {n_proc_resolved} parallel workers")
             affected_flat_indices = np.where(bbox_result.mask)[0]
-            updates = run_parallel_spatial_fit(
+            updates = parallel.run_parallel_spatial_fit(
                 affected_flat_indices=affected_flat_indices,
                 raster_data=raster_data,
                 obs_data=obs_data,
@@ -889,8 +864,8 @@ def spatial_fit(
 
 @cli.from_docstring(app)
 def plot_posterior_values(
-    csv_path: Annotated[Path, typer.Option("--csv-path", "-c", exists=True, dir_okay=False)],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
+    csv_path: typing.Annotated[Path, typer.Option("--csv-path", "-c", exists=True, dir_okay=False)],
+    output_dir: typing.Annotated[Path, typer.Option("--output-dir", "-o", file_okay=False)],
 ) -> None:
     """
     Plot prior and posterior Vs30 mean values with error bars.
@@ -914,7 +889,7 @@ def plot_posterior_values(
         cfg = get_config()
 
         # Filter out rows with placeholder values for excluded categories (e.g., water)
-        df = df[df["prior_mean_vs30_km_per_s"] != cfg.nodata_value].copy()
+        df = df[df["prior_mean_vs30_km_per_s"] != constants.NODATA_VALUE].copy()
 
         _validate_csv_columns(
             df,
@@ -939,7 +914,7 @@ def plot_posterior_values(
         posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
 
         # Create figure
-        fig, ax = plt.subplots(figsize=cfg.plot_figsize)
+        fig, ax = matplotlib.pyplot.subplots(figsize=constants.PLOT_FIGSIZE)
 
         # Offset for x positions to separate prior and posterior
         offset = 0.2
@@ -988,9 +963,9 @@ def plot_posterior_values(
         output_path = output_dir / output_filename
 
         # Save plot
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=cfg.plot_dpi, bbox_inches="tight")
-        plt.close()
+        matplotlib.pyplot.tight_layout()
+        matplotlib.pyplot.savefig(output_path, dpi=constants.PLOT_DPI, bbox_inches="tight")
+        matplotlib.pyplot.close()
 
         logger.info(f"Plot saved to: {output_path}")
         typer.echo(f"✓ Plot saved to: {output_path}")
@@ -1003,23 +978,19 @@ def plot_posterior_values(
 
 @cli.from_docstring(app)
 def full_pipeline_for_geology_or_terrain(
-    model_type: Annotated[str, typer.Option("--model-type", "-t")],
-    categorical_model_csv: Annotated[
+    model_type: typing.Annotated[str, typer.Option("--model-type", "-t")],
+    categorical_model_csv: typing.Annotated[
         Path, typer.Option("--categorical-model-csv", "-m", exists=True, dir_okay=False)
     ],
-    output_dir: Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
-    clustered_observations_csv: Annotated[
+    output_dir: typing.Annotated[Path, typer.Option("--output-dir", "-d", file_okay=False)],
+    clustered_observations_csv: typing.Annotated[
         Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
-    independent_observations_csv: Annotated[
+    independent_observations_csv: typing.Annotated[
         Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
-    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
-    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
-    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
-    eps: Annotated[float | None, typer.Option("--eps")] = None,
-    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
-    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
+    nproc: typing.Annotated[int | None, typer.Option("--nproc")] = None,
+    n_proc: typing.Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Run the full VS30 generation pipeline for a single model type.
@@ -1045,14 +1016,6 @@ def full_pipeline_for_geology_or_terrain(
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations (e.g., measured filtered).
-    n_prior : int, optional
-        Effective number of prior observations for Bayesian update.
-    min_sigma : float, optional
-        Minimum standard deviation allowed.
-    min_group : int, optional
-        Minimum group size for DBSCAN clustering.
-    eps : float, optional
-        Maximum distance for DBSCAN clustering.
     nproc : int, optional
         Number of processes for clustering.
     n_proc : int, optional
@@ -1067,10 +1030,6 @@ def full_pipeline_for_geology_or_terrain(
 
         cfg = get_config()
 
-        n_prior = n_prior if n_prior is not None else cfg.n_prior
-        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
-        min_group = min_group if min_group is not None else cfg.min_group
-        eps = eps if eps is not None else cfg.eps
         nproc = nproc if nproc is not None else cfg.n_proc
 
         do_bayesian_update = cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values
@@ -1093,15 +1052,11 @@ def full_pipeline_for_geology_or_terrain(
                 independent_observations_csv=independent_observations_csv,
                 output_dir=output_dir,
                 model_type=model_type,
-                n_prior=n_prior,
-                min_sigma=min_sigma,
-                min_group=min_group,
-                eps=eps,
                 nproc=nproc,
             )
 
             posterior_csv = (
-                output_dir / f"{cfg.posterior_prefix}{categorical_model_csv.name}"
+                output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
             )
             if not posterior_csv.exists():
                 raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
@@ -1122,14 +1077,14 @@ def full_pipeline_for_geology_or_terrain(
         )
 
         initial_raster = output_dir / (
-            cfg.geology_initial_vs30_filename
+            constants.GEOLOGY_INITIAL_VS30_FILENAME
             if model_type == "geology"
-            else cfg.terrain_initial_vs30_filename
+            else constants.TERRAIN_INITIAL_VS30_FILENAME
         )
         id_raster_name = (
-            cfg.geology_id_filename
+            constants.GEOLOGY_ID_FILENAME
             if model_type == "geology"
-            else cfg.terrain_id_filename
+            else constants.TERRAIN_ID_FILENAME
         )
         id_raster = output_dir / id_raster_name
 
@@ -1151,7 +1106,7 @@ def full_pipeline_for_geology_or_terrain(
             )
             current_raster = (
                 output_dir
-                / cfg.geology_vs30_slope_and_coastal_distance_adjusted_filename
+                / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
             )
             if not current_raster.exists():
                 raise FileNotFoundError(f"Step 3 failed to produce {current_raster}")
@@ -1182,10 +1137,10 @@ def full_pipeline_for_geology_or_terrain(
 
 @cli.from_docstring(app)
 def combine(
-    geology_tif: Annotated[Path, typer.Option("--geology-tif", exists=True, dir_okay=False)],
-    terrain_tif: Annotated[Path, typer.Option("--terrain-tif", exists=True, dir_okay=False)],
-    output_path: Annotated[Path, typer.Option("--output-path", "-o", dir_okay=False)],
-    combination_method: Annotated[str | None, typer.Option("--combination-method")] = None,
+    geology_tif: typing.Annotated[Path, typer.Option("--geology-tif", exists=True, dir_okay=False)],
+    terrain_tif: typing.Annotated[Path, typer.Option("--terrain-tif", exists=True, dir_okay=False)],
+    output_path: typing.Annotated[Path, typer.Option("--output-path", "-o", dir_okay=False)],
+    combination_method: typing.Annotated[str | None, typer.Option("--combination-method")] = None,
 ) -> None:
     """
     Combine geology and terrain VS30 rasters using a weighted average.
@@ -1226,17 +1181,13 @@ def combine(
             geol_data[geol_data == nodata] = np.nan
             terr_data[terr_data == nodata] = np.nan
 
-            vs30_g, stdv_g = geol_data[0], geol_data[1]
-            vs30_t, stdv_t = terr_data[0], terr_data[1]
-
             # Combine models using shared function (log-space mixture)
             combined_vs30, combined_stdv = utils.combine_vs30_models(
-                geol_vs30=vs30_g,
-                geol_stdv=stdv_g,
-                terr_vs30=vs30_t,
-                terr_stdv=stdv_t,
+                geol_vs30=geol_data[0],
+                geol_stdv=geol_data[1],
+                terr_vs30=terr_data[0],
+                terr_stdv=terr_data[1],
                 combination_method=combination_method,
-                k_value=cfg.k_value,
             )
 
             # Create output array correctly restoring nodata where things are NaN
@@ -1266,26 +1217,22 @@ def combine(
 
 @cli.from_docstring(app)
 def full_pipeline(
-    geology_categorical_csv: Annotated[
+    geology_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
-    terrain_categorical_csv: Annotated[
+    terrain_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
     ] = None,
-    clustered_observations_csv: Annotated[
+    clustered_observations_csv: typing.Annotated[
         Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
-    independent_observations_csv: Annotated[
+    independent_observations_csv: typing.Annotated[
         Path | None, typer.Option("--independent-observations-csv", "-o", exists=True, dir_okay=False)
     ] = None,
-    output_dir: Annotated[Path | None, typer.Option("--output-dir", "-d", file_okay=False)] = None,
-    n_prior: Annotated[int | None, typer.Option("--n-prior")] = None,
-    min_sigma: Annotated[float | None, typer.Option("--min-sigma")] = None,
-    min_group: Annotated[int | None, typer.Option("--min-group")] = None,
-    eps: Annotated[float | None, typer.Option("--eps")] = None,
-    nproc: Annotated[int | None, typer.Option("--nproc")] = None,
-    combination_method: Annotated[str | None, typer.Option("--combination-method")] = None,
-    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
+    output_dir: typing.Annotated[Path | None, typer.Option("--output-dir", "-d", file_okay=False)] = None,
+    nproc: typing.Annotated[int | None, typer.Option("--nproc")] = None,
+    combination_method: typing.Annotated[str | None, typer.Option("--combination-method")] = None,
+    n_proc: typing.Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Run the full VS30 generation pipeline for both geology and terrain models.
@@ -1306,14 +1253,6 @@ def full_pipeline(
         Path to CSV file with independent observations (e.g., measured filtered).
     output_dir : Path, optional
         Directory to save all pipeline outputs. Default from config.
-    n_prior : int, optional
-        Effective number of prior observations for Bayesian update.
-    min_sigma : float, optional
-        Minimum standard deviation allowed.
-    min_group : int, optional
-        Minimum group size for DBSCAN clustering.
-    eps : float, optional
-        Maximum distance for DBSCAN clustering.
     nproc : int, optional
         Number of processes for clustering.
     combination_method : str, optional
@@ -1335,10 +1274,6 @@ def full_pipeline(
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        n_prior = n_prior if n_prior is not None else cfg.n_prior
-        min_sigma = min_sigma if min_sigma is not None else cfg.min_sigma
-        min_group = min_group if min_group is not None else cfg.min_group
-        eps = eps if eps is not None else cfg.eps
         nproc = nproc if nproc is not None else cfg.n_proc
         combination_method = (
             combination_method
@@ -1346,18 +1281,18 @@ def full_pipeline(
             else cfg.combination_method
         )
 
-        from vs30.parallel import resolve_n_proc
+        from vs30 import parallel as parallel_module
 
-        n_proc_resolved = resolve_n_proc(
+        n_proc_resolved = parallel_module.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
 
         # Resolve CSV paths if not provided
         res_dir = Path(__file__).parent / "resources"
         if geology_categorical_csv is None:
-            geology_categorical_csv = res_dir / cfg.geology_csv
+            geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
         if terrain_categorical_csv is None:
-            terrain_categorical_csv = res_dir / cfg.terrain_csv
+            terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
 
         # 1. Run Geology Pipeline
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
@@ -1367,10 +1302,6 @@ def full_pipeline(
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
             output_dir=output_dir,
-            n_prior=n_prior,
-            min_sigma=min_sigma,
-            min_group=min_group,
-            eps=eps,
             nproc=nproc,
             n_proc=n_proc_resolved,
         )
@@ -1383,10 +1314,6 @@ def full_pipeline(
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
             output_dir=output_dir,
-            n_prior=n_prior,
-            min_sigma=min_sigma,
-            min_group=min_group,
-            eps=eps,
             nproc=nproc,
             n_proc=n_proc_resolved,
         )
@@ -1396,9 +1323,9 @@ def full_pipeline(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
-        geol_tif = output_dir / cfg.output_filenames["geology"]
-        terr_tif = output_dir / cfg.output_filenames["terrain"]
-        combined_tif = output_dir / cfg.combined_vs30_filename
+        geol_tif = output_dir / constants.OUTPUT_FILENAMES["geology"]
+        terr_tif = output_dir / constants.OUTPUT_FILENAMES["terrain"]
+        combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
 
         combine(
             geology_tif=geol_tif,
@@ -1419,36 +1346,36 @@ def full_pipeline(
 
 @cli.from_docstring(app)
 def compute_at_locations(
-    locations_csv: Annotated[
+    locations_csv: typing.Annotated[
         Path | None, typer.Option("--locations-csv", "-l", exists=True, dir_okay=False)
     ] = None,
-    output_csv: Annotated[
+    output_csv: typing.Annotated[
         Path | None, typer.Option("--output-csv", "-o", dir_okay=False)
     ] = None,
-    lon_column: Annotated[str | None, typer.Option("--lon-column")] = None,
-    lat_column: Annotated[str | None, typer.Option("--lat-column")] = None,
-    geology_categorical_csv: Annotated[
+    lon_column: typing.Annotated[str | None, typer.Option("--lon-column")] = None,
+    lat_column: typing.Annotated[str | None, typer.Option("--lat-column")] = None,
+    geology_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
-    terrain_categorical_csv: Annotated[
+    terrain_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
     ] = None,
-    clustered_observations_csv: Annotated[
+    clustered_observations_csv: typing.Annotated[
         Path | None, typer.Option("--clustered-observations-csv", "-c", exists=True, dir_okay=False)
     ] = None,
-    independent_observations_csv: Annotated[
+    independent_observations_csv: typing.Annotated[
         Path | None, typer.Option("--independent-observations-csv", "-i", exists=True, dir_okay=False)
     ] = None,
-    coast_distance_raster: Annotated[
+    coast_distance_raster: typing.Annotated[
         Path | None, typer.Option("--coast-distance-raster", exists=True, dir_okay=False)
     ] = None,
-    include_intermediate: Annotated[
+    include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
-    combination_method: Annotated[
+    combination_method: typing.Annotated[
         str | None, typer.Option("--combination-method")
     ] = None,
-    n_proc: Annotated[int | None, typer.Option("--n-proc")] = None,
+    n_proc: typing.Annotated[int | None, typer.Option("--n-proc")] = None,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1494,14 +1421,7 @@ def compute_at_locations(
     """
     from qcore import coordinates
 
-    from vs30.parallel import (
-        LocationsChunkConfig,
-        process_geology_at_points,
-        process_terrain_at_points,
-        resolve_n_proc,
-        run_parallel_locations,
-    )
-    from vs30.utils import combine_vs30_models
+    from vs30 import parallel as parallel_locations
 
     try:
         cfg = get_config()
@@ -1534,9 +1454,9 @@ def compute_at_locations(
             output_csv = Path(cfg.locations_output_csv)
 
         if lon_column is None:
-            lon_column = cfg.locations_lon_column
+            lon_column = constants.LOCATIONS_LON_COLUMN
         if lat_column is None:
-            lat_column = cfg.locations_lat_column
+            lat_column = constants.LOCATIONS_LAT_COLUMN
 
         if combination_method is None:
             combination_method = cfg.combination_method
@@ -1568,9 +1488,9 @@ def compute_at_locations(
         # Resolve CSV paths if not provided
         res_dir = Path(__file__).parent / "resources"
         if geology_categorical_csv is None:
-            geology_categorical_csv = res_dir / cfg.geology_csv
+            geology_categorical_csv = res_dir / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
         if terrain_categorical_csv is None:
-            terrain_categorical_csv = res_dir / cfg.terrain_csv
+            terrain_categorical_csv = res_dir / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
 
         # Load observations for spatial adjustment
         clustered_observations_csv = _resolve_observation_csv(
@@ -1605,7 +1525,7 @@ def compute_at_locations(
         terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
         # Resolve n_proc from CLI or config
-        n_proc_resolved = resolve_n_proc(
+        n_proc_resolved = parallel_locations.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
 
@@ -1618,22 +1538,20 @@ def compute_at_locations(
             # Re-read the original CSV (without NZTM conversion - workers will do it)
             locations_df_raw = pd.read_csv(locations_csv)
 
-            config = LocationsChunkConfig(
+            loc_config = parallel_locations.LocationsChunkConfig(
                 lon_column=lon_column,
                 lat_column=lat_column,
                 include_intermediate=include_intermediate,
                 combination_method=combination_method,
                 coast_distance_raster=coast_distance_raster,
-                k_value=cfg.k_value,
-                epsilon=cfg.weight_epsilon_div_by_zero,
             )
 
-            df = run_parallel_locations(
+            df = parallel_locations.run_parallel_locations(
                 locations_df=locations_df_raw,
                 observations_df=observations_df,
                 geol_model_df=geol_model_df,
                 terr_model_df=terr_model_df,
-                config=config,
+                config=loc_config,
                 n_proc=n_proc_resolved,
             )
 
@@ -1661,7 +1579,7 @@ def compute_at_locations(
             geol_stdv_hybrid,
             geol_mvn_vs30,
             geol_mvn_stdv,
-        ) = process_geology_at_points(
+        ) = parallel_locations.process_geology_at_points(
             points, geol_model_df, observations_df, coast_distance_raster
         )
 
@@ -1681,7 +1599,7 @@ def compute_at_locations(
             terr_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
-        ) = process_terrain_at_points(points, terr_model_df, observations_df)
+        ) = parallel_locations.process_terrain_at_points(points, terr_model_df, observations_df)
 
         df["terrain_id"] = terr_ids
         if include_intermediate:
@@ -1691,14 +1609,12 @@ def compute_at_locations(
         df["terrain_mvn_stdv"] = terr_mvn_stdv
 
         typer.echo("Combining models...")
-        combined_vs30, combined_stdv = combine_vs30_models(
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_mvn_vs30,
             geol_mvn_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
             combination_method,
-            k_value=cfg.k_value,
-            epsilon=cfg.weight_epsilon_div_by_zero,
         )
 
         df["vs30"] = combined_vs30

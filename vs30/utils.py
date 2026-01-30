@@ -1,6 +1,6 @@
 import numpy as np
 
-from vs30.config import get_default_config
+from vs30 import constants
 
 
 # ============================================================================
@@ -23,7 +23,7 @@ def correlation_function(
     phi : float
         Correlation length parameter in meters.
     min_dist : float, optional
-        Minimum distance enforced to prevent division issues. Default from config.
+        Minimum distance enforced to prevent division issues. Default is MIN_DIST_ENFORCED.
 
     Returns
     -------
@@ -37,7 +37,7 @@ def correlation_function(
     exact-zero distances from producing correlation = 1.0.
     """
     if min_dist is None:
-        min_dist = get_default_config().min_dist_enforced
+        min_dist = constants.MIN_DIST_ENFORCED
     return np.exp(-np.maximum(min_dist, distances) / phi)
 
 
@@ -52,8 +52,6 @@ def combine_vs30_models(
     terr_vs30: np.ndarray,
     terr_stdv: np.ndarray,
     combination_method: str | float,
-    k_value: float = 3.0,
-    epsilon: float = 1e-10,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Combine geology and terrain Vs30 models using log-space weighted mixture.
@@ -77,13 +75,7 @@ def combine_vs30_models(
         Either a ratio (float) where ratio = geology_weight / terrain_weight,
         so ratio=1.0 gives equal weighting, ratio=2.0 gives geology twice
         the weight of terrain. Or "standard_deviation_weighting" for
-        variance-based weighting using k_value exponent.
-    k_value : float, optional
-        Exponent for standard deviation weighting. Higher values give more
-        weight to the model with lower uncertainty. Default is 3.0.
-    epsilon : float, optional
-        Small value to prevent division by zero in variance weighting.
-        Default is 1e-10.
+        variance-based weighting using K_VALUE exponent.
 
     Returns
     -------
@@ -102,13 +94,15 @@ def combine_vs30_models(
 
     For ratio=1.0 with inputs (200, 400), the result is ~283 (geometric mean),
     not 300 (arithmetic mean).
+
+    Uses K_VALUE and WEIGHT_EPSILON_DIV_BY_ZERO constants from constants.py
+    for standard deviation weighting calculations.
     """
     # Determine weights based on combination method
-    method_str = str(combination_method).strip()
-    if method_str == "standard_deviation_weighting":
+    if str(combination_method).strip() == "standard_deviation_weighting":
         # Variance-based weighting: lower stdv gets higher weight
-        m_g = (geol_stdv**2 + epsilon) ** -k_value
-        m_t = (terr_stdv**2 + epsilon) ** -k_value
+        m_g = (geol_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO) ** -constants.K_VALUE
+        m_t = (terr_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO) ** -constants.K_VALUE
         total_m = m_g + m_t
         w_g = m_g / total_m
         w_t = m_t / total_m

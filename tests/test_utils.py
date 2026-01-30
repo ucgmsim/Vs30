@@ -183,7 +183,6 @@ class TestCombineVs30Models:
         combined_vs30, _ = combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method="standard_deviation_weighting",
-            k_value=3.0,
         )
 
         # Geology has lower stdv, so it should get more weight
@@ -201,7 +200,6 @@ class TestCombineVs30Models:
         combined_vs30, _ = combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method="standard_deviation_weighting",
-            k_value=3.0,
         )
 
         # Equal stdv means equal weight → geometric mean
@@ -262,27 +260,3 @@ class TestCombineVs30Models:
                 combination_method="invalid_method",
             )
 
-    def test_k_value_effect(self):
-        """Test that higher k_value gives more weight to lower stdv model."""
-        geol_vs30 = np.array([200.0])
-        geol_stdv = np.array([0.2])  # Lower stdv
-        terr_vs30 = np.array([400.0])
-        terr_stdv = np.array([0.4])
-
-        # Low k_value: less sensitivity to stdv differences
-        combined_low_k, _ = combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
-            combination_method="standard_deviation_weighting",
-            k_value=1.0,
-        )
-
-        # High k_value: more sensitivity to stdv differences
-        combined_high_k, _ = combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
-            combination_method="standard_deviation_weighting",
-            k_value=5.0,
-        )
-
-        # With higher k, geology (lower stdv) gets even more weight
-        # So combined_high_k should be closer to 200 than combined_low_k
-        assert combined_high_k[0] < combined_low_k[0]

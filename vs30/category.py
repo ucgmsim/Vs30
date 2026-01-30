@@ -8,7 +8,7 @@ This module is self-contained and includes all functionality needed to:
 3. Perform Bayesian updates of category mean and standard deviation values
 """
 
-from math import exp, log, sqrt
+import math
 from pathlib import Path
 
 import geopandas as gpd
@@ -16,28 +16,21 @@ import numpy as np
 import pandas as pd
 import rasterio
 import shapely
-from sklearn.cluster import DBSCAN
+import sklearn.cluster
 
-from vs30.config import get_default_config
-
-_cfg = get_default_config()
-RASTER_ID_NODATA_VALUE = _cfg.raster_id_nodata_value
-
-STANDARD_ID_COLUMN = "id"
+from vs30 import constants
 
 _data_dir = Path(__file__).parent / "data"
 
 
 def _get_qmap_path() -> Path:
-    """Get path to QMAP geology shapefile from config."""
-    cfg = get_default_config()
-    return _data_dir / cfg.geology_shapefile_path
+    """Get path to QMAP geology shapefile."""
+    return _data_dir / constants.GEOLOGY_SHAPEFILE_PATH
 
 
 def _get_terrain_raster_path() -> Path:
-    """Get path to terrain classification raster from config."""
-    cfg = get_default_config()
-    return _data_dir / cfg.terrain_raster_filename
+    """Get path to terrain classification raster."""
+    return _data_dir / constants.TERRAIN_RASTER_FILENAME
 
 
 # ============================================================================
@@ -60,7 +53,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside polygons).
+        Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
     """
     # load QMAP polygons (keeps CRS from file)
     gdf = gpd.read_file(_get_qmap_path())[["gid", "geometry"]]
@@ -73,7 +66,7 @@ def _assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     joined = gpd.sjoin(points_gdf, gdf, how="left", predicate="within")
 
     # Default to ID_NODATA, fill with gid where available
-    values = np.full(len(points), RASTER_ID_NODATA_VALUE, dtype=np.uint8)
+    values = np.full(len(points), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
     value_mask = ~joined["gid"].isna()
     values[value_mask] = joined.loc[value_mask, "gid"].values
 
@@ -96,7 +89,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or RASTER_ID_NODATA_VALUE if outside raster).
+        Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
     with rasterio.open(_get_terrain_raster_path()) as src:
         nodata = src.nodata
@@ -107,7 +100,7 @@ def _assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 
         # Handle nodata values
         if nodata is not None:
-            terrain_ids[terrain_ids == nodata] = RASTER_ID_NODATA_VALUE
+            terrain_ids[terrain_ids == nodata] = constants.RASTER_ID_NODATA_VALUE
 
     return terrain_ids
 
@@ -144,11 +137,11 @@ def _compute_bayesian_posterior_mean(
     """
     # The posterior_variance terms in numerator and denominator cancel out,
     # simplifying to a weighted average in log-space:
-    #   log_posterior = (n_prior * log(prior) + log(obs)) / (n_prior + 1)
+    #   log_posterior = (n_prior * math.log(prior) + math.log(obs)) / (n_prior + 1)
     weighted_log_mean = (
-        num_prior_observations * log(prior_mean) + log(observation_value)
+        num_prior_observations * math.log(prior_mean) + math.log(observation_value)
     ) / (num_prior_observations + 1)
-    return exp(weighted_log_mean)
+    return math.exp(weighted_log_mean)
 
 
 def _compute_bayesian_posterior_variance(
@@ -179,7 +172,7 @@ def _compute_bayesian_posterior_variance(
     float
         Posterior variance.
     """
-    log_residual = log(observation_value) - log(prior_mean)
+    log_residual = math.log(observation_value) - math.log(prior_mean)
     mean_shift = (
         num_prior_observations / (num_prior_observations + 1)
     ) * log_residual**2
@@ -197,8 +190,6 @@ def _compute_bayesian_posterior_variance(
 def update_with_independent_data(
     categorical_model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
-    n_prior: int = 3,
-    min_sigma: float = 0.5,
 ) -> pd.DataFrame:
     """
     Perform Bayesian update of category mean and standard deviation values.
@@ -213,10 +204,6 @@ def update_with_independent_data(
         Can handle various column naming conventions.
     observations_df : DataFrame
         Observations containing vs30, uncertainty, and category ID column.
-    n_prior : int, optional
-        Assume prior model made up of n_prior measurements. Default is 3.
-    min_sigma : float, optional
-        Minimum model_stdv allowed. Default is 0.5.
 
     Returns
     -------
@@ -228,15 +215,19 @@ def update_with_independent_data(
         - "posterior_num_observations_independent_observations"
         - "assumed_num_prior_observations"
         - "enforced_min_sigma"
-    """
-    cfg = get_default_config()
 
+    Notes
+    -----
+    Uses N_PRIOR and MIN_SIGMA constants from constants.py.
+    """
+    n_prior = constants.N_PRIOR
+    min_sigma = constants.MIN_SIGMA
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
 
     # Identify prior columns
-    prior_mean_col = cfg.col_prior_mean
-    prior_std_col = cfg.col_prior_stdv
+    prior_mean_col = constants.COL_PRIOR_MEAN
+    prior_std_col = constants.COL_PRIOR_STDV
 
     # If a Bayesian update was previously performed, use the posterior values as priors
     # for subsequent updates. Otherwise, use the raw categorical model data as priors.
@@ -244,31 +235,31 @@ def update_with_independent_data(
     # This ensures sequential Bayesian updates: when both clustered and independent observations
     # are processed, independent observations use the spatially bias-corrected clustered posterior
     # as their prior, rather than the original (potentially biased) categorical model priors.
-    if cfg.col_posterior_mean_clustered in updated_categorical_model_df.columns:
+    if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         # Use clustered posterior as prior for independent updates
         # This implements the sequential Bayesian update: clustered → independent
         updated_categorical_model_df[prior_mean_col] = updated_categorical_model_df[
-            cfg.col_posterior_mean_clustered
+            constants.COL_POSTERIOR_MEAN_CLUSTERED
         ]
         updated_categorical_model_df[prior_std_col] = updated_categorical_model_df[
-            cfg.col_posterior_stdv_clustered
+            constants.COL_POSTERIOR_STDV_CLUSTERED
         ]
     else:
         # No posterior available - must have raw categorical data to use as priors
-        if cfg.col_mean in updated_categorical_model_df.columns:
+        if constants.COL_MEAN in updated_categorical_model_df.columns:
             # Initial prior format - rename to prior_ columns
             updated_categorical_model_df = updated_categorical_model_df.rename(
                 columns={
-                    cfg.col_mean: prior_mean_col,
-                    cfg.col_stdv: prior_std_col,
+                    constants.COL_MEAN: prior_mean_col,
+                    constants.COL_STDV: prior_std_col,
                 }
             )
         else:
             # Fail fast - no usable prior information available
             raise ValueError(
                 f"No usable prior information found. Expected either posterior columns from "
-                f"previous Bayesian update or initial categorical model columns ('{cfg.col_mean}', "
-                f"'{cfg.col_stdv}')."
+                f"previous Bayesian update or initial categorical model columns ('{constants.COL_MEAN}', "
+                f"'{constants.COL_STDV}')."
             )
 
     # Enforce minimum sigma value on prior
@@ -276,8 +267,8 @@ def update_with_independent_data(
     updated_categorical_model_df.loc[mask, prior_std_col] = min_sigma
 
     # Initialize posterior columns
-    post_mean_col = cfg.col_posterior_mean_independent
-    post_std_col = cfg.col_posterior_stdv_independent
+    post_mean_col = constants.COL_POSTERIOR_MEAN_INDEPENDENT
+    post_std_col = constants.COL_POSTERIOR_STDV_INDEPENDENT
     post_n_col = "posterior_num_observations_independent_observations"
 
     updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
@@ -292,9 +283,9 @@ def update_with_independent_data(
 
     for category_row_idx, category_row in updated_categorical_model_df.iterrows():
         # Match observations to this category using model_id
-        category_id = category_row[STANDARD_ID_COLUMN]
+        category_id = category_row[constants.STANDARD_ID_COLUMN]
         observations_for_category_df = observations_df[
-            observations_df[STANDARD_ID_COLUMN] == category_id
+            observations_df[constants.STANDARD_ID_COLUMN] == category_id
         ]
 
         # Initialize running values for sequential update
@@ -320,7 +311,7 @@ def update_with_independent_data(
 
             # Update running values for next iteration
             current_mean = new_mean
-            current_std = sqrt(new_variance)
+            current_std = math.sqrt(new_variance)
             current_n += 1
 
         # Write final posterior values for this category
@@ -334,8 +325,6 @@ def update_with_independent_data(
 def perform_clustering(
     sites_df: pd.DataFrame,
     model_type: str,
-    min_group: int = 5,
-    eps: float = 15000,
     nproc: int = -1,
 ) -> pd.DataFrame:
     """
@@ -348,15 +337,10 @@ def perform_clustering(
     Parameters
     ----------
     sites_df : DataFrame
-        Observations DataFrame with columns: STANDARD_ID_COLUMN, easting, northing.
+        Observations DataFrame with columns: constants.STANDARD_ID_COLUMN, easting, northing.
         Must have category IDs already assigned.
     model_type : str
         Model type: "geology" or "terrain".
-    min_group : int, optional
-        Minimum group size for DBSCAN clustering. Default is 5.
-    eps : float, optional
-        Maximum distance (metres) for points to be considered in same cluster.
-        Default is 15000.
     nproc : int, optional
         Number of processes for DBSCAN. -1 to use all available cores.
         Default is -1.
@@ -366,15 +350,20 @@ def perform_clustering(
     DataFrame
         Modified DataFrame with added "cluster" column containing cluster IDs.
         -1 indicates unclustered points.
+
+    Notes
+    -----
+    Uses MIN_GROUP and EPS constants from constants.py for DBSCAN parameters.
     """
+    min_group = constants.MIN_GROUP
     sites_df = sites_df.copy()
     # Default not a member of any cluster (-1)
     sites_df["cluster"] = -1
 
     features = np.column_stack((sites_df.easting.values, sites_df.northing.values))
-    model_ids = sites_df[STANDARD_ID_COLUMN].values
+    model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
     ids = np.array(sorted(set(model_ids)))
-    ids = ids[ids != RASTER_ID_NODATA_VALUE].astype(int)
+    ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
     for category_id in ids:
         subset_mask = model_ids == category_id
@@ -383,7 +372,7 @@ def perform_clustering(
             # Can't form any groups
             continue
 
-        dbscan = DBSCAN(eps=eps, min_samples=min_group, n_jobs=nproc)
+        dbscan = sklearn.cluster.DBSCAN(eps=constants.EPS, min_samples=min_group, n_jobs=nproc)
         dbscan.fit(subset)
 
         # Save labels
@@ -419,43 +408,41 @@ def update_with_clustered_data(
     DataFrame
         Updated DataFrame with posterior mean and standard deviation columns.
     """
-    cfg = get_default_config()
-
     # Create a copy to update
     posterior_df = prior_df.copy()
 
     # Identify prior columns
-    prior_mean_col = cfg.col_prior_mean
-    prior_std_col = cfg.col_prior_stdv
+    prior_mean_col = constants.COL_PRIOR_MEAN
+    prior_std_col = constants.COL_PRIOR_STDV
 
     if prior_mean_col not in posterior_df.columns:
-        if cfg.col_mean in posterior_df.columns:
+        if constants.COL_MEAN in posterior_df.columns:
             # Initial prior format - rename to prior_ columns
             posterior_df = posterior_df.rename(
                 columns={
-                    cfg.col_mean: prior_mean_col,
-                    cfg.col_stdv: prior_std_col,
+                    constants.COL_MEAN: prior_mean_col,
+                    constants.COL_STDV: prior_std_col,
                 }
             )
 
     # Initialize posterior columns with suffix
-    post_mean_col = cfg.col_posterior_mean_clustered
-    post_std_col = cfg.col_posterior_stdv_clustered
+    post_mean_col = constants.COL_POSTERIOR_MEAN_CLUSTERED
+    post_std_col = constants.COL_POSTERIOR_STDV_CLUSTERED
 
     posterior_df[post_mean_col] = posterior_df[prior_mean_col]
     posterior_df[post_std_col] = posterior_df[prior_std_col]
 
     # Convert to numpy array format for computation
     max_id_prior = (
-        int(posterior_df[STANDARD_ID_COLUMN].max()) if len(posterior_df) > 0 else 0
+        int(posterior_df[constants.STANDARD_ID_COLUMN].max()) if len(posterior_df) > 0 else 0
     )
 
     # Filter out sites with ID_NODATA
     valid_sites = sites_df[
-        sites_df[STANDARD_ID_COLUMN] != RASTER_ID_NODATA_VALUE
+        sites_df[constants.STANDARD_ID_COLUMN] != constants.RASTER_ID_NODATA_VALUE
     ].copy()
     max_id_sites = (
-        int(valid_sites[STANDARD_ID_COLUMN].max()) if len(valid_sites) > 0 else 0
+        int(valid_sites[constants.STANDARD_ID_COLUMN].max()) if len(valid_sites) > 0 else 0
     )
 
     max_id = max(max_id_prior, max_id_sites)
@@ -463,7 +450,7 @@ def update_with_clustered_data(
     posterior_array = np.full((max_id + 1, 2), np.nan)
     id_to_idx = {}
     for idx, row in posterior_df.iterrows():
-        cat_id = int(row[STANDARD_ID_COLUMN])
+        cat_id = int(row[constants.STANDARD_ID_COLUMN])
         if cat_id <= max_id:
             # Use prior values as starting point
             posterior_array[cat_id, 0] = row[prior_mean_col]
@@ -471,14 +458,14 @@ def update_with_clustered_data(
             id_to_idx[cat_id] = idx
 
     # Process each category ID that exists in the sites
-    unique_ids = valid_sites[STANDARD_ID_COLUMN].unique()
+    unique_ids = valid_sites[constants.STANDARD_ID_COLUMN].unique()
 
     for category_id in unique_ids:
         category_id_int = int(category_id)
         if category_id_int not in id_to_idx or category_id_int > max_id:
             continue
 
-        category_sites = valid_sites[valid_sites[STANDARD_ID_COLUMN] == category_id_int]
+        category_sites = valid_sites[valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int]
         cluster_counts = category_sites["cluster"].value_counts()
 
         # Effective sample size: one per cluster, but each noise point (-1) counts individually.
@@ -507,7 +494,7 @@ def update_with_clustered_data(
 
         # Compute geometric mean and weighted standard deviation
         log_geometric_mean = weighted_log_vs30_sum / effective_n
-        posterior_array[category_id_int, 0] = exp(log_geometric_mean)
+        posterior_array[category_id_int, 0] = math.exp(log_geometric_mean)
         posterior_array[category_id_int, 1] = np.sqrt(
             np.sum(weights * (np.log(category_sites.vs30.values) - log_geometric_mean) ** 2)
         )
@@ -531,9 +518,7 @@ def posterior_from_bayesian_update(
     categorical_model_df: pd.DataFrame,
     independent_observations_df: pd.DataFrame | None = None,
     clustered_observations_df: pd.DataFrame | None = None,
-    n_prior: int = 3,
-    min_sigma: float = 0.5,
-    model_type: str = "geology",  # Passed to cluster update
+    model_type: str = "geology",
 ) -> pd.DataFrame:
     """
     Dispatcher function to perform Bayesian updates with clustered and/or independent data.
@@ -548,6 +533,27 @@ def posterior_from_bayesian_update(
     - Clustered data may have spatial biases (urban/infrastructure-focused sampling)
     - Independent data are often higher-quality and more representative
     - Processing clustered data first corrects biases, then independent data refines the model
+
+    Parameters
+    ----------
+    categorical_model_df : DataFrame
+        DataFrame with prior mean and standard deviation columns.
+    independent_observations_df : DataFrame, optional
+        Independent observations for Bayesian update.
+    clustered_observations_df : DataFrame, optional
+        Clustered observations for Bayesian update.
+    model_type : str, optional
+        Model type: "geology" or "terrain". Default is "geology".
+
+    Returns
+    -------
+    DataFrame
+        Updated DataFrame with posterior values.
+
+    Notes
+    -----
+    Uses N_PRIOR and MIN_SIGMA constants from constants.py for the independent
+    observations Bayesian update.
     """
     df = categorical_model_df.copy()
 
@@ -555,9 +561,7 @@ def posterior_from_bayesian_update(
         df = update_with_clustered_data(df, clustered_observations_df, model_type)
 
     if independent_observations_df is not None:
-        df = update_with_independent_data(
-            df, independent_observations_df, n_prior, min_sigma
-        )
+        df = update_with_independent_data(df, independent_observations_df)
 
     return df
 
@@ -620,18 +624,18 @@ def get_vs30_for_points(
             f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
         )
 
-    from vs30.raster import _select_vs30_columns_by_priority
+    from vs30 import raster
 
-    mean_col, stdv_col = _select_vs30_columns_by_priority(
+    mean_col, stdv_col = raster._select_vs30_columns_by_priority(
         list(categorical_model_df.columns)
     )
 
     # Build lookup dictionaries from category ID to Vs30 values
     id_to_vs30 = dict(
-        zip(categorical_model_df[STANDARD_ID_COLUMN], categorical_model_df[mean_col])
+        zip(categorical_model_df[constants.STANDARD_ID_COLUMN], categorical_model_df[mean_col])
     )
     id_to_stdv = dict(
-        zip(categorical_model_df[STANDARD_ID_COLUMN], categorical_model_df[stdv_col])
+        zip(categorical_model_df[constants.STANDARD_ID_COLUMN], categorical_model_df[stdv_col])
     )
 
     # Look up Vs30 values for each point

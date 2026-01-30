@@ -30,14 +30,15 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+import rasterio.enums
+import rasterio.features
+import rasterio.transform
+import rasterio.warp
 from osgeo import gdal
-from rasterio import features
-from rasterio.enums import Resampling
-from rasterio.transform import from_bounds
-from rasterio.warp import reproject
 from tqdm import tqdm
 
-from vs30.config import get_default_config
+from vs30 import config
+from vs30 import constants
 
 logger = logging.getLogger(__name__)
 
@@ -48,33 +49,28 @@ DATA_DIR = Path(__file__).parent / "data"
 
 
 def _get_terrain_raster_path() -> Path:
-    """Get path to terrain classification raster from config."""
-    cfg = get_default_config()
-    return DATA_DIR / cfg.terrain_raster_filename
+    """Get path to terrain classification raster."""
+    return DATA_DIR / constants.TERRAIN_RASTER_FILENAME
 
 
 def _get_geology_shapefile_path() -> Path:
-    """Get path to geology shapefile from config."""
-    cfg = get_default_config()
-    return DATA_DIR / cfg.geology_shapefile_path
+    """Get path to geology shapefile."""
+    return DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
 
 
 def _get_coastline_shapefile_path() -> Path:
-    """Get path to coastline shapefile from config."""
-    cfg = get_default_config()
-    return DATA_DIR / cfg.coastline_shapefile_path
+    """Get path to coastline shapefile."""
+    return DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH
 
 
 def _get_slope_raster_path() -> Path:
-    """Get path to source slope raster from config."""
-    cfg = get_default_config()
-    return DATA_DIR / cfg.slope_source_raster_filename
+    """Get path to source slope raster."""
+    return DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
 
 
 def _get_shapefiles_archive_path() -> Path:
-    """Get path to shapefiles archive from config."""
-    cfg = get_default_config()
-    return DATA_DIR / cfg.shapefiles_archive_filename
+    """Get path to shapefiles archive."""
+    return DATA_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
 
 
 def _ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
@@ -240,7 +236,7 @@ def create_category_id_raster(
             f"model_type must be 'terrain' or 'geology', got '{model_type}'"
         )
 
-    cfg = get_default_config()
+    cfg = config.get_default_config()
     xmin = xmin if xmin is not None else cfg.grid_xmin
     xmax = xmax if xmax is not None else cfg.grid_xmax
     ymin = ymin if ymin is not None else cfg.grid_ymin
@@ -253,7 +249,7 @@ def create_category_id_raster(
     # Common setup: calculate grid dimensions and transform
     nx = round((xmax - xmin) / dx)
     ny = round((ymax - ymin) / dy)
-    dst_transform = from_bounds(xmin, ymin, xmax, ymax, nx, ny)
+    dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
     output_filename = "tid.tif" if model_type == "terrain" else "gid.tif"
     output_path = output_dir / output_filename
     band_description = "Model ID Index"
@@ -265,9 +261,9 @@ def create_category_id_raster(
         "height": ny,
         "count": 1,
         "dtype": "uint8",
-        "crs": cfg.nztm_crs,
+        "crs": constants.NZTM_CRS,
         "transform": dst_transform,
-        "nodata": cfg.raster_id_nodata_value,
+        "nodata": constants.RASTER_ID_NODATA_VALUE,
         "compress": "deflate",
     }
 
@@ -280,14 +276,14 @@ def create_category_id_raster(
         # Read source raster and reproject
         with rasterio.open(terrain_raster_path) as src:
             with rasterio.open(output_path, "w", **profile) as dst:
-                reproject(
+                rasterio.warp.reproject(
                     source=rasterio.band(src, 1),
                     destination=rasterio.band(dst, 1),
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=dst_transform,
-                    dst_crs=cfg.nztm_crs,
-                    resampling=Resampling.nearest,
+                    dst_crs=constants.NZTM_CRS,
+                    resampling=rasterio.enums.Resampling.nearest,
                 )
                 dst.descriptions = (band_description,)
 
@@ -306,19 +302,19 @@ def create_category_id_raster(
             raise ValueError(f"Shapefile {geology_shapefile_path} missing 'gid' column")
 
         # Ensure shapefile is in NZTM CRS (EPSG:2193)
-        if gdf.crs is None or str(gdf.crs) != cfg.nztm_crs:
-            gdf = gdf.to_crs(cfg.nztm_crs)
+        if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
+            gdf = gdf.to_crs(constants.NZTM_CRS)
 
         # Create shapes iterator for rasterization
         shapes = ((geom, value) for geom, value in zip(gdf.geometry, gdf.gid))
 
         # Rasterize to output file
         with rasterio.open(output_path, "w", **profile) as dst:
-            burned = features.rasterize(
+            burned = rasterio.features.rasterize(
                 shapes=shapes,
                 out_shape=(ny, nx),
                 transform=dst_transform,
-                fill=cfg.raster_id_nodata_value,
+                fill=constants.RASTER_ID_NODATA_VALUE,
                 dtype=np.uint8,
                 all_touched=False,
             )
@@ -354,19 +350,17 @@ def _select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
     ValueError
         If no suitable column pair is found.
     """
-    cfg = get_default_config()
-
     priorities = [
         # 1. Independent observations posterior
-        (cfg.col_posterior_mean_independent, cfg.col_posterior_stdv_independent),
+        (constants.COL_POSTERIOR_MEAN_INDEPENDENT, constants.COL_POSTERIOR_STDV_INDEPENDENT),
         # 2. Clustered observations posterior
-        (cfg.col_posterior_mean_clustered, cfg.col_posterior_stdv_clustered),
+        (constants.COL_POSTERIOR_MEAN_CLUSTERED, constants.COL_POSTERIOR_STDV_CLUSTERED),
         # 3. Generic posterior
-        (cfg.col_posterior_mean, cfg.col_posterior_stdv),
+        (constants.COL_POSTERIOR_MEAN, constants.COL_POSTERIOR_STDV),
         # 4. Explicit prior
-        (cfg.col_prior_mean, cfg.col_prior_stdv),
+        (constants.COL_PRIOR_MEAN, constants.COL_PRIOR_STDV),
         # 5. Standard/Original names
-        (cfg.col_mean, cfg.col_stdv),
+        (constants.COL_MEAN, constants.COL_STDV),
     ]
 
     for mean_col, std_col in priorities:
@@ -415,9 +409,6 @@ def create_vs30_raster_from_ids(
     ValueError
         If CSV file is missing required columns or IDs don't match.
     """
-    # Get config
-    cfg = get_default_config()
-
     logger.info(f"Creating VS30 raster: {output_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,12 +445,12 @@ def create_vs30_raster_from_ids(
         profile = src.profile.copy()
 
     # Create output arrays
-    vs30_array = np.full(id_array.shape, cfg.nodata_value, dtype=np.float32)
-    stdv_array = np.full(id_array.shape, cfg.nodata_value, dtype=np.float32)
+    vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
+    stdv_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
 
     # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[(unique_ids != cfg.raster_id_nodata_value) & (unique_ids != 0)]
+    valid_ids = unique_ids[(unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)]
 
     for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
         if pixel_id in id_to_vs30_values:
@@ -476,7 +467,7 @@ def create_vs30_raster_from_ids(
     profile.update({
         "count": 2,
         "dtype": "float32",
-        "nodata": cfg.nodata_value,
+        "nodata": constants.NODATA_VALUE,
         "compress": "deflate",
     })
 
@@ -514,9 +505,6 @@ def create_coast_distance_raster(
         - The distance array (float32).
         - The updated profile used for saving.
     """
-    # Get config
-    cfg = get_default_config()
-
     logger.info("Creating coast distance raster...")
     _ensure_coast_shapefile_extracted()
 
@@ -530,10 +518,10 @@ def create_coast_distance_raster(
 
     # Extend to full NZ land coverage to ensure accurate distances
     # (matching legacy _full_land_grid behavior)
-    g_xmin = min(cfg.full_nz_land_xmin, s_xmin)
-    g_xmax = max(cfg.full_nz_land_xmax, s_xmax)
-    g_ymin = min(cfg.full_nz_land_ymin, s_ymin)
-    g_ymax = max(cfg.full_nz_land_ymax, s_ymax)
+    g_xmin = min(constants.FULL_NZ_LAND_XMIN, s_xmin)
+    g_xmax = max(constants.FULL_NZ_LAND_XMAX, s_xmax)
+    g_ymin = min(constants.FULL_NZ_LAND_YMIN, s_ymin)
+    g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
 
     # Check if grid was extended beyond template bounds (requires cropping later)
     grid_was_extended = g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
@@ -612,7 +600,6 @@ def create_slope_raster(
         - The slope array (float32).
         - The updated profile used for saving.
     """
-    cfg = get_default_config()
     logger.info("Creating slope raster...")
     slope_raster_path = _get_slope_raster_path()
     if not slope_raster_path.exists():
@@ -622,20 +609,20 @@ def create_slope_raster(
     destination = np.zeros((template_profile["height"], template_profile["width"]))
 
     with rasterio.open(slope_raster_path) as src:
-        reproject(
+        rasterio.warp.reproject(
             source=rasterio.band(src, 1),
             destination=destination,
             src_transform=src.transform,
             src_crs=src.crs,
             dst_transform=template_profile["transform"],
             dst_crs=template_profile["crs"],
-            resampling=Resampling.nearest,
+            resampling=rasterio.enums.Resampling.nearest,
         )
 
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": cfg.nodata_value, "compress": "deflate"}
+        {"dtype": "float32", "count": 1, "nodata": constants.NODATA_VALUE, "compress": "deflate"}
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
@@ -751,48 +738,46 @@ def apply_hybrid_geology_modifications(
     tuple[np.ndarray, np.ndarray]
         Modified (vs30_array, stdv_array).
     """
-    cfg = get_default_config()
     logger.info("Applying slope and coastal distance based geology modifications...")
 
-    # Fill in defaults from config for any unspecified parameters
+    # Fill in defaults from constants for any unspecified parameters
     if mod6:
         if hybrid_mod6_dist_min is None:
-            hybrid_mod6_dist_min = cfg.hybrid_mod6_dist_min
+            hybrid_mod6_dist_min = constants.HYBRID_MOD6_DIST_MIN
         if hybrid_mod6_dist_max is None:
-            hybrid_mod6_dist_max = cfg.hybrid_mod6_dist_max
+            hybrid_mod6_dist_max = constants.HYBRID_MOD6_DIST_MAX
         if hybrid_mod6_vs30_min is None:
-            hybrid_mod6_vs30_min = cfg.hybrid_mod6_vs30_min
+            hybrid_mod6_vs30_min = constants.HYBRID_MOD6_VS30_MIN
         if hybrid_mod6_vs30_max is None:
-            hybrid_mod6_vs30_max = cfg.hybrid_mod6_vs30_max
+            hybrid_mod6_vs30_max = constants.HYBRID_MOD6_VS30_MAX
     if mod13:
         if hybrid_mod13_dist_min is None:
-            hybrid_mod13_dist_min = cfg.hybrid_mod13_dist_min
+            hybrid_mod13_dist_min = constants.HYBRID_MOD13_DIST_MIN
         if hybrid_mod13_dist_max is None:
-            hybrid_mod13_dist_max = cfg.hybrid_mod13_dist_max
+            hybrid_mod13_dist_max = constants.HYBRID_MOD13_DIST_MAX
         if hybrid_mod13_vs30_min is None:
-            hybrid_mod13_vs30_min = cfg.hybrid_mod13_vs30_min
+            hybrid_mod13_vs30_min = constants.HYBRID_MOD13_VS30_MIN
         if hybrid_mod13_vs30_max is None:
-            hybrid_mod13_vs30_max = cfg.hybrid_mod13_vs30_max
+            hybrid_mod13_vs30_max = constants.HYBRID_MOD13_VS30_MAX
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:
-        # group IDs have reduction factors loaded from config
-        for gid_str, factor in cfg.hybrid_sigma_reduction_factors.items():
-            gid = int(gid_str)
+        # group IDs have reduction factors from constants
+        for gid, factor in constants.HYBRID_SIGMA_REDUCTION_FACTORS.items():
             # Find pixels with this ID
             mask = id_array == gid
             stdv_array[mask] *= factor
 
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
-        # Prevent log10(0) or log10(-NODATA) by capping at min_slope_for_log
+        # Prevent log10(0) or log10(-NODATA) by capping at constants.MIN_SLOPE_FOR_LOG
         modified_slope = np.copy(slope_array)
-        modified_slope[(modified_slope <= 0) | (modified_slope == cfg.nodata_value)] = (
-            cfg.min_slope_for_log
+        modified_slope[(modified_slope <= 0) | (modified_slope == constants.NODATA_VALUE)] = (
+            constants.MIN_SLOPE_FOR_LOG
         )
         safe_log_slope = np.log10(modified_slope)
 
-        for spec in cfg.hybrid_vs30_params:
+        for spec in constants.HYBRID_VS30_PARAMS:
             gid = spec.gid
             slope_limits = spec.slope_limits
             # Compute log10 of vs30 values at runtime
@@ -882,7 +867,6 @@ def apply_hybrid_modifications_at_points(
     ValueError
         If coast_distance_raster_path is None and mod6 or mod13 is True.
     """
-    cfg = get_default_config()
     # Use source slope raster if not specified
     if slope_raster_path is None:
         slope_raster_path = _get_slope_raster_path()
@@ -924,21 +908,20 @@ def apply_hybrid_modifications_at_points(
 
     # 1. Update standard deviation for specific groups
     if hybrid:
-        for gid_str, factor in cfg.hybrid_sigma_reduction_factors.items():
-            gid = int(gid_str)
+        for gid, factor in constants.HYBRID_SIGMA_REDUCTION_FACTORS.items():
             mask = geology_ids == gid
             if np.any(mask):
                 modified_stdv[mask] *= factor
 
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
-        # Prevent log10(0) or log10(negative) by capping at min_slope_for_log
-        safe_slope = np.maximum(slope_values, cfg.min_slope_for_log)
+        # Prevent log10(0) or log10(negative) by capping at constants.MIN_SLOPE_FOR_LOG
+        safe_slope = np.maximum(slope_values, constants.MIN_SLOPE_FOR_LOG)
         # Handle nodata values
-        safe_slope[slope_values == cfg.nodata_value] = cfg.min_slope_for_log
+        safe_slope[slope_values == constants.NODATA_VALUE] = constants.MIN_SLOPE_FOR_LOG
         safe_log_slope = np.log10(safe_slope)
 
-        for spec in cfg.hybrid_vs30_params:
+        for spec in constants.HYBRID_VS30_PARAMS:
             gid = spec.gid
             slope_limits = spec.slope_limits
             vs30_limits_log10 = np.log10(np.array(spec.vs30_values))
@@ -959,16 +942,16 @@ def apply_hybrid_modifications_at_points(
         _apply_coastal_distance_modification(
             modified_vs30, geology_ids, coast_dist_values,
             gid=4,
-            dist_min=cfg.hybrid_mod6_dist_min, dist_max=cfg.hybrid_mod6_dist_max,
-            vs30_min=cfg.hybrid_mod6_vs30_min, vs30_max=cfg.hybrid_mod6_vs30_max,
+            dist_min=constants.HYBRID_MOD6_DIST_MIN, dist_max=constants.HYBRID_MOD6_DIST_MAX,
+            vs30_min=constants.HYBRID_MOD6_VS30_MIN, vs30_max=constants.HYBRID_MOD6_VS30_MAX,
         )
 
     if mod13 and coast_dist_values is not None:
         _apply_coastal_distance_modification(
             modified_vs30, geology_ids, coast_dist_values,
             gid=10,
-            dist_min=cfg.hybrid_mod13_dist_min, dist_max=cfg.hybrid_mod13_dist_max,
-            vs30_min=cfg.hybrid_mod13_vs30_min, vs30_max=cfg.hybrid_mod13_vs30_max,
+            dist_min=constants.HYBRID_MOD13_DIST_MIN, dist_max=constants.HYBRID_MOD13_DIST_MAX,
+            vs30_min=constants.HYBRID_MOD13_VS30_MIN, vs30_max=constants.HYBRID_MOD13_VS30_MAX,
         )
 
     return modified_vs30, modified_stdv

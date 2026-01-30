@@ -13,14 +13,13 @@ import pandas as pd
 import pytest
 from math import sqrt
 
+from vs30 import constants
 from vs30.category import (
     _compute_bayesian_posterior_mean,
     _compute_bayesian_posterior_variance,
     perform_clustering,
     update_with_independent_data,
     get_vs30_for_points,
-    RASTER_ID_NODATA_VALUE,
-    STANDARD_ID_COLUMN,
 )
 
 
@@ -136,8 +135,6 @@ class TestUpdateWithIndependentData:
         result = update_with_independent_data(
             sample_categorical_model,
             sample_observations,
-            n_prior=3,
-            min_sigma=0.3,
         )
 
         # Check output has expected columns
@@ -146,6 +143,7 @@ class TestUpdateWithIndependentData:
         assert "posterior_num_observations_independent_observations" in result.columns
 
         # Category 1 should be updated (has 2 observations)
+        # N_PRIOR=3 from constants, so 3 + 2 = 5
         cat1 = result[result["id"] == 1].iloc[0]
         assert cat1["posterior_num_observations_independent_observations"] == 5  # 3 prior + 2 obs
 
@@ -154,60 +152,68 @@ class TestUpdateWithIndependentData:
         assert cat3["posterior_mean_vs30_km_per_s_independent_observations"] == 400.0
 
     def test_min_sigma_enforced(self, sample_categorical_model, sample_observations):
-        """Test that minimum sigma is enforced."""
-        min_sigma = 0.4
+        """Test that minimum sigma is enforced using MIN_SIGMA constant."""
+        from vs30.constants import MIN_SIGMA
 
         result = update_with_independent_data(
             sample_categorical_model,
             sample_observations,
-            n_prior=3,
-            min_sigma=min_sigma,
         )
 
-        # All posteriors should have stddev >= min_sigma
-        # Note: posteriors can go below min_sigma, but prior is floored at min_sigma
-        assert result["enforced_min_sigma"].iloc[0] == min_sigma
+        # All posteriors should have stddev >= MIN_SIGMA
+        # Note: posteriors can go below MIN_SIGMA, but prior is floored at MIN_SIGMA
+        assert result["enforced_min_sigma"].iloc[0] == MIN_SIGMA
 
 
 class TestPerformClustering:
-    """Tests for the DBSCAN clustering function."""
+    """Tests for the DBSCAN clustering function.
+
+    Uses actual constants from constants.py:
+    - EPS = 15000 (15km epsilon for DBSCAN)
+    - MIN_GROUP = 5 (minimum cluster size)
+    """
 
     @pytest.fixture
     def clustered_sites(self):
-        """Create sites with clear clusters."""
-        # Cluster 1: tight group at (1000, 1000)
+        """Create sites with clear clusters for EPS=15000, MIN_GROUP=5.
+
+        Cluster 1: 10 points centered at (0, 0) with ~5km spread (within EPS=15km)
+        Cluster 2: 10 points centered at (50000, 50000) - 50km away from cluster 1
+        Scattered: 3 points each >20km apart (more than EPS=15km)
+        """
+        np.random.seed(42)  # For reproducibility
+
+        # Cluster 1: 10 points centered at (0, 0) with ~5km spread
         cluster1 = pd.DataFrame({
             "id": [1] * 10,
-            "easting": 1000 + np.random.normal(0, 100, 10),
-            "northing": 1000 + np.random.normal(0, 100, 10),
+            "easting": np.random.normal(0, 2000, 10),
+            "northing": np.random.normal(0, 2000, 10),
             "vs30": np.random.uniform(180, 220, 10),
         })
 
-        # Cluster 2: tight group at (50000, 50000)
+        # Cluster 2: 10 points centered at (50000, 50000) - 50km away from cluster 1
         cluster2 = pd.DataFrame({
             "id": [1] * 10,
-            "easting": 50000 + np.random.normal(0, 100, 10),
-            "northing": 50000 + np.random.normal(0, 100, 10),
+            "easting": 50000 + np.random.normal(0, 2000, 10),
+            "northing": 50000 + np.random.normal(0, 2000, 10),
             "vs30": np.random.uniform(180, 220, 10),
         })
 
-        # Scattered points (should not cluster)
+        # Scattered points: each >20km apart (more than EPS=15km)
         scattered = pd.DataFrame({
             "id": [1] * 3,
-            "easting": [100000, 200000, 300000],
-            "northing": [100000, 200000, 300000],
+            "easting": [100000, 120000, 140000],
+            "northing": [100000, 120000, 140000],
             "vs30": [200, 210, 190],
         })
 
         return pd.concat([cluster1, cluster2, scattered], ignore_index=True)
 
     def test_clustering_identifies_groups(self, clustered_sites):
-        """Test that clustering identifies tight groups."""
+        """Test that clustering identifies tight groups with actual EPS=15km."""
         result = perform_clustering(
             clustered_sites,
             model_type="geology",
-            min_group=5,
-            eps=1000,  # 1km epsilon
         )
 
         # Should have cluster column
@@ -217,32 +223,35 @@ class TestPerformClustering:
         unique_clusters = result[result["cluster"] != -1]["cluster"].unique()
         assert len(unique_clusters) >= 2
 
-    def test_scattered_points_unclustered(self, clustered_sites):
-        """Test that scattered points remain unclustered."""
-        result = perform_clustering(
-            clustered_sites,
-            model_type="geology",
-            min_group=5,
-            eps=1000,
-        )
+    def test_scattered_points_unclustered(self):
+        """Test that scattered points (>EPS=15km apart) remain unclustered."""
+        # 5 points, each >20km apart (more than EPS=15km)
+        sites = pd.DataFrame({
+            "id": [1] * 5,
+            "easting": [0, 20000, 40000, 60000, 80000],
+            "northing": [0, 20000, 40000, 60000, 80000],
+            "vs30": [200, 210, 190, 205, 195],
+        })
 
-        # Points at 100000, 200000, 300000 should be unclustered (-1)
-        far_points = result[result["easting"] > 90000]
-        assert (far_points["cluster"] == -1).all()
+        result = perform_clustering(sites, model_type="geology")
+
+        # All points should be unclustered (-1) since they're >15km apart
+        assert (result["cluster"] == -1).all()
 
     def test_min_group_respected(self):
-        """Test that min_group parameter is respected."""
-        # Create a small group (4 points) that shouldn't cluster with min_group=5
+        """Test that MIN_GROUP=5 is respected - 4 close points don't cluster."""
+        # Create 4 points close together (within EPS=15km of each other)
+        # But since MIN_GROUP=5, they shouldn't form a cluster
         sites = pd.DataFrame({
             "id": [1] * 4,
-            "easting": [1000, 1010, 1020, 1030],
-            "northing": [1000, 1010, 1020, 1030],
+            "easting": [0, 1000, 2000, 3000],
+            "northing": [0, 1000, 2000, 3000],
             "vs30": [200, 200, 200, 200],
         })
 
-        result = perform_clustering(sites, "geology", min_group=5, eps=1000)
+        result = perform_clustering(sites, "geology")
 
-        # All points should be unclustered since group is too small
+        # All points should be unclustered since group is too small for MIN_GROUP=5
         assert (result["cluster"] == -1).all()
 
 
@@ -273,7 +282,7 @@ class TestGetVs30ForPoints:
         assert len(ids) == 1
 
         # ID should be valid (not NODATA) for Christchurch
-        assert ids[0] != RASTER_ID_NODATA_VALUE
+        assert ids[0] != constants.RASTER_ID_NODATA_VALUE
 
     def test_christchurch_point_terrain(self, sample_model_df):
         """Test that Christchurch point returns valid terrain values."""
@@ -317,11 +326,11 @@ class TestCategoryConstants:
 
     def test_raster_id_nodata_value(self):
         """Test that RASTER_ID_NODATA_VALUE is set correctly."""
-        assert RASTER_ID_NODATA_VALUE == 255
+        assert constants.RASTER_ID_NODATA_VALUE == 255
 
     def test_standard_id_column(self):
         """Test that STANDARD_ID_COLUMN is correct."""
-        assert STANDARD_ID_COLUMN == "id"
+        assert constants.STANDARD_ID_COLUMN == "id"
 
 
 # =============================================================================
@@ -354,8 +363,6 @@ class TestCategoryEdgeCases:
         result_df = update_with_independent_data(
             categorical_model_df,
             observations_df,
-            n_prior=10,
-            min_sigma=0.1,
         )
 
         # Result should have posterior columns
