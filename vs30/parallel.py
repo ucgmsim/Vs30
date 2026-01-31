@@ -84,12 +84,8 @@ def resolve_n_proc(n_proc: int | None) -> int:
 # Use spawn context to avoid GDAL fork issues
 # GDAL is not fork-safe; using spawn starts fresh processes without inheriting
 # the parent's GDAL state, which prevents deadlocks
-_spawn_context = mp.get_context('spawn')
+_spawn_context = mp.get_context("spawn")
 
-
-# =============================================================================
-# Point Processing Helper Functions
-# =============================================================================
 
 
 def process_geology_at_points(
@@ -97,7 +93,10 @@ def process_geology_at_points(
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
     coast_distance_raster: Path | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    noisy: bool = False,
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+]:
     """
     Process geology model at points, including hybrid modifications and spatial adjustment.
 
@@ -116,6 +115,8 @@ def process_geology_at_points(
         Observation data with columns: easting, northing, vs30, uncertainty.
     coast_distance_raster : Path, optional
         Path to coastal distance raster. If None, hybrid modifications are skipped.
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
 
     Returns
     -------
@@ -141,13 +142,15 @@ def process_geology_at_points(
 
     # Apply hybrid modifications (slope and coastal distance)
     if coast_distance_raster is not None and coast_distance_raster.exists():
-        geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_modifications_at_points(
-            points,
-            geol_vs30,
-            geol_stdv,
-            geol_ids,
-            slope_raster_path=raster._get_slope_raster_path(),
-            coast_distance_raster_path=coast_distance_raster,
+        geol_vs30_hybrid, geol_stdv_hybrid = (
+            raster.apply_hybrid_modifications_at_points(
+                points,
+                geol_vs30,
+                geol_stdv,
+                geol_ids,
+                slope_raster_path=None,  # Uses default from constants
+                coast_distance_raster_path=coast_distance_raster,
+            )
         )
     else:
         geol_vs30_hybrid = geol_vs30
@@ -169,6 +172,7 @@ def process_geology_at_points(
             obs_model_stdv=obs_geol_stdv,
             obs_uncertainty=observations_df["uncertainty"].values,
             model_type="geology",
+            noisy=noisy,
         )
     else:
         geol_mvn_vs30 = geol_vs30_hybrid
@@ -189,6 +193,7 @@ def process_terrain_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
+    noisy: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Process terrain model at points, including spatial adjustment.
@@ -205,6 +210,8 @@ def process_terrain_at_points(
         Categorical terrain model with Vs30 mean and standard deviation per category.
     observations_df : DataFrame
         Observation data with columns: easting, northing, vs30, uncertainty.
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
 
     Returns
     -------
@@ -240,6 +247,7 @@ def process_terrain_at_points(
             obs_model_stdv=obs_terr_stdv,
             obs_uncertainty=observations_df["uncertainty"].values,
             model_type="terrain",
+            noisy=noisy,
         )
     else:
         terr_mvn_vs30 = terr_vs30
@@ -247,10 +255,6 @@ def process_terrain_at_points(
 
     return terr_ids, terr_vs30, terr_stdv, terr_mvn_vs30, terr_mvn_stdv
 
-
-# =============================================================================
-# Data Classes for Parallel Processing
-# =============================================================================
 
 
 @dataclass
@@ -262,14 +266,13 @@ class LocationsChunkConfig:
     include_intermediate: bool
     combination_method: str | float
     coast_distance_raster: Path | None
+    noisy: bool
 
 
-# =============================================================================
-# Worker Functions
-# =============================================================================
 
-
-def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma: no cover
+def process_locations_chunk(
+    args: tuple,
+) -> tuple[int, pd.DataFrame]:  # pragma: no cover
     """
     Worker function: process a chunk of locations through the full pipeline.
 
@@ -303,7 +306,9 @@ def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma:
 
     # Convert coordinates to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
-        np.column_stack([chunk_df[config.lat_column].values, chunk_df[config.lon_column].values])
+        np.column_stack(
+            [chunk_df[config.lat_column].values, chunk_df[config.lon_column].values]
+        )
     )
     northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
     chunk_df["easting"] = easting
@@ -320,7 +325,11 @@ def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma:
         geol_mvn_vs30,
         geol_mvn_stdv,
     ) = process_geology_at_points(
-        points, geol_model_df, observations_df, config.coast_distance_raster
+        points,
+        geol_model_df,
+        observations_df,
+        config.coast_distance_raster,
+        config.noisy,
     )
 
     chunk_df["geology_id"] = geol_ids
@@ -339,7 +348,7 @@ def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma:
         terr_stdv,
         terr_mvn_vs30,
         terr_mvn_stdv,
-    ) = process_terrain_at_points(points, terr_model_df, observations_df)
+    ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
 
     chunk_df["terrain_id"] = terr_ids
     if config.include_intermediate:
@@ -363,7 +372,9 @@ def process_locations_chunk(args: tuple) -> tuple[int, pd.DataFrame]:  # pragma:
     return chunk_id, chunk_df
 
 
-def process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
+def process_pixels_chunk(
+    args: tuple,
+) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
     """
     Worker function: compute spatial adjustments for a chunk of affected pixels.
 
@@ -411,7 +422,6 @@ def process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustme
             pixel,
             obs_data,
             config_params["model_type"],
-            phi=config_params["phi"],
             max_dist_m=config_params["max_dist_m"],
             max_points=config_params["max_points"],
             noisy=config_params["noisy"],
@@ -423,10 +433,6 @@ def process_pixels_chunk(args: tuple) -> tuple[int, list[spatial.SpatialAdjustme
 
     return chunk_id, updates
 
-
-# =============================================================================
-# Orchestration Functions
-# =============================================================================
 
 
 def run_parallel_locations(
@@ -465,7 +471,14 @@ def run_parallel_locations(
     """
     split_indices = np.array_split(range(len(locations_df)), n_proc)
     chunk_args = [
-        (locations_df.iloc[idx].reset_index(drop=True), i, observations_df, geol_model_df, terr_model_df, config)
+        (
+            locations_df.iloc[idx].reset_index(drop=True),
+            i,
+            observations_df,
+            geol_model_df,
+            terr_model_df,
+            config,
+        )
         for i, idx in enumerate(split_indices)
         if len(idx) > 0
     ]
@@ -495,7 +508,6 @@ def run_parallel_spatial_fit(
     raster_data,  # RasterData - avoid import cycle
     obs_data: spatial.ObservationData,
     model_type: str,
-    phi: float,
     max_dist_m: float,
     max_points: int,
     noisy: bool,
@@ -518,8 +530,6 @@ def run_parallel_spatial_fit(
         Observation data for spatial adjustment
     model_type : str
         Model type ("geology" or "terrain")
-    phi : float
-        Correlation length parameter
     max_dist_m : float
         Maximum distance for considering observations
     max_points : int
@@ -564,7 +574,6 @@ def run_parallel_spatial_fit(
     # Config params
     config_params = {
         "model_type": model_type,
-        "phi": phi,
         "max_dist_m": max_dist_m,
         "max_points": max_points,
         "noisy": noisy,

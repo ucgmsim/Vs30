@@ -15,8 +15,8 @@ from math import sqrt
 
 from vs30 import constants
 from vs30.category import (
-    _compute_bayesian_posterior_mean,
-    _compute_bayesian_posterior_variance,
+    compute_bayesian_posterior_mean,
+    compute_bayesian_posterior_variance,
     perform_clustering,
     update_with_independent_data,
     get_vs30_for_points,
@@ -27,14 +27,14 @@ class TestBayesianUpdateFormulas:
     """Tests for the Bayesian update helper functions."""
 
     def test_posterior_variance_basic(self):
-        """Test _compute_bayesian_posterior_variance with simple inputs."""
+        """Test compute_bayesian_posterior_variance with simple inputs."""
         prior_stdv = 0.5  # Prior std dev
         num_prior_observations = 3  # Prior sample size
         uncertainty = 0.2  # Observation uncertainty
         prior_mean = 200  # Prior mean
         observation_value = 210  # Observation
 
-        var = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
+        var = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
 
         # Variance should be positive
         assert var > 0
@@ -42,13 +42,13 @@ class TestBayesianUpdateFormulas:
         assert var < prior_stdv**2
 
     def test_posterior_mean_basic(self):
-        """Test _compute_bayesian_posterior_mean with simple inputs."""
+        """Test compute_bayesian_posterior_mean with simple inputs."""
         prior_mean = 200  # Prior mean
         num_prior_observations = 3  # Prior sample size
         posterior_variance = 0.2  # Updated variance
         observation_value = 220  # Observation
 
-        mean = _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # New mean should be between prior and observation
         assert min(prior_mean, observation_value) <= mean <= max(prior_mean, observation_value)
@@ -60,7 +60,7 @@ class TestBayesianUpdateFormulas:
         posterior_variance = 0.2
         observation_value = 300  # Observation much higher than prior
 
-        mean = _compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # Mean should be closer to observation than prior was
         assert mean > prior_mean
@@ -74,11 +74,11 @@ class TestBayesianUpdateFormulas:
 
         # Observation close to prior
         obs_close = 205
-        var_close = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
+        var_close = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
 
         # Observation far from prior
         obs_far = 400
-        var_far = _compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
+        var_far = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
 
         # Variance should be higher when observation is far from prior
         assert var_far > var_close
@@ -100,8 +100,8 @@ class TestBayesianUpdateFormulas:
             observation_value = true_value * (1 + np.random.normal(0, 0.05))
             uncertainty = 0.2
 
-            var = _compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
-            current_mean = _compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
+            var = compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
+            current_mean = compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
             current_std = sqrt(var)
             current_num_observations += 1
 

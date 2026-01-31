@@ -12,19 +12,11 @@ see config.yaml and config.py.
 from dataclasses import dataclass
 from pathlib import Path
 
-# =============================================================================
-# DIRECTORY PATHS
-# =============================================================================
-
 # Path to the data directory containing shapefiles, rasters, and other input data
 DATA_DIR = Path(__file__).parent / "data"
 
 # Path to the resources directory containing CSV files with categorical model parameters
 RESOURCE_PATH = Path(__file__).parent / "resources"
-
-# =============================================================================
-# SPATIAL CORRELATION PARAMETERS
-# =============================================================================
 
 # Covariance reduction factor for dissimilar Vs30 values (dimensionless).
 # Controls how much the correlation between two points is reduced when their
@@ -46,10 +38,6 @@ PHI: dict[str, int] = {"geology": PHI_GEOLOGY, "terrain": PHI_TERRAIN}
 # The correlation function uses exp(-distance/phi), so distance=0 gives correlation=1.
 MIN_DIST_ENFORCED: float = 0.1
 
-# =============================================================================
-# SPATIAL UPDATE PARAMETERS
-# =============================================================================
-
 # Maximum distance (meters) for considering observations in multivariate normal
 # (MVN) spatial adjustment. Observations further than this distance from a pixel
 # will not influence its update.
@@ -59,10 +47,6 @@ MAX_DIST_M: int = 10000
 # (MVN) spatial adjustment. If a pixel is within MAX_DIST_M of more than MAX_POINTS
 # observations, only the MAX_POINTS closest observations will be considered.
 MAX_POINTS: int = 500
-
-# =============================================================================
-# MODEL COMBINATION PARAMETERS
-# =============================================================================
 
 # K value for standard deviation based weighting when combining geology and
 # terrain models. Represents the exponent for inverse variance weighting:
@@ -74,10 +58,6 @@ K_VALUE: float = 3.0
 # standard deviation is exactly zero.
 WEIGHT_EPSILON_DIV_BY_ZERO: float = 1.0e-10
 
-# =============================================================================
-# BAYESIAN UPDATE PARAMETERS
-# =============================================================================
-
 # Assumed initial number of prior observations (n0 in Bayesian formulas)
 # for Bayesian update of Vs30 mean and standard deviation values
 # for each geology and terrain category.
@@ -86,10 +66,6 @@ N_PRIOR: int = 3
 # Minimum standard deviation (log-space) allowed after Bayesian update.
 # Prevents over-confidence when many observations are available.
 MIN_SIGMA: float = 0.5
-
-# =============================================================================
-# DBSCAN CLUSTERING PARAMETERS
-# =============================================================================
 
 # DBSCAN clustering parameters for spatially clustered observations
 # such as Vs30 inferred from dense CPT measurements.
@@ -129,17 +105,15 @@ TERRAIN_RASTER_FILENAME: str = "IwahashiPike.tif"
 GEOLOGY_SHAPEFILE_PATH: str = "qmap/qmap.shp"
 
 # Coastline shapefile for coastal distance calculations
-COASTLINE_SHAPEFILE_PATH: str = "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
+COASTLINE_SHAPEFILE_PATH: str = (
+    "coast/nz-coastlines-and-islands-polygons-topo-1500k.shp"
+)
 
 # Source slope raster (used if slope.tif needs to be generated)
 SLOPE_SOURCE_RASTER_FILENAME: str = "slope.tif"
 
 # Archive containing shapefiles (extracted on first use)
 SHAPEFILES_ARCHIVE_FILENAME: str = "shapefiles.tar.xz"
-
-# =============================================================================
-# OUTPUT FILENAMES
-# =============================================================================
 
 # Prefix used to indicate that Bayesian updates have been performed
 POSTERIOR_PREFIX: str = "posterior_"
@@ -173,9 +147,7 @@ TERRAIN_VS30_MEAN_STDDEV_FILENAME: str = (
 )
 
 # Final geology Vs30 after slope, coastal distance, and spatial adjustment
-GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = (
-    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
-)
+GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
 
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
@@ -232,10 +204,6 @@ HYBRID_SIGMA_REDUCTION_FACTORS: dict[int, float] = {
 # Minimum slope value used to prevent log10(0) when calculating hybrid Vs30
 MIN_SLOPE_FOR_LOG: float = 1.0e-9
 
-# =============================================================================
-# NODATA AND PLACEHOLDER VALUES
-# =============================================================================
-
 # No data value in the provided categorical rasters
 RASTER_ID_NODATA_VALUE: int = 255
 
@@ -257,10 +225,6 @@ FULL_NZ_LAND_XMIN: int = 1060050
 FULL_NZ_LAND_XMAX: int = 2120050
 FULL_NZ_LAND_YMIN: int = 4730050
 FULL_NZ_LAND_YMAX: int = 6250050
-
-# =============================================================================
-# DATAFRAME COLUMN NAMES
-# =============================================================================
 
 # Default column names for longitude and latitude in location input CSV files.
 LOCATIONS_LON_COLUMN: str = "longitude"
@@ -290,16 +254,8 @@ COL_STDV: str = "standard_deviation_vs30_km_per_s"
 # Standard column name for category ID in DataFrames.
 STANDARD_ID_COLUMN: str = "id"
 
-# =============================================================================
-# COORDINATE REFERENCE SYSTEM
-# =============================================================================
-
 # Coordinate Reference System for New Zealand Transverse Mercator 2000
 NZTM_CRS: str = "EPSG:2193"
-
-# =============================================================================
-# PLOTTING PARAMETERS
-# =============================================================================
 
 PLOT_FIGSIZE: list[int] = [12, 8]
 PLOT_DPI: int = 300

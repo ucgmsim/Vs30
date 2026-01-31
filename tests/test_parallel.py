@@ -150,6 +150,7 @@ class TestLocationsChunkConfig:
             include_intermediate=True,
             combination_method="0.5",
             coast_distance_raster=None,
+            noisy=False,
         )
 
         assert config.lon_column == "longitude"
@@ -160,11 +161,11 @@ class TestLocationsChunkConfig:
 
 
 class TestProcessLocationsChunkDirect:
-    """Tests for _process_locations_chunk worker function (called directly)."""
+    """Tests for process_locations_chunk worker function (called directly)."""
 
     def test_process_empty_chunk(self):
         """Test processing an empty chunk."""
-        from vs30.parallel import _process_locations_chunk, LocationsChunkConfig
+        from vs30.parallel import process_locations_chunk, LocationsChunkConfig
 
         # Empty DataFrame
         chunk_df = pd.DataFrame({
@@ -191,23 +192,24 @@ class TestProcessLocationsChunkDirect:
             include_intermediate=False,
             combination_method='0.5',
             coast_distance_raster=None,
+            noisy=False,
         )
 
         # This should handle empty chunk gracefully
         args = (chunk_df, 0, observations_df, geol_model_df, geol_model_df, config)
 
-        chunk_id, result_df = _process_locations_chunk(args)
+        chunk_id, result_df = process_locations_chunk(args)
 
         assert chunk_id == 0
         assert len(result_df) == 0
 
 
 class TestProcessPixelsChunkDirect:
-    """Tests for _process_pixels_chunk worker function (called directly)."""
+    """Tests for process_pixels_chunk worker function (called directly)."""
 
     def test_process_single_pixel(self):
         """Test processing a single pixel chunk."""
-        from vs30.parallel import _process_pixels_chunk
+        from vs30.parallel import process_pixels_chunk
 
         # Simple pixel data
         pixel_data_dict = {
@@ -241,7 +243,7 @@ class TestProcessPixelsChunkDirect:
 
         args = ([0], 0, pixel_data_dict, obs_data_dict, config_params)
 
-        chunk_id, updates = _process_pixels_chunk(args)
+        chunk_id, updates = process_pixels_chunk(args)
 
         assert chunk_id == 0
         # Should produce one update for the pixel
@@ -250,7 +252,7 @@ class TestProcessPixelsChunkDirect:
 
     def test_process_multiple_pixels(self):
         """Test processing multiple pixels."""
-        from vs30.parallel import _process_pixels_chunk
+        from vs30.parallel import process_pixels_chunk
 
         # Multiple pixels
         pixel_data_dict = {
@@ -289,7 +291,7 @@ class TestProcessPixelsChunkDirect:
 
         args = ([0, 1], 0, pixel_data_dict, obs_data_dict, config_params)
 
-        chunk_id, updates = _process_pixels_chunk(args)
+        chunk_id, updates = process_pixels_chunk(args)
 
         assert chunk_id == 0
         assert len(updates) == 2

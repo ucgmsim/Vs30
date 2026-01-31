@@ -37,12 +37,9 @@ import rasterio.warp
 from osgeo import gdal
 from tqdm import tqdm
 
-from vs30 import config
 from vs30 import constants
 
 logger = logging.getLogger(__name__)
-
-
 
 
 def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
@@ -107,7 +104,9 @@ def ensure_qmap_shapefile_extracted() -> None:
 
     This shapefile is required for geology ID raster creation.
     """
-    ensure_shapefile_extracted(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap")
+    ensure_shapefile_extracted(
+        constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+    )
 
 
 def ensure_coast_shapefile_extracted() -> None:
@@ -116,7 +115,9 @@ def ensure_coast_shapefile_extracted() -> None:
 
     This shapefile is required for creating coastal distance rasters.
     """
-    ensure_shapefile_extracted(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast")
+    ensure_shapefile_extracted(
+        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
+    )
 
 
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
@@ -171,12 +172,12 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
 def create_category_id_raster(
     model_type: str,
     output_dir: Path,
-    xmin: float | None = None,
-    xmax: float | None = None,
-    ymin: float | None = None,
-    ymax: float | None = None,
-    dx: float | None = None,
-    dy: float | None = None,
+    xmin: float,
+    xmax: float,
+    ymin: float,
+    ymax: float,
+    dx: float,
+    dy: float,
 ) -> Path:
     """
     Create category ID raster for terrain or geology.
@@ -190,6 +191,18 @@ def create_category_id_raster(
         Either "terrain" or "geology".
     output_dir : Path
         Directory where output raster will be saved.
+    xmin : float
+        Grid minimum easting (m, NZTM2000).
+    xmax : float
+        Grid maximum easting (m, NZTM2000).
+    ymin : float
+        Grid minimum northing (m, NZTM2000).
+    ymax : float
+        Grid maximum northing (m, NZTM2000).
+    dx : float
+        Grid cell width (m).
+    dy : float
+        Grid cell height (m).
 
     Returns
     -------
@@ -207,14 +220,6 @@ def create_category_id_raster(
         raise ValueError(
             f"model_type must be 'terrain' or 'geology', got '{model_type}'"
         )
-
-    cfg = config.get_default_config()
-    xmin = xmin if xmin is not None else cfg.grid_xmin
-    xmax = xmax if xmax is not None else cfg.grid_xmax
-    ymin = ymin if ymin is not None else cfg.grid_ymin
-    ymax = ymax if ymax is not None else cfg.grid_ymax
-    dx = dx if dx is not None else cfg.grid_dx
-    dy = dy if dy is not None else cfg.grid_dy
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -266,7 +271,9 @@ def create_category_id_raster(
         # Rasterize geology shapefile to target grid
         geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
         if not geology_shapefile_path.exists():
-            raise FileNotFoundError(f"Geology shapefile not found: {geology_shapefile_path}")
+            raise FileNotFoundError(
+                f"Geology shapefile not found: {geology_shapefile_path}"
+            )
 
         # Read shapefile
         gdf = gpd.read_file(geology_shapefile_path)
@@ -324,9 +331,15 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
     """
     priorities = [
         # 1. Independent observations posterior
-        (constants.COL_POSTERIOR_MEAN_INDEPENDENT, constants.COL_POSTERIOR_STDV_INDEPENDENT),
+        (
+            constants.COL_POSTERIOR_MEAN_INDEPENDENT,
+            constants.COL_POSTERIOR_STDV_INDEPENDENT,
+        ),
         # 2. Clustered observations posterior
-        (constants.COL_POSTERIOR_MEAN_CLUSTERED, constants.COL_POSTERIOR_STDV_CLUSTERED),
+        (
+            constants.COL_POSTERIOR_MEAN_CLUSTERED,
+            constants.COL_POSTERIOR_STDV_CLUSTERED,
+        ),
         # 3. Generic posterior
         (constants.COL_POSTERIOR_MEAN, constants.COL_POSTERIOR_STDV),
         # 4. Explicit prior
@@ -422,7 +435,9 @@ def create_vs30_raster_from_ids(
 
     # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[(unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)]
+    valid_ids = unique_ids[
+        (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
+    ]
 
     for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
         if pixel_id in id_to_vs30_values:
@@ -436,12 +451,14 @@ def create_vs30_raster_from_ids(
                 f"Available IDs in CSV: {sorted(id_to_vs30_values.keys())}"
             )
 
-    profile.update({
-        "count": 2,
-        "dtype": "float32",
-        "nodata": constants.NODATA_VALUE,
-        "compress": "deflate",
-    })
+    profile.update(
+        {
+            "count": 2,
+            "dtype": "float32",
+            "nodata": constants.NODATA_VALUE,
+            "compress": "deflate",
+        }
+    )
 
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(vs30_array, 1)
@@ -496,7 +513,9 @@ def create_coast_distance_raster(
     g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
 
     # Check if grid was extended beyond template bounds (requires cropping later)
-    grid_was_extended = g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
+    grid_was_extended = (
+        g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
+    )
 
     # Rasterize land polygons using GDAL (legacy approach)
     # Use UInt16 data type as in legacy code (sufficient for distance range)
@@ -594,7 +613,12 @@ def create_slope_raster(
     # Save to file
     profile = template_profile.copy()
     profile.update(
-        {"dtype": "float32", "count": 1, "nodata": constants.NODATA_VALUE, "compress": "deflate"}
+        {
+            "dtype": "float32",
+            "count": 1,
+            "nodata": constants.NODATA_VALUE,
+            "compress": "deflate",
+        }
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
@@ -641,7 +665,9 @@ def apply_coastal_distance_modification(
         return
 
     dist_vals = coast_dist_array[mask]
-    val = vs30_min + (vs30_max - vs30_min) * (dist_vals - dist_min) / (dist_max - dist_min)
+    val = vs30_min + (vs30_max - vs30_min) * (dist_vals - dist_min) / (
+        dist_max - dist_min
+    )
     vs30_array[mask] = np.clip(val, vs30_min, vs30_max)
 
 
@@ -654,14 +680,14 @@ def apply_hybrid_geology_modifications(
     mod6: bool = True,
     mod13: bool = True,
     hybrid: bool = True,
-    hybrid_mod6_dist_min: float | None = None,
-    hybrid_mod6_dist_max: float | None = None,
-    hybrid_mod6_vs30_min: float | None = None,
-    hybrid_mod6_vs30_max: float | None = None,
-    hybrid_mod13_dist_min: float | None = None,
-    hybrid_mod13_dist_max: float | None = None,
-    hybrid_mod13_vs30_min: float | None = None,
-    hybrid_mod13_vs30_max: float | None = None,
+    hybrid_mod6_dist_min: float = constants.HYBRID_MOD6_DIST_MIN,
+    hybrid_mod6_dist_max: float = constants.HYBRID_MOD6_DIST_MAX,
+    hybrid_mod6_vs30_min: float = constants.HYBRID_MOD6_VS30_MIN,
+    hybrid_mod6_vs30_max: float = constants.HYBRID_MOD6_VS30_MAX,
+    hybrid_mod13_dist_min: float = constants.HYBRID_MOD13_DIST_MIN,
+    hybrid_mod13_dist_max: float = constants.HYBRID_MOD13_DIST_MAX,
+    hybrid_mod13_vs30_min: float = constants.HYBRID_MOD13_VS30_MIN,
+    hybrid_mod13_vs30_max: float = constants.HYBRID_MOD13_VS30_MAX,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply hybrid model modifications to VS30 and standard deviation arrays.
@@ -688,22 +714,22 @@ def apply_hybrid_geology_modifications(
         Whether to apply modification for Group 13 (Floodplain). Default True.
     hybrid : bool, optional
         Whether to apply general hybrid slope-based modifications. Default True.
-    hybrid_mod6_dist_min : float, optional
-        Min distance threshold for mod6. Default from config.
-    hybrid_mod6_dist_max : float, optional
-        Max distance threshold for mod6. Default from config.
-    hybrid_mod6_vs30_min : float, optional
-        Min Vs30 for mod6. Default from config.
-    hybrid_mod6_vs30_max : float, optional
-        Max Vs30 for mod6. Default from config.
-    hybrid_mod13_dist_min : float, optional
-        Min distance threshold for mod13. Default from config.
-    hybrid_mod13_dist_max : float, optional
-        Max distance threshold for mod13. Default from config.
-    hybrid_mod13_vs30_min : float, optional
-        Min Vs30 for mod13. Default from config.
-    hybrid_mod13_vs30_max : float, optional
-        Max Vs30 for mod13. Default from config.
+    hybrid_mod6_dist_min : float
+        Min distance threshold for mod6. Default from constants.
+    hybrid_mod6_dist_max : float
+        Max distance threshold for mod6. Default from constants.
+    hybrid_mod6_vs30_min : float
+        Min Vs30 for mod6. Default from constants.
+    hybrid_mod6_vs30_max : float
+        Max Vs30 for mod6. Default from constants.
+    hybrid_mod13_dist_min : float
+        Min distance threshold for mod13. Default from constants.
+    hybrid_mod13_dist_max : float
+        Max distance threshold for mod13. Default from constants.
+    hybrid_mod13_vs30_min : float
+        Min Vs30 for mod13. Default from constants.
+    hybrid_mod13_vs30_max : float
+        Max Vs30 for mod13. Default from constants.
 
     Returns
     -------
@@ -711,26 +737,6 @@ def apply_hybrid_geology_modifications(
         Modified (vs30_array, stdv_array).
     """
     logger.info("Applying slope and coastal distance based geology modifications...")
-
-    # Fill in defaults from constants for any unspecified parameters
-    if mod6:
-        if hybrid_mod6_dist_min is None:
-            hybrid_mod6_dist_min = constants.HYBRID_MOD6_DIST_MIN
-        if hybrid_mod6_dist_max is None:
-            hybrid_mod6_dist_max = constants.HYBRID_MOD6_DIST_MAX
-        if hybrid_mod6_vs30_min is None:
-            hybrid_mod6_vs30_min = constants.HYBRID_MOD6_VS30_MIN
-        if hybrid_mod6_vs30_max is None:
-            hybrid_mod6_vs30_max = constants.HYBRID_MOD6_VS30_MAX
-    if mod13:
-        if hybrid_mod13_dist_min is None:
-            hybrid_mod13_dist_min = constants.HYBRID_MOD13_DIST_MIN
-        if hybrid_mod13_dist_max is None:
-            hybrid_mod13_dist_max = constants.HYBRID_MOD13_DIST_MAX
-        if hybrid_mod13_vs30_min is None:
-            hybrid_mod13_vs30_min = constants.HYBRID_MOD13_VS30_MIN
-        if hybrid_mod13_vs30_max is None:
-            hybrid_mod13_vs30_max = constants.HYBRID_MOD13_VS30_MAX
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:
@@ -744,9 +750,9 @@ def apply_hybrid_geology_modifications(
     if hybrid:
         # Prevent log10(0) or log10(-NODATA) by capping at constants.MIN_SLOPE_FOR_LOG
         modified_slope = np.copy(slope_array)
-        modified_slope[(modified_slope <= 0) | (modified_slope == constants.NODATA_VALUE)] = (
-            constants.MIN_SLOPE_FOR_LOG
-        )
+        modified_slope[
+            (modified_slope <= 0) | (modified_slope == constants.NODATA_VALUE)
+        ] = constants.MIN_SLOPE_FOR_LOG
         safe_log_slope = np.log10(modified_slope)
 
         for spec in constants.HYBRID_VS30_PARAMS:
@@ -772,18 +778,26 @@ def apply_hybrid_geology_modifications(
     # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6:
         apply_coastal_distance_modification(
-            vs30_array, id_array, coast_dist_array,
+            vs30_array,
+            id_array,
+            coast_dist_array,
             gid=4,
-            dist_min=hybrid_mod6_dist_min, dist_max=hybrid_mod6_dist_max,
-            vs30_min=hybrid_mod6_vs30_min, vs30_max=hybrid_mod6_vs30_max,
+            dist_min=hybrid_mod6_dist_min,
+            dist_max=hybrid_mod6_dist_max,
+            vs30_min=hybrid_mod6_vs30_min,
+            vs30_max=hybrid_mod6_vs30_max,
         )
 
     if mod13:
         apply_coastal_distance_modification(
-            vs30_array, id_array, coast_dist_array,
+            vs30_array,
+            id_array,
+            coast_dist_array,
             gid=10,
-            dist_min=hybrid_mod13_dist_min, dist_max=hybrid_mod13_dist_max,
-            vs30_min=hybrid_mod13_vs30_min, vs30_max=hybrid_mod13_vs30_max,
+            dist_min=hybrid_mod13_dist_min,
+            dist_max=hybrid_mod13_dist_max,
+            vs30_min=hybrid_mod13_vs30_min,
+            vs30_max=hybrid_mod13_vs30_max,
         )
 
     return vs30_array, stdv_array
@@ -912,18 +926,26 @@ def apply_hybrid_modifications_at_points(
     # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
     if mod6 and coast_dist_values is not None:
         apply_coastal_distance_modification(
-            modified_vs30, geology_ids, coast_dist_values,
+            modified_vs30,
+            geology_ids,
+            coast_dist_values,
             gid=4,
-            dist_min=constants.HYBRID_MOD6_DIST_MIN, dist_max=constants.HYBRID_MOD6_DIST_MAX,
-            vs30_min=constants.HYBRID_MOD6_VS30_MIN, vs30_max=constants.HYBRID_MOD6_VS30_MAX,
+            dist_min=constants.HYBRID_MOD6_DIST_MIN,
+            dist_max=constants.HYBRID_MOD6_DIST_MAX,
+            vs30_min=constants.HYBRID_MOD6_VS30_MIN,
+            vs30_max=constants.HYBRID_MOD6_VS30_MAX,
         )
 
     if mod13 and coast_dist_values is not None:
         apply_coastal_distance_modification(
-            modified_vs30, geology_ids, coast_dist_values,
+            modified_vs30,
+            geology_ids,
+            coast_dist_values,
             gid=10,
-            dist_min=constants.HYBRID_MOD13_DIST_MIN, dist_max=constants.HYBRID_MOD13_DIST_MAX,
-            vs30_min=constants.HYBRID_MOD13_VS30_MIN, vs30_max=constants.HYBRID_MOD13_VS30_MAX,
+            dist_min=constants.HYBRID_MOD13_DIST_MIN,
+            dist_max=constants.HYBRID_MOD13_DIST_MAX,
+            vs30_min=constants.HYBRID_MOD13_VS30_MIN,
+            vs30_max=constants.HYBRID_MOD13_VS30_MAX,
         )
 
     return modified_vs30, modified_stdv

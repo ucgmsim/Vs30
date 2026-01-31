@@ -2,7 +2,7 @@
 Tests for the VS30 raster module.
 
 Tests cover:
-- _select_vs30_columns_by_priority function
+- select_vs30_columns_by_priority function
 - apply_hybrid_geology_modifications function
 - Hybrid model calculations
 """
@@ -11,13 +11,13 @@ import numpy as np
 import pytest
 
 from vs30.raster import (
-    _select_vs30_columns_by_priority,
+    select_vs30_columns_by_priority,
     apply_hybrid_geology_modifications,
 )
 
 
 class TestSelectVs30ColumnsByPriority:
-    """Tests for the _select_vs30_columns_by_priority function."""
+    """Tests for the select_vs30_columns_by_priority function."""
 
     def test_independent_observations_priority(self):
         """Test that independent observations posterior is preferred."""
@@ -31,7 +31,7 @@ class TestSelectVs30ColumnsByPriority:
             "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         assert mean_col == "posterior_mean_vs30_km_per_s_independent_observations"
         assert std_col == "posterior_standard_deviation_vs30_km_per_s_independent_observations"
@@ -46,7 +46,7 @@ class TestSelectVs30ColumnsByPriority:
             "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         assert mean_col == "posterior_mean_vs30_km_per_s_clustered_observations"
         assert std_col == "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
@@ -61,7 +61,7 @@ class TestSelectVs30ColumnsByPriority:
             "posterior_standard_deviation_vs30_km_per_s",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         assert mean_col == "posterior_mean_vs30_km_per_s"
         assert std_col == "posterior_standard_deviation_vs30_km_per_s"
@@ -76,7 +76,7 @@ class TestSelectVs30ColumnsByPriority:
             "prior_standard_deviation_vs30_km_per_s",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         assert mean_col == "prior_mean_vs30_km_per_s"
         assert std_col == "prior_standard_deviation_vs30_km_per_s"
@@ -89,7 +89,7 @@ class TestSelectVs30ColumnsByPriority:
             "standard_deviation_vs30_km_per_s",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         assert mean_col == "mean_vs30_km_per_s"
         assert std_col == "standard_deviation_vs30_km_per_s"
@@ -99,7 +99,7 @@ class TestSelectVs30ColumnsByPriority:
         columns = ["id", "some_other_column"]
 
         with pytest.raises(ValueError, match="Could not find valid VS30"):
-            _select_vs30_columns_by_priority(columns)
+            select_vs30_columns_by_priority(columns)
 
     def test_partial_pair_not_selected(self):
         """Test that having only mean or only std column doesn't match."""
@@ -111,7 +111,7 @@ class TestSelectVs30ColumnsByPriority:
             "standard_deviation_vs30_km_per_s",
         ]
 
-        mean_col, std_col = _select_vs30_columns_by_priority(columns)
+        mean_col, std_col = select_vs30_columns_by_priority(columns)
 
         # Should fall back to standard columns since independent is incomplete
         assert mean_col == "mean_vs30_km_per_s"
@@ -410,7 +410,12 @@ class TestCreateCategoryIdRaster:
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with pytest.raises(ValueError, match="model_type must be"):
-                create_category_id_raster("invalid", Path(temp_dir))
+                create_category_id_raster(
+                    "invalid", Path(temp_dir),
+                    xmin=1500000, xmax=1505000,
+                    ymin=5100000, ymax=5105000,
+                    dx=250, dy=250
+                )
 
 
 class TestApplyHybridModificationsAtPoints:
@@ -549,7 +554,7 @@ class TestLoadModelValuesFromCSVErrors:
         test_csv.write_text(csv_content)
 
         # Mock the resource path to point to our temp file
-        with mock.patch("vs30.raster.RESOURCE_PATH", tmp_path):
+        with mock.patch("vs30.constants.RESOURCE_PATH", tmp_path):
             with pytest.raises(ValueError, match="missing required columns"):
                 load_model_values_from_csv("test.csv")
 

@@ -3,15 +3,11 @@ import numpy as np
 from vs30 import constants
 
 
-# ============================================================================
-# Correlation Functions
-# ============================================================================
-
 
 def correlation_function(
     distances: np.ndarray,
     phi: float,
-    min_dist: float | None = None,
+    min_dist: float = constants.MIN_DIST_ENFORCED,
 ) -> np.ndarray:
     """
     Calculate exponential correlation from distances.
@@ -36,14 +32,8 @@ def correlation_function(
     A small minimum distance (default 0.1 m) is enforced to prevent
     exact-zero distances from producing correlation = 1.0.
     """
-    if min_dist is None:
-        min_dist = constants.MIN_DIST_ENFORCED
     return np.exp(-np.maximum(min_dist, distances) / phi)
 
-
-# ============================================================================
-# Model Combination Functions
-# ============================================================================
 
 
 def combine_vs30_models(
@@ -101,8 +91,12 @@ def combine_vs30_models(
     # Determine weights based on combination method
     if str(combination_method).strip() == "standard_deviation_weighting":
         # Variance-based weighting: lower stdv gets higher weight
-        m_g = (geol_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO) ** -constants.K_VALUE
-        m_t = (terr_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO) ** -constants.K_VALUE
+        m_g = (
+            geol_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO
+        ) ** -constants.K_VALUE
+        m_t = (
+            terr_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO
+        ) ** -constants.K_VALUE
         total_m = m_g + m_t
         w_g = m_g / total_m
         w_t = m_t / total_m
