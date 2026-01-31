@@ -151,10 +151,6 @@ class Vs30Config(pydantic.BaseModel):
         return cls.from_yaml(cls.default_config_path())
 
 
-# =============================================================================
-# Module-level config management
-# =============================================================================
-
 _default_config: Vs30Config | None = None
 
 

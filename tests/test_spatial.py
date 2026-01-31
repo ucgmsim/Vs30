@@ -154,9 +154,7 @@ class TestBuildCovarianceMatrix:
             simple_pixel,
             nearby_observations,
             model_type="geology",
-            phi=1000.0,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         # Matrix should be (1 pixel + 3 observations) x (1 pixel + 3 observations)
@@ -169,9 +167,7 @@ class TestBuildCovarianceMatrix:
             simple_pixel,
             nearby_observations,
             model_type="geology",
-            phi=1000.0,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         np.testing.assert_array_almost_equal(cov, cov.T)
@@ -182,9 +178,7 @@ class TestBuildCovarianceMatrix:
             simple_pixel,
             nearby_observations,
             model_type="geology",
-            phi=1000.0,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         assert (np.diag(cov) > 0).all()
@@ -195,9 +189,7 @@ class TestBuildCovarianceMatrix:
             simple_pixel,
             nearby_observations,
             model_type="geology",
-            phi=1000.0,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         # Off-diagonal elements should decrease with distance
@@ -206,27 +198,26 @@ class TestBuildCovarianceMatrix:
         assert cov[0, 1] > cov[0, 3]
 
     def test_larger_phi_gives_higher_covariance(self, simple_pixel, nearby_observations):
-        """Test that larger phi gives higher off-diagonal covariance."""
-        cov_small_phi = build_covariance_matrix(
+        """Test that larger phi gives higher off-diagonal covariance.
+
+        Geology has phi=1407, terrain has phi=993, so geology should have higher covariance.
+        """
+        cov_terrain = build_covariance_matrix(
+            simple_pixel,
+            nearby_observations,
+            model_type="terrain",
+            noisy=False,
+        )
+
+        cov_geology = build_covariance_matrix(
             simple_pixel,
             nearby_observations,
             model_type="geology",
-            phi=500.0,
             noisy=False,
-            cov_reduc=0.0,
         )
 
-        cov_large_phi = build_covariance_matrix(
-            simple_pixel,
-            nearby_observations,
-            model_type="geology",
-            phi=2000.0,
-            noisy=False,
-            cov_reduc=0.0,
-        )
-
-        # Larger phi means slower decay, so higher covariance at same distance
-        assert cov_large_phi[0, 1] > cov_small_phi[0, 1]
+        # Geology (phi=1407) should have higher covariance than terrain (phi=993)
+        assert cov_geology[0, 1] > cov_terrain[0, 1]
 
 
 class TestSelectObservationsForPixel:
@@ -340,11 +331,9 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             nearby_observation,
             model_type="geology",
-            phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         assert isinstance(result, SpatialAdjustmentResult)
@@ -356,11 +345,9 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             nearby_observation,
             model_type="geology",
-            phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         # Observation is higher (280), prior is 250, update should increase
@@ -372,11 +359,9 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             nearby_observation,
             model_type="geology",
-            phi=1000.0,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
-            cov_reduc=0.0,
         )
 
         # Adding observation should reduce uncertainty
@@ -938,6 +923,7 @@ class TestPrepareObservationDataErrors:
                 updated_model_table=model_table,
                 model_type="invalid_model",
                 output_dir=temp_dir,
+                noisy=False,
             )
 
 
@@ -1023,7 +1009,7 @@ class TestBuildCovarianceMatrixAdditional:
 
         cov = build_covariance_matrix(
             pixel, obs_data, "geology",
-            phi=1000.0, noisy=False, cov_reduc=0.0
+            noisy=False
         )
 
         # Should be 3x3 (1 pixel + 2 observations)
@@ -1130,7 +1116,11 @@ class TestFindAffectedPixels:
             uncertainty=np.array([25.0]),
         )
 
-        result = find_affected_pixels(raster_data, obs_data, max_dist_m=5000)
+        result = find_affected_pixels(
+            raster_data, obs_data,
+            max_spatial_boolean_array_memory_gb=2.0,
+            max_dist_m=5000
+        )
 
         # Should find some affected pixels
         assert result.n_affected_pixels > 0

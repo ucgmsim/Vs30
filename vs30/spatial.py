@@ -42,7 +42,6 @@ import scipy
 from tqdm import tqdm
 
 from vs30 import category
-from vs30 import config
 from vs30 import constants
 from vs30 import raster
 from vs30 import utils
@@ -64,7 +63,9 @@ class ObservationData:
     residuals: np.ndarray  # (n_obs,) log residuals: log(vs30 / model_vs30)
     omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
     uncertainty: np.ndarray  # (n_obs,) observation uncertainties
-    cluster_labels: np.ndarray | None = None  # (n_obs,) cluster labels from DBSCAN, -1 = unclustered
+    cluster_labels: np.ndarray | None = (
+        None  # (n_obs,) cluster labels from DBSCAN, -1 = unclustered
+    )
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -270,7 +271,7 @@ def prepare_observation_data(
     updated_model_table: np.ndarray,
     model_type: str,
     output_dir: Path,
-    noisy: bool | None = None,
+    noisy: bool,
 ) -> ObservationData:
     """
     Prepare observation data for MVN processing.
@@ -291,26 +292,22 @@ def prepare_observation_data(
         Model type ("geology" or "terrain").
     output_dir : Path
         Output directory for intermediate rasters (slope, coast distance).
-    noisy : bool, optional
-        Whether to apply noise weighting. Default from config.
+    noisy : bool
+        Whether to apply noise weighting.
 
     Returns
     -------
     ObservationData
         Prepared observation data object.
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    noisy = noisy if noisy is not None else cfg.noisy
-
     # Get observation locations
     obs_locs = observations[["easting", "northing"]].values
 
     # Interpolate model values at observation locations
     if model_type == "geology":
-        model_ids = category._assign_to_category_geology(obs_locs)
+        model_ids = category.assign_to_category_geology(obs_locs)
     elif model_type == "terrain":
-        model_ids = category._assign_to_category_terrain(obs_locs)
+        model_ids = category.assign_to_category_terrain(obs_locs)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
@@ -528,18 +525,13 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
     return chunk_idx, chunk_mask, obs_to_grid_indices
 
 
-# ============================================================================
-# Covariance Matrix Building
-# ============================================================================
-
 
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
     model_type: str,
-    phi: float | None = None,
-    noisy: bool | None = None,
-    cov_reduc: float | None = None,
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
     """
     Build covariance matrix through clear pipeline of steps.
@@ -559,21 +551,17 @@ def build_covariance_matrix(
         Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
         First row/column is for the pixel, rest are for observations.
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
 
     # Step 1: Compute Euclidean distance matrix
     all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
         np.float64
     )
-    distance_matrix = scipy.spatial.distance.cdist(all_points, all_points, metric="euclidean")
+    distance_matrix = scipy.spatial.distance.cdist(
+        all_points, all_points, metric="euclidean"
+    )
 
     # Step 2: Apply correlation function
-    if phi is None:
-        phi = constants.PHI[model_type]
-    corr = utils.correlation_function(distance_matrix, phi)
+    corr = utils.correlation_function(distance_matrix, constants.PHI[model_type])
 
     # Step 3: Scale by standard deviations
     stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
@@ -597,16 +585,12 @@ def build_covariance_matrix(
     return cov
 
 
-# ============================================================================
-# Spatial Adjustment Computation
-# ============================================================================
-
 
 def select_observations_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
-    max_dist_m: float | None = None,
-    max_points: int | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
 ) -> ObservationData:
     """
     Select observations for a pixel using distance filtering.
@@ -630,11 +614,6 @@ def select_observations_for_pixel(
     ObservationData
         Selected observations (subset of obs_data).
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
-    max_points = max_points if max_points is not None else constants.MAX_POINTS
-
     # Calculate distances from pixel to all observations
     distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
 
@@ -672,11 +651,10 @@ def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
     model_type: str,
-    phi: float | None = None,
-    max_dist_m: float | None = None,
-    max_points: int | None = None,
-    noisy: bool | None = None,
-    cov_reduc: float | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> SpatialAdjustmentResult | None:
     """
     Compute MVN update for a single pixel.
@@ -695,23 +673,16 @@ def compute_spatial_adjustment_for_pixel(
     SpatialAdjustmentResult or None
         Update result, or None if pixel should be skipped.
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
-    max_points = max_points if max_points is not None else constants.MAX_POINTS
-    noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
-
     # Handle NaN/NoData pixels
     if np.isnan(pixel.vs30) or np.isnan(pixel.stdv):
         return None
 
-    phi_val = phi if phi is not None else constants.PHI[model_type]
-
     # Correlation at zero distance is slightly less than 1.0 due to the
     # enforced minimum distance (nugget effect). This shrinks the prior
     # variance to match the legacy implementation's behavior.
-    corr_zero = utils.correlation_function(np.array([0.0]), phi_val)[0]
+    corr_zero = utils.correlation_function(np.array([0.0]), constants.PHI[model_type])[
+        0
+    ]
     initial_var = (pixel.stdv**2) * corr_zero
 
     # Select observations for this pixel
@@ -737,7 +708,6 @@ def compute_spatial_adjustment_for_pixel(
         pixel,
         selected_obs,
         model_type,
-        phi=phi,
         noisy=noisy,
         cov_reduc=cov_reduc,
     )
@@ -776,10 +746,6 @@ def compute_spatial_adjustment_for_pixel(
         pixel_index=pixel.index,
     )
 
-
-# ============================================================================
-# Find Affected Pixels
-# ============================================================================
 
 
 def subsample_by_cluster(
@@ -863,7 +829,8 @@ def accumulate_bbox_results(
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
-    max_dist_m: float | None = None,
+    max_spatial_boolean_array_memory_gb: float,
+    max_dist_m: float = constants.MAX_DIST_M,
     n_proc: int = 1,
 ) -> BoundingBoxResult:
     """
@@ -875,6 +842,8 @@ def find_affected_pixels(
         Raster data object.
     obs_data : ObservationData
         Observation data.
+    max_spatial_boolean_array_memory_gb : float
+        Memory limit (GB) for boolean arrays in spatial processing.
     max_dist_m : float, optional
         Maximum distance for considering observations.
     n_proc : int, optional
@@ -886,19 +855,13 @@ def find_affected_pixels(
     BoundingBoxResult
         Result containing mask and observation-to-grid mappings.
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
-
     # Get coordinates for valid pixels
     grid_locs = raster_data.get_coordinates()
 
     n_obs = len(obs_data.locations)
 
     # Calculate chunk size based on observation count
-    chunk_size = calculate_chunk_size(
-        n_obs, cfg.max_spatial_boolean_array_memory_gb
-    )
+    chunk_size = calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb)
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
     # Precompute observation bounds
@@ -950,8 +913,12 @@ def find_affected_pixels(
         # Merge results
         for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
             accumulate_bbox_results(
-                valid_points_in_bbox_mask, obs_to_grid_indices,
-                chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
+                valid_points_in_bbox_mask,
+                obs_to_grid_indices,
+                chunk_idx,
+                chunk_size,
+                chunk_mask,
+                chunk_obs_to_grid,
                 raster_data.valid_flat_indices,
             )
     else:
@@ -975,8 +942,12 @@ def find_affected_pixels(
             )
 
             accumulate_bbox_results(
-                valid_points_in_bbox_mask, obs_to_grid_indices,
-                chunk_idx, chunk_size, chunk_mask, chunk_obs_to_grid,
+                valid_points_in_bbox_mask,
+                obs_to_grid_indices,
+                chunk_idx,
+                chunk_size,
+                chunk_mask,
+                chunk_obs_to_grid,
                 raster_data.valid_flat_indices,
             )
 
@@ -997,21 +968,17 @@ def find_affected_pixels(
     )
 
 
-# ============================================================================
-# Main Spatial Adjustments Computation
-# ============================================================================
-
 
 def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_result: BoundingBoxResult,
     model_type: str,
-    phi: float | None = None,
-    max_dist_m: float | None = None,
-    max_points: int | None = None,
-    noisy: bool | None = None,
-    cov_reduc: float | None = None,
+    max_spatial_boolean_array_memory_gb: float,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> list[SpatialAdjustmentResult]:
     """
     Compute MVN updates for all affected pixels.
@@ -1032,13 +999,6 @@ def compute_spatial_adjustments(
     list
         List of SpatialAdjustmentResult objects.
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
-    max_points = max_points if max_points is not None else constants.MAX_POINTS
-    noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
-
     # Get affected pixel indices
     affected_flat_indices = np.where(bbox_result.mask)[0]
     affected_valid_indices = np.where(bbox_result.mask[raster_data.valid_flat_indices])[
@@ -1055,7 +1015,7 @@ def compute_spatial_adjustments(
 
     # Process in chunks for memory efficiency
     chunk_size = calculate_chunk_size(
-        len(obs_data.locations), cfg.max_spatial_boolean_array_memory_gb
+        len(obs_data.locations), max_spatial_boolean_array_memory_gb
     )
     n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
 
@@ -1093,7 +1053,6 @@ def compute_spatial_adjustments(
                     pixel,
                     obs_data,
                     model_type,
-                    phi=phi,
                     max_dist_m=max_dist_m,
                     max_points=max_points,
                     noisy=noisy,
@@ -1109,10 +1068,6 @@ def compute_spatial_adjustments(
 
     return all_updates
 
-
-# ============================================================================
-# Apply Updates and Write Output
-# ============================================================================
 
 
 def apply_and_write_updates(
@@ -1156,10 +1111,6 @@ def apply_and_write_updates(
     )
 
 
-# ============================================================================
-# Point-Based Spatial Adjustment Computation
-# ============================================================================
-
 
 def compute_spatial_adjustment_at_points(
     points: np.ndarray,
@@ -1171,11 +1122,10 @@ def compute_spatial_adjustment_at_points(
     obs_model_stdv: np.ndarray,
     obs_uncertainty: np.ndarray,
     model_type: str,
-    phi: float | None = None,
-    max_dist_m: float | None = None,
-    max_points: int | None = None,
-    noisy: bool | None = None,
-    cov_reduc: float | None = None,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute MVN spatial adjustment at specific query points.
 
@@ -1203,16 +1153,14 @@ def compute_spatial_adjustment_at_points(
         (M,) array of observation uncertainties.
     model_type : str
         Either "geology" or "terrain" (determines phi correlation length).
-    phi : float, optional
-        Correlation length parameter. If None, uses value from config.
     max_dist_m : float, optional
-        Maximum distance (meters) to consider observations. Default from config.
+        Maximum distance (meters) to consider observations. Default from constants.
     max_points : int, optional
-        Maximum number of observations per point. Default from config.
-    noisy : bool, optional
-        Whether to apply noise weighting. Default from config.
-    cov_reduc : float, optional
-        Covariance reduction factor. Default from config.
+        Maximum number of observations per point. Default from constants.
+    noisy : bool
+        Whether to apply noise weighting.
+    cov_reduc : float
+        Covariance reduction factor. Default from constants.
 
     Returns
     -------
@@ -1230,16 +1178,6 @@ def compute_spatial_adjustment_at_points(
     4. Apply MVN conditioning to get posterior mean and variance
     5. Convert back from log-space to linear Vs30
     """
-    # Resolve config defaults
-    cfg = config.get_default_config()
-    max_dist_m = max_dist_m if max_dist_m is not None else constants.MAX_DIST_M
-    max_points = max_points if max_points is not None else constants.MAX_POINTS
-    noisy = noisy if noisy is not None else cfg.noisy
-    cov_reduc = cov_reduc if cov_reduc is not None else constants.COV_REDUC
-
-    if phi is None:
-        phi = constants.PHI[model_type]
-
     n_points = len(points)
     n_obs = len(obs_locations)
 
@@ -1285,7 +1223,9 @@ def compute_spatial_adjustment_at_points(
         omega_obs = np.ones(len(obs_residuals))
 
     # Compute correlation at distance 0 for default variance
-    corr_zero = utils.correlation_function(np.array([0.0]), phi)[0]
+    corr_zero = utils.correlation_function(np.array([0.0]), constants.PHI[model_type])[
+        0
+    ]
 
     # Process each query point
     for i in tqdm(range(n_points), desc="Computing MVN at points", unit="point"):
@@ -1330,10 +1270,12 @@ def compute_spatial_adjustment_at_points(
         # Build covariance matrix
         # First element is query point, rest are nearby observations
         all_locs = np.vstack([point, nearby_locs])
-        dist_matrix = scipy.spatial.distance.cdist(all_locs, all_locs, metric="euclidean")
+        dist_matrix = scipy.spatial.distance.cdist(
+            all_locs, all_locs, metric="euclidean"
+        )
 
         # Apply correlation function
-        corr_matrix = utils.correlation_function(dist_matrix, phi)
+        corr_matrix = utils.correlation_function(dist_matrix, constants.PHI[model_type])
 
         # Scale by standard deviations to get covariance
         stdv_vector = np.concatenate([[prior_stdv], nearby_model_stdv])

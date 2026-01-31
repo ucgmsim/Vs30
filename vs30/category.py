@@ -20,10 +20,6 @@ import sklearn.cluster
 from vs30 import constants
 from vs30 import raster
 
-# ============================================================================
-# Category Assignment Functions
-# ============================================================================
-
 
 def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     """
@@ -90,10 +86,6 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 
     return terrain_ids
 
-
-# ============================================================================
-# Helper Functions for Bayesian Update
-# ============================================================================
 
 
 def compute_bayesian_posterior_mean(
@@ -165,10 +157,6 @@ def compute_bayesian_posterior_variance(
     )
     return pooled_variance / (num_prior_observations + 1)
 
-
-# ============================================================================
-# Bayesian Update Functions
-# ============================================================================
 
 
 def update_with_independent_data(
@@ -561,10 +549,6 @@ def posterior_from_bayesian_update(
 
     return df
 
-
-# ============================================================================
-# Point-Based Query Functions
-# ============================================================================
 
 
 def get_vs30_for_points(
