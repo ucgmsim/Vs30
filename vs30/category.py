@@ -8,8 +8,6 @@ This module is self-contained and includes all functionality needed to:
 3. Perform Bayesian updates of category mean and standard deviation values
 """
 
-import math
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -17,8 +15,7 @@ import rasterio
 import shapely
 import sklearn.cluster
 
-from vs30 import constants
-from vs30 import raster
+from vs30 import constants, raster
 
 
 def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
@@ -116,9 +113,9 @@ def compute_bayesian_posterior_mean(
     """
 
     weighted_log_mean = (
-        num_prior_observations * math.log(prior_mean) + math.log(observation_value)
+        num_prior_observations * np.log(prior_mean) + np.log(observation_value)
     ) / (num_prior_observations + 1)
-    return math.exp(weighted_log_mean)
+    return np.exp(weighted_log_mean)
 
 
 def compute_bayesian_posterior_variance(
@@ -149,7 +146,7 @@ def compute_bayesian_posterior_variance(
     float
         Posterior variance.
     """
-    log_residual = math.log(observation_value) - math.log(prior_mean)
+    log_residual = np.log(observation_value) - np.log(prior_mean)
     mean_shift = (
         num_prior_observations / (num_prior_observations + 1)
     ) * log_residual**2
@@ -283,7 +280,7 @@ def update_with_independent_data(
 
             # Update running values for next iteration
             current_mean = new_mean
-            current_std = math.sqrt(new_variance)
+            current_std = np.sqrt(new_variance)
             current_n += 1
 
         # Write final posterior values for this category
@@ -332,7 +329,10 @@ def perform_clustering(
     sites_df[constants.COL_CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
 
     features = np.column_stack(
-        (sites_df[constants.COL_EASTING].values, sites_df[constants.COL_NORTHING].values)
+        (
+            sites_df[constants.COL_EASTING].values,
+            sites_df[constants.COL_NORTHING].values,
+        )
     )
     model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
     ids = np.array(sorted(set(model_ids)))
@@ -478,7 +478,7 @@ def update_with_clustered_data(
 
         # Compute geometric mean and weighted standard deviation
         log_geometric_mean = weighted_log_vs30_sum / effective_n
-        posterior_array[category_id_int, 0] = math.exp(log_geometric_mean)
+        posterior_array[category_id_int, 0] = np.exp(log_geometric_mean)
         posterior_array[category_id_int, 1] = np.sqrt(
             np.sum(
                 weights
