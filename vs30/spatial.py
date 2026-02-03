@@ -29,10 +29,9 @@ observation points, the model prediction is adjusted toward the measured value,
 with the adjustment magnitude depending on distance and correlation structure.
 """
 
-from dataclasses import dataclass
 import logging
-import math
 import multiprocessing as mp
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -41,10 +40,7 @@ import rasterio
 import scipy
 from tqdm import tqdm
 
-from vs30 import category
-from vs30 import constants
-from vs30 import raster
-from vs30 import utils
+from vs30 import category, constants, raster, utils
 
 # Use spawn context to avoid GDAL fork issues
 _spawn_context = mp.get_context("spawn")
@@ -603,7 +599,6 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
     return chunk_idx, chunk_mask, obs_to_grid_indices
 
 
-
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
@@ -661,7 +656,6 @@ def build_covariance_matrix(
         cov *= np.exp(-cov_reduc * log_dist_matrix)
 
     return cov
-
 
 
 def select_observations_for_pixel(
@@ -775,7 +769,7 @@ def compute_spatial_adjustment_for_pixel(
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
         return SpatialAdjustmentResult(
             updated_vs30=pixel.vs30,
-            updated_stdv=math.sqrt(initial_var),
+            updated_stdv=np.sqrt(initial_var),
             n_observations_used=0,
             min_distance=np.inf,
             pixel_index=pixel.index,
@@ -806,7 +800,7 @@ def compute_spatial_adjustment_for_pixel(
 
     # Update vs30 and stdv
     new_vs30 = pixel.vs30 * np.exp(pred_update)
-    new_stdv = math.sqrt(var)
+    new_stdv = np.sqrt(var)
 
     # Calculate minimum distance
     distances = scipy.spatial.distance.cdist(
@@ -823,7 +817,6 @@ def compute_spatial_adjustment_for_pixel(
         min_distance=float(min_distance),
         pixel_index=pixel.index,
     )
-
 
 
 def subsample_by_cluster(
@@ -1046,7 +1039,6 @@ def find_affected_pixels(
     )
 
 
-
 def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
@@ -1147,7 +1139,6 @@ def compute_spatial_adjustments(
     return all_updates
 
 
-
 def apply_and_write_updates(
     raster_data: RasterData,
     updates: list[SpatialAdjustmentResult],
@@ -1187,7 +1178,6 @@ def apply_and_write_updates(
         f"Wrote updated raster to {output_path} "
         f"({len(updates):,} pixels updated out of {np.sum(raster_data.valid_mask):,} valid)"
     )
-
 
 
 def compute_spatial_adjustment_at_points(
@@ -1328,7 +1318,7 @@ def compute_spatial_adjustment_at_points(
 
         if not np.any(nearby_mask):
             # No nearby observations - apply default variance shrinkage (matching legacy)
-            mvn_stdv[i] = math.sqrt(prior_stdv**2 * corr_zero)
+            mvn_stdv[i] = np.sqrt(prior_stdv**2 * corr_zero)
             continue
 
         # Limit to max_points closest observations
@@ -1394,11 +1384,11 @@ def compute_spatial_adjustment_at_points(
             # Update vs30 in log-space, then convert back
             log_vs30_posterior = np.log(prior_vs30) + pred_adjustment
             mvn_vs30[i] = np.exp(log_vs30_posterior)
-            mvn_stdv[i] = math.sqrt(max(0, posterior_var))
+            mvn_stdv[i] = np.sqrt(max(0, posterior_var))
 
         except np.linalg.LinAlgError:
             # Singular matrix - keep prior values with default variance shrinkage
-            mvn_stdv[i] = math.sqrt(prior_stdv**2 * corr_zero)
+            mvn_stdv[i] = np.sqrt(prior_stdv**2 * corr_zero)
             logger.debug(
                 f"Singular covariance matrix at point {i}, keeping prior values"
             )

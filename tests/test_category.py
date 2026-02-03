@@ -8,14 +8,11 @@ Tests cover:
 - get_vs30_for_points function
 """
 
-import math
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from vs30 import category
-from vs30 import constants
+from vs30 import category, constants
 
 
 class TestBayesianUpdateFormulas:
@@ -29,7 +26,13 @@ class TestBayesianUpdateFormulas:
         prior_mean = 200  # Prior mean
         observation_value = 210  # Observation
 
-        var = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
+        var = category.compute_bayesian_posterior_variance(
+            prior_stdv,
+            num_prior_observations,
+            uncertainty,
+            prior_mean,
+            observation_value,
+        )
 
         # Variance should be positive
         assert var > 0
@@ -43,10 +46,16 @@ class TestBayesianUpdateFormulas:
         posterior_variance = 0.2  # Updated variance
         observation_value = 220  # Observation
 
-        mean = category.compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = category.compute_bayesian_posterior_mean(
+            prior_mean, num_prior_observations, posterior_variance, observation_value
+        )
 
         # New mean should be between prior and observation
-        assert min(prior_mean, observation_value) <= mean <= max(prior_mean, observation_value)
+        assert (
+            min(prior_mean, observation_value)
+            <= mean
+            <= max(prior_mean, observation_value)
+        )
 
     def test_posterior_mean_pulls_toward_observation(self):
         """Test that posterior mean is pulled toward observation."""
@@ -55,7 +64,9 @@ class TestBayesianUpdateFormulas:
         posterior_variance = 0.2
         observation_value = 300  # Observation much higher than prior
 
-        mean = category.compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = category.compute_bayesian_posterior_mean(
+            prior_mean, num_prior_observations, posterior_variance, observation_value
+        )
 
         # Mean should be closer to observation than prior was
         assert mean > prior_mean
@@ -69,11 +80,15 @@ class TestBayesianUpdateFormulas:
 
         # Observation close to prior
         obs_close = 205
-        var_close = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
+        var_close = category.compute_bayesian_posterior_variance(
+            prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close
+        )
 
         # Observation far from prior
         obs_far = 400
-        var_far = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
+        var_far = category.compute_bayesian_posterior_variance(
+            prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far
+        )
 
         # Variance should be higher when observation is far from prior
         assert var_far > var_close
@@ -95,9 +110,17 @@ class TestBayesianUpdateFormulas:
             observation_value = true_value * (1 + np.random.normal(0, 0.05))
             uncertainty = 0.2
 
-            var = category.compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
-            current_mean = category.compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
-            current_std = math.sqrt(var)
+            var = category.compute_bayesian_posterior_variance(
+                current_std,
+                current_num_observations,
+                uncertainty,
+                current_mean,
+                observation_value,
+            )
+            current_mean = category.compute_bayesian_posterior_mean(
+                current_mean, current_num_observations, var, observation_value
+            )
+            current_std = np.sqrt(var)
             current_num_observations += 1
 
         # After many observations, mean should be close to true value
@@ -110,20 +133,24 @@ class TestUpdateWithIndependentData:
     @pytest.fixture
     def sample_categorical_model(self):
         """Create sample categorical model DataFrame."""
-        return pd.DataFrame({
-            "id": [1, 2, 3],
-            "mean_vs30_km_per_s": [200.0, 300.0, 400.0],
-            "standard_deviation_vs30_km_per_s": [0.5, 0.4, 0.3],
-        })
+        return pd.DataFrame(
+            {
+                "id": [1, 2, 3],
+                "mean_vs30_km_per_s": [200.0, 300.0, 400.0],
+                "standard_deviation_vs30_km_per_s": [0.5, 0.4, 0.3],
+            }
+        )
 
     @pytest.fixture
     def sample_observations(self):
         """Create sample observations DataFrame."""
-        return pd.DataFrame({
-            "id": [1, 1, 2],
-            "vs30": [210.0, 195.0, 320.0],
-            "uncertainty": [0.2, 0.2, 0.15],
-        })
+        return pd.DataFrame(
+            {
+                "id": [1, 1, 2],
+                "vs30": [210.0, 195.0, 320.0],
+                "uncertainty": [0.2, 0.2, 0.15],
+            }
+        )
 
     def test_basic_update(self, sample_categorical_model, sample_observations):
         """Test basic Bayesian update with observations."""
@@ -134,13 +161,18 @@ class TestUpdateWithIndependentData:
 
         # Check output has expected columns
         assert "posterior_mean_vs30_km_per_s_independent_observations" in result.columns
-        assert "posterior_standard_deviation_vs30_km_per_s_independent_observations" in result.columns
+        assert (
+            "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+            in result.columns
+        )
         assert "posterior_num_observations_independent_observations" in result.columns
 
         # Category 1 should be updated (has 2 observations)
         # N_PRIOR=3 from constants, so 3 + 2 = 5
         cat1 = result[result["id"] == 1].iloc[0]
-        assert cat1["posterior_num_observations_independent_observations"] == 5  # 3 prior + 2 obs
+        assert (
+            cat1["posterior_num_observations_independent_observations"] == 5
+        )  # 3 prior + 2 obs
 
         # Category 3 should remain unchanged (no observations)
         cat3 = result[result["id"] == 3].iloc[0]
@@ -177,28 +209,34 @@ class TestPerformClustering:
         np.random.seed(42)  # For reproducibility
 
         # Cluster 1: 10 points centered at (0, 0) with ~5km spread
-        cluster1 = pd.DataFrame({
-            "id": [1] * 10,
-            "easting": np.random.normal(0, 2000, 10),
-            "northing": np.random.normal(0, 2000, 10),
-            "vs30": np.random.uniform(180, 220, 10),
-        })
+        cluster1 = pd.DataFrame(
+            {
+                "id": [1] * 10,
+                "easting": np.random.normal(0, 2000, 10),
+                "northing": np.random.normal(0, 2000, 10),
+                "vs30": np.random.uniform(180, 220, 10),
+            }
+        )
 
         # Cluster 2: 10 points centered at (50000, 50000) - 50km away from cluster 1
-        cluster2 = pd.DataFrame({
-            "id": [1] * 10,
-            "easting": 50000 + np.random.normal(0, 2000, 10),
-            "northing": 50000 + np.random.normal(0, 2000, 10),
-            "vs30": np.random.uniform(180, 220, 10),
-        })
+        cluster2 = pd.DataFrame(
+            {
+                "id": [1] * 10,
+                "easting": 50000 + np.random.normal(0, 2000, 10),
+                "northing": 50000 + np.random.normal(0, 2000, 10),
+                "vs30": np.random.uniform(180, 220, 10),
+            }
+        )
 
         # Scattered points: each >20km apart (more than EPS=15km)
-        scattered = pd.DataFrame({
-            "id": [1] * 3,
-            "easting": [100000, 120000, 140000],
-            "northing": [100000, 120000, 140000],
-            "vs30": [200, 210, 190],
-        })
+        scattered = pd.DataFrame(
+            {
+                "id": [1] * 3,
+                "easting": [100000, 120000, 140000],
+                "northing": [100000, 120000, 140000],
+                "vs30": [200, 210, 190],
+            }
+        )
 
         return pd.concat([cluster1, cluster2, scattered], ignore_index=True)
 
@@ -219,12 +257,14 @@ class TestPerformClustering:
     def test_scattered_points_unclustered(self):
         """Test that scattered points (>EPS=15km apart) remain unclustered."""
         # 5 points, each >20km apart (more than EPS=15km)
-        sites = pd.DataFrame({
-            "id": [1] * 5,
-            "easting": [0, 20000, 40000, 60000, 80000],
-            "northing": [0, 20000, 40000, 60000, 80000],
-            "vs30": [200, 210, 190, 205, 195],
-        })
+        sites = pd.DataFrame(
+            {
+                "id": [1] * 5,
+                "easting": [0, 20000, 40000, 60000, 80000],
+                "northing": [0, 20000, 40000, 60000, 80000],
+                "vs30": [200, 210, 190, 205, 195],
+            }
+        )
 
         result = category.perform_clustering(sites, model_type="geology")
 
@@ -235,12 +275,14 @@ class TestPerformClustering:
         """Test that MIN_GROUP=5 is respected - 4 close points don't cluster."""
         # Create 4 points close together (within EPS=15km of each other)
         # But since MIN_GROUP=5, they shouldn't form a cluster
-        sites = pd.DataFrame({
-            "id": [1] * 4,
-            "easting": [0, 1000, 2000, 3000],
-            "northing": [0, 1000, 2000, 3000],
-            "vs30": [200, 200, 200, 200],
-        })
+        sites = pd.DataFrame(
+            {
+                "id": [1] * 4,
+                "easting": [0, 1000, 2000, 3000],
+                "northing": [0, 1000, 2000, 3000],
+                "vs30": [200, 200, 200, 200],
+            }
+        )
 
         result = category.perform_clustering(sites, "geology")
 
@@ -254,11 +296,13 @@ class TestGetVs30ForPoints:
     @pytest.fixture
     def sample_model_df(self):
         """Create sample categorical model DataFrame."""
-        return pd.DataFrame({
-            "id": [1, 2, 3, 4, 5],
-            "mean_vs30_km_per_s": [200.0, 250.0, 300.0, 350.0, 400.0],
-            "standard_deviation_vs30_km_per_s": [0.5, 0.45, 0.4, 0.35, 0.3],
-        })
+        return pd.DataFrame(
+            {
+                "id": [1, 2, 3, 4, 5],
+                "mean_vs30_km_per_s": [200.0, 250.0, 300.0, 350.0, 400.0],
+                "standard_deviation_vs30_km_per_s": [0.5, 0.45, 0.4, 0.35, 0.3],
+            }
+        )
 
     def test_christchurch_point_geology(self, sample_model_df):
         """Test that Christchurch point returns valid geology values."""
@@ -299,11 +343,13 @@ class TestGetVs30ForPoints:
     def test_multiple_points(self, sample_model_df):
         """Test with multiple points."""
         # Multiple NZ locations
-        points = np.array([
-            [1570604, 5180029],  # Christchurch
-            [1757209, 5920482],  # Auckland
-            [1748735, 5427916],  # Wellington
-        ])
+        points = np.array(
+            [
+                [1570604, 5180029],  # Christchurch
+                [1757209, 5920482],  # Auckland
+                [1748735, 5427916],  # Wellington
+            ]
+        )
 
         vs30, stdv, ids = category.get_vs30_for_points(
             points, "geology", sample_model_df
@@ -320,20 +366,24 @@ class TestCategoryEdgeCases:
     def test_update_with_no_matching_observations(self):
         """Test Bayesian update when no observations match a category."""
         # Create categorical model with some categories
-        categorical_model_df = pd.DataFrame({
-            'id': [1, 2, 3],
-            'mean_vs30_km_per_s': [300.0, 400.0, 500.0],
-            'standard_deviation_vs30_km_per_s': [30.0, 40.0, 50.0],
-        })
+        categorical_model_df = pd.DataFrame(
+            {
+                "id": [1, 2, 3],
+                "mean_vs30_km_per_s": [300.0, 400.0, 500.0],
+                "standard_deviation_vs30_km_per_s": [30.0, 40.0, 50.0],
+            }
+        )
 
         # Observations that don't match any category (use STANDARD_ID_COLUMN = 'id')
-        observations_df = pd.DataFrame({
-            'vs30': [350.0],
-            'uncertainty': [25.0],
-            'id': [99],  # Non-existent category - uses 'id' column
-            'easting': [1500000.0],
-            'northing': [5100000.0],
-        })
+        observations_df = pd.DataFrame(
+            {
+                "vs30": [350.0],
+                "uncertainty": [25.0],
+                "id": [99],  # Non-existent category - uses 'id' column
+                "easting": [1500000.0],
+                "northing": [5100000.0],
+            }
+        )
 
         # Should not raise, categories without observations keep prior
         result_df = category.update_with_independent_data(
@@ -342,5 +392,10 @@ class TestCategoryEdgeCases:
         )
 
         # Result should have posterior columns
-        assert 'posterior_mean_vs30_km_per_s_independent_observations' in result_df.columns
-        assert 'posterior_standard_deviation_vs30_km_per_s_independent_observations' in result_df.columns
+        assert (
+            "posterior_mean_vs30_km_per_s_independent_observations" in result_df.columns
+        )
+        assert (
+            "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+            in result_df.columns
+        )
