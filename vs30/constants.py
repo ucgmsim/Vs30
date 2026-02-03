@@ -82,11 +82,9 @@ MIN_GROUP: int = 5
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 EPS: float = 15000.0
 
-# =============================================================================
 # CATEGORICAL MODEL FILES
 # Mean and standard deviation of Vs30 values for each geology and terrain category.
 # Paths are relative to the resources directory.
-# =============================================================================
 
 GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: str = (
     "categorical_vs30_mean_and_stddev/geology/"
@@ -97,11 +95,9 @@ TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: str = (
     "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )
 
-# =============================================================================
 # INTERNAL DATA FILES
 # Filenames for input data files bundled with the package.
 # These are relative to the vs30/data directory.
-# =============================================================================
 
 # Terrain classification raster (IwahashiPike terrain categories)
 TERRAIN_RASTER_FILENAME: str = "IwahashiPike.tif"
@@ -163,10 +159,8 @@ OUTPUT_FILENAMES: dict[str, str] = {
     "terrain": TERRAIN_VS30_MEAN_STDDEV_FILENAME,
 }
 
-# =============================================================================
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
-# =============================================================================
 
 HYBRID_MOD6_DIST_MIN: float = 8000.0
 HYBRID_MOD6_DIST_MAX: float = 20000.0
@@ -228,11 +222,8 @@ RASTER_ID_NODATA_VALUE: int = 255
 # (minimum value for signed 16-bit integers)
 NODATA_VALUE: int = -32767
 
-# =============================================================================
 # FULL NEW ZEALAND LAND EXTENT BOUNDS
 # (For coastal distance calculations)
-# =============================================================================
-
 # IMPORTANT: These values define the full extent of New Zealand land coverage
 # and MUST NOT be changed. They are used to ensure coastal distance calculations
 # are computed on the full NZ land extent, regardless of the configured study
@@ -279,10 +270,8 @@ NZTM_CRS: str = "EPSG:2193"
 PLOT_FIGSIZE: list[int] = [12, 8]
 PLOT_DPI: int = 300
 
-# =============================================================================
 # OBSERVATION DATA COLUMN NAMES
 # Standard column names for observation DataFrames used throughout the package.
-# =============================================================================
 
 COL_EASTING: str = "easting"
 COL_NORTHING: str = "northing"
@@ -306,37 +295,29 @@ REQUIRED_OBSERVATION_COLUMNS_BASIC: list[str] = [
     COL_VS30,
 ]
 
-# =============================================================================
 # MODEL TYPE IDENTIFIERS
 # String identifiers for the two model types used in the Vs30 pipeline.
-# =============================================================================
 
 MODEL_TYPE_GEOLOGY: str = "geology"
 MODEL_TYPE_TERRAIN: str = "terrain"
 VALID_MODEL_TYPES: list[str] = [MODEL_TYPE_GEOLOGY, MODEL_TYPE_TERRAIN]
 
-# =============================================================================
 # RASTER BAND INDICES
 # Band numbers for multi-band VS30 rasters (1-indexed as per rasterio convention).
-# =============================================================================
 
 RASTER_BAND_VS30: int = 1
 RASTER_BAND_STDV: int = 2
 
-# =============================================================================
 # GEOTIFF OPTIONS
 # Standard options for writing GeoTIFF raster files.
-# =============================================================================
 
 GEOTIFF_DRIVER: str = "GTiff"
 GEOTIFF_COMPRESSION: str = "deflate"
 GEOTIFF_TILED: bool = True
 GEOTIFF_BIGTIFF: str = "yes"
 
-# =============================================================================
 # RASTER BAND DESCRIPTIONS
 # Standard descriptions for raster bands.
-# =============================================================================
 
 BAND_DESCRIPTION_ID_INDEX: str = "Model ID Index"
 BAND_DESCRIPTION_VS30: str = "Vs30"
@@ -348,26 +329,20 @@ BAND_DESCRIPTION_STDV_COMBINED: str = "Standard Deviation (Combined Average)"
 BAND_DESCRIPTION_COAST_DISTANCE: str = "Distance to Coast (m)"
 BAND_DESCRIPTION_SLOPE: str = "Slope"
 
-# =============================================================================
 # SHAPEFILE COLUMN NAMES
 # Column names used in input shapefiles.
-# =============================================================================
 
 SHAPEFILE_GEOLOGY_ID_COLUMN: str = "gid"
 SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
 
-# =============================================================================
 # SPATIAL PROCESSING CONSTANTS
 # Constants used in spatial coordinate and pixel calculations.
-# =============================================================================
 
 # Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
 PIXEL_CENTER_OFFSET: float = 0.5
 
-# =============================================================================
 # PLOT STYLING CONSTANTS
 # Standard styling parameters for matplotlib plots.
-# =============================================================================
 
 PLOT_X_OFFSET: float = 0.2
 PLOT_ERRORBAR_CAPSIZE: int = 5
