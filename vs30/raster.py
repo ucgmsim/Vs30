@@ -98,28 +98,6 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
         )
 
 
-def ensure_qmap_shapefile_extracted() -> None:
-    """
-    Ensure qmap.shp shapefile is extracted from shapefiles.tar.xz.
-
-    This shapefile is required for geology ID raster creation.
-    """
-    ensure_shapefile_extracted(
-        constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
-    )
-
-
-def ensure_coast_shapefile_extracted() -> None:
-    """
-    Ensure coast shapefile is extracted from shapefiles.tar.xz.
-
-    This shapefile is required for creating coastal distance rasters.
-    """
-    ensure_shapefile_extracted(
-        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
-    )
-
-
 def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     """
     Load model values (vs30 mean and standard deviation) from CSV file.
@@ -270,7 +248,9 @@ def create_category_id_raster(
 
     else:  # geology
         # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
-        ensure_qmap_shapefile_extracted()
+        ensure_shapefile_extracted(
+            constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+        )
 
         # Rasterize geology shapefile to target grid
         geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
@@ -409,7 +389,9 @@ def create_vs30_raster_from_ids(
     logger.info(f"Creating VS30 raster: {output_path}")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    ensure_qmap_shapefile_extracted()
+    ensure_shapefile_extracted(
+        constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+    )
 
     # Load CSV and create ID-to-values mapping
     csv_file_path = constants.RESOURCE_PATH / csv_path
@@ -510,7 +492,9 @@ def create_coast_distance_raster(
         - The updated profile used for saving.
     """
     logger.info("Creating coast distance raster...")
-    ensure_coast_shapefile_extracted()
+    ensure_shapefile_extracted(
+        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
+    )
 
     # Get template bounds for final output extent
     dx = template_profile["transform"].a
