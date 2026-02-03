@@ -18,11 +18,6 @@ from rasterio import transform
 from vs30 import config
 from vs30 import constants
 
-
-# =============================================================================
-# TEST CONSTANTS
-# =============================================================================
-
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
 BENCHMARKS_DIR: Path = TESTS_DIR / "benchmarks"
@@ -38,11 +33,6 @@ TEST_RASTER_NODATA: float = -9999.0
 TEST_RTOL: float = 1e-5
 TEST_ATOL: float = 1e-8
 
-
-# =============================================================================
-# CONFIG UTILITIES
-# =============================================================================
-
 def reset_default_config() -> None:
     """
     Reset the cached default configuration.
@@ -51,11 +41,6 @@ def reset_default_config() -> None:
     (e.g., after modifying config.yaml during testing).
     """
     config._default_config = None
-
-
-# =============================================================================
-# SHARED FIXTURES
-# =============================================================================
 
 @pytest.fixture
 def temp_dir() -> Path:
@@ -121,11 +106,6 @@ def sample_vs30_raster(temp_dir: Path) -> Path:
         dst.write(stdv_data, constants.RASTER_BAND_STDV)
 
     return raster_path
-
-
-# =============================================================================
-# COMPARISON UTILITIES
-# =============================================================================
 
 def compare_rasters(
     actual_path: Path,
