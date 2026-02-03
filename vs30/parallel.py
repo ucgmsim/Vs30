@@ -259,7 +259,24 @@ def process_terrain_at_points(
 
 @dataclass
 class LocationsChunkConfig:
-    """Configuration parameters for processing a locations chunk."""
+    """
+    Configuration parameters for processing a locations chunk.
+
+    Attributes
+    ----------
+    lon_column : str
+        Name of longitude column in input CSV.
+    lat_column : str
+        Name of latitude column in input CSV.
+    include_intermediate : bool
+        Whether to include intermediate values in output.
+    combination_method : str or float
+        Method for combining geology and terrain models.
+    coast_distance_raster : Path or None
+        Path to coastal distance raster for hybrid modifications.
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
+    """
 
     lon_column: str
     lat_column: str

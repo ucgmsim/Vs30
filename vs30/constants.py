@@ -31,6 +31,8 @@ PHI_GEOLOGY: int = 1407
 PHI_TERRAIN: int = 993
 
 # Dictionary for convenient access by model type
+# Note: Keys are literal strings here since MODEL_TYPE_* constants are defined later.
+# This maintains backward compatibility while PHI is used before MODEL_TYPE_* definitions.
 PHI: dict[str, int] = {"geology": PHI_GEOLOGY, "terrain": PHI_TERRAIN}
 
 # Minimum distance (meters) enforced in correlation calculations to prevent
@@ -52,6 +54,9 @@ MAX_POINTS: int = 500
 # terrain models. Represents the exponent for inverse variance weighting:
 # weight ~ (sigma^2)^-k. Only used when combination_method is "standard_deviation_weighting".
 K_VALUE: float = 3.0
+
+# Combination method string for standard deviation weighting
+COMBINATION_METHOD_STDV_WEIGHTING: str = "standard_deviation_weighting"
 
 # Small epsilon value added to variance when computing inverse-variance weights
 # for combining geology and terrain models. Prevents division by zero when
@@ -176,7 +181,18 @@ HYBRID_MOD13_VS30_MAX: float = 500.0
 
 @dataclass
 class HybridVs30Param:
-    """Parameters for slope-based Vs30 interpolation per geology group."""
+    """
+    Parameters for slope-based Vs30 interpolation per geology group.
+
+    Attributes
+    ----------
+    gid : int
+        Geology group ID.
+    slope_limits : list[float]
+        Log10(slope) limits for interpolation [min, max].
+    vs30_values : list[float]
+        Vs30 values (m/s) at the slope limits [at_min_slope, at_max_slope].
+    """
 
     gid: int
     slope_limits: list[float]
@@ -238,6 +254,9 @@ COL_POSTERIOR_MEAN_INDEPENDENT: str = (
 COL_POSTERIOR_STDV_INDEPENDENT: str = (
     "posterior_standard_deviation_vs30_km_per_s_independent_observations"
 )
+COL_POSTERIOR_NOBS_INDEPENDENT: str = (
+    "posterior_num_observations_independent_observations"
+)
 COL_POSTERIOR_MEAN_CLUSTERED: str = (
     "posterior_mean_vs30_km_per_s_clustered_observations"
 )
@@ -259,3 +278,103 @@ NZTM_CRS: str = "EPSG:2193"
 
 PLOT_FIGSIZE: list[int] = [12, 8]
 PLOT_DPI: int = 300
+
+# =============================================================================
+# OBSERVATION DATA COLUMN NAMES
+# Standard column names for observation DataFrames used throughout the package.
+# =============================================================================
+
+COL_EASTING: str = "easting"
+COL_NORTHING: str = "northing"
+COL_VS30: str = "vs30"
+COL_UNCERTAINTY: str = "uncertainty"
+COL_CLUSTER: str = "cluster"
+
+# Cluster label for unclustered/noise points in DBSCAN output
+CLUSTER_UNCLUSTERED_LABEL: int = -1
+
+# Required columns for observation DataFrames
+REQUIRED_OBSERVATION_COLUMNS: list[str] = [
+    COL_EASTING,
+    COL_NORTHING,
+    COL_VS30,
+    COL_UNCERTAINTY,
+]
+REQUIRED_OBSERVATION_COLUMNS_BASIC: list[str] = [
+    COL_EASTING,
+    COL_NORTHING,
+    COL_VS30,
+]
+
+# =============================================================================
+# MODEL TYPE IDENTIFIERS
+# String identifiers for the two model types used in the Vs30 pipeline.
+# =============================================================================
+
+MODEL_TYPE_GEOLOGY: str = "geology"
+MODEL_TYPE_TERRAIN: str = "terrain"
+VALID_MODEL_TYPES: list[str] = [MODEL_TYPE_GEOLOGY, MODEL_TYPE_TERRAIN]
+
+# =============================================================================
+# RASTER BAND INDICES
+# Band numbers for multi-band VS30 rasters (1-indexed as per rasterio convention).
+# =============================================================================
+
+RASTER_BAND_VS30: int = 1
+RASTER_BAND_STDV: int = 2
+
+# =============================================================================
+# GEOTIFF OPTIONS
+# Standard options for writing GeoTIFF raster files.
+# =============================================================================
+
+GEOTIFF_DRIVER: str = "GTiff"
+GEOTIFF_COMPRESSION: str = "deflate"
+GEOTIFF_TILED: bool = True
+GEOTIFF_BIGTIFF: str = "yes"
+
+# =============================================================================
+# RASTER BAND DESCRIPTIONS
+# Standard descriptions for raster bands.
+# =============================================================================
+
+BAND_DESCRIPTION_ID_INDEX: str = "Model ID Index"
+BAND_DESCRIPTION_VS30: str = "Vs30"
+BAND_DESCRIPTION_STDV: str = "Standard Deviation"
+BAND_DESCRIPTION_VS30_HYBRID: str = "Vs30 (Hybrid)"
+BAND_DESCRIPTION_STDV_HYBRID: str = "Standard Deviation (Hybrid)"
+BAND_DESCRIPTION_VS30_COMBINED: str = "Vs30 (Combined Average)"
+BAND_DESCRIPTION_STDV_COMBINED: str = "Standard Deviation (Combined Average)"
+BAND_DESCRIPTION_COAST_DISTANCE: str = "Distance to Coast (m)"
+BAND_DESCRIPTION_SLOPE: str = "Slope"
+
+# =============================================================================
+# SHAPEFILE COLUMN NAMES
+# Column names used in input shapefiles.
+# =============================================================================
+
+SHAPEFILE_GEOLOGY_ID_COLUMN: str = "gid"
+SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
+
+# =============================================================================
+# SPATIAL PROCESSING CONSTANTS
+# Constants used in spatial coordinate and pixel calculations.
+# =============================================================================
+
+# Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
+PIXEL_CENTER_OFFSET: float = 0.5
+
+# =============================================================================
+# PLOT STYLING CONSTANTS
+# Standard styling parameters for matplotlib plots.
+# =============================================================================
+
+PLOT_X_OFFSET: float = 0.2
+PLOT_ERRORBAR_CAPSIZE: int = 5
+PLOT_ERRORBAR_CAPTHICK: float = 1.5
+PLOT_MARKER_SIZE: int = 6
+PLOT_ALPHA: float = 0.7
+PLOT_GRID_ALPHA: float = 0.3
+PLOT_LABEL_FONTSIZE: int = 12
+PLOT_TITLE_FONTSIZE: int = 14
+PLOT_LEGEND_FONTSIZE: int = 11

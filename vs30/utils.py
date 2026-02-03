@@ -1,7 +1,14 @@
+"""
+Shared utility functions for the vs30 package.
+
+This module provides general-purpose functions used across multiple modules,
+including the exponential correlation function for spatial interpolation and
+the model combination algorithm.
+"""
+
 import numpy as np
 
 from vs30 import constants
-
 
 
 def correlation_function(
@@ -89,7 +96,7 @@ def combine_vs30_models(
     for standard deviation weighting calculations.
     """
     # Determine weights based on combination method
-    if str(combination_method).strip() == "standard_deviation_weighting":
+    if str(combination_method).strip() == constants.COMBINATION_METHOD_STDV_WEIGHTING:
         # Variance-based weighting: lower stdv gets higher weight
         m_g = (
             geol_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO

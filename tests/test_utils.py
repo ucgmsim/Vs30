@@ -9,10 +9,7 @@ Tests cover:
 import numpy as np
 import pytest
 
-from vs30.utils import (
-    combine_vs30_models,
-    correlation_function,
-)
+from vs30 import utils
 
 
 class TestCorrelationFunction:
@@ -23,7 +20,7 @@ class TestCorrelationFunction:
         distances = np.array([0.1])  # Very small distance
         phi = 1000
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         # Should be very close to 1
         assert corr[0] > 0.99
@@ -33,7 +30,7 @@ class TestCorrelationFunction:
         distances = np.array([10000])  # 10km
         phi = 1000  # 1km correlation length
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         # Should be close to exp(-10) ≈ 0.000045
         assert corr[0] < 0.01
@@ -43,7 +40,7 @@ class TestCorrelationFunction:
         phi = 1000
         distances = np.array([phi])
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         # At distance = phi, correlation should be 1/e ≈ 0.368
         expected = 1 / np.exp(1)
@@ -54,7 +51,7 @@ class TestCorrelationFunction:
         distances = np.array([100, 500, 1000, 2000, 5000])
         phi = 1000
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         # Correlations should be monotonically decreasing
         for i in range(len(corr) - 1):
@@ -65,7 +62,7 @@ class TestCorrelationFunction:
         distances = np.random.rand(100) * 50000  # 0 to 50km
         phi = 1000
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         assert (corr >= 0).all()
         assert (corr <= 1).all()
@@ -79,7 +76,7 @@ class TestCorrelationFunction:
         ])
         phi = 1000
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         assert corr.shape == (3, 3)
         # Diagonal should have highest correlation
@@ -89,8 +86,8 @@ class TestCorrelationFunction:
         """Test that larger phi gives higher correlation at same distance."""
         distance = np.array([1000])
 
-        corr_small_phi = correlation_function(distance, phi=500)
-        corr_large_phi = correlation_function(distance, phi=2000)
+        corr_small_phi = utils.correlation_function(distance, phi=500)
+        corr_large_phi = utils.correlation_function(distance, phi=2000)
 
         # Larger phi means slower decay, so higher correlation at same distance
         assert corr_large_phi[0] > corr_small_phi[0]
@@ -104,7 +101,7 @@ class TestUtilsEdgeCases:
         distances = np.array([1000000.0])  # 1000 km
         phi = 1000.0  # 1 km correlation length
 
-        corr = correlation_function(distances, phi)
+        corr = utils.correlation_function(distances, phi)
 
         assert corr[0] < 0.001  # Should be essentially zero
 
@@ -124,7 +121,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])
 
-        combined_vs30, combined_stdv = combine_vs30_models(
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method=1.0,  # Equal weighting
         )
@@ -142,7 +139,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])
 
-        combined_vs30, combined_stdv = combine_vs30_models(
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method=2.0,  # Geology has 2x weight
         )
@@ -164,7 +161,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])
 
-        combined_vs30, _ = combine_vs30_models(
+        combined_vs30, _ = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method=100.0,  # Very high geology weight
         )
@@ -180,7 +177,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.5])  # High uncertainty
 
-        combined_vs30, _ = combine_vs30_models(
+        combined_vs30, _ = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method="standard_deviation_weighting",
         )
@@ -197,7 +194,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])  # Same stdv as geology
 
-        combined_vs30, _ = combine_vs30_models(
+        combined_vs30, _ = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method="standard_deviation_weighting",
         )
@@ -213,7 +210,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.4])
 
-        combined_vs30, combined_stdv = combine_vs30_models(
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method=1.0,  # Equal weighting
         )
@@ -236,7 +233,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0, 300.0, 200.0])
         terr_stdv = np.array([0.3, 0.2, 0.4])
 
-        combined_vs30, combined_stdv = combine_vs30_models(
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_vs30, geol_stdv, terr_vs30, terr_stdv,
             combination_method=1.0,
         )
@@ -255,8 +252,7 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.3])
 
         with pytest.raises(ValueError, match="Unknown combination method"):
-            combine_vs30_models(
+            utils.combine_vs30_models(
                 geol_vs30, geol_stdv, terr_vs30, terr_stdv,
                 combination_method="invalid_method",
             )
-

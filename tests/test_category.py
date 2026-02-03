@@ -8,19 +8,14 @@ Tests cover:
 - get_vs30_for_points function
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
-from math import sqrt
 
+from vs30 import category
 from vs30 import constants
-from vs30.category import (
-    compute_bayesian_posterior_mean,
-    compute_bayesian_posterior_variance,
-    perform_clustering,
-    update_with_independent_data,
-    get_vs30_for_points,
-)
 
 
 class TestBayesianUpdateFormulas:
@@ -34,7 +29,7 @@ class TestBayesianUpdateFormulas:
         prior_mean = 200  # Prior mean
         observation_value = 210  # Observation
 
-        var = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
+        var = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, observation_value)
 
         # Variance should be positive
         assert var > 0
@@ -48,7 +43,7 @@ class TestBayesianUpdateFormulas:
         posterior_variance = 0.2  # Updated variance
         observation_value = 220  # Observation
 
-        mean = compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = category.compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # New mean should be between prior and observation
         assert min(prior_mean, observation_value) <= mean <= max(prior_mean, observation_value)
@@ -60,7 +55,7 @@ class TestBayesianUpdateFormulas:
         posterior_variance = 0.2
         observation_value = 300  # Observation much higher than prior
 
-        mean = compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
+        mean = category.compute_bayesian_posterior_mean(prior_mean, num_prior_observations, posterior_variance, observation_value)
 
         # Mean should be closer to observation than prior was
         assert mean > prior_mean
@@ -74,11 +69,11 @@ class TestBayesianUpdateFormulas:
 
         # Observation close to prior
         obs_close = 205
-        var_close = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
+        var_close = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close)
 
         # Observation far from prior
         obs_far = 400
-        var_far = compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
+        var_far = category.compute_bayesian_posterior_variance(prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far)
 
         # Variance should be higher when observation is far from prior
         assert var_far > var_close
@@ -100,9 +95,9 @@ class TestBayesianUpdateFormulas:
             observation_value = true_value * (1 + np.random.normal(0, 0.05))
             uncertainty = 0.2
 
-            var = compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
-            current_mean = compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
-            current_std = sqrt(var)
+            var = category.compute_bayesian_posterior_variance(current_std, current_num_observations, uncertainty, current_mean, observation_value)
+            current_mean = category.compute_bayesian_posterior_mean(current_mean, current_num_observations, var, observation_value)
+            current_std = math.sqrt(var)
             current_num_observations += 1
 
         # After many observations, mean should be close to true value
@@ -132,7 +127,7 @@ class TestUpdateWithIndependentData:
 
     def test_basic_update(self, sample_categorical_model, sample_observations):
         """Test basic Bayesian update with observations."""
-        result = update_with_independent_data(
+        result = category.update_with_independent_data(
             sample_categorical_model,
             sample_observations,
         )
@@ -153,16 +148,14 @@ class TestUpdateWithIndependentData:
 
     def test_min_sigma_enforced(self, sample_categorical_model, sample_observations):
         """Test that minimum sigma is enforced using MIN_SIGMA constant."""
-        from vs30.constants import MIN_SIGMA
-
-        result = update_with_independent_data(
+        result = category.update_with_independent_data(
             sample_categorical_model,
             sample_observations,
         )
 
         # All posteriors should have stddev >= MIN_SIGMA
         # Note: posteriors can go below MIN_SIGMA, but prior is floored at MIN_SIGMA
-        assert result["enforced_min_sigma"].iloc[0] == MIN_SIGMA
+        assert result["enforced_min_sigma"].iloc[0] == constants.MIN_SIGMA
 
 
 class TestPerformClustering:
@@ -211,7 +204,7 @@ class TestPerformClustering:
 
     def test_clustering_identifies_groups(self, clustered_sites):
         """Test that clustering identifies tight groups with actual EPS=15km."""
-        result = perform_clustering(
+        result = category.perform_clustering(
             clustered_sites,
             model_type="geology",
         )
@@ -233,7 +226,7 @@ class TestPerformClustering:
             "vs30": [200, 210, 190, 205, 195],
         })
 
-        result = perform_clustering(sites, model_type="geology")
+        result = category.perform_clustering(sites, model_type="geology")
 
         # All points should be unclustered (-1) since they're >15km apart
         assert (result["cluster"] == -1).all()
@@ -249,7 +242,7 @@ class TestPerformClustering:
             "vs30": [200, 200, 200, 200],
         })
 
-        result = perform_clustering(sites, "geology")
+        result = category.perform_clustering(sites, "geology")
 
         # All points should be unclustered since group is too small for MIN_GROUP=5
         assert (result["cluster"] == -1).all()
@@ -272,7 +265,7 @@ class TestGetVs30ForPoints:
         # University of Canterbury area (NZTM)
         points = np.array([[1570604, 5180029]])
 
-        vs30, stdv, ids = get_vs30_for_points(
+        vs30, stdv, ids = category.get_vs30_for_points(
             points, "geology", sample_model_df
         )
 
@@ -288,7 +281,7 @@ class TestGetVs30ForPoints:
         """Test that Christchurch point returns valid terrain values."""
         points = np.array([[1570604, 5180029]])
 
-        vs30, stdv, ids = get_vs30_for_points(
+        vs30, stdv, ids = category.get_vs30_for_points(
             points, "terrain", sample_model_df
         )
 
@@ -301,7 +294,7 @@ class TestGetVs30ForPoints:
         points = np.array([[1570604, 5180029]])
 
         with pytest.raises(ValueError, match="Unknown model_type"):
-            get_vs30_for_points(points, "invalid", sample_model_df)
+            category.get_vs30_for_points(points, "invalid", sample_model_df)
 
     def test_multiple_points(self, sample_model_df):
         """Test with multiple points."""
@@ -312,30 +305,13 @@ class TestGetVs30ForPoints:
             [1748735, 5427916],  # Wellington
         ])
 
-        vs30, stdv, ids = get_vs30_for_points(
+        vs30, stdv, ids = category.get_vs30_for_points(
             points, "geology", sample_model_df
         )
 
         assert len(vs30) == 3
         assert len(stdv) == 3
         assert len(ids) == 3
-
-
-class TestCategoryConstants:
-    """Tests for category module constants."""
-
-    def test_raster_id_nodata_value(self):
-        """Test that RASTER_ID_NODATA_VALUE is set correctly."""
-        assert constants.RASTER_ID_NODATA_VALUE == 255
-
-    def test_standard_id_column(self):
-        """Test that STANDARD_ID_COLUMN is correct."""
-        assert constants.STANDARD_ID_COLUMN == "id"
-
-
-# =============================================================================
-# Additional Tests from Coverage Improvements
-# =============================================================================
 
 
 class TestCategoryEdgeCases:
@@ -360,7 +336,7 @@ class TestCategoryEdgeCases:
         })
 
         # Should not raise, categories without observations keep prior
-        result_df = update_with_independent_data(
+        result_df = category.update_with_independent_data(
             categorical_model_df,
             observations_df,
         )

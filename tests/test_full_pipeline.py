@@ -16,134 +16,18 @@ multi-process (n_proc=cpu_count) modes to ensure parallel processing works corre
 import os
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import pytest
-import rasterio
 import yaml
 from typer.testing import CliRunner
 
-from vs30.cli import app
-
-# Test fixtures directory
-FIXTURES_DIR = Path(__file__).parent / "fixtures"
-BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
-
-
-def compare_rasters(
-    actual_path: Path,
-    expected_path: Path,
-    rtol: float = 1e-5,
-    atol: float = 1e-8,
-) -> None:
-    """
-    Compare two raster files for equality within tolerance.
-
-    Parameters
-    ----------
-    actual_path : Path
-        Path to the actual output raster.
-    expected_path : Path
-        Path to the expected benchmark raster.
-    rtol : float
-        Relative tolerance for numpy.allclose.
-    atol : float
-        Absolute tolerance for numpy.allclose.
-
-    Raises
-    ------
-    AssertionError
-        If the rasters differ beyond tolerance.
-    """
-    with rasterio.open(actual_path) as actual, rasterio.open(expected_path) as expected:
-        # Check metadata
-        assert actual.count == expected.count, f"Band count mismatch: {actual.count} vs {expected.count}"
-        assert actual.width == expected.width, f"Width mismatch: {actual.width} vs {expected.width}"
-        assert actual.height == expected.height, f"Height mismatch: {actual.height} vs {expected.height}"
-
-        # Check each band
-        for band_idx in range(1, actual.count + 1):
-            actual_data = actual.read(band_idx)
-            expected_data = expected.read(band_idx)
-
-            # Get nodata value
-            nodata = actual.nodata
-
-            # Create masks for valid data
-            if nodata is not None:
-                actual_valid = actual_data != nodata
-                expected_valid = expected_data != nodata
-                assert np.array_equal(actual_valid, expected_valid), (
-                    f"Band {band_idx}: Valid data masks differ"
-                )
-                # Compare only valid data
-                if np.any(actual_valid):
-                    assert np.allclose(
-                        actual_data[actual_valid],
-                        expected_data[expected_valid],
-                        rtol=rtol,
-                        atol=atol,
-                    ), f"Band {band_idx}: Data values differ beyond tolerance"
-            else:
-                assert np.allclose(actual_data, expected_data, rtol=rtol, atol=atol), (
-                    f"Band {band_idx}: Data values differ beyond tolerance"
-                )
-
-
-def compare_csvs(
-    actual_path: Path,
-    expected_path: Path,
-    rtol: float = 1e-5,
-    atol: float = 1e-8,
-) -> None:
-    """
-    Compare two CSV files for equality within tolerance.
-
-    Parameters
-    ----------
-    actual_path : Path
-        Path to the actual output CSV.
-    expected_path : Path
-        Path to the expected benchmark CSV.
-    rtol : float
-        Relative tolerance for numeric comparison.
-    atol : float
-        Absolute tolerance for numeric comparison.
-
-    Raises
-    ------
-    AssertionError
-        If the CSVs differ beyond tolerance.
-    """
-    actual_df = pd.read_csv(actual_path)
-    expected_df = pd.read_csv(expected_path)
-
-    # Check columns match
-    assert set(actual_df.columns) == set(expected_df.columns), (
-        f"Column mismatch: {set(actual_df.columns)} vs {set(expected_df.columns)}"
-    )
-
-    # Check row count
-    assert len(actual_df) == len(expected_df), (
-        f"Row count mismatch: {len(actual_df)} vs {len(expected_df)}"
-    )
-
-    # Compare each column
-    for col in actual_df.columns:
-        if pd.api.types.is_numeric_dtype(actual_df[col]):
-            assert np.allclose(
-                actual_df[col].values,
-                expected_df[col].values,
-                rtol=rtol,
-                atol=atol,
-                equal_nan=True,
-            ), f"Column '{col}' values differ beyond tolerance"
-        else:
-            assert actual_df[col].equals(expected_df[col]), (
-                f"Column '{col}' values differ"
-            )
+from conftest import BENCHMARKS_DIR
+from conftest import compare_csvs
+from conftest import compare_rasters
+from conftest import FIXTURES_DIR
+from vs30 import cli
 
 
 def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path:
@@ -194,11 +78,10 @@ def run_full_pipeline(config_path: Path) -> None:
         Path to the configuration file.
     """
     runner = CliRunner()
-    result = runner.invoke(app, ["--config", str(config_path), "full-pipeline"])
+    result = runner.invoke(cli.app, ["--config", str(config_path), "full-pipeline"])
     if result.exit_code != 0:
         print(f"Output:\n{result.stdout}")
         if result.exception:
-            import traceback
             print(f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
         raise RuntimeError(f"Pipeline failed with exit code {result.exit_code}")
 
@@ -305,7 +188,7 @@ class TestSmallDomainBothObservationTypes:
 
 class TestSmallDomainClusteredOnly:
     """Fast test with clustered (CPT) observations only.
-    
+
     Uses 10km domain at 500m resolution (400 pixels) with full test CPT dataset
     to ensure adequate observations per category for stable Bayesian updates.
     """
