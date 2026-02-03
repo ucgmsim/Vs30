@@ -36,6 +36,43 @@ class Vs30Config(pydantic.BaseModel):
     detailed descriptions of each parameter's meaning and units.
 
     For scientific/algorithmic constants, see vs30/constants.py.
+
+    Attributes
+    ----------
+    n_proc : int
+        Number of processors for parallel processing (-1 for all cores).
+    grid_xmin : int
+        Grid minimum X coordinate (NZTM, meters).
+    grid_xmax : int
+        Grid maximum X coordinate (NZTM, meters).
+    grid_ymin : int
+        Grid minimum Y coordinate (NZTM, meters).
+    grid_ymax : int
+        Grid maximum Y coordinate (NZTM, meters).
+    grid_dx : int
+        Grid X spacing (meters).
+    grid_dy : int
+        Grid Y spacing (meters).
+    locations_csv : str or None
+        Path to input CSV with locations for compute-at-locations.
+    locations_output_csv : str or None
+        Path to output CSV for compute-at-locations results.
+    noisy : bool
+        Whether measurements are noisy (affects uncertainty weighting).
+    max_spatial_boolean_array_memory_gb : float
+        Maximum memory (GB) for spatial boolean arrays per process.
+    obs_subsample_step_for_clustered : int
+        Subsampling step for clustered observations in affected pixel search.
+    independent_observations_file : str or None
+        Path to independent observations CSV (relative to resources).
+    clustered_observations_file : str or None
+        Path to clustered observations CSV (relative to resources).
+    output_dir : str
+        Output directory path.
+    combination_method : str or float
+        Method for combining models: ratio (float) or 'standard_deviation_weighting'.
+    do_bayesian_update_of_geology_and_terrain_categorical_vs30_values : bool
+        Whether to perform Bayesian update of categorical values.
     """
 
     # --- Processor settings ---

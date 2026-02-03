@@ -40,7 +40,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     """
     # load QMAP polygons (keeps CRS from file)
     gdf = gpd.read_file(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
-        ["gid", "geometry"]
+        [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
 
     # Build point GeoDataFrame (ensure float64)
@@ -52,8 +52,10 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
 
     # Default to ID_NODATA, fill with gid where available
     values = np.full(len(points), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
-    value_mask = ~joined["gid"].isna()
-    values[value_mask] = joined.loc[value_mask, "gid"].values
+    value_mask = ~joined[constants.SHAPEFILE_GEOLOGY_ID_COLUMN].isna()
+    values[value_mask] = joined.loc[
+        value_mask, constants.SHAPEFILE_GEOLOGY_ID_COLUMN
+    ].values
 
     return values
 
@@ -85,7 +87,6 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
             terrain_ids[terrain_ids == src.nodata] = constants.RASTER_ID_NODATA_VALUE
 
     return terrain_ids
-
 
 
 def compute_bayesian_posterior_mean(
@@ -156,7 +157,6 @@ def compute_bayesian_posterior_variance(
         num_prior_observations * prior_stdv**2 + uncertainty**2 + mean_shift
     )
     return pooled_variance / (num_prior_observations + 1)
-
 
 
 def update_with_independent_data(
@@ -241,7 +241,7 @@ def update_with_independent_data(
     # Initialize posterior columns
     post_mean_col = constants.COL_POSTERIOR_MEAN_INDEPENDENT
     post_std_col = constants.COL_POSTERIOR_STDV_INDEPENDENT
-    post_n_col = "posterior_num_observations_independent_observations"
+    post_n_col = constants.COL_POSTERIOR_NOBS_INDEPENDENT
 
     updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
     updated_categorical_model_df["enforced_min_sigma"] = min_sigma
@@ -269,16 +269,16 @@ def update_with_independent_data(
             new_variance = compute_bayesian_posterior_variance(
                 current_std,
                 current_n,
-                observation_row["uncertainty"],
+                observation_row[constants.COL_UNCERTAINTY],
                 current_mean,
-                observation_row["vs30"],
+                observation_row[constants.COL_VS30],
             )
 
             new_mean = compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
                 new_variance,
-                observation_row["vs30"],
+                observation_row[constants.COL_VS30],
             )
 
             # Update running values for next iteration
@@ -327,12 +327,13 @@ def perform_clustering(
     -----
     Uses MIN_GROUP and EPS constants from constants.py for DBSCAN parameters.
     """
-    min_group = constants.MIN_GROUP
     sites_df = sites_df.copy()
-    # Default not a member of any cluster (-1)
-    sites_df["cluster"] = -1
+    # Default not a member of any cluster
+    sites_df[constants.COL_CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
 
-    features = np.column_stack((sites_df.easting.values, sites_df.northing.values))
+    features = np.column_stack(
+        (sites_df[constants.COL_EASTING].values, sites_df[constants.COL_NORTHING].values)
+    )
     model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
     ids = np.array(sorted(set(model_ids)))
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
@@ -340,17 +341,17 @@ def perform_clustering(
     for category_id in ids:
         subset_mask = model_ids == category_id
         subset = features[subset_mask]
-        if subset.shape[0] < min_group:
+        if subset.shape[0] < constants.MIN_GROUP:
             # Can't form any groups
             continue
 
         dbscan = sklearn.cluster.DBSCAN(
-            eps=constants.EPS, min_samples=min_group, n_jobs=nproc
+            eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
         )
         dbscan.fit(subset)
 
         # Save labels
-        sites_df.loc[subset_mask, "cluster"] = dbscan.labels_
+        sites_df.loc[subset_mask, constants.COL_CLUSTER] = dbscan.labels_
 
     return sites_df
 
@@ -358,7 +359,6 @@ def perform_clustering(
 def update_with_clustered_data(
     prior_df: pd.DataFrame,
     sites_df: pd.DataFrame,
-    model_type: str = "",
 ) -> pd.DataFrame:
     """
     Perform Bayesian update for clustered CPT data.
@@ -374,8 +374,6 @@ def update_with_clustered_data(
         Prior categorical model with mean and standard deviation columns.
     sites_df : DataFrame
         Clustered observation sites with vs30, cluster, and category ID columns.
-    model_type : str, optional
-        Unused. Retained for backward compatibility.
 
     Returns
     -------
@@ -446,14 +444,16 @@ def update_with_clustered_data(
         category_sites = valid_sites[
             valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int
         ]
-        cluster_counts = category_sites["cluster"].value_counts()
+        cluster_counts = category_sites[constants.COL_CLUSTER].value_counts()
 
         # Effective sample size: one per cluster, but each noise point (-1) counts individually.
-        # len(cluster_counts) counts distinct cluster IDs. If -1 is present, it was counted
-        # once but represents cluster_counts[-1] individual observations, so add the extra.
+        # len(cluster_counts) counts distinct cluster IDs. If CLUSTER_UNCLUSTERED_LABEL is present,
+        # it was counted once but represents cluster_counts[CLUSTER_UNCLUSTERED_LABEL] individual
+        # observations, so add the extra.
         effective_n = len(cluster_counts)
-        if -1 in cluster_counts.index:
-            effective_n += cluster_counts[-1] - 1  # -1 was already counted once
+        if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
+            # CLUSTER_UNCLUSTERED_LABEL was already counted once
+            effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
 
         if effective_n == 0:
             continue
@@ -462,15 +462,17 @@ def update_with_clustered_data(
         weights = np.repeat(1.0 / effective_n, len(category_sites))
 
         for cluster_label in cluster_counts.index:
-            cluster_mask = category_sites["cluster"] == cluster_label
+            cluster_mask = category_sites[constants.COL_CLUSTER] == cluster_label
             cluster_sites = category_sites[cluster_mask]
-            if cluster_label == -1:
+            if cluster_label == constants.CLUSTER_UNCLUSTERED_LABEL:
                 # Unclustered points: each counts as one observation
-                weighted_log_vs30_sum += np.sum(np.log(cluster_sites.vs30.values))
+                weighted_log_vs30_sum += np.sum(
+                    np.log(cluster_sites[constants.COL_VS30].values)
+                )
             else:
                 # Clustered points: entire cluster counts as one observation
                 weighted_log_vs30_sum += np.sum(
-                    np.log(cluster_sites.vs30.values)
+                    np.log(cluster_sites[constants.COL_VS30].values)
                 ) / len(cluster_sites)
                 weights[cluster_mask] /= len(cluster_sites)
 
@@ -479,7 +481,12 @@ def update_with_clustered_data(
         posterior_array[category_id_int, 0] = math.exp(log_geometric_mean)
         posterior_array[category_id_int, 1] = np.sqrt(
             np.sum(
-                weights * (np.log(category_sites.vs30.values) - log_geometric_mean) ** 2
+                weights
+                * (
+                    np.log(category_sites[constants.COL_VS30].values)
+                    - log_geometric_mean
+                )
+                ** 2
             )
         )
 
@@ -542,13 +549,12 @@ def posterior_from_bayesian_update(
     df = categorical_model_df.copy()
 
     if clustered_observations_df is not None:
-        df = update_with_clustered_data(df, clustered_observations_df, model_type)
+        df = update_with_clustered_data(df, clustered_observations_df)
 
     if independent_observations_df is not None:
         df = update_with_independent_data(df, independent_observations_df)
 
     return df
-
 
 
 def get_vs30_for_points(
@@ -586,7 +592,7 @@ def get_vs30_for_points(
     -----
     The function automatically detects the column naming convention in the
     categorical model DataFrame. It looks for columns in this priority order
-    (names defined in config.yaml):
+    (names defined in constants.py):
 
     For mean: col_posterior_mean_independent, col_posterior_mean_clustered,
               col_prior_mean, col_mean

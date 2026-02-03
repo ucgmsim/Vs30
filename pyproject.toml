@@ -63,6 +63,14 @@ qcore-utils = ["qcore"]
 pyyaml = ["yaml"]
 GDAL = ["osgeo"]
 
+[tool.coverage.run]
+omit = [
+    "vs30/cli.py",
+    "vs30/config.py",
+    "vs30/constants.py",
+    "vs30/parallel.py",
+]
+
 [tool.deptry.per_rule_ignores]
 DEP001 = ["conftest", "setuptools"]
 DEP003 = ["setuptools"]

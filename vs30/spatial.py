@@ -54,18 +54,37 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ObservationData:
-    """Bundled observation data for spatial processing."""
+    """
+    Bundled observation data for spatial processing.
 
-    locations: np.ndarray  # (n_obs, 2) array of [easting, northing]
-    vs30: np.ndarray  # (n_obs,) measured vs30 values
-    model_vs30: np.ndarray  # (n_obs,) model vs30 at observation locations
-    model_stdv: np.ndarray  # (n_obs,) model stdv at observation locations
-    residuals: np.ndarray  # (n_obs,) log residuals: log(vs30 / model_vs30)
-    omega: np.ndarray  # (n_obs,) noise weights (if noisy=True)
-    uncertainty: np.ndarray  # (n_obs,) observation uncertainties
-    cluster_labels: np.ndarray | None = (
-        None  # (n_obs,) cluster labels from DBSCAN, -1 = unclustered
-    )
+    Attributes
+    ----------
+    locations : ndarray
+        (n_obs, 2) array of [easting, northing] coordinates.
+    vs30 : ndarray
+        (n_obs,) measured Vs30 values.
+    model_vs30 : ndarray
+        (n_obs,) model Vs30 at observation locations.
+    model_stdv : ndarray
+        (n_obs,) model standard deviation at observation locations.
+    residuals : ndarray
+        (n_obs,) log residuals: log(vs30 / model_vs30).
+    omega : ndarray
+        (n_obs,) noise weights (if noisy=True).
+    uncertainty : ndarray
+        (n_obs,) observation uncertainties.
+    cluster_labels : ndarray or None
+        (n_obs,) cluster labels from DBSCAN, -1 = unclustered.
+    """
+
+    locations: np.ndarray
+    vs30: np.ndarray
+    model_vs30: np.ndarray
+    model_stdv: np.ndarray
+    residuals: np.ndarray
+    omega: np.ndarray
+    uncertainty: np.ndarray
+    cluster_labels: np.ndarray | None = None
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -84,17 +103,45 @@ class ObservationData:
 
 @dataclass
 class PixelData:
-    """Data for a single pixel."""
+    """
+    Data for a single pixel.
 
-    location: np.ndarray  # [easting, northing]
-    vs30: float  # prior vs30 value
-    stdv: float  # prior stdv value
-    index: int  # flat index in the raster
+    Attributes
+    ----------
+    location : ndarray
+        [easting, northing] coordinates.
+    vs30 : float
+        Prior Vs30 value.
+    stdv : float
+        Prior standard deviation value.
+    index : int
+        Flat index in the raster.
+    """
+
+    location: np.ndarray
+    vs30: float
+    stdv: float
+    index: int
 
 
 @dataclass
 class SpatialAdjustmentResult:
-    """Result of an MVN update for a single pixel."""
+    """
+    Result of an MVN update for a single pixel.
+
+    Attributes
+    ----------
+    updated_vs30 : float
+        Updated Vs30 value after spatial adjustment.
+    updated_stdv : float
+        Updated standard deviation after spatial adjustment.
+    n_observations_used : int
+        Number of observations used in the MVN conditioning.
+    min_distance : float
+        Distance (meters) to the nearest observation used.
+    pixel_index : int
+        Flat index of this pixel in the raster.
+    """
 
     updated_vs30: float
     updated_stdv: float
@@ -105,15 +152,34 @@ class SpatialAdjustmentResult:
 
 @dataclass
 class RasterData:
-    """Raster data and metadata."""
+    """
+    Raster data and metadata.
 
-    vs30: np.ndarray  # Band 1: Vs30 mean
-    stdv: np.ndarray  # Band 2: Vs30 stdv
+    Attributes
+    ----------
+    vs30 : ndarray
+        Band 1: Vs30 mean values (2D array).
+    stdv : ndarray
+        Band 2: Vs30 standard deviation values (2D array).
+    transform : rasterio.transform.Affine
+        Affine transformation for coordinate conversion.
+    crs : rasterio.crs.CRS
+        Coordinate reference system.
+    nodata : float or None
+        No-data value used in the raster.
+    valid_mask : ndarray
+        Boolean mask of non-nodata pixels (2D array).
+    valid_flat_indices : ndarray
+        Flat indices of non-nodata pixels (1D array).
+    """
+
+    vs30: np.ndarray
+    stdv: np.ndarray
     transform: rasterio.transform.Affine
     crs: rasterio.crs.CRS
     nodata: float | None
-    valid_mask: np.ndarray  # Boolean mask of non-nodata pixels
-    valid_flat_indices: np.ndarray  # Flat indices of non-nodata pixels
+    valid_mask: np.ndarray
+    valid_flat_indices: np.ndarray
 
     @classmethod
     def from_file(cls, path: Path) -> "RasterData":
@@ -162,9 +228,9 @@ class RasterData:
         y_scale = self.transform[4]
         y_origin = self.transform[5]
 
-        # Pixel centers: add 0.5 to row/col indices (following legacy implementation)
-        cols_center = valid_cols.astype(float) + 0.5
-        rows_center = valid_rows.astype(float) + 0.5
+        # Pixel centers: add offset to row/col indices (following legacy implementation)
+        cols_center = valid_cols.astype(float) + constants.PIXEL_CENTER_OFFSET
+        rows_center = valid_rows.astype(float) + constants.PIXEL_CENTER_OFFSET
 
         xs = x_origin + cols_center * x_scale
         ys = y_origin + rows_center * y_scale
@@ -190,7 +256,7 @@ class RasterData:
         with rasterio.open(
             path,
             "w",
-            driver="GTiff",
+            driver=constants.GEOTIFF_DRIVER,
             height=self.vs30.shape[0],
             width=self.vs30.shape[1],
             count=2,
@@ -198,9 +264,9 @@ class RasterData:
             crs=self.crs,
             transform=self.transform,
             nodata=self.nodata,
-            compress="deflate",
-            tiled=True,
-            bigtiff="yes",
+            compress=constants.GEOTIFF_COMPRESSION,
+            tiled=constants.GEOTIFF_TILED,
+            bigtiff=constants.GEOTIFF_BIGTIFF,
         ) as dst:
             dst.write(updated_vs30, 1)
             dst.write(updated_stdv, 2)
@@ -208,12 +274,21 @@ class RasterData:
 
 @dataclass
 class BoundingBoxResult:
-    """Result of bounding box search for affected pixels."""
+    """
+    Result of bounding box search for affected pixels.
 
-    mask: np.ndarray  # Boolean mask of pixels in any observation's bounding box
-    obs_to_grid_indices: list[
-        np.ndarray
-    ]  # For each observation, flat indices of pixels in its bounding box
+    Attributes
+    ----------
+    mask : ndarray
+        Boolean mask of pixels in any observation's bounding box.
+    obs_to_grid_indices : list[ndarray]
+        For each observation, flat indices of pixels in its bounding box.
+    n_affected_pixels : int
+        Total number of pixels affected by at least one observation.
+    """
+
+    mask: np.ndarray
+    obs_to_grid_indices: list[np.ndarray]
     n_affected_pixels: int
 
 
@@ -255,13 +330,16 @@ def validate_observations(observations: pd.DataFrame) -> None:
     ValueError
         If observation data is invalid.
     """
-    required_columns = ["easting", "northing", "vs30", "uncertainty"]
-    missing = [col for col in required_columns if col not in observations.columns]
+    missing = [
+        col
+        for col in constants.REQUIRED_OBSERVATION_COLUMNS
+        if col not in observations.columns
+    ]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
-    if not np.all(observations["vs30"] > 0):
+    if not np.all(observations[constants.COL_VS30] > 0):
         raise ValueError("Vs30 must be positive")
-    if not np.all(observations["uncertainty"] > 0):
+    if not np.all(observations[constants.COL_UNCERTAINTY] > 0):
         raise ValueError("Uncertainty must be positive")
 
 

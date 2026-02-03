@@ -155,7 +155,7 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     df = pd.read_csv(csv_file_path, skipinitialspace=True)
 
     # Check if required columns exist
-    required_cols = ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"]
+    required_cols = [constants.COL_MEAN, constants.COL_STDV]
     missing_cols = [col for col in required_cols if col not in df.columns]
 
     if missing_cols:
@@ -227,13 +227,17 @@ def create_category_id_raster(
     nx = round((xmax - xmin) / dx)
     ny = round((ymax - ymin) / dy)
     dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
-    output_filename = "tid.tif" if model_type == "terrain" else "gid.tif"
+    output_filename = (
+        constants.TERRAIN_ID_FILENAME
+        if model_type == "terrain"
+        else constants.GEOLOGY_ID_FILENAME
+    )
     output_path = output_dir / output_filename
-    band_description = "Model ID Index"
+    band_description = constants.BAND_DESCRIPTION_ID_INDEX
 
     # Common output raster profile
     profile = {
-        "driver": "GTiff",
+        "driver": constants.GEOTIFF_DRIVER,
         "width": nx,
         "height": ny,
         "count": 1,
@@ -241,7 +245,7 @@ def create_category_id_raster(
         "crs": constants.NZTM_CRS,
         "transform": dst_transform,
         "nodata": constants.RASTER_ID_NODATA_VALUE,
-        "compress": "deflate",
+        "compress": constants.GEOTIFF_COMPRESSION,
     }
 
     if model_type == "terrain":
@@ -277,15 +281,23 @@ def create_category_id_raster(
 
         # Read shapefile
         gdf = gpd.read_file(geology_shapefile_path)
-        if "gid" not in gdf.columns:
-            raise ValueError(f"Shapefile {geology_shapefile_path} missing 'gid' column")
+        if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
+            raise ValueError(
+                f"Shapefile {geology_shapefile_path} missing "
+                f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
+            )
 
         # Ensure shapefile is in NZTM CRS (EPSG:2193)
         if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
             gdf = gdf.to_crs(constants.NZTM_CRS)
 
         # Create shapes iterator for rasterization
-        shapes = ((geom, value) for geom, value in zip(gdf.geometry, gdf.gid))
+        shapes = (
+            (geom, value)
+            for geom, value in zip(
+                gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]
+            )
+        )
 
         # Rasterize to output file
         with rasterio.open(output_path, "w", **profile) as dst:
@@ -412,7 +424,7 @@ def create_vs30_raster_from_ids(
 
     mean_col, std_col = select_vs30_columns_by_priority(list(df.columns))
 
-    required_cols = ["id", mean_col, std_col]
+    required_cols = [constants.STANDARD_ID_COLUMN, mean_col, std_col]
     missing_cols = [col for col in required_cols if col not in df.columns]
     if missing_cols:
         raise ValueError(
@@ -420,7 +432,7 @@ def create_vs30_raster_from_ids(
         )
 
     id_to_vs30_values = {
-        int(row["id"]): (float(row[mean_col]), float(row[std_col]))
+        int(row[constants.STANDARD_ID_COLUMN]): (float(row[mean_col]), float(row[std_col]))
         for _, row in df.iterrows()
     }
 
@@ -461,9 +473,12 @@ def create_vs30_raster_from_ids(
     )
 
     with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(vs30_array, 1)
-        dst.write(stdv_array, 2)
-        dst.descriptions = ("Vs30", "Standard Deviation")
+        dst.write(vs30_array, constants.RASTER_BAND_VS30)
+        dst.write(stdv_array, constants.RASTER_BAND_STDV)
+        dst.descriptions = (
+            constants.BAND_DESCRIPTION_VS30,
+            constants.BAND_DESCRIPTION_STDV,
+        )
 
     logger.info(f"Completed VS30 raster: {output_path}")
     return output_path
@@ -534,7 +549,7 @@ def create_coast_distance_raster(
     # Compute proximity distances using GDAL (legacy approach)
     # DISTUNITS=GEO ensures distances in georeferenced units (meters)
     band = ds.GetRasterBand(1)
-    band.SetDescription("Distance to Coast (m)")
+    band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
     # Note: ComputeProximity modifies the raster in-place
     ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
     band = None
@@ -561,7 +576,7 @@ def create_coast_distance_raster(
 
         with rasterio.open(output_path, "w", **profile) as dst:
             dst.write(distance_meters, 1)
-            dst.descriptions = ("Distance to Coast (m)",)
+            dst.descriptions = (constants.BAND_DESCRIPTION_COAST_DISTANCE,)
     else:
         with rasterio.open(output_path) as src:
             distance_meters = src.read(1).astype(np.float32)
@@ -623,7 +638,7 @@ def create_slope_raster(
 
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(destination, 1)
-        dst.descriptions = ("Slope",)
+        dst.descriptions = (constants.BAND_DESCRIPTION_SLOPE,)
 
     return destination, profile
 

@@ -253,12 +253,12 @@ def update_categorical_vs30_models(
 
         # Drop rows with placeholder values for excluded categories (e.g., water)
         categorical_model_df = categorical_model_df[
-            categorical_model_df["mean_vs30_km_per_s"] != constants.NODATA_VALUE
+            categorical_model_df[constants.COL_MEAN] != constants.NODATA_VALUE
         ]
 
         validate_csv_columns(
             categorical_model_df,
-            ["mean_vs30_km_per_s", "standard_deviation_vs30_km_per_s"],
+            [constants.COL_MEAN, constants.COL_STDV],
             "Categorical model CSV",
         )
 
@@ -277,7 +277,7 @@ def update_categorical_vs30_models(
 
             validate_csv_columns(
                 clustered_observations_df,
-                ["easting", "northing", "vs30"],
+                constants.REQUIRED_OBSERVATION_COLUMNS_BASIC,
                 "Clustered observations CSV",
             )
 
@@ -331,7 +331,7 @@ def update_categorical_vs30_models(
 
             validate_csv_columns(
                 independent_observations_df,
-                ["easting", "northing", "vs30", "uncertainty"],
+                constants.REQUIRED_OBSERVATION_COLUMNS,
                 "Independent observations CSV",
             )
 
@@ -577,7 +577,10 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         with rasterio.open(output_path, "w", **profile) as dst:
             dst.write(mod_vs30, 1)
             dst.write(mod_stdv, 2)
-            dst.descriptions = ("Vs30 (Hybrid)", "Standard Deviation (Hybrid)")
+            dst.descriptions = (
+                constants.BAND_DESCRIPTION_VS30_HYBRID,
+                constants.BAND_DESCRIPTION_STDV_HYBRID,
+            )
 
         typer.echo(
             "✓ Successfully created slope and coastal distance adjusted geology raster"
@@ -788,7 +791,7 @@ def spatial_fit(
         clustered_obs_file = cfg.clustered_observations_file
         is_clustered_obs = (
             clustered_obs_file is not None
-            and observations_csv.name in clustered_obs_file
+            and observations_csv.resolve() == (constants.RESOURCE_PATH / clustered_obs_file).resolve()
         )
 
         # 3. Load Model Values (updated categorical table)
@@ -802,10 +805,10 @@ def spatial_fit(
         )
 
         # Build table indexed by category ID
-        max_id = model_df["id"].max()
+        max_id = model_df[constants.STANDARD_ID_COLUMN].max()
         updated_model_table = np.full((max_id, 2), np.nan)
         for _, row in model_df.iterrows():
-            idx = int(row["id"]) - 1
+            idx = int(row[constants.STANDARD_ID_COLUMN]) - 1
             if 0 <= idx < max_id:
                 updated_model_table[idx, 0] = row[mean_col]
                 updated_model_table[idx, 1] = row[std_col]
@@ -909,16 +912,16 @@ def plot_posterior_values(
         df = pd.read_csv(csv_path, skipinitialspace=True)
 
         # Filter out rows with placeholder values for excluded categories (e.g., water)
-        df = df[df["prior_mean_vs30_km_per_s"] != constants.NODATA_VALUE].copy()
+        df = df[df[constants.COL_PRIOR_MEAN] != constants.NODATA_VALUE].copy()
 
         validate_csv_columns(
             df,
             [
-                "id",
-                "prior_mean_vs30_km_per_s",
-                "prior_standard_deviation_vs30_km_per_s",
-                "posterior_mean_vs30_km_per_s",
-                "posterior_standard_deviation_vs30_km_per_s",
+                constants.STANDARD_ID_COLUMN,
+                constants.COL_PRIOR_MEAN,
+                constants.COL_PRIOR_STDV,
+                constants.COL_POSTERIOR_MEAN,
+                constants.COL_POSTERIOR_STDV,
             ],
             "Plot input CSV",
         )
@@ -927,18 +930,18 @@ def plot_posterior_values(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Extract data
-        category_ids = df["id"].values
-        prior_mean = df["prior_mean_vs30_km_per_s"].values
-        prior_std = df["prior_standard_deviation_vs30_km_per_s"].values
-        posterior_mean = df["posterior_mean_vs30_km_per_s"].values
-        posterior_std = df["posterior_standard_deviation_vs30_km_per_s"].values
+        category_ids = df[constants.STANDARD_ID_COLUMN].values
+        prior_mean = df[constants.COL_PRIOR_MEAN].values
+        prior_std = df[constants.COL_PRIOR_STDV].values
+        posterior_mean = df[constants.COL_POSTERIOR_MEAN].values
+        posterior_std = df[constants.COL_POSTERIOR_STDV].values
 
         # Create figure
         fig, ax = matplotlib.pyplot.subplots(figsize=constants.PLOT_FIGSIZE)
 
         # Offset for x positions to separate prior and posterior
-        prior_x = category_ids - 0.2
-        posterior_x = category_ids + 0.2
+        prior_x = category_ids - constants.PLOT_X_OFFSET
+        posterior_x = category_ids + constants.PLOT_X_OFFSET
 
         # Plot prior values with error bars
         ax.errorbar(
@@ -947,10 +950,10 @@ def plot_posterior_values(
             yerr=prior_std,
             fmt="o",
             label="Prior",
-            capsize=5,
-            capthick=1.5,
-            markersize=6,
-            alpha=0.7,
+            capsize=constants.PLOT_ERRORBAR_CAPSIZE,
+            capthick=constants.PLOT_ERRORBAR_CAPTHICK,
+            markersize=constants.PLOT_MARKER_SIZE,
+            alpha=constants.PLOT_ALPHA,
         )
 
         # Plot posterior values with error bars
@@ -960,18 +963,21 @@ def plot_posterior_values(
             yerr=posterior_std,
             fmt="s",
             label="Posterior",
-            capsize=5,
-            capthick=1.5,
-            markersize=6,
-            alpha=0.7,
+            capsize=constants.PLOT_ERRORBAR_CAPSIZE,
+            capthick=constants.PLOT_ERRORBAR_CAPTHICK,
+            markersize=constants.PLOT_MARKER_SIZE,
+            alpha=constants.PLOT_ALPHA,
         )
 
         # Set labels and title
-        ax.set_xlabel("Category ID", fontsize=12)
-        ax.set_ylabel("Vs30 (m/s)", fontsize=12)
-        ax.set_title("Prior vs Posterior Vs30 Values by Category", fontsize=14)
-        ax.legend(fontsize=11)
-        ax.grid(True, alpha=0.3)
+        ax.set_xlabel("Category ID", fontsize=constants.PLOT_LABEL_FONTSIZE)
+        ax.set_ylabel("Vs30 (m/s)", fontsize=constants.PLOT_LABEL_FONTSIZE)
+        ax.set_title(
+            "Prior vs Posterior Vs30 Values by Category",
+            fontsize=constants.PLOT_TITLE_FONTSIZE,
+        )
+        ax.legend(fontsize=constants.PLOT_LEGEND_FONTSIZE)
+        ax.grid(True, alpha=constants.PLOT_GRID_ALPHA)
 
         # Set x-axis to show category IDs
         ax.set_xticks(category_ids)
@@ -1244,8 +1250,8 @@ def combine(
             with rasterio.open(output_path, "w", **profile) as dst:
                 dst.write(combined_data)
                 dst.descriptions = (
-                    "Vs30 (Combined Average)",
-                    "Standard Deviation (Combined Average)",
+                    constants.BAND_DESCRIPTION_VS30_COMBINED,
+                    constants.BAND_DESCRIPTION_STDV_COMBINED,
                 )
 
     except Exception as e:
@@ -1570,7 +1576,7 @@ def compute_at_locations(
             )
         else:
             observations_df = pd.DataFrame(
-                columns=["easting", "northing", "vs30", "uncertainty"]
+                columns=constants.REQUIRED_OBSERVATION_COLUMNS
             )
 
         typer.echo(f"Loaded {len(observations_df)} observations for spatial adjustment")
