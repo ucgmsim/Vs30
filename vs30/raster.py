@@ -211,7 +211,6 @@ def create_category_id_raster(
         else constants.GEOLOGY_ID_FILENAME
     )
     output_path = output_dir / output_filename
-    band_description = constants.BAND_DESCRIPTION_ID_INDEX
 
     # Common output raster profile
     profile = {
@@ -244,7 +243,7 @@ def create_category_id_raster(
                     dst_crs=constants.NZTM_CRS,
                     resampling=rasterio.enums.Resampling.nearest,
                 )
-                dst.descriptions = (band_description,)
+                dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
 
     else:  # geology
         # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
@@ -290,7 +289,7 @@ def create_category_id_raster(
                 all_touched=False,
             )
             dst.write(burned, 1)
-            dst.descriptions = (band_description,)
+            dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
 
     return output_path
 

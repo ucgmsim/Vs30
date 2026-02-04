@@ -189,14 +189,8 @@ def update_with_independent_data(
     -----
     Uses N_PRIOR and MIN_SIGMA constants from constants.py.
     """
-    n_prior = constants.N_PRIOR
-    min_sigma = constants.MIN_SIGMA
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
-
-    # Identify prior columns
-    prior_mean_col = constants.COL_PRIOR_MEAN
-    prior_std_col = constants.COL_PRIOR_STDV
 
     # If a Bayesian update was previously performed, use the posterior values as priors
     # for subsequent updates. Otherwise, use the raw categorical model data as priors.
@@ -207,10 +201,10 @@ def update_with_independent_data(
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         # Use clustered posterior as prior for independent updates
         # This implements the sequential Bayesian update: clustered → independent
-        updated_categorical_model_df[prior_mean_col] = updated_categorical_model_df[
+        updated_categorical_model_df[constants.COL_PRIOR_MEAN] = updated_categorical_model_df[
             constants.COL_POSTERIOR_MEAN_CLUSTERED
         ]
-        updated_categorical_model_df[prior_std_col] = updated_categorical_model_df[
+        updated_categorical_model_df[constants.COL_PRIOR_STDV] = updated_categorical_model_df[
             constants.COL_POSTERIOR_STDV_CLUSTERED
         ]
     else:
@@ -219,8 +213,8 @@ def update_with_independent_data(
             # Initial prior format - rename to prior_ columns
             updated_categorical_model_df = updated_categorical_model_df.rename(
                 columns={
-                    constants.COL_MEAN: prior_mean_col,
-                    constants.COL_STDV: prior_std_col,
+                    constants.COL_MEAN: constants.COL_PRIOR_MEAN,
+                    constants.COL_STDV: constants.COL_PRIOR_STDV,
                 }
             )
         else:
@@ -232,23 +226,19 @@ def update_with_independent_data(
             )
 
     # Enforce minimum sigma value on prior
-    mask = updated_categorical_model_df[prior_std_col] < min_sigma
-    updated_categorical_model_df.loc[mask, prior_std_col] = min_sigma
+    mask = updated_categorical_model_df[constants.COL_PRIOR_STDV] < constants.MIN_SIGMA
+    updated_categorical_model_df.loc[mask, constants.COL_PRIOR_STDV] = constants.MIN_SIGMA
 
     # Initialize posterior columns
-    post_mean_col = constants.COL_POSTERIOR_MEAN_INDEPENDENT
-    post_std_col = constants.COL_POSTERIOR_STDV_INDEPENDENT
-    post_n_col = constants.COL_POSTERIOR_NOBS_INDEPENDENT
-
-    updated_categorical_model_df["assumed_num_prior_observations"] = n_prior
-    updated_categorical_model_df["enforced_min_sigma"] = min_sigma
-    updated_categorical_model_df[post_mean_col] = updated_categorical_model_df[
-        prior_mean_col
+    updated_categorical_model_df["assumed_num_prior_observations"] = constants.N_PRIOR
+    updated_categorical_model_df["enforced_min_sigma"] = constants.MIN_SIGMA
+    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = updated_categorical_model_df[
+        constants.COL_PRIOR_MEAN
     ]
-    updated_categorical_model_df[post_std_col] = updated_categorical_model_df[
-        prior_std_col
+    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = updated_categorical_model_df[
+        constants.COL_PRIOR_STDV
     ]
-    updated_categorical_model_df[post_n_col] = n_prior
+    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = constants.N_PRIOR
 
     for category_row_idx, category_row in updated_categorical_model_df.iterrows():
         # Match observations to this category using model_id
@@ -258,9 +248,9 @@ def update_with_independent_data(
         ]
 
         # Initialize running values for sequential update
-        current_mean = category_row[post_mean_col]
-        current_std = category_row[post_std_col]
-        current_n = category_row[post_n_col]
+        current_mean = category_row[constants.COL_POSTERIOR_MEAN_INDEPENDENT]
+        current_std = category_row[constants.COL_POSTERIOR_STDV_INDEPENDENT]
+        current_n = category_row[constants.COL_POSTERIOR_NOBS_INDEPENDENT]
 
         for _, observation_row in observations_for_category_df.iterrows():
             new_variance = compute_bayesian_posterior_variance(
@@ -284,9 +274,9 @@ def update_with_independent_data(
             current_n += 1
 
         # Write final posterior values for this category
-        updated_categorical_model_df.at[category_row_idx, post_mean_col] = current_mean
-        updated_categorical_model_df.at[category_row_idx, post_std_col] = current_std
-        updated_categorical_model_df.at[category_row_idx, post_n_col] = current_n
+        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_MEAN_INDEPENDENT] = current_mean
+        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_STDV_INDEPENDENT] = current_std
+        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_NOBS_INDEPENDENT] = current_n
 
     return updated_categorical_model_df
 
@@ -383,26 +373,19 @@ def update_with_clustered_data(
     # Create a copy to update
     posterior_df = prior_df.copy()
 
-    # Identify prior columns
-    prior_mean_col = constants.COL_PRIOR_MEAN
-    prior_std_col = constants.COL_PRIOR_STDV
-
-    if prior_mean_col not in posterior_df.columns:
+    if constants.COL_PRIOR_MEAN not in posterior_df.columns:
         if constants.COL_MEAN in posterior_df.columns:
             # Initial prior format - rename to prior_ columns
             posterior_df = posterior_df.rename(
                 columns={
-                    constants.COL_MEAN: prior_mean_col,
-                    constants.COL_STDV: prior_std_col,
+                    constants.COL_MEAN: constants.COL_PRIOR_MEAN,
+                    constants.COL_STDV: constants.COL_PRIOR_STDV,
                 }
             )
 
     # Initialize posterior columns with suffix
-    post_mean_col = constants.COL_POSTERIOR_MEAN_CLUSTERED
-    post_std_col = constants.COL_POSTERIOR_STDV_CLUSTERED
-
-    posterior_df[post_mean_col] = posterior_df[prior_mean_col]
-    posterior_df[post_std_col] = posterior_df[prior_std_col]
+    posterior_df[constants.COL_POSTERIOR_MEAN_CLUSTERED] = posterior_df[constants.COL_PRIOR_MEAN]
+    posterior_df[constants.COL_POSTERIOR_STDV_CLUSTERED] = posterior_df[constants.COL_PRIOR_STDV]
 
     # Convert to numpy array format for computation
     max_id_prior = (
@@ -429,8 +412,8 @@ def update_with_clustered_data(
         cat_id = int(row[constants.STANDARD_ID_COLUMN])
         if cat_id <= max_id:
             # Use prior values as starting point
-            posterior_array[cat_id, 0] = row[prior_mean_col]
-            posterior_array[cat_id, 1] = row[prior_std_col]
+            posterior_array[cat_id, 0] = row[constants.COL_PRIOR_MEAN]
+            posterior_array[cat_id, 1] = row[constants.COL_PRIOR_STDV]
             id_to_idx[cat_id] = idx
 
     # Process each category ID that exists in the sites
@@ -499,8 +482,8 @@ def update_with_clustered_data(
             # Keep original prior values if somehow NaN
             continue
 
-        posterior_df.at[df_idx, post_mean_col] = mean_val
-        posterior_df.at[df_idx, post_std_col] = std_val
+        posterior_df.at[df_idx, constants.COL_POSTERIOR_MEAN_CLUSTERED] = mean_val
+        posterior_df.at[df_idx, constants.COL_POSTERIOR_STDV_CLUSTERED] = std_val
 
     return posterior_df
 
