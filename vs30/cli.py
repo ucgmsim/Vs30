@@ -763,11 +763,6 @@ def spatial_fit(
 
         cfg = get_config()
 
-        max_dist_m = constants.MAX_DIST_M
-        max_points = constants.MAX_POINTS
-        noisy = cfg.noisy  # noisy is still user-configurable
-        cov_reduc = constants.COV_REDUC
-
         n_proc_resolved = parallel.resolve_n_proc(
             n_proc if n_proc is not None else cfg.n_proc
         )
@@ -836,7 +831,7 @@ def spatial_fit(
             raster_data,
             obs_data_for_bbox,
             max_spatial_boolean_array_memory_gb=cfg.max_spatial_boolean_array_memory_gb,
-            max_dist_m=max_dist_m,
+            max_dist_m=constants.MAX_DIST_M,
             n_proc=n_proc_resolved,
         )
         logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
@@ -851,10 +846,10 @@ def spatial_fit(
                 raster_data=raster_data,
                 obs_data=obs_data,
                 model_type=model_type,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
+                max_dist_m=constants.MAX_DIST_M,
+                max_points=constants.MAX_POINTS,
+                noisy=cfg.noisy,
+                cov_reduc=constants.COV_REDUC,
                 n_proc=n_proc_resolved,
             )
         else:
@@ -864,10 +859,10 @@ def spatial_fit(
                 bbox_result,
                 model_type,
                 max_spatial_boolean_array_memory_gb=cfg.max_spatial_boolean_array_memory_gb,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
+                max_dist_m=constants.MAX_DIST_M,
+                max_points=constants.MAX_POINTS,
+                noisy=cfg.noisy,
+                cov_reduc=constants.COV_REDUC,
             )
 
         # 7. Apply Updates and Write Output
@@ -1070,12 +1065,11 @@ def full_pipeline_for_geology_or_terrain(
         )
 
         # Resolve observations from config if not provided
-        res_dir = constants.RESOURCE_PATH
         clustered_observations_csv = resolve_observation_csv(
-            clustered_observations_csv, cfg.clustered_observations_file, res_dir
+            clustered_observations_csv, cfg.clustered_observations_file, constants.RESOURCE_PATH
         )
         independent_observations_csv = resolve_observation_csv(
-            independent_observations_csv, cfg.independent_observations_file, res_dir
+            independent_observations_csv, cfg.independent_observations_file, constants.RESOURCE_PATH
         )
 
         # --- Step 1: Update Categorical Models (conditional) ---
@@ -1337,15 +1331,14 @@ def full_pipeline(
         )
 
         # Resolve CSV paths if not provided
-        res_dir = constants.RESOURCE_PATH
         if geology_categorical_csv is None:
             geology_categorical_csv = (
-                res_dir
+                constants.RESOURCE_PATH
                 / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             )
         if terrain_categorical_csv is None:
             terrain_categorical_csv = (
-                res_dir
+                constants.RESOURCE_PATH
                 / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             )
 
@@ -1542,24 +1535,23 @@ def compute_at_locations(
         typer.echo(f"Loaded {len(points)} locations")
 
         # Resolve CSV paths if not provided
-        res_dir = constants.RESOURCE_PATH
         if geology_categorical_csv is None:
             geology_categorical_csv = (
-                res_dir
+                constants.RESOURCE_PATH
                 / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             )
         if terrain_categorical_csv is None:
             terrain_categorical_csv = (
-                res_dir
+                constants.RESOURCE_PATH
                 / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
             )
 
         # Load observations for spatial adjustment
         clustered_observations_csv = resolve_observation_csv(
-            clustered_observations_csv, cfg.clustered_observations_file, res_dir
+            clustered_observations_csv, cfg.clustered_observations_file, constants.RESOURCE_PATH
         )
         independent_observations_csv = resolve_observation_csv(
-            independent_observations_csv, cfg.independent_observations_file, res_dir
+            independent_observations_csv, cfg.independent_observations_file, constants.RESOURCE_PATH
         )
 
         # Load and combine all available observation files
