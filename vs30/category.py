@@ -40,7 +40,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
         [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
 
-    # Build point GeoDataFrame (ensure float64)
+    # Build point GeoDataFrame
     points_shapely = shapely.points(points)
     points_gdf = gpd.GeoDataFrame(geometry=points_shapely, crs=gdf.crs)
 
