@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 from qcore import coordinates
 from vs30 import category
+from vs30 import constants
 from vs30 import raster
 from vs30 import spatial
 from vs30 import utils
@@ -137,7 +138,7 @@ def process_geology_at_points(
     """
     # Get initial Vs30 values at points
     geol_vs30, geol_stdv, geol_ids = category.get_vs30_for_points(
-        points, "geology", model_df
+        points, constants.ModelType.GEOLOGY, model_df
     )
 
     # Apply hybrid modifications (slope and coastal distance)
@@ -158,20 +159,20 @@ def process_geology_at_points(
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
-        obs_locs = observations_df[["easting", "northing"]].values
+        obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
         obs_geol_vs30, obs_geol_stdv, _ = category.get_vs30_for_points(
-            obs_locs, "geology", model_df
+            obs_locs, constants.ModelType.GEOLOGY, model_df
         )
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
             obs_locations=obs_locs,
-            obs_vs30=observations_df["vs30"].values,
+            obs_vs30=observations_df[constants.COL_VS30].values,
             obs_model_vs30=obs_geol_vs30,
             obs_model_stdv=obs_geol_stdv,
-            obs_uncertainty=observations_df["uncertainty"].values,
-            model_type="geology",
+            obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
+            model_type=constants.ModelType.GEOLOGY,
             noisy=noisy,
         )
     else:
@@ -228,25 +229,25 @@ def process_terrain_at_points(
     """
     # Get initial Vs30 values at points
     terr_vs30, terr_stdv, terr_ids = category.get_vs30_for_points(
-        points, "terrain", model_df
+        points, constants.ModelType.TERRAIN, model_df
     )
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
-        obs_locs = observations_df[["easting", "northing"]].values
+        obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
         obs_terr_vs30, obs_terr_stdv, _ = category.get_vs30_for_points(
-            obs_locs, "terrain", model_df
+            obs_locs, constants.ModelType.TERRAIN, model_df
         )
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,
             obs_locations=obs_locs,
-            obs_vs30=observations_df["vs30"].values,
+            obs_vs30=observations_df[constants.COL_VS30].values,
             obs_model_vs30=obs_terr_vs30,
             obs_model_stdv=obs_terr_stdv,
-            obs_uncertainty=observations_df["uncertainty"].values,
-            model_type="terrain",
+            obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
+            model_type=constants.ModelType.TERRAIN,
             noisy=noisy,
         )
     else:
@@ -328,8 +329,8 @@ def process_locations_chunk(
         )
     )
     northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
-    chunk_df["easting"] = easting
-    chunk_df["northing"] = northing
+    chunk_df[constants.COL_EASTING] = easting
+    chunk_df[constants.COL_NORTHING] = northing
     points = np.column_stack([easting, northing])
 
     # Process geology model
@@ -349,14 +350,14 @@ def process_locations_chunk(
         config.noisy,
     )
 
-    chunk_df["geology_id"] = geol_ids
+    chunk_df[constants.COL_GEOLOGY_ID] = geol_ids
     if config.include_intermediate:
-        chunk_df["geology_vs30"] = geol_vs30
-        chunk_df["geology_stdv"] = geol_stdv
-        chunk_df["geology_vs30_hybrid"] = geol_vs30_hybrid
-        chunk_df["geology_stdv_hybrid"] = geol_stdv_hybrid
-    chunk_df["geology_mvn_vs30"] = geol_mvn_vs30
-    chunk_df["geology_mvn_stdv"] = geol_mvn_stdv
+        chunk_df[constants.COL_GEOLOGY_VS30] = geol_vs30
+        chunk_df[constants.COL_GEOLOGY_STDV] = geol_stdv
+        chunk_df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+        chunk_df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+    chunk_df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+    chunk_df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     # Process terrain model
     (
@@ -367,12 +368,12 @@ def process_locations_chunk(
         terr_mvn_stdv,
     ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
 
-    chunk_df["terrain_id"] = terr_ids
+    chunk_df[constants.COL_TERRAIN_ID] = terr_ids
     if config.include_intermediate:
-        chunk_df["terrain_vs30"] = terr_vs30
-        chunk_df["terrain_stdv"] = terr_stdv
-    chunk_df["terrain_mvn_vs30"] = terr_mvn_vs30
-    chunk_df["terrain_mvn_stdv"] = terr_mvn_stdv
+        chunk_df[constants.COL_TERRAIN_VS30] = terr_vs30
+        chunk_df[constants.COL_TERRAIN_STDV] = terr_stdv
+    chunk_df[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+    chunk_df[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
     # Combine models
     combined_vs30, combined_stdv = utils.combine_vs30_models(
@@ -383,8 +384,8 @@ def process_locations_chunk(
         config.combination_method,
     )
 
-    chunk_df["vs30"] = combined_vs30
-    chunk_df["stdv"] = combined_stdv
+    chunk_df[constants.COL_VS30] = combined_vs30
+    chunk_df[constants.COL_COMBINED_STDV] = combined_stdv
 
     return chunk_id, chunk_df
 
@@ -415,13 +416,13 @@ def process_pixels_chunk(
 
     # Reconstruct ObservationData from dict (dataclasses can't always be pickled cleanly)
     obs_data = spatial.ObservationData(
-        locations=obs_data_dict["locations"],
-        vs30=obs_data_dict["vs30"],
-        model_vs30=obs_data_dict["model_vs30"],
-        model_stdv=obs_data_dict["model_stdv"],
-        residuals=obs_data_dict["residuals"],
-        omega=obs_data_dict["omega"],
-        uncertainty=obs_data_dict["uncertainty"],
+        locations=obs_data_dict[constants.KEY_LOCATIONS],
+        vs30=obs_data_dict[constants.COL_VS30],
+        model_vs30=obs_data_dict[constants.KEY_MODEL_VS30],
+        model_stdv=obs_data_dict[constants.KEY_MODEL_STDV],
+        residuals=obs_data_dict[constants.KEY_RESIDUALS],
+        omega=obs_data_dict[constants.KEY_OMEGA],
+        uncertainty=obs_data_dict[constants.COL_UNCERTAINTY],
     )
 
     updates = []
@@ -429,20 +430,20 @@ def process_pixels_chunk(
         # Get pixel data from the prepared dict
         pixel_info = pixel_data_dict[idx]
         pixel = spatial.PixelData(
-            location=pixel_info["location"],
-            vs30=pixel_info["vs30"],
-            stdv=pixel_info["stdv"],
-            index=pixel_info["index"],
+            location=pixel_info[constants.KEY_LOCATION],
+            vs30=pixel_info[constants.COL_VS30],
+            stdv=pixel_info[constants.KEY_STDV],
+            index=pixel_info[constants.KEY_INDEX],
         )
 
         update = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
-            config_params["model_type"],
-            max_dist_m=config_params["max_dist_m"],
-            max_points=config_params["max_points"],
-            noisy=config_params["noisy"],
-            cov_reduc=config_params["cov_reduc"],
+            config_params[constants.KEY_MODEL_TYPE],
+            max_dist_m=config_params[constants.KEY_MAX_DIST_M],
+            max_points=config_params[constants.KEY_MAX_POINTS],
+            noisy=config_params[constants.KEY_NOISY],
+            cov_reduc=config_params[constants.KEY_COV_REDUC],
         )
 
         if update is not None:
@@ -545,8 +546,8 @@ def run_parallel_spatial_fit(
         Raster data object with vs30, stdv, and coordinate info
     obs_data : ObservationData
         Observation data for spatial adjustment
-    model_type : str
-        Model type ("geology" or "terrain")
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN)
     max_dist_m : float
         Maximum distance for considering observations
     max_points : int
@@ -571,30 +572,30 @@ def run_parallel_spatial_fit(
         valid_idx = np.searchsorted(raster_data.valid_flat_indices, flat_idx)
         if valid_idx < len(grid_locs):
             pixel_data_dict[i] = {
-                "location": grid_locs[valid_idx],
-                "vs30": float(raster_data.vs30.flat[flat_idx]),
-                "stdv": float(raster_data.stdv.flat[flat_idx]),
-                "index": int(flat_idx),
+                constants.KEY_LOCATION: grid_locs[valid_idx],
+                constants.COL_VS30: float(raster_data.vs30.flat[flat_idx]),
+                constants.KEY_STDV: float(raster_data.stdv.flat[flat_idx]),
+                constants.KEY_INDEX: int(flat_idx),
             }
 
     # Convert ObservationData to dict for pickling
     obs_data_dict = {
-        "locations": obs_data.locations,
-        "vs30": obs_data.vs30,
-        "model_vs30": obs_data.model_vs30,
-        "model_stdv": obs_data.model_stdv,
-        "residuals": obs_data.residuals,
-        "omega": obs_data.omega,
-        "uncertainty": obs_data.uncertainty,
+        constants.KEY_LOCATIONS: obs_data.locations,
+        constants.COL_VS30: obs_data.vs30,
+        constants.KEY_MODEL_VS30: obs_data.model_vs30,
+        constants.KEY_MODEL_STDV: obs_data.model_stdv,
+        constants.KEY_RESIDUALS: obs_data.residuals,
+        constants.KEY_OMEGA: obs_data.omega,
+        constants.COL_UNCERTAINTY: obs_data.uncertainty,
     }
 
     # Config params
     config_params = {
-        "model_type": model_type,
-        "max_dist_m": max_dist_m,
-        "max_points": max_points,
-        "noisy": noisy,
-        "cov_reduc": cov_reduc,
+        constants.KEY_MODEL_TYPE: model_type,
+        constants.KEY_MAX_DIST_M: max_dist_m,
+        constants.KEY_MAX_POINTS: max_points,
+        constants.KEY_NOISY: noisy,
+        constants.KEY_COV_REDUC: cov_reduc,
     }
 
     # Divide pixel indices into chunks

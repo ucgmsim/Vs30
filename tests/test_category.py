@@ -43,11 +43,10 @@ class TestBayesianUpdateFormulas:
         """Test compute_bayesian_posterior_mean with simple inputs."""
         prior_mean = 200  # Prior mean
         num_prior_observations = 3  # Prior sample size
-        posterior_variance = 0.2  # Updated variance
         observation_value = 220  # Observation
 
         mean = category.compute_bayesian_posterior_mean(
-            prior_mean, num_prior_observations, posterior_variance, observation_value
+            prior_mean, num_prior_observations, observation_value
         )
 
         # New mean should be between prior and observation
@@ -61,11 +60,10 @@ class TestBayesianUpdateFormulas:
         """Test that posterior mean is pulled toward observation."""
         prior_mean = 200
         num_prior_observations = 3
-        posterior_variance = 0.2
         observation_value = 300  # Observation much higher than prior
 
         mean = category.compute_bayesian_posterior_mean(
-            prior_mean, num_prior_observations, posterior_variance, observation_value
+            prior_mean, num_prior_observations, observation_value
         )
 
         # Mean should be closer to observation than prior was
@@ -118,7 +116,7 @@ class TestBayesianUpdateFormulas:
                 observation_value,
             )
             current_mean = category.compute_bayesian_posterior_mean(
-                current_mean, current_num_observations, var, observation_value
+                current_mean, current_num_observations, observation_value
             )
             current_std = np.sqrt(var)
             current_num_observations += 1
@@ -244,7 +242,6 @@ class TestPerformClustering:
         """Test that clustering identifies tight groups with actual EPS=15km."""
         result = category.perform_clustering(
             clustered_sites,
-            model_type="geology",
         )
 
         # Should have cluster column
@@ -266,7 +263,7 @@ class TestPerformClustering:
             }
         )
 
-        result = category.perform_clustering(sites, model_type="geology")
+        result = category.perform_clustering(sites)
 
         # All points should be unclustered (-1) since they're >15km apart
         assert (result["cluster"] == -1).all()
@@ -284,7 +281,7 @@ class TestPerformClustering:
             }
         )
 
-        result = category.perform_clustering(sites, "geology")
+        result = category.perform_clustering(sites)
 
         # All points should be unclustered since group is too small for MIN_GROUP=5
         assert (result["cluster"] == -1).all()
@@ -326,7 +323,7 @@ class TestGetVs30ForPoints:
         points = np.array([[1570604, 5180029]])
 
         vs30, stdv, ids = category.get_vs30_for_points(
-            points, "terrain", sample_model_df
+            points, constants.ModelType.TERRAIN, sample_model_df
         )
 
         assert len(vs30) == 1

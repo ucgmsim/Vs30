@@ -64,7 +64,7 @@ independent_observations_file: observations/measured_vs30_independent_observatio
 - **No spatial clustering**: Each measurement is treated independently
 - **Direct model updating**: Each observation updates the categorical model at its exact location
 - **Bayesian integration**: Uses `update_with_independent_data()` function in the category module
-- **Output layers**: Contributes to `posterior_mean_vs30_km_per_s_independent_observations` and related uncertainty layers
+- **Output layers**: Contributes to `constants.COL_POSTERIOR_MEAN_INDEPENDENT` and related uncertainty layers (`constants.COL_POSTERIOR_STDV_INDEPENDENT`)
 
 ### Quality Considerations
 

@@ -10,6 +10,7 @@ see config.yaml and config.py.
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 # Path to the data directory containing shapefiles, rasters, and other input data
@@ -31,9 +32,7 @@ PHI_GEOLOGY: int = 1407
 PHI_TERRAIN: int = 993
 
 # Dictionary for convenient access by model type
-# Note: Keys are literal strings here since MODEL_TYPE_* constants are defined later.
-# This maintains backward compatibility while PHI is used before MODEL_TYPE_* definitions.
-PHI: dict[str, int] = {"geology": PHI_GEOLOGY, "terrain": PHI_TERRAIN}
+# Note: PHI uses string keys for now; will be updated after ModelType is defined below.
 
 # Minimum distance (meters) enforced in correlation calculations to prevent
 # division by zero or correlation=1 when points are exactly co-located.
@@ -153,11 +152,7 @@ GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distanc
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 
-# Dictionary for convenient access by model type
-OUTPUT_FILENAMES: dict[str, str] = {
-    "geology": GEOLOGY_VS30_MEAN_STDDEV_FILENAME,
-    "terrain": TERRAIN_VS30_MEAN_STDDEV_FILENAME,
-}
+# OUTPUT_FILENAMES and PHI dictionaries are defined after ModelType class below
 
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
@@ -260,6 +255,8 @@ COL_PRIOR_MEAN: str = "prior_mean_vs30_km_per_s"
 COL_PRIOR_STDV: str = "prior_standard_deviation_vs30_km_per_s"
 COL_MEAN: str = "mean_vs30_km_per_s"
 COL_STDV: str = "standard_deviation_vs30_km_per_s"
+COL_ASSUMED_NUM_PRIOR_OBS: str = "assumed_num_prior_observations"
+COL_ENFORCED_MIN_SIGMA: str = "enforced_min_sigma"
 
 # Standard column name for category ID in DataFrames.
 STANDARD_ID_COLUMN: str = "id"
@@ -282,6 +279,40 @@ COL_CLUSTER: str = "cluster"
 # Cluster label for unclustered/noise points in DBSCAN output
 CLUSTER_UNCLUSTERED_LABEL: int = -1
 
+# OUTPUT CSV COLUMN NAMES
+# Column names for compute-at-locations output CSV files.
+
+COL_GEOLOGY_ID: str = "geology_id"
+COL_GEOLOGY_VS30: str = "geology_vs30"
+COL_GEOLOGY_STDV: str = "geology_stdv"
+COL_GEOLOGY_VS30_HYBRID: str = "geology_vs30_hybrid"
+COL_GEOLOGY_STDV_HYBRID: str = "geology_stdv_hybrid"
+COL_GEOLOGY_MVN_VS30: str = "geology_mvn_vs30"
+COL_GEOLOGY_MVN_STDV: str = "geology_mvn_stdv"
+COL_TERRAIN_ID: str = "terrain_id"
+COL_TERRAIN_VS30: str = "terrain_vs30"
+COL_TERRAIN_STDV: str = "terrain_stdv"
+COL_TERRAIN_MVN_VS30: str = "terrain_mvn_vs30"
+COL_TERRAIN_MVN_STDV: str = "terrain_mvn_stdv"
+COL_COMBINED_STDV: str = "stdv"
+
+# PARALLEL PROCESSING DICTIONARY KEYS
+# Keys used in dictionaries for multiprocessing data transfer.
+
+KEY_LOCATIONS: str = "locations"
+KEY_MODEL_VS30: str = "model_vs30"
+KEY_MODEL_STDV: str = "model_stdv"
+KEY_RESIDUALS: str = "residuals"
+KEY_OMEGA: str = "omega"
+KEY_LOCATION: str = "location"
+KEY_STDV: str = "stdv"
+KEY_INDEX: str = "index"
+KEY_MODEL_TYPE: str = "model_type"
+KEY_MAX_DIST_M: str = "max_dist_m"
+KEY_MAX_POINTS: str = "max_points"
+KEY_NOISY: str = "noisy"
+KEY_COV_REDUC: str = "cov_reduc"
+
 # Required columns for observation DataFrames
 REQUIRED_OBSERVATION_COLUMNS: list[str] = [
     COL_EASTING,
@@ -298,9 +329,22 @@ REQUIRED_OBSERVATION_COLUMNS_BASIC: list[str] = [
 # MODEL TYPE IDENTIFIERS
 # String identifiers for the two model types used in the Vs30 pipeline.
 
-MODEL_TYPE_GEOLOGY: str = "geology"
-MODEL_TYPE_TERRAIN: str = "terrain"
-VALID_MODEL_TYPES: list[str] = [MODEL_TYPE_GEOLOGY, MODEL_TYPE_TERRAIN]
+class ModelType(StrEnum):
+    """Valid model types for VS30 calculations."""
+
+    GEOLOGY = "geology"
+    TERRAIN = "terrain"
+
+# Dictionaries for convenient access by model type
+PHI: dict[ModelType, int] = {
+    ModelType.GEOLOGY: PHI_GEOLOGY,
+    ModelType.TERRAIN: PHI_TERRAIN,
+}
+
+OUTPUT_FILENAMES: dict[ModelType, str] = {
+    ModelType.GEOLOGY: GEOLOGY_VS30_MEAN_STDDEV_FILENAME,
+    ModelType.TERRAIN: TERRAIN_VS30_MEAN_STDDEV_FILENAME,
+}
 
 # RASTER BAND INDICES
 # Band numbers for multi-band VS30 rasters (1-indexed as per rasterio convention).

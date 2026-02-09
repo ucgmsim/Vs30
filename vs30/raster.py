@@ -165,8 +165,8 @@ def create_category_id_raster(
 
     Parameters
     ----------
-    model_type : str
-        Either "terrain" or "geology".
+    model_type : constants.ModelType
+        Either ModelType.TERRAIN or ModelType.GEOLOGY.
     output_dir : Path
         Directory where output raster will be saved.
     xmin : float
@@ -190,13 +190,13 @@ def create_category_id_raster(
     Raises
     ------
     ValueError
-        If model_type is not "terrain" or "geology".
+        If model_type is not a valid ModelType.
     FileNotFoundError
         If input files don't exist.
     """
-    if model_type not in ["terrain", "geology"]:
+    if model_type not in constants.ModelType:
         raise ValueError(
-            f"model_type must be 'terrain' or 'geology', got '{model_type}'"
+            f"model_type must be a valid ModelType, got '{model_type}'"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -207,7 +207,7 @@ def create_category_id_raster(
     dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
     output_filename = (
         constants.TERRAIN_ID_FILENAME
-        if model_type == "terrain"
+        if model_type == constants.ModelType.TERRAIN
         else constants.GEOLOGY_ID_FILENAME
     )
     output_path = output_dir / output_filename
@@ -225,7 +225,7 @@ def create_category_id_raster(
         "compress": constants.GEOTIFF_COMPRESSION,
     }
 
-    if model_type == "terrain":
+    if model_type == constants.ModelType.TERRAIN:
         # Resample terrain raster to target grid
         terrain_raster_path = constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME
         if not terrain_raster_path.exists():
