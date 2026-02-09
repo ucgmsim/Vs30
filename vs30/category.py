@@ -1,11 +1,6 @@
 """
 Functions for relating measurement vs30 values to geology/terrain categories
 and performing Bayesian updates of categorical mean and standard deviation values.
-
-This module is self-contained and includes all functionality needed to:
-1. Relate measurement locations to category IDs
-2. Compute category statistics from measurements
-3. Perform Bayesian updates of category mean and standard deviation values
 """
 
 import geopandas as gpd
@@ -35,7 +30,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
     """
-    # load QMAP polygons (keeps CRS from file)
+    # load QMAP polygons
     gdf = gpd.read_file(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
         [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
@@ -229,7 +224,9 @@ def update_with_independent_data(
     )
 
     # Initialize posterior columns
-    updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = constants.N_PRIOR
+    updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = (
+        constants.N_PRIOR
+    )
     updated_categorical_model_df[constants.COL_ENFORCED_MIN_SIGMA] = constants.MIN_SIGMA
     updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = (
         updated_categorical_model_df[constants.COL_PRIOR_MEAN]
