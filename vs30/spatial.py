@@ -362,8 +362,8 @@ def prepare_observation_data(
         Raster data object (used for transform/profile info).
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
-    model_type : str
-        Model type ("geology" or "terrain").
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
     output_dir : Path
         Output directory for intermediate rasters (slope, coast distance).
     noisy : bool
@@ -375,12 +375,12 @@ def prepare_observation_data(
         Prepared observation data object.
     """
     # Get observation locations
-    obs_locs = observations[["easting", "northing"]].values
+    obs_locs = observations[[constants.COL_EASTING, constants.COL_NORTHING]].values
 
     # Interpolate model values at observation locations
-    if model_type == "geology":
+    if model_type == constants.ModelType.GEOLOGY:
         model_ids = category.assign_to_category_geology(obs_locs)
-    elif model_type == "terrain":
+    elif model_type == constants.ModelType.TERRAIN:
         model_ids = category.assign_to_category_terrain(obs_locs)
     else:
         raise ValueError(f"Unknown model type: {model_type}")
@@ -404,14 +404,14 @@ def prepare_observation_data(
     # Filter out observations where model values are NaN/NoData
     valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
     obs_locs = obs_locs[valid_obs_mask]
-    vs30_obs = observations.vs30.values[valid_obs_mask]
+    vs30_obs = observations[constants.COL_VS30].values[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
     model_stdv = model_stdv[valid_obs_mask]
-    uncertainty = observations.uncertainty.values[valid_obs_mask]
+    uncertainty = observations[constants.COL_UNCERTAINTY].values[valid_obs_mask]
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
-    if model_type == "geology":
+    if model_type == constants.ModelType.GEOLOGY:
         # 1. Get slope and coast distance at points
         # Use existing rasters in output_dir if possible, otherwise create temporary ones
         slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
@@ -615,8 +615,8 @@ def build_covariance_matrix(
         Pixel data for the pixel being updated.
     selected_observations : ObservationData
         Selected observations for this pixel.
-    model_type : str
-        Model type ("geology" or "terrain").
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
 
     Returns
     -------
@@ -737,8 +737,8 @@ def compute_spatial_adjustment_for_pixel(
         Pixel data.
     obs_data : ObservationData
         Full observation data.
-    model_type : str
-        Model type ("geology" or "terrain").
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
 
     Returns
     -------
@@ -1061,8 +1061,8 @@ def compute_spatial_adjustments(
         Observation data.
     bbox_result : BoundingBoxResult
         Bounding box result.
-    model_type : str
-        Model type ("geology" or "terrain").
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
 
     Returns
     -------
@@ -1154,8 +1154,8 @@ def apply_and_write_updates(
         Raster data object.
     updates : list
         List of SpatialAdjustmentResult objects.
-    model_type : str
-        Model type ("geology" or "terrain").
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
     output_dir : Path
         Directory where output raster will be saved.
     """
@@ -1219,8 +1219,8 @@ def compute_spatial_adjustment_at_points(
         (M,) array of model standard deviation at observation locations.
     obs_uncertainty : np.ndarray
         (M,) array of observation uncertainties.
-    model_type : str
-        Either "geology" or "terrain" (determines phi correlation length).
+    model_type : constants.ModelType
+        Either ModelType.GEOLOGY or ModelType.TERRAIN (determines phi correlation length).
     max_dist_m : float, optional
         Maximum distance (meters) to consider observations. Default from constants.
     max_points : int, optional

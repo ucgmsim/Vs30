@@ -31,16 +31,10 @@ import pandas as pd
 import rasterio
 import sklearn.cluster
 import typer
+from qcore import cli, coordinates
 
-from qcore import cli
-from qcore import coordinates
-from vs30 import category
+from vs30 import category, constants, parallel, raster, spatial, utils
 from vs30 import config as config_module
-from vs30 import constants
-from vs30 import parallel
-from vs30 import raster
-from vs30 import spatial
-from vs30 import utils
 
 logger = logging.getLogger(__name__)
 
@@ -239,9 +233,9 @@ def update_categorical_vs30_models(
             )
             raise typer.Exit(1)
 
-        if model_type not in ["geology", "terrain"]:
+        if model_type not in constants.ModelType:
             typer.echo(
-                f"Error: model_type must be 'geology' or 'terrain', got '{model_type}'",
+                f"Error: model_type must be a valid ModelType, got '{model_type}'",
                 err=True,
             )
             raise typer.Exit(1)
@@ -286,8 +280,8 @@ def update_categorical_vs30_models(
             )
 
             # Assign category IDs
-            obs_locs = clustered_observations_df[["easting", "northing"]].values
-            if model_type == "geology":
+            obs_locs = clustered_observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+            if model_type == constants.ModelType.GEOLOGY:
                 model_ids = category.assign_to_category_geology(obs_locs)
             else:  # terrain
                 model_ids = category.assign_to_category_terrain(obs_locs)
@@ -316,7 +310,7 @@ def update_categorical_vs30_models(
             # Perform clustering
             logger.info("Performing spatial clustering...")
             clustered_observations_df = category.perform_clustering(
-                clustered_observations_df, model_type, nproc
+                clustered_observations_df, nproc
             )
 
         # Load independent observations if provided
@@ -340,8 +334,8 @@ def update_categorical_vs30_models(
             )
 
             # Assign category IDs
-            obs_locs = independent_observations_df[["easting", "northing"]].values
-            if model_type == "geology":
+            obs_locs = independent_observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+            if model_type == constants.ModelType.GEOLOGY:
                 model_ids = category.assign_to_category_geology(obs_locs)
             else:  # terrain
                 model_ids = category.assign_to_category_terrain(obs_locs)
@@ -354,7 +348,6 @@ def update_categorical_vs30_models(
             current_prior_df,
             independent_observations_df=independent_observations_df,
             clustered_observations_df=clustered_observations_df,
-            model_type=model_type,
         )
 
         # Create output directory if it doesn't exist
@@ -452,7 +445,7 @@ def make_initial_vs30_raster(
 
             logger.info("Creating terrain category ID raster...")
             id_raster = raster.create_category_id_raster(
-                "terrain", output_dir, **grid_params
+                constants.ModelType.TERRAIN, output_dir, **grid_params
             )
 
             logger.info("Creating terrain VS30 raster...")
@@ -474,7 +467,7 @@ def make_initial_vs30_raster(
 
             logger.info("Creating geology category ID raster...")
             id_raster = raster.create_category_id_raster(
-                "geology", output_dir, **grid_params
+                constants.ModelType.GEOLOGY, output_dir, **grid_params
             )
 
             logger.info("Creating geology VS30 raster...")
@@ -591,7 +584,6 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         logger.exception("Error creating hybrid raster")
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
-
 
 
 def prepare_observations_for_spatial_fit(
@@ -786,7 +778,8 @@ def spatial_fit(
         clustered_obs_file = cfg.clustered_observations_file
         is_clustered_obs = (
             clustered_obs_file is not None
-            and observations_csv.resolve() == (constants.RESOURCE_PATH / clustered_obs_file).resolve()
+            and observations_csv.resolve()
+            == (constants.RESOURCE_PATH / clustered_obs_file).resolve()
         )
 
         # 3. Load Model Values (updated categorical table)
@@ -1066,10 +1059,14 @@ def full_pipeline_for_geology_or_terrain(
 
         # Resolve observations from config if not provided
         clustered_observations_csv = resolve_observation_csv(
-            clustered_observations_csv, cfg.clustered_observations_file, constants.RESOURCE_PATH
+            clustered_observations_csv,
+            cfg.clustered_observations_file,
+            constants.RESOURCE_PATH,
         )
         independent_observations_csv = resolve_observation_csv(
-            independent_observations_csv, cfg.independent_observations_file, constants.RESOURCE_PATH
+            independent_observations_csv,
+            cfg.independent_observations_file,
+            constants.RESOURCE_PATH,
         )
 
         # --- Step 1: Update Categorical Models (conditional) ---
@@ -1098,21 +1095,21 @@ def full_pipeline_for_geology_or_terrain(
         # --- Step 2: Make Initial Raster ---
         logger.info("\n=== STEP 2: Creating Initial Raster ===")
         make_initial_vs30_raster(
-            terrain=(model_type == "terrain"),
-            geology=(model_type == "geology"),
+            terrain=(model_type == constants.ModelType.TERRAIN),
+            geology=(model_type == constants.ModelType.GEOLOGY),
             output_dir=output_dir,
-            geology_csv=posterior_csv if model_type == "geology" else None,
-            terrain_csv=posterior_csv if model_type == "terrain" else None,
+            geology_csv=posterior_csv if model_type == constants.ModelType.GEOLOGY else None,
+            terrain_csv=posterior_csv if model_type == constants.ModelType.TERRAIN else None,
         )
 
         initial_raster = output_dir / (
             constants.GEOLOGY_INITIAL_VS30_FILENAME
-            if model_type == "geology"
+            if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_INITIAL_VS30_FILENAME
         )
         id_raster_name = (
             constants.GEOLOGY_ID_FILENAME
-            if model_type == "geology"
+            if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_ID_FILENAME
         )
         id_raster = output_dir / id_raster_name
@@ -1123,7 +1120,7 @@ def full_pipeline_for_geology_or_terrain(
         # --- Step 3: Hybrid Modification (Geology Only) ---
         current_raster = initial_raster
 
-        if model_type == "geology":
+        if model_type == constants.ModelType.GEOLOGY:
             logger.info(
                 "\n=== STEP 3: Creating Slope and Coastal Distance Adjusted Geology Raster ==="
             )
@@ -1345,7 +1342,7 @@ def full_pipeline(
         # 1. Run Geology Pipeline
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
         full_pipeline_for_geology_or_terrain(
-            model_type="geology",
+            model_type=constants.ModelType.GEOLOGY,
             categorical_model_csv=geology_categorical_csv,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
@@ -1357,7 +1354,7 @@ def full_pipeline(
         # 2. Run Terrain Pipeline
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
         full_pipeline_for_geology_or_terrain(
-            model_type="terrain",
+            model_type=constants.ModelType.TERRAIN,
             categorical_model_csv=terrain_categorical_csv,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
@@ -1371,8 +1368,8 @@ def full_pipeline(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
-        geol_tif = output_dir / constants.OUTPUT_FILENAMES["geology"]
-        terr_tif = output_dir / constants.OUTPUT_FILENAMES["terrain"]
+        geol_tif = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.GEOLOGY]
+        terr_tif = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.TERRAIN]
         combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
 
         combine(
@@ -1529,8 +1526,8 @@ def compute_at_locations(
             np.column_stack([df[lat_column].values, df[lon_column].values])
         )
         northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
-        df["easting"] = easting
-        df["northing"] = northing
+        df[constants.COL_EASTING] = easting
+        df[constants.COL_NORTHING] = northing
         points = np.column_stack([easting, northing])
         typer.echo(f"Loaded {len(points)} locations")
 
@@ -1548,10 +1545,14 @@ def compute_at_locations(
 
         # Load observations for spatial adjustment
         clustered_observations_csv = resolve_observation_csv(
-            clustered_observations_csv, cfg.clustered_observations_file, constants.RESOURCE_PATH
+            clustered_observations_csv,
+            cfg.clustered_observations_file,
+            constants.RESOURCE_PATH,
         )
         independent_observations_csv = resolve_observation_csv(
-            independent_observations_csv, cfg.independent_observations_file, constants.RESOURCE_PATH
+            independent_observations_csv,
+            cfg.independent_observations_file,
+            constants.RESOURCE_PATH,
         )
 
         # Load and combine all available observation files
@@ -1641,14 +1642,14 @@ def compute_at_locations(
             noisy=cfg.noisy,
         )
 
-        df["geology_id"] = geol_ids
+        df[constants.COL_GEOLOGY_ID] = geol_ids
         if include_intermediate:
-            df["geology_vs30"] = geol_vs30
-            df["geology_stdv"] = geol_stdv
-            df["geology_vs30_hybrid"] = geol_vs30_hybrid
-            df["geology_stdv_hybrid"] = geol_stdv_hybrid
-        df["geology_mvn_vs30"] = geol_mvn_vs30
-        df["geology_mvn_stdv"] = geol_mvn_stdv
+            df[constants.COL_GEOLOGY_VS30] = geol_vs30
+            df[constants.COL_GEOLOGY_STDV] = geol_stdv
+            df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+            df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+        df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+        df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
         typer.echo("Processing terrain model...")
         (
@@ -1661,12 +1662,12 @@ def compute_at_locations(
             points, terr_model_df, observations_df, noisy=cfg.noisy
         )
 
-        df["terrain_id"] = terr_ids
+        df[constants.COL_TERRAIN_ID] = terr_ids
         if include_intermediate:
-            df["terrain_vs30"] = terr_vs30
-            df["terrain_stdv"] = terr_stdv
-        df["terrain_mvn_vs30"] = terr_mvn_vs30
-        df["terrain_mvn_stdv"] = terr_mvn_stdv
+            df[constants.COL_TERRAIN_VS30] = terr_vs30
+            df[constants.COL_TERRAIN_STDV] = terr_stdv
+        df[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+        df[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
         typer.echo("Combining models...")
         combined_vs30, combined_stdv = utils.combine_vs30_models(
@@ -1677,8 +1678,8 @@ def compute_at_locations(
             combination_method,
         )
 
-        df["vs30"] = combined_vs30
-        df["stdv"] = combined_stdv
+        df[constants.COL_VS30] = combined_vs30
+        df[constants.COL_COMBINED_STDV] = combined_stdv
 
         # Write output
         output_csv.parent.mkdir(parents=True, exist_ok=True)

@@ -89,7 +89,6 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 def compute_bayesian_posterior_mean(
     prior_mean: float,
     num_prior_observations: float,
-    posterior_variance: float,
     observation_value: float,
 ) -> float:
     """
@@ -101,8 +100,6 @@ def compute_bayesian_posterior_mean(
         Prior mean (in linear space, not log space).
     num_prior_observations : float
         Effective number of prior observations.
-    posterior_variance : float
-        Posterior variance (computed from compute_bayesian_posterior_variance).
     observation_value : float
         New observation value (in linear space).
 
@@ -179,9 +176,9 @@ def update_with_independent_data(
     DataFrame
         Updated DataFrame with posterior mean and standard deviation values.
         Columns:
-        - "posterior_mean_vs30_km_per_s_independent_observations"
-        - "posterior_standard_deviation_vs30_km_per_s_independent_observations"
-        - "posterior_num_observations_independent_observations"
+        - constants.COL_POSTERIOR_MEAN_INDEPENDENT
+        - constants.COL_POSTERIOR_STDV_INDEPENDENT
+        - constants.COL_POSTERIOR_NOBS_INDEPENDENT
         - "assumed_num_prior_observations"
         - "enforced_min_sigma"
 
@@ -201,12 +198,12 @@ def update_with_independent_data(
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         # Use clustered posterior as prior for independent updates
         # This implements the sequential Bayesian update: clustered → independent
-        updated_categorical_model_df[constants.COL_PRIOR_MEAN] = updated_categorical_model_df[
-            constants.COL_POSTERIOR_MEAN_CLUSTERED
-        ]
-        updated_categorical_model_df[constants.COL_PRIOR_STDV] = updated_categorical_model_df[
-            constants.COL_POSTERIOR_STDV_CLUSTERED
-        ]
+        updated_categorical_model_df[constants.COL_PRIOR_MEAN] = (
+            updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_CLUSTERED]
+        )
+        updated_categorical_model_df[constants.COL_PRIOR_STDV] = (
+            updated_categorical_model_df[constants.COL_POSTERIOR_STDV_CLUSTERED]
+        )
     else:
         # No posterior available - must have raw categorical data to use as priors
         if constants.COL_MEAN in updated_categorical_model_df.columns:
@@ -227,18 +224,22 @@ def update_with_independent_data(
 
     # Enforce minimum sigma value on prior
     mask = updated_categorical_model_df[constants.COL_PRIOR_STDV] < constants.MIN_SIGMA
-    updated_categorical_model_df.loc[mask, constants.COL_PRIOR_STDV] = constants.MIN_SIGMA
+    updated_categorical_model_df.loc[mask, constants.COL_PRIOR_STDV] = (
+        constants.MIN_SIGMA
+    )
 
     # Initialize posterior columns
-    updated_categorical_model_df["assumed_num_prior_observations"] = constants.N_PRIOR
-    updated_categorical_model_df["enforced_min_sigma"] = constants.MIN_SIGMA
-    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = updated_categorical_model_df[
-        constants.COL_PRIOR_MEAN
-    ]
-    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = updated_categorical_model_df[
-        constants.COL_PRIOR_STDV
-    ]
-    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = constants.N_PRIOR
+    updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = constants.N_PRIOR
+    updated_categorical_model_df[constants.COL_ENFORCED_MIN_SIGMA] = constants.MIN_SIGMA
+    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = (
+        updated_categorical_model_df[constants.COL_PRIOR_MEAN]
+    )
+    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = (
+        updated_categorical_model_df[constants.COL_PRIOR_STDV]
+    )
+    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = (
+        constants.N_PRIOR
+    )
 
     for category_row_idx, category_row in updated_categorical_model_df.iterrows():
         # Match observations to this category using model_id
@@ -264,7 +265,6 @@ def update_with_independent_data(
             new_mean = compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
-                new_variance,
                 observation_row[constants.COL_VS30],
             )
 
@@ -274,16 +274,21 @@ def update_with_independent_data(
             current_n += 1
 
         # Write final posterior values for this category
-        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_MEAN_INDEPENDENT] = current_mean
-        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_STDV_INDEPENDENT] = current_std
-        updated_categorical_model_df.at[category_row_idx, constants.COL_POSTERIOR_NOBS_INDEPENDENT] = current_n
+        updated_categorical_model_df.at[
+            category_row_idx, constants.COL_POSTERIOR_MEAN_INDEPENDENT
+        ] = current_mean
+        updated_categorical_model_df.at[
+            category_row_idx, constants.COL_POSTERIOR_STDV_INDEPENDENT
+        ] = current_std
+        updated_categorical_model_df.at[
+            category_row_idx, constants.COL_POSTERIOR_NOBS_INDEPENDENT
+        ] = current_n
 
     return updated_categorical_model_df
 
 
 def perform_clustering(
     sites_df: pd.DataFrame,
-    model_type: str,
     nproc: int = -1,
 ) -> pd.DataFrame:
     """
@@ -298,8 +303,6 @@ def perform_clustering(
     sites_df : DataFrame
         Observations DataFrame with columns: constants.STANDARD_ID_COLUMN, easting, northing.
         Must have category IDs already assigned.
-    model_type : str
-        Model type: "geology" or "terrain".
     nproc : int, optional
         Number of processes for DBSCAN. -1 to use all available cores.
         Default is -1.
@@ -384,8 +387,12 @@ def update_with_clustered_data(
             )
 
     # Initialize posterior columns with suffix
-    posterior_df[constants.COL_POSTERIOR_MEAN_CLUSTERED] = posterior_df[constants.COL_PRIOR_MEAN]
-    posterior_df[constants.COL_POSTERIOR_STDV_CLUSTERED] = posterior_df[constants.COL_PRIOR_STDV]
+    posterior_df[constants.COL_POSTERIOR_MEAN_CLUSTERED] = posterior_df[
+        constants.COL_PRIOR_MEAN
+    ]
+    posterior_df[constants.COL_POSTERIOR_STDV_CLUSTERED] = posterior_df[
+        constants.COL_PRIOR_STDV
+    ]
 
     # Convert to numpy array format for computation
     max_id_prior = (
@@ -492,7 +499,6 @@ def posterior_from_bayesian_update(
     categorical_model_df: pd.DataFrame,
     independent_observations_df: pd.DataFrame | None = None,
     clustered_observations_df: pd.DataFrame | None = None,
-    model_type: str = "geology",
 ) -> pd.DataFrame:
     """
     Dispatcher function to perform Bayesian updates with clustered and/or independent data.
@@ -516,8 +522,6 @@ def posterior_from_bayesian_update(
         Independent observations for Bayesian update.
     clustered_observations_df : DataFrame, optional
         Clustered observations for Bayesian update.
-    model_type : str, optional
-        Model type: "geology" or "terrain". Default is "geology".
 
     Returns
     -------
@@ -554,8 +558,8 @@ def get_vs30_for_points(
     ----------
     points : np.ndarray
         (N, 2) array of [easting, northing] coordinates in NZTM.
-    model_type : str
-        Either "geology" or "terrain".
+    model_type : constants.ModelType
+        Either ModelType.GEOLOGY or ModelType.TERRAIN.
     categorical_model_df : pd.DataFrame
         DataFrame with columns for category ID, Vs30 mean, and Vs30 standard deviation.
         Supports various column naming conventions (see Notes).
@@ -577,20 +581,22 @@ def get_vs30_for_points(
     categorical model DataFrame. It looks for columns in this priority order
     (names defined in constants.py):
 
-    For mean: col_posterior_mean_independent, col_posterior_mean_clustered,
-              col_prior_mean, col_mean
+    For mean: constants.COL_POSTERIOR_MEAN_INDEPENDENT,
+              constants.COL_POSTERIOR_MEAN_CLUSTERED,
+              constants.COL_PRIOR_MEAN, constants.COL_MEAN
 
-    For stddev: col_posterior_stdv_independent, col_posterior_stdv_clustered,
-                col_prior_stdv, col_stdv
+    For stddev: constants.COL_POSTERIOR_STDV_INDEPENDENT,
+                constants.COL_POSTERIOR_STDV_CLUSTERED,
+                constants.COL_PRIOR_STDV, constants.COL_STDV
     """
     # Assign category IDs to points
-    if model_type == "geology":
+    if model_type == constants.ModelType.GEOLOGY:
         category_ids = assign_to_category_geology(points)
-    elif model_type == "terrain":
+    elif model_type == constants.ModelType.TERRAIN:
         category_ids = assign_to_category_terrain(points)
     else:
         raise ValueError(
-            f"Unknown model_type: {model_type}. Must be 'geology' or 'terrain'."
+            f"Unknown model_type: {model_type}. Must be a valid ModelType."
         )
 
     mean_col, stdv_col = raster.select_vs30_columns_by_priority(
