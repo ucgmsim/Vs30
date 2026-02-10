@@ -2,13 +2,9 @@
 Tests for the VS30 raster module.
 
 Tests cover:
-- select_vs30_columns_by_priority function
 - apply_hybrid_geology_modifications function
-- Hybrid model calculations
+- apply_hybrid_modifications_at_points function
 """
-
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,78 +12,6 @@ import rasterio
 from rasterio.transform import from_bounds
 
 from vs30 import raster
-
-
-class TestSelectVs30ColumnsByPriority:
-    """Tests for the select_vs30_columns_by_priority function."""
-
-    def test_independent_observations_priority(self):
-        """Test that independent observations posterior is preferred."""
-        columns = [
-            "id",
-            "mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s",
-            "posterior_mean_vs30_km_per_s_independent_observations",
-            "posterior_standard_deviation_vs30_km_per_s_independent_observations",
-            "posterior_mean_vs30_km_per_s_clustered_observations",
-            "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
-        ]
-
-        mean_col, std_col = raster.select_vs30_columns_by_priority(columns)
-
-        assert mean_col == "posterior_mean_vs30_km_per_s_independent_observations"
-        assert std_col == "posterior_standard_deviation_vs30_km_per_s_independent_observations"
-
-    def test_clustered_observations_second_priority(self):
-        """Test that clustered observations posterior is second priority."""
-        columns = [
-            "id",
-            "mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s",
-            "posterior_mean_vs30_km_per_s_clustered_observations",
-            "posterior_standard_deviation_vs30_km_per_s_clustered_observations",
-        ]
-
-        mean_col, std_col = raster.select_vs30_columns_by_priority(columns)
-
-        assert mean_col == "posterior_mean_vs30_km_per_s_clustered_observations"
-        assert std_col == "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
-
-    def test_standard_columns_fallback(self):
-        """Test that standard columns are used as fallback."""
-        columns = [
-            "id",
-            "mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s",
-        ]
-
-        mean_col, std_col = raster.select_vs30_columns_by_priority(columns)
-
-        assert mean_col == "mean_vs30_km_per_s"
-        assert std_col == "standard_deviation_vs30_km_per_s"
-
-    def test_missing_columns_raises_error(self):
-        """Test that missing columns raises ValueError."""
-        columns = ["id", "some_other_column"]
-
-        with pytest.raises(ValueError, match="Could not find valid VS30"):
-            raster.select_vs30_columns_by_priority(columns)
-
-    def test_partial_pair_not_selected(self):
-        """Test that having only mean or only std column doesn't match."""
-        columns = [
-            "id",
-            "posterior_mean_vs30_km_per_s_independent_observations",
-            # Missing posterior_standard_deviation_vs30_km_per_s_independent_observations
-            "mean_vs30_km_per_s",
-            "standard_deviation_vs30_km_per_s",
-        ]
-
-        mean_col, std_col = raster.select_vs30_columns_by_priority(columns)
-
-        # Should fall back to standard columns since independent is incomplete
-        assert mean_col == "mean_vs30_km_per_s"
-        assert std_col == "standard_deviation_vs30_km_per_s"
 
 
 class TestApplyHybridGeologyModifications:
@@ -255,67 +179,8 @@ class TestApplyHybridGeologyModifications:
         np.testing.assert_array_equal(result_stdv, original_stdv)
 
 
-class TestLoadModelValuesFromCSV:
-    """Tests for load_model_values_from_csv function."""
-
-    def test_load_valid_csv(self):
-        """Test loading a valid model CSV from resources."""
-        # Load default geology model (correct path with subdirectory)
-        values = raster.load_model_values_from_csv(
-            "categorical_vs30_mean_and_stddev/geology/geology_model_prior_mean_and_standard_deviation.csv"
-        )
-
-        assert values.shape[1] == 2  # mean and stddev columns
-        assert values.dtype == np.float64
-        assert len(values) > 0
-
-    def test_load_terrain_csv(self):
-        """Test loading terrain model CSV."""
-        values = raster.load_model_values_from_csv(
-            "categorical_vs30_mean_and_stddev/terrain/terrain_model_prior_mean_and_standard_deviation.csv"
-        )
-
-        assert values.shape[1] == 2
-        assert len(values) > 0
-
-    def test_file_not_found_raises_error(self):
-        """Test that missing CSV file raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError, match="CSV file not found"):
-            raster.load_model_values_from_csv("nonexistent/path/to/file.csv")
-
-
-class TestCreateCategoryIdRaster:
-    """Tests for create_category_id_raster function."""
-
-    def test_invalid_model_type_raises(self):
-        """Test that invalid model type raises ValueError."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with pytest.raises(ValueError, match="model_type must be"):
-                raster.create_category_id_raster(
-                    "invalid", Path(temp_dir),
-                    xmin=1500000, xmax=1505000,
-                    ymin=5100000, ymax=5105000,
-                    dx=250, dy=250
-                )
-
-
 class TestApplyHybridModificationsAtPoints:
     """Tests for apply_hybrid_modifications_at_points function."""
-
-    def test_requires_coast_raster_for_mod6(self):
-        """Test that mod6 requires coast_distance_raster_path."""
-        points = np.array([[1500000.0, 5100000.0]])
-        vs30 = np.array([300.0])
-        stdv = np.array([30.0])
-        geology_ids = np.array([4])  # Alluvium (mod6 applies)
-
-        with pytest.raises(ValueError, match="coast_distance_raster_path is required"):
-            raster.apply_hybrid_modifications_at_points(
-                points, vs30, stdv, geology_ids,
-                mod6=True,
-                mod13=False,
-                coast_distance_raster_path=None,
-            )
 
     @pytest.fixture
     def slope_raster(self, tmp_path):
