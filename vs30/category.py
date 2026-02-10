@@ -71,8 +71,7 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
     with rasterio.open(constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
-        sampled = list(src.sample(points))
-        terrain_ids = np.array([s[0] for s in sampled], dtype=src.dtypes[0])
+        terrain_ids = np.array([s[0] for s in src.sample(points)], dtype=src.dtypes[0])
 
         # Handle nodata values
         if src.nodata is not None:
@@ -102,6 +101,19 @@ def compute_bayesian_posterior_mean(
     -------
     float
         Posterior mean (in linear space).
+
+    Notes
+    -----
+
+    This function was written in the original Vs30 codebase as
+
+    def _new_mean(mu_0, n0, var, y):
+        return exp((n0 / var * log(mu_0) + log(y) / var) / (n0 / var + 1 / var))
+
+    which can be shown to be equivalent to the form in this function with the substitutions of
+    mu_0 -> prior_mean, n0 -> num_prior_observations, and y -> observation_value, and cancelling
+    out the 1/var terms, which are common factors of every term in the numerator and denominator
+    of the exponential function.
     """
 
     weighted_log_mean = (
@@ -113,7 +125,7 @@ def compute_bayesian_posterior_mean(
 def compute_bayesian_posterior_variance(
     prior_stdv: float,
     num_prior_observations: float,
-    uncertainty: float,
+    observation_uncertainty: float,
     prior_mean: float,
     observation_value: float,
 ) -> float:
@@ -126,7 +138,7 @@ def compute_bayesian_posterior_variance(
         Prior standard deviation.
     num_prior_observations : float
         Effective number of prior observations.
-    uncertainty : float
+    observation_uncertainty : float
         Uncertainty (standard deviation) of new observation.
     prior_mean : float
         Prior mean.
@@ -137,13 +149,27 @@ def compute_bayesian_posterior_variance(
     -------
     float
         Posterior variance.
+
+    Notes
+    -----
+
+    This function was written in the original Vs30 codebase as
+
+    def _new_var(sigma_0, n0, uncertainty, mu_0, y):
+        mean_shift = (n0 / (n0 + 1)) * (log(y) - log(mu_0)) ** 2
+        return (n0 * sigma_0 * sigma_0 + uncertainty * uncertainty + mean_shift) / (n0 + 1)
+
+    which can be shown to be equivalent to the form in this function with the substitutions of
+    sigma_0 -> prior_stdv, n0 -> num_prior_observations, uncertainty -> observation_uncertainty, mu_0 -> prior_mean,
+    and y -> observation_value. Additionally, note that sigma_0 * sigma_0 == sigma_0**2 and
+    uncertainty * uncertainty == uncertainty**2.
     """
     log_residual = np.log(observation_value) - np.log(prior_mean)
     mean_shift = (
         num_prior_observations / (num_prior_observations + 1)
     ) * log_residual**2
     pooled_variance = (
-        num_prior_observations * prior_stdv**2 + uncertainty**2 + mean_shift
+        num_prior_observations * prior_stdv**2 + observation_uncertainty**2 + mean_shift
     )
     return pooled_variance / (num_prior_observations + 1)
 

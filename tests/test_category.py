@@ -21,14 +21,14 @@ class TestBayesianUpdateFormulas:
         """Test compute_bayesian_posterior_variance with simple inputs."""
         prior_stdv = 0.5  # Prior std dev
         num_prior_observations = 3  # Prior sample size
-        uncertainty = 0.2  # Observation uncertainty
+        observation_uncertainty = 0.2  # Observation uncertainty
         prior_mean = 200  # Prior mean
         observation_value = 210  # Observation
 
         var = category.compute_bayesian_posterior_variance(
             prior_stdv,
             num_prior_observations,
-            uncertainty,
+            observation_uncertainty,
             prior_mean,
             observation_value,
         )
@@ -72,19 +72,19 @@ class TestBayesianUpdateFormulas:
         """Test that variance increases when observation far from prior."""
         prior_stdv = 0.5
         num_prior_observations = 3
-        uncertainty = 0.2
+        observation_uncertainty = 0.2
         prior_mean = 200
 
         # Observation close to prior
         obs_close = 205
         var_close = category.compute_bayesian_posterior_variance(
-            prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_close
+            prior_stdv, num_prior_observations, observation_uncertainty, prior_mean, obs_close
         )
 
         # Observation far from prior
         obs_far = 400
         var_far = category.compute_bayesian_posterior_variance(
-            prior_stdv, num_prior_observations, uncertainty, prior_mean, obs_far
+            prior_stdv, num_prior_observations, observation_uncertainty, prior_mean, obs_far
         )
 
         # Variance should be higher when observation is far from prior
@@ -105,12 +105,12 @@ class TestBayesianUpdateFormulas:
         for _ in range(10):
             # Observation with some noise
             observation_value = true_value * (1 + np.random.normal(0, 0.05))
-            uncertainty = 0.2
+            observation_uncertainty = 0.2
 
             var = category.compute_bayesian_posterior_variance(
                 current_std,
                 current_num_observations,
-                uncertainty,
+                observation_uncertainty,
                 current_mean,
                 observation_value,
             )
@@ -145,7 +145,7 @@ class TestUpdateWithIndependentData:
             {
                 "id": [1, 1, 2],
                 "vs30": [210.0, 195.0, 320.0],
-                "uncertainty": [0.2, 0.2, 0.15],
+                "observation_uncertainty": [0.2, 0.2, 0.15],
             }
         )
 
@@ -205,7 +205,7 @@ class TestCategoryEdgeCases:
         observations_df = pd.DataFrame(
             {
                 "vs30": [350.0],
-                "uncertainty": [25.0],
+                "observation_uncertainty": [25.0],
                 "id": [99],  # Non-existent category - uses 'id' column
                 "easting": [1500000.0],
                 "northing": [5100000.0],
