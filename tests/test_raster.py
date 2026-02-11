@@ -13,6 +13,31 @@ from rasterio.transform import from_bounds
 
 from vs30 import raster
 
+# Shared extent for test rasters used by TestApplyHybridModificationsAtPoints
+TEST_XMIN, TEST_XMAX = 1740000, 1760000
+TEST_YMIN, TEST_YMAX = 5420000, 5440000
+TEST_RASTER_SIZE = 20
+
+
+def write_single_band_raster(path, data):
+    """Write a single-band GeoTIFF with the shared test extent."""
+    raster_transform = from_bounds(
+        TEST_XMIN, TEST_YMIN, TEST_XMAX, TEST_YMAX,
+        TEST_RASTER_SIZE, TEST_RASTER_SIZE,
+    )
+    with rasterio.open(
+        path, "w",
+        driver="GTiff",
+        width=TEST_RASTER_SIZE,
+        height=TEST_RASTER_SIZE,
+        count=1,
+        dtype="float32",
+        crs="EPSG:2193",
+        transform=raster_transform,
+        nodata=-9999.0,
+    ) as dst:
+        dst.write(data, 1)
+
 
 class TestApplyHybridGeologyModifications:
     """Tests for the apply_hybrid_geology_modifications function."""
@@ -20,24 +45,14 @@ class TestApplyHybridGeologyModifications:
     @pytest.fixture
     def sample_arrays(self):
         """Create sample arrays for testing."""
-        # 3x3 grid with different geology IDs
         id_array = np.array([
             [1, 2, 3],
             [4, 5, 6],
             [7, 10, 11],
         ], dtype=np.uint8)
 
-        vs30_array = np.array([
-            [300.0, 300.0, 300.0],
-            [300.0, 300.0, 300.0],
-            [300.0, 300.0, 300.0],
-        ], dtype=np.float32)
-
-        stdv_array = np.array([
-            [0.5, 0.5, 0.5],
-            [0.5, 0.5, 0.5],
-            [0.5, 0.5, 0.5],
-        ], dtype=np.float32)
+        vs30_array = np.full((3, 3), 300.0, dtype=np.float32)
+        stdv_array = np.full((3, 3), 0.5, dtype=np.float32)
 
         slope_array = np.array([
             [0.01, 0.05, 0.1],
@@ -184,66 +199,20 @@ class TestApplyHybridModificationsAtPoints:
 
     @pytest.fixture
     def slope_raster(self, tmp_path):
-        """Create a test slope raster."""
+        """Create a test slope raster with values from 0.01 to 10."""
         slope_path = tmp_path / "slope.tif"
-
-        # Create a simple slope raster covering a small test area
-        xmin, xmax = 1740000, 1760000
-        ymin, ymax = 5420000, 5440000
-        width = 20
-        height = 20
-
-        transform = from_bounds(xmin, ymin, xmax, ymax, width, height)
-
-        # Create slope data varying from 0.01 to 10
-        slope_data = np.linspace(0.01, 10, width * height).reshape(height, width).astype(np.float32)
-
-        profile = {
-            "driver": "GTiff",
-            "width": width,
-            "height": height,
-            "count": 1,
-            "dtype": "float32",
-            "crs": "EPSG:2193",
-            "transform": transform,
-            "nodata": -9999.0,
-        }
-
-        with rasterio.open(slope_path, "w", **profile) as dst:
-            dst.write(slope_data, 1)
-
+        n = TEST_RASTER_SIZE
+        slope_data = np.linspace(0.01, 10, n * n).reshape(n, n).astype(np.float32)
+        write_single_band_raster(slope_path, slope_data)
         return slope_path
 
     @pytest.fixture
     def coast_distance_raster(self, tmp_path):
-        """Create a test coastal distance raster."""
+        """Create a test coastal distance raster with values from 1000 to 30000 meters."""
         coast_path = tmp_path / "coast_dist.tif"
-
-        # Same extent as slope raster
-        xmin, xmax = 1740000, 1760000
-        ymin, ymax = 5420000, 5440000
-        width = 20
-        height = 20
-
-        transform = from_bounds(xmin, ymin, xmax, ymax, width, height)
-
-        # Create coastal distance data varying from 1000 to 30000 meters
-        coast_data = np.linspace(1000, 30000, width * height).reshape(height, width).astype(np.float32)
-
-        profile = {
-            "driver": "GTiff",
-            "width": width,
-            "height": height,
-            "count": 1,
-            "dtype": "float32",
-            "crs": "EPSG:2193",
-            "transform": transform,
-            "nodata": -9999.0,
-        }
-
-        with rasterio.open(coast_path, "w", **profile) as dst:
-            dst.write(coast_data, 1)
-
+        n = TEST_RASTER_SIZE
+        coast_data = np.linspace(1000, 30000, n * n).reshape(n, n).astype(np.float32)
+        write_single_band_raster(coast_path, coast_data)
         return coast_path
 
     def test_hybrid_slope_modifications_at_points(self, slope_raster, coast_distance_raster):
@@ -303,8 +272,8 @@ class TestApplyHybridModificationsAtPoints:
         assert np.all(modified_vs30 >= 240)
         assert np.all(modified_vs30 <= 500)
 
-    def test_no_modifications_disabled(self, slope_raster, coast_distance_raster):
-        """Test that disabling all modifications returns similar values."""
+    def test_all_modifications_disabled_returns_unchanged(self, slope_raster, coast_distance_raster):
+        """Test that disabling all modifications returns unchanged values."""
         points = np.array([[1750000.0, 5430000.0]])
         vs30 = np.array([300.0])
         stdv = np.array([0.5])

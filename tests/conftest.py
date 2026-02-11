@@ -7,30 +7,26 @@ All shared test fixtures should be defined here to avoid duplication.
 
 import shutil
 import tempfile
+import traceback
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 import rasterio
-from rasterio import transform
+from typer.testing import CliRunner
 
-from vs30 import constants
+from vs30 import cli
 
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
 BENCHMARKS_DIR: Path = TESTS_DIR / "benchmarks"
 
-TEST_RASTER_WIDTH: int = 10
-TEST_RASTER_HEIGHT: int = 10
-TEST_RASTER_XMIN: int = 1500000
-TEST_RASTER_XMAX: int = 1505000
-TEST_RASTER_YMIN: int = 5100000
-TEST_RASTER_YMAX: int = 5105000
-TEST_RASTER_NODATA: float = -9999.0
-
 TEST_RTOL: float = 1e-5
 TEST_ATOL: float = 1e-8
+
+runner = CliRunner()
+
 
 @pytest.fixture
 def temp_dir() -> Path:
@@ -47,55 +43,55 @@ def temp_dir() -> Path:
     shutil.rmtree(tmpdir)
 
 
-@pytest.fixture
-def sample_vs30_raster(temp_dir: Path) -> Path:
+def run_cli(args: list[str]) -> None:
     """
-    Create a sample 2-band VS30 raster for testing.
+    Run a vs30 CLI command via CliRunner, raising on failure.
 
     Parameters
     ----------
-    temp_dir : Path
-        Temporary directory for the raster file.
+    args : list[str]
+        CLI arguments to pass to the vs30 app.
 
-    Returns
-    -------
-    Path
-        Path to the created test raster.
+    Raises
+    ------
+    RuntimeError
+        If the CLI command exits with a non-zero code.
     """
-    raster_path = temp_dir / "test_vs30.tif"
+    result = runner.invoke(cli.app, args)
+    if result.exit_code != 0:
+        print(f"Output:\n{result.stdout}")
+        if result.exception:
+            print(
+                f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}"
+            )
+        raise RuntimeError(f"CLI command failed with exit code {result.exit_code}")
 
-    raster_transform = transform.from_bounds(
-        TEST_RASTER_XMIN,
-        TEST_RASTER_YMIN,
-        TEST_RASTER_XMAX,
-        TEST_RASTER_YMAX,
-        TEST_RASTER_WIDTH,
-        TEST_RASTER_HEIGHT,
-    )
 
-    vs30_data = np.random.uniform(
-        200, 600, (TEST_RASTER_HEIGHT, TEST_RASTER_WIDTH)
-    ).astype(np.float32)
-    stdv_data = np.random.uniform(
-        20, 60, (TEST_RASTER_HEIGHT, TEST_RASTER_WIDTH)
-    ).astype(np.float32)
+def compare_output_files(output_dir: Path, benchmark_dir: Path, filenames: list[str]) -> None:
+    """
+    Compare a list of output files against their benchmarks.
 
-    with rasterio.open(
-        raster_path,
-        "w",
-        driver=constants.GEOTIFF_DRIVER,
-        height=TEST_RASTER_HEIGHT,
-        width=TEST_RASTER_WIDTH,
-        count=2,
-        dtype="float32",
-        crs=constants.NZTM_CRS,
-        transform=raster_transform,
-        nodata=TEST_RASTER_NODATA,
-    ) as dst:
-        dst.write(vs30_data, constants.RASTER_BAND_VS30)
-        dst.write(stdv_data, constants.RASTER_BAND_STDV)
+    Routes .tif files to compare_rasters and .csv files to compare_csvs.
 
-    return raster_path
+    Parameters
+    ----------
+    output_dir : Path
+        Directory containing actual output files.
+    benchmark_dir : Path
+        Directory containing expected benchmark files.
+    filenames : list[str]
+        Names of files to compare.
+    """
+    for filename in filenames:
+        actual = output_dir / filename
+        expected = benchmark_dir / filename
+        assert actual.exists(), f"Missing output file: {filename}"
+
+        if filename.endswith(".tif"):
+            compare_rasters(actual, expected)
+        elif filename.endswith(".csv"):
+            compare_csvs(actual, expected)
+
 
 def compare_rasters(
     actual_path: Path,

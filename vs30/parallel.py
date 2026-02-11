@@ -88,7 +88,6 @@ def resolve_n_proc(n_proc: int | None) -> int:
 _spawn_context = mp.get_context("spawn")
 
 
-
 def process_geology_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
@@ -261,7 +260,6 @@ def process_terrain_at_points(
         terr_mvn_vs30,
         terr_mvn_stdv,
     )
-
 
 
 @dataclass
@@ -456,7 +454,6 @@ def process_pixels_chunk(
             updates.append(update)
 
     return chunk_id, updates
-
 
 
 def run_parallel_locations(

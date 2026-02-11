@@ -802,13 +802,13 @@ def compute_spatial_adjustment_for_pixel(
     new_vs30 = pixel.vs30 * np.exp(pred_update)
     new_stdv = np.sqrt(var)
 
-    # Calculate minimum distance
+    # Calculate minimum distance to nearest observation used
     distances = scipy.spatial.distance.cdist(
         pixel.location.reshape(1, -1),
         selected_obs.locations,
         metric="euclidean",
     )[0]
-    min_distance = np.min(distances) if len(distances) > 0 else np.inf
+    min_distance = np.min(distances)
 
     return SpatialAdjustmentResult(
         updated_vs30=float(new_vs30),
