@@ -11,42 +11,22 @@ a parallel job.
 """
 
 import contextlib
-from dataclasses import dataclass
 import multiprocessing as mp
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import threadpoolctl
+from qcore import coordinates
 from tqdm import tqdm
 
-from qcore import coordinates
-from vs30 import category
-from vs30 import constants
-from vs30 import raster
-from vs30 import spatial
-from vs30 import utils
+from vs30 import category, constants, raster, spatial, utils
 
 
 @contextlib.contextmanager
 def single_threaded_blas():
-    """
-    Context manager to restrict BLAS to single-threaded operation.
-
-    Use this when running multiprocessing to prevent oversubscription.
-    For example, 8 processes x 8 BLAS threads = 64 threads competing
-    for 8 cores, which is slower than 8 single-threaded processes.
-
-    This replaces the previous approach of setting OMP_NUM_THREADS etc.
-    at import time, allowing BLAS thread control to happen at runtime
-    after CLI arguments have been parsed.
-
-    Usage
-    -----
-        with single_threaded_blas():
-            with mp.Pool(n_proc) as pool:
-                results = pool.map(worker_func, chunks)
-    """
+    """Restrict BLAS to single-threaded operation to prevent oversubscription during multiprocessing."""
     with threadpoolctl.threadpool_limits(limits=1, user_api="blas"):
         yield
 
@@ -159,7 +139,9 @@ def process_geology_at_points(
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
-        obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+        obs_locs = observations_df[
+            [constants.COL_EASTING, constants.COL_NORTHING]
+        ].values
         obs_geol_ids = category.assign_to_category_geology(obs_locs)
         obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -234,7 +216,9 @@ def process_terrain_at_points(
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
-        obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+        obs_locs = observations_df[
+            [constants.COL_EASTING, constants.COL_NORTHING]
+        ].values
         obs_terr_ids = category.assign_to_category_terrain(obs_locs)
         obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, model_df)
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -289,7 +273,6 @@ class LocationsChunkConfig:
     combination_method: str | float
     coast_distance_raster: Path | None
     noisy: bool
-
 
 
 def process_locations_chunk(
