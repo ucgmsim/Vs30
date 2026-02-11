@@ -556,15 +556,19 @@ def posterior_from_bayesian_update(
     Uses N_PRIOR and MIN_SIGMA constants from constants.py for the independent
     observations Bayesian update.
     """
-    df = categorical_model_df.copy()
+    categorical_model_df_copy = categorical_model_df.copy()
 
     if clustered_observations_df is not None:
-        df = update_with_clustered_data(df, clustered_observations_df)
+        categorical_model_df_copy = update_with_clustered_data(
+            categorical_model_df_copy, clustered_observations_df
+        )
 
     if independent_observations_df is not None:
-        df = update_with_independent_data(df, independent_observations_df)
+        categorical_model_df_copy = update_with_independent_data(
+            categorical_model_df_copy, independent_observations_df
+        )
 
-    return df
+    return categorical_model_df_copy
 
 
 def get_vs30_for_points(
