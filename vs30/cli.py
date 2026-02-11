@@ -342,13 +342,17 @@ def update_categorical_vs30_models(
 
             independent_observations_df[constants.STANDARD_ID_COLUMN] = model_ids
 
-        # Perform Bayesian update(s) via dispatcher
+        # Perform Bayesian update(s)
         logger.info("Applying Bayesian updates...")
-        current_prior_df = category.posterior_from_bayesian_update(
-            current_prior_df,
-            independent_observations_df=independent_observations_df,
-            clustered_observations_df=clustered_observations_df,
-        )
+        if clustered_observations_df is not None:
+            current_prior_df = category.update_with_clustered_data(
+                current_prior_df, clustered_observations_df
+            )
+
+        if independent_observations_df is not None:
+            current_prior_df = category.update_with_independent_data(
+                current_prior_df, independent_observations_df
+            )
 
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)

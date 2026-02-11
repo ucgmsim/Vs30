@@ -518,59 +518,6 @@ def update_with_clustered_data(
     return posterior_df
 
 
-def posterior_from_bayesian_update(
-    categorical_model_df: pd.DataFrame,
-    independent_observations_df: pd.DataFrame | None = None,
-    clustered_observations_df: pd.DataFrame | None = None,
-) -> pd.DataFrame:
-    """
-    Dispatcher function to perform Bayesian updates with clustered and/or independent data.
-
-    When both clustered and independent observations are provided, the order matters:
-    1. Clustered observations (typically CPT data) are processed first with spatial clustering
-       to correct for sampling biases that may arise from dense geotechnical investigations.
-    2. Independent observations (typically direct Vs30 measurements) then update the
-       bias-corrected model.
-
-    This order is scientifically motivated because:
-    - Clustered data may have spatial biases (urban/infrastructure-focused sampling)
-    - Independent data are often higher-quality and more representative
-    - Processing clustered data first corrects biases, then independent data refines the model
-
-    Parameters
-    ----------
-    categorical_model_df : DataFrame
-        DataFrame with prior mean and standard deviation columns.
-    independent_observations_df : DataFrame, optional
-        Independent observations for Bayesian update.
-    clustered_observations_df : DataFrame, optional
-        Clustered observations for Bayesian update.
-
-    Returns
-    -------
-    DataFrame
-        Updated DataFrame with posterior values.
-
-    Notes
-    -----
-    Uses N_PRIOR and MIN_SIGMA constants from constants.py for the independent
-    observations Bayesian update.
-    """
-    categorical_model_df_copy = categorical_model_df.copy()
-
-    if clustered_observations_df is not None:
-        categorical_model_df_copy = update_with_clustered_data(
-            categorical_model_df_copy, clustered_observations_df
-        )
-
-    if independent_observations_df is not None:
-        categorical_model_df_copy = update_with_independent_data(
-            categorical_model_df_copy, independent_observations_df
-        )
-
-    return categorical_model_df_copy
-
-
 def get_vs30_for_points(
     points: np.ndarray,
     model_type: str,
