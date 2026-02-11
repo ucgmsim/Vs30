@@ -145,7 +145,7 @@ class TestUpdateWithIndependentData:
             {
                 "id": [1, 1, 2],
                 "vs30": [210.0, 195.0, 320.0],
-                "observation_uncertainty": [0.2, 0.2, 0.15],
+                "uncertainty": [0.2, 0.2, 0.15],
             }
         )
 
@@ -205,7 +205,7 @@ class TestCategoryEdgeCases:
         observations_df = pd.DataFrame(
             {
                 "vs30": [350.0],
-                "observation_uncertainty": [25.0],
+                "uncertainty": [25.0],
                 "id": [99],  # Non-existent category - uses 'id' column
                 "easting": [1500000.0],
                 "northing": [5100000.0],
