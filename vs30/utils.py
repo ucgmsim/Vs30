@@ -42,7 +42,6 @@ def correlation_function(
     return np.exp(-np.maximum(min_dist, distances) / phi)
 
 
-
 def combine_vs30_models(
     geol_vs30: np.ndarray,
     geol_stdv: np.ndarray,

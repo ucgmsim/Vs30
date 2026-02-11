@@ -14,20 +14,29 @@ multi-process (n_proc=cpu_count) modes to ensure parallel processing works corre
 """
 
 import os
-import shutil
-import tempfile
-import traceback
 from pathlib import Path
 
 import pytest
 import yaml
-from typer.testing import CliRunner
 
 from conftest import BENCHMARKS_DIR
-from conftest import compare_csvs
-from conftest import compare_rasters
+from conftest import compare_output_files
 from conftest import FIXTURES_DIR
-from vs30 import cli
+from conftest import run_cli
+
+SCENARIOS = [
+    "small_independent_only",
+    "small_both",
+    "small_clustered_only",
+]
+
+KEY_OUTPUT_FILES = [
+    "combined_vs30.tif",
+    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif",
+    "terrain_vs30_spatially_adjusted_with_uncertainty.tif",
+    "posterior_geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
+    "posterior_terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
+]
 
 
 def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path:
@@ -37,7 +46,7 @@ def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path
     Parameters
     ----------
     scenario : str
-        One of "independent_only", "clustered_only", or "both".
+        One of "small_independent_only", "small_clustered_only", or "small_both".
     output_dir : Path
         Directory for pipeline output.
     n_proc : int
@@ -48,16 +57,13 @@ def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path
     Path
         Path to the created config file.
     """
-    # Load the base config for this scenario
     config_file = FIXTURES_DIR / f"test_config_{scenario}.yaml"
     with open(config_file) as f:
         config = yaml.safe_load(f)
 
-    # Override settings for test
     config["n_proc"] = n_proc
     config["output_dir"] = str(output_dir)
 
-    # Write to temp location
     test_config_path = output_dir / "test_config.yaml"
     with open(test_config_path, "w") as f:
         yaml.dump(config, f)
@@ -65,171 +71,17 @@ def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path
     return test_config_path
 
 
-def run_full_pipeline(config_path: Path) -> None:
-    """
-    Run the full pipeline with the given config.
-
-    Uses Typer's CliRunner to invoke the CLI in-process, enabling
-    pytest coverage tracking of the executed code.
-
-    Parameters
-    ----------
-    config_path : Path
-        Path to the configuration file.
-    """
-    runner = CliRunner()
-    result = runner.invoke(cli.app, ["--config", str(config_path), "full-pipeline"])
-    if result.exit_code != 0:
-        print(f"Output:\n{result.stdout}")
-        if result.exception:
-            print(f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}")
-        raise RuntimeError(f"Pipeline failed with exit code {result.exit_code}")
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_single_process(temp_dir, scenario):
+    """Test pipeline with n_proc=1 for each scenario."""
+    config_path = create_test_config(scenario, temp_dir, n_proc=1)
+    run_cli(["--config", str(config_path), "full-pipeline"])
+    compare_output_files(temp_dir, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 
 
-# Key output files to compare
-KEY_OUTPUT_FILES = [
-    "combined_vs30.tif",
-    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif",
-    "terrain_vs30_spatially_adjusted_with_uncertainty.tif",
-    "posterior_geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
-    "posterior_terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
-]
-
-
-class TestSmallDomainIndependentOnly:
-    """Fast test with small domain and independent observations only."""
-
-    SCENARIO = "small_independent_only"
-    BENCHMARK_DIR = BENCHMARKS_DIR / "small_independent_only"
-
-    @pytest.fixture
-    def output_dir(self):
-        """Create temporary output directory."""
-        tmpdir = tempfile.mkdtemp(prefix="vs30_test_small_independent_")
-        yield Path(tmpdir)
-        shutil.rmtree(tmpdir)
-
-    def test_single_process(self, output_dir):
-        """Test pipeline with n_proc=1."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=1)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
-
-    @pytest.mark.parametrize("n_proc", [os.cpu_count()])
-    def test_multiprocess(self, output_dir, n_proc):
-        """Test pipeline with multiple processes."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=n_proc)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
-
-
-class TestSmallDomainBothObservationTypes:
-    """Fast test with small domain and both observation types."""
-
-    SCENARIO = "small_both"
-    BENCHMARK_DIR = BENCHMARKS_DIR / "small_both"
-
-    @pytest.fixture
-    def output_dir(self):
-        """Create temporary output directory."""
-        tmpdir = tempfile.mkdtemp(prefix="vs30_test_small_both_")
-        yield Path(tmpdir)
-        shutil.rmtree(tmpdir)
-
-    def test_single_process(self, output_dir):
-        """Test pipeline with n_proc=1."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=1)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
-
-    @pytest.mark.parametrize("n_proc", [os.cpu_count()])
-    def test_multiprocess(self, output_dir, n_proc):
-        """Test pipeline with multiple processes."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=n_proc)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
-
-
-class TestSmallDomainClusteredOnly:
-    """Fast test with clustered (CPT) observations only.
-
-    Uses 10km domain at 500m resolution (400 pixels) with full test CPT dataset
-    to ensure adequate observations per category for stable Bayesian updates.
-    """
-
-    SCENARIO = "small_clustered_only"
-    BENCHMARK_DIR = BENCHMARKS_DIR / "small_clustered_only"
-
-    @pytest.fixture
-    def output_dir(self):
-        """Create temporary output directory."""
-        tmpdir = tempfile.mkdtemp(prefix="vs30_test_small_clustered_")
-        yield Path(tmpdir)
-        shutil.rmtree(tmpdir)
-
-    def test_single_process(self, output_dir):
-        """Test pipeline with n_proc=1."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=1)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
-
-    @pytest.mark.parametrize("n_proc", [os.cpu_count()])
-    def test_multiprocess(self, output_dir, n_proc):
-        """Test pipeline with multiple processes."""
-        config_path = create_test_config(self.SCENARIO, output_dir, n_proc=n_proc)
-        run_full_pipeline(config_path)
-
-        for filename in KEY_OUTPUT_FILES:
-            actual = output_dir / filename
-            expected = self.BENCHMARK_DIR / filename
-            assert actual.exists(), f"Missing output file: {filename}"
-
-            if filename.endswith(".tif"):
-                compare_rasters(actual, expected)
-            elif filename.endswith(".csv"):
-                compare_csvs(actual, expected)
+@pytest.mark.parametrize("scenario", SCENARIOS)
+def test_multiprocess(temp_dir, scenario):
+    """Test pipeline with all available CPUs for each scenario."""
+    config_path = create_test_config(scenario, temp_dir, n_proc=os.cpu_count())
+    run_cli(["--config", str(config_path), "full-pipeline"])
+    compare_output_files(temp_dir, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)

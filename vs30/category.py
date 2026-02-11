@@ -351,7 +351,7 @@ def perform_clustering(
         )
     )
     model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
-    ids = np.array(sorted(set(model_ids)))
+    ids = np.unique(model_ids)
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
     for category_id in ids:
@@ -370,6 +370,80 @@ def perform_clustering(
         sites_df.loc[subset_mask, constants.COL_CLUSTER] = dbscan.labels_
 
     return sites_df
+
+
+def compute_effective_sample_size(cluster_counts: pd.Series) -> int:
+    """Count effective independent observations from cluster assignments.
+
+    Each DBSCAN cluster contributes one effective observation regardless of
+    size. Each unclustered point (label = -1) counts individually.
+
+    Parameters
+    ----------
+    cluster_counts : Series
+        Value counts of cluster labels for one category.
+
+    Returns
+    -------
+    int
+        Number of effective independent observations.
+    """
+    effective_n = len(cluster_counts)
+    if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
+        effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
+    return effective_n
+
+
+def compute_cluster_weighted_mean_and_stddev(
+    category_sites: pd.DataFrame,
+    cluster_counts: pd.Series,
+    effective_n: int,
+) -> tuple[float, float]:
+    """Compute cluster-weighted geometric mean and log-space standard deviation.
+
+    Clusters contribute their geometric mean as a single pseudo-observation.
+    Unclustered points each contribute individually.
+
+    Parameters
+    ----------
+    category_sites : DataFrame
+        Observation sites for one category, with vs30 and cluster columns.
+    cluster_counts : Series
+        Value counts of cluster labels for this category.
+    effective_n : int
+        Number of effective independent observations.
+
+    Returns
+    -------
+    tuple[float, float]
+        (geometric_mean_vs30, log_space_standard_deviation)
+    """
+    weighted_log_vs30_sum = 0.0
+    weights = np.repeat(1.0 / effective_n, len(category_sites))
+
+    for cluster_label in cluster_counts.index:
+        cluster_mask = category_sites[constants.COL_CLUSTER] == cluster_label
+        cluster_sites = category_sites[cluster_mask]
+        if cluster_label == constants.CLUSTER_UNCLUSTERED_LABEL:
+            weighted_log_vs30_sum += np.sum(
+                np.log(cluster_sites[constants.COL_VS30].values)
+            )
+        else:
+            weighted_log_vs30_sum += np.sum(
+                np.log(cluster_sites[constants.COL_VS30].values)
+            ) / len(cluster_sites)
+            weights[cluster_mask] /= len(cluster_sites)
+
+    log_geometric_mean = weighted_log_vs30_sum / effective_n
+    geometric_mean_vs30 = np.exp(log_geometric_mean)
+    log_stddev = np.sqrt(
+        np.sum(
+            weights
+            * (np.log(category_sites[constants.COL_VS30].values) - log_geometric_mean)
+            ** 2
+        )
+    )
+    return geometric_mean_vs30, log_stddev
 
 
 def update_with_clustered_data(
@@ -417,41 +491,23 @@ def update_with_clustered_data(
         constants.COL_PRIOR_STDV
     ]
 
-    # Convert to numpy array format for computation
-    max_id_prior = (
-        int(posterior_df[constants.STANDARD_ID_COLUMN].max())
-        if len(posterior_df) > 0
-        else 0
-    )
-
     # Filter out sites with ID_NODATA
     valid_sites = sites_df[
         sites_df[constants.STANDARD_ID_COLUMN] != constants.RASTER_ID_NODATA_VALUE
     ].copy()
-    max_id_sites = (
-        int(valid_sites[constants.STANDARD_ID_COLUMN].max())
-        if len(valid_sites) > 0
-        else 0
-    )
 
-    max_id = max(max_id_prior, max_id_sites)
-
-    posterior_array = np.full((max_id + 1, 2), np.nan)
-    id_to_idx = {}
-    for idx, row in posterior_df.iterrows():
-        cat_id = int(row[constants.STANDARD_ID_COLUMN])
-        if cat_id <= max_id:
-            # Use prior values as starting point
-            posterior_array[cat_id, 0] = row[constants.COL_PRIOR_MEAN]
-            posterior_array[cat_id, 1] = row[constants.COL_PRIOR_STDV]
-            id_to_idx[cat_id] = idx
+    # Build a mapping from category ID to DataFrame index for direct updates
+    id_to_idx = dict(zip(
+        posterior_df[constants.STANDARD_ID_COLUMN].astype(int),
+        posterior_df.index,
+    ))
 
     # Process each category ID that exists in the sites
     unique_ids = valid_sites[constants.STANDARD_ID_COLUMN].unique()
 
     for category_id in unique_ids:
         category_id_int = int(category_id)
-        if category_id_int not in id_to_idx or category_id_int > max_id:
+        if category_id_int not in id_to_idx:
             continue
 
         category_sites = valid_sites[
@@ -459,61 +515,16 @@ def update_with_clustered_data(
         ]
         cluster_counts = category_sites[constants.COL_CLUSTER].value_counts()
 
-        # Effective sample size: one per cluster, but each noise point (-1) counts individually.
-        # len(cluster_counts) counts distinct cluster IDs. If CLUSTER_UNCLUSTERED_LABEL is present,
-        # it was counted once but represents cluster_counts[CLUSTER_UNCLUSTERED_LABEL] individual
-        # observations, so add the extra.
-        effective_n = len(cluster_counts)
-        if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
-            # CLUSTER_UNCLUSTERED_LABEL was already counted once
-            effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
-
+        effective_n = compute_effective_sample_size(cluster_counts)
         if effective_n == 0:
             continue
 
-        weighted_log_vs30_sum = 0.0
-        weights = np.repeat(1.0 / effective_n, len(category_sites))
-
-        for cluster_label in cluster_counts.index:
-            cluster_mask = category_sites[constants.COL_CLUSTER] == cluster_label
-            cluster_sites = category_sites[cluster_mask]
-            if cluster_label == constants.CLUSTER_UNCLUSTERED_LABEL:
-                # Unclustered points: each counts as one observation
-                weighted_log_vs30_sum += np.sum(
-                    np.log(cluster_sites[constants.COL_VS30].values)
-                )
-            else:
-                # Clustered points: entire cluster counts as one observation
-                weighted_log_vs30_sum += np.sum(
-                    np.log(cluster_sites[constants.COL_VS30].values)
-                ) / len(cluster_sites)
-                weights[cluster_mask] /= len(cluster_sites)
-
-        # Compute geometric mean and weighted standard deviation
-        log_geometric_mean = weighted_log_vs30_sum / effective_n
-        posterior_array[category_id_int, 0] = np.exp(log_geometric_mean)
-        posterior_array[category_id_int, 1] = np.sqrt(
-            np.sum(
-                weights
-                * (
-                    np.log(category_sites[constants.COL_VS30].values)
-                    - log_geometric_mean
-                )
-                ** 2
-            )
+        mean_vs30, stddev = compute_cluster_weighted_mean_and_stddev(
+            category_sites, cluster_counts, effective_n
         )
-
-    # Convert back to DataFrame format
-    for category_id, df_idx in id_to_idx.items():
-        mean_val = posterior_array[category_id, 0]
-        std_val = posterior_array[category_id, 1]
-
-        if np.isnan(mean_val) or np.isnan(std_val):
-            # Keep original prior values if somehow NaN
-            continue
-
-        posterior_df.at[df_idx, constants.COL_POSTERIOR_MEAN_CLUSTERED] = mean_val
-        posterior_df.at[df_idx, constants.COL_POSTERIOR_STDV_CLUSTERED] = std_val
+        df_idx = id_to_idx[category_id_int]
+        posterior_df.at[df_idx, constants.COL_POSTERIOR_MEAN_CLUSTERED] = mean_vs30
+        posterior_df.at[df_idx, constants.COL_POSTERIOR_STDV_CLUSTERED] = stddev
 
     return posterior_df
 
