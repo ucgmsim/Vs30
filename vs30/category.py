@@ -518,61 +518,39 @@ def update_with_clustered_data(
     return posterior_df
 
 
-def get_vs30_for_points(
-    points: np.ndarray,
-    model_type: str,
+def get_vs30_for_ids(
+    category_ids: np.ndarray,
     categorical_model_df: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Get Vs30 mean and standard deviation at points from categorical model.
+) -> pd.DataFrame:
+    """Get Vs30 mean and standard deviation for category IDs from categorical model.
 
-    This function assigns each point to a geology or terrain category, then
-    looks up the Vs30 mean and standard deviation from the categorical model.
+    Looks up the Vs30 mean and standard deviation for each category ID
+    from the categorical model DataFrame.
 
     Parameters
     ----------
-    points : np.ndarray
-        (N, 2) array of [easting, northing] coordinates in NZTM.
-    model_type : constants.ModelType
-        Either ModelType.GEOLOGY or ModelType.TERRAIN.
+    category_ids : np.ndarray
+        Array of category IDs (e.g. from assign_to_category_geology or
+        assign_to_category_terrain).
     categorical_model_df : pd.DataFrame
         DataFrame with columns for category ID, Vs30 mean, and Vs30 standard deviation.
         Supports various column naming conventions (see Notes).
 
     Returns
     -------
-    vs30_mean : np.ndarray
-        Array of Vs30 mean values (m/s) at each point. NaN for points outside
-        valid categories.
-    vs30_stdv : np.ndarray
-        Array of Vs30 standard deviation values at each point. NaN for points
-        outside valid categories.
-    category_ids : np.ndarray
-        Array of category IDs assigned to each point.
+    pd.DataFrame
+        DataFrame with columns:
+        - constants.COL_CATEGORY_VS30_MEAN: Vs30 mean values (m/s) for each
+          category ID. NaN for IDs not found in the model.
+        - constants.COL_CATEGORY_VS30_STDV: Vs30 standard deviation values for
+          each category ID. NaN for IDs not found in the model.
 
     Notes
     -----
     The function automatically detects the column naming convention in the
-    categorical model DataFrame. It looks for columns in this priority order
-    (names defined in constants.py):
-
-    For mean: constants.COL_POSTERIOR_MEAN_INDEPENDENT,
-              constants.COL_POSTERIOR_MEAN_CLUSTERED,
-              constants.COL_PRIOR_MEAN, constants.COL_MEAN
-
-    For stddev: constants.COL_POSTERIOR_STDV_INDEPENDENT,
-                constants.COL_POSTERIOR_STDV_CLUSTERED,
-                constants.COL_PRIOR_STDV, constants.COL_STDV
+    categorical model DataFrame. See raster.select_vs30_columns_by_priority
+    for the priority order.
     """
-    # Assign category IDs to points
-    if model_type == constants.ModelType.GEOLOGY:
-        category_ids = assign_to_category_geology(points)
-    elif model_type == constants.ModelType.TERRAIN:
-        category_ids = assign_to_category_terrain(points)
-    else:
-        raise ValueError(
-            f"Unknown model_type: {model_type}. Must be a valid ModelType."
-        )
-
     mean_col, stdv_col = raster.select_vs30_columns_by_priority(
         list(categorical_model_df.columns)
     )
@@ -599,4 +577,9 @@ def get_vs30_for_points(
         [id_to_stdv.get(cid, np.nan) for cid in category_ids], dtype=np.float64
     )
 
-    return vs30_mean, vs30_stdv, category_ids
+    return pd.DataFrame(
+        {
+            constants.COL_CATEGORY_VS30_MEAN: vs30_mean,
+            constants.COL_CATEGORY_VS30_STDV: vs30_stdv,
+        }
+    )

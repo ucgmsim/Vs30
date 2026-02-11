@@ -136,41 +136,41 @@ def process_geology_at_points(
     geol_mvn_stdv : ndarray
         Final geology standard deviation after spatial adjustment.
     """
-    # Get initial Vs30 values at points
-    geol_vs30, geol_stdv, geol_ids = category.get_vs30_for_points(
-        points, constants.ModelType.GEOLOGY, model_df
-    )
+    # Assign geology category IDs to points
+    geol_ids = category.assign_to_category_geology(points)
+
+    # Get initial Vs30 values from categorical model
+    geol_vs30_df = category.get_vs30_for_ids(geol_ids, model_df)
 
     # Apply hybrid modifications (slope and coastal distance)
     if coast_distance_raster is not None and coast_distance_raster.exists():
         geol_vs30_hybrid, geol_stdv_hybrid = (
             raster.apply_hybrid_modifications_at_points(
                 points,
-                geol_vs30,
-                geol_stdv,
+                geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+                geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
                 geol_ids,
                 slope_raster_path=None,  # Uses default from constants
                 coast_distance_raster_path=coast_distance_raster,
             )
         )
     else:
-        geol_vs30_hybrid = geol_vs30
-        geol_stdv_hybrid = geol_stdv
+        geol_vs30_hybrid = geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
+        geol_stdv_hybrid = geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
-        obs_geol_vs30, obs_geol_stdv, _ = category.get_vs30_for_points(
-            obs_locs, constants.ModelType.GEOLOGY, model_df
-        )
+        obs_geol_ids = category.assign_to_category_geology(obs_locs)
+        obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
             obs_locations=obs_locs,
             obs_vs30=observations_df[constants.COL_VS30].values,
-            obs_model_vs30=obs_geol_vs30,
-            obs_model_stdv=obs_geol_stdv,
+            obs_model_vs30=obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+            obs_model_stdv=obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
             model_type=constants.ModelType.GEOLOGY,
             noisy=noisy,
@@ -181,8 +181,8 @@ def process_geology_at_points(
 
     return (
         geol_ids,
-        geol_vs30,
-        geol_stdv,
+        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
         geol_vs30_hybrid,
         geol_stdv_hybrid,
         geol_mvn_vs30,
@@ -227,34 +227,40 @@ def process_terrain_at_points(
     terr_mvn_stdv : ndarray
         Final terrain standard deviation after spatial adjustment.
     """
-    # Get initial Vs30 values at points
-    terr_vs30, terr_stdv, terr_ids = category.get_vs30_for_points(
-        points, constants.ModelType.TERRAIN, model_df
-    )
+    # Assign terrain category IDs to points
+    terr_ids = category.assign_to_category_terrain(points)
+
+    # Get initial Vs30 values from categorical model
+    terr_vs30_df = category.get_vs30_for_ids(terr_ids, model_df)
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
-        obs_terr_vs30, obs_terr_stdv, _ = category.get_vs30_for_points(
-            obs_locs, constants.ModelType.TERRAIN, model_df
-        )
+        obs_terr_ids = category.assign_to_category_terrain(obs_locs)
+        obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, model_df)
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
-            model_vs30=terr_vs30,
-            model_stdv=terr_stdv,
+            model_vs30=terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+            model_stdv=terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_locations=obs_locs,
             obs_vs30=observations_df[constants.COL_VS30].values,
-            obs_model_vs30=obs_terr_vs30,
-            obs_model_stdv=obs_terr_stdv,
+            obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+            obs_model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
             model_type=constants.ModelType.TERRAIN,
             noisy=noisy,
         )
     else:
-        terr_mvn_vs30 = terr_vs30
-        terr_mvn_stdv = terr_stdv
+        terr_mvn_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
+        terr_mvn_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
-    return terr_ids, terr_vs30, terr_stdv, terr_mvn_vs30, terr_mvn_stdv
+    return (
+        terr_ids,
+        terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+        terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+        terr_mvn_vs30,
+        terr_mvn_stdv,
+    )
 
 
 

@@ -276,6 +276,11 @@ COL_VS30: str = "vs30"
 COL_UNCERTAINTY: str = "uncertainty"
 COL_CLUSTER: str = "cluster"
 
+# Column names for the DataFrame returned by get_vs30_for_ids,
+# which maps category IDs to their categorical model Vs30 values.
+COL_CATEGORY_VS30_MEAN: str = "category_vs30_mean"
+COL_CATEGORY_VS30_STDV: str = "category_vs30_stdv"
+
 # Cluster label for unclustered/noise points in DBSCAN output
 CLUSTER_UNCLUSTERED_LABEL: int = -1
 
