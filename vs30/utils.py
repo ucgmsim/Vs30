@@ -33,11 +33,6 @@ def correlation_function(
     correlations : ndarray
         Correlation values between 0 and 1. Same shape as distances.
 
-    Notes
-    -----
-    Uses exponential correlation function: exp(-distance / phi).
-    A small minimum distance (default 0.1 m) is enforced to prevent
-    exact-zero distances from producing correlation = 1.0.
     """
     return np.exp(-np.maximum(min_dist, distances) / phi)
 
