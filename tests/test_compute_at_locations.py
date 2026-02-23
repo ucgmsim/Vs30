@@ -23,15 +23,15 @@ LOCATIONS_CLI_ARGS = [
 EXPECTED_CSV = BENCHMARKS_DIR / "nz_cities_vs30.csv"
 
 
-def test_single_process(temp_dir):
+def test_single_process(tmp_path):
     """Test compute-at-locations with n_proc=1."""
-    output_csv = temp_dir / "output.csv"
+    output_csv = tmp_path / "output.csv"
     run_cli([*LOCATIONS_CLI_ARGS, "--output-csv", str(output_csv), "--n-proc", "1"])
     compare_csvs(output_csv, EXPECTED_CSV)
 
 
-def test_multiprocess(temp_dir):
+def test_multiprocess(tmp_path):
     """Test that multiprocess results match single-process benchmark."""
-    output_csv = temp_dir / "output.csv"
+    output_csv = tmp_path / "output.csv"
     run_cli([*LOCATIONS_CLI_ARGS, "--output-csv", str(output_csv), "--n-proc", "-1"])
     compare_csvs(output_csv, EXPECTED_CSV)
