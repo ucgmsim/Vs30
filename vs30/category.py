@@ -183,12 +183,7 @@ def update_with_independent_data(
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
 
-    # If a Bayesian update was previously performed, use the posterior values as priors
-    # for subsequent updates. Otherwise, use the raw categorical model data as priors.
-    #
-    # This ensures sequential Bayesian updates: when both clustered and independent observations
-    # are processed, independent observations use the spatially bias-corrected clustered posterior
-    # as their prior, rather than the original (potentially biased) categorical model priors.
+    # Setup Bayesian prior from categorical data, if this is not the first time we are updating. 
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         # Use clustered posterior as prior for independent updates
         # This implements the sequential Bayesian update: clustered → independent
