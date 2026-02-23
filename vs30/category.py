@@ -179,7 +179,7 @@ def update_with_independent_data(
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
 
-    # Setup Bayesian prior from categorical data, if this is not the first time we are updating. 
+    # Setup Bayesian prior from categorical data, if this is not the first time we are updating.
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         updated_categorical_model_df[constants.COL_PRIOR_MEAN] = (
             updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_CLUSTERED]
@@ -188,19 +188,19 @@ def update_with_independent_data(
             updated_categorical_model_df[constants.COL_POSTERIOR_STDV_CLUSTERED]
         )
     elif constants.COL_MEAN in updated_categorical_model_df.columns:
-            # Initial prior format - rename to prior_ columns
-            updated_categorical_model_df = updated_categorical_model_df.rename(
-                columns={
-                    constants.COL_MEAN: constants.COL_PRIOR_MEAN,
-                    constants.COL_STDV: constants.COL_PRIOR_STDV,
-                }
-            )
-     else:
-            raise ValueError(
-                f"No usable prior information found. Expected either posterior columns from "
-                f"previous Bayesian update or initial categorical model columns ('{constants.COL_MEAN}', "
-                f"'{constants.COL_STDV}')."
-            )
+        # Initial prior format - rename to prior_ columns
+        updated_categorical_model_df = updated_categorical_model_df.rename(
+            columns={
+                constants.COL_MEAN: constants.COL_PRIOR_MEAN,
+                constants.COL_STDV: constants.COL_PRIOR_STDV,
+            }
+        )
+    else:
+        raise ValueError(
+            f"No usable prior information found. Expected either posterior columns from "
+            f"previous Bayesian update or initial categorical model columns ('{constants.COL_MEAN}', "
+            f"'{constants.COL_STDV}')."
+        )
 
     # Enforce minimum sigma value on prior
     mask = updated_categorical_model_df[constants.COL_PRIOR_STDV] < constants.MIN_SIGMA
