@@ -185,17 +185,13 @@ def update_with_independent_data(
 
     # Setup Bayesian prior from categorical data, if this is not the first time we are updating. 
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
-        # Use clustered posterior as prior for independent updates
-        # This implements the sequential Bayesian update: clustered → independent
         updated_categorical_model_df[constants.COL_PRIOR_MEAN] = (
             updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_CLUSTERED]
         )
         updated_categorical_model_df[constants.COL_PRIOR_STDV] = (
             updated_categorical_model_df[constants.COL_POSTERIOR_STDV_CLUSTERED]
         )
-    else:
-        # No posterior available - must have raw categorical data to use as priors
-        if constants.COL_MEAN in updated_categorical_model_df.columns:
+    elif constants.COL_MEAN in updated_categorical_model_df.columns:
             # Initial prior format - rename to prior_ columns
             updated_categorical_model_df = updated_categorical_model_df.rename(
                 columns={
@@ -203,8 +199,7 @@ def update_with_independent_data(
                     constants.COL_STDV: constants.COL_PRIOR_STDV,
                 }
             )
-        else:
-            # Fail fast - no usable prior information available
+     else:
             raise ValueError(
                 f"No usable prior information found. Expected either posterior columns from "
                 f"previous Bayesian update or initial categorical model columns ('{constants.COL_MEAN}', "
