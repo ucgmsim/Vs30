@@ -203,10 +203,8 @@ def update_with_independent_data(
         )
 
     # Enforce minimum sigma value on prior
-    mask = updated_categorical_model_df[constants.COL_PRIOR_STDV] < constants.MIN_SIGMA
-    updated_categorical_model_df.loc[mask, constants.COL_PRIOR_STDV] = (
-        constants.MIN_SIGMA
-    )
+    updated_categorical_model_df[constants.COL_PRIOR_STDV] = np.clip(updated_categorical_model_df[constants.COL_PRIOR_STDV].values,
+        constants.MIN_SIGMA, None)
 
     # Initialize posterior columns
     updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = (

@@ -161,10 +161,10 @@ def main(
 @cli.from_docstring(app)
 def update_categorical_vs30_models(
     categorical_model_csv: typing.Annotated[
-        Path, typer.Option("--categorical-model-csv", "-m", exists=True, dir_okay=False)
+        Path, typer.Argument(exists=True, dir_okay=False)
     ],
     output_dir: typing.Annotated[
-        Path, typer.Option("--output-dir", "-d", file_okay=False)
+        Path, typer.Argument(file_okay=False)
     ],
     model_type: typing.Annotated[str, typer.Option("--model-type", "-t")],
     clustered_observations_csv: typing.Annotated[
@@ -362,8 +362,6 @@ def update_categorical_vs30_models(
 
         current_prior_df.to_csv(output_path, index=False)
 
-        typer.echo("✓ Successfully updated categorical model values")
-        typer.echo(f"  Output saved to: {output_path}")
 
     except Exception as e:
         logger.exception("Error updating category values")
