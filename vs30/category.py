@@ -173,12 +173,8 @@ def update_with_independent_data(
         - constants.COL_POSTERIOR_MEAN_INDEPENDENT
         - constants.COL_POSTERIOR_STDV_INDEPENDENT
         - constants.COL_POSTERIOR_NOBS_INDEPENDENT
-        - "assumed_num_prior_observations"
-        - "enforced_min_sigma"
-
-    Notes
-    -----
-    Uses N_PRIOR and MIN_SIGMA constants from constants.py.
+        - constants.COL_ASSUMED_NUM_PRIOR_OBS
+        - constants.COL_ENFORCED_MIN_SIGMA
     """
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
