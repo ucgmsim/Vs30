@@ -39,11 +39,7 @@ from vs30 import config as config_module
 logger = logging.getLogger(__name__)
 
 # Create Typer app for CLI
-app = typer.Typer(
-    name="vs30",
-    help="VS30 map generation and categorical model updates",
-    add_completion=False,
-)
+app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
 
 def resolve_observation_csv(
@@ -280,7 +276,9 @@ def update_categorical_vs30_models(
             )
 
             # Assign category IDs
-            obs_locs = clustered_observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+            obs_locs = clustered_observations_df[
+                [constants.COL_EASTING, constants.COL_NORTHING]
+            ].values
             if model_type == constants.ModelType.GEOLOGY:
                 model_ids = category.assign_to_category_geology(obs_locs)
             else:  # terrain
@@ -334,7 +332,9 @@ def update_categorical_vs30_models(
             )
 
             # Assign category IDs
-            obs_locs = independent_observations_df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+            obs_locs = independent_observations_df[
+                [constants.COL_EASTING, constants.COL_NORTHING]
+            ].values
             if model_type == constants.ModelType.GEOLOGY:
                 model_ids = category.assign_to_category_geology(obs_locs)
             else:  # terrain
@@ -1102,8 +1102,12 @@ def full_pipeline_for_geology_or_terrain(
             terrain=(model_type == constants.ModelType.TERRAIN),
             geology=(model_type == constants.ModelType.GEOLOGY),
             output_dir=output_dir,
-            geology_csv=posterior_csv if model_type == constants.ModelType.GEOLOGY else None,
-            terrain_csv=posterior_csv if model_type == constants.ModelType.TERRAIN else None,
+            geology_csv=posterior_csv
+            if model_type == constants.ModelType.GEOLOGY
+            else None,
+            terrain_csv=posterior_csv
+            if model_type == constants.ModelType.TERRAIN
+            else None,
         )
 
         initial_raster = output_dir / (
