@@ -5,14 +5,11 @@ This module contains fixtures and helper functions used across multiple test fil
 All shared test fixtures should be defined here to avoid duplication.
 """
 
-import shutil
-import tempfile
 import traceback
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 import rasterio
 from typer.testing import CliRunner
 
@@ -26,22 +23,6 @@ TEST_RTOL: float = 1e-5
 TEST_ATOL: float = 1e-8
 
 runner = CliRunner()
-
-
-@pytest.fixture
-def temp_dir() -> Path:
-    """
-    Create a temporary directory for test outputs.
-
-    Yields
-    ------
-    Path
-        Path to temporary directory. Automatically cleaned up after test.
-    """
-    tmpdir = tempfile.mkdtemp(prefix="vs30_test_")
-    yield Path(tmpdir)
-    shutil.rmtree(tmpdir)
-
 
 def run_cli(args: list[str]) -> None:
     """
