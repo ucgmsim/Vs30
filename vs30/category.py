@@ -101,19 +101,6 @@ def compute_bayesian_posterior_mean(
     -------
     float
         Posterior mean (in linear space).
-
-    Notes
-    -----
-
-    This function was written in the original Vs30 codebase as
-
-    def _new_mean(mu_0, n0, var, y):
-        return exp((n0 / var * log(mu_0) + log(y) / var) / (n0 / var + 1 / var))
-
-    which can be shown to be equivalent to the form in this function with the substitutions of
-    mu_0 -> prior_mean, n0 -> num_prior_observations, and y -> observation_value, and cancelling
-    out the 1/var terms, which are common factors of every term in the numerator and denominator
-    of the exponential function.
     """
 
     weighted_log_mean = (
@@ -149,20 +136,6 @@ def compute_bayesian_posterior_variance(
     -------
     float
         Posterior variance.
-
-    Notes
-    -----
-
-    This function was written in the original Vs30 codebase as
-
-    def _new_var(sigma_0, n0, uncertainty, mu_0, y):
-        mean_shift = (n0 / (n0 + 1)) * (log(y) - log(mu_0)) ** 2
-        return (n0 * sigma_0 * sigma_0 + uncertainty * uncertainty + mean_shift) / (n0 + 1)
-
-    which can be shown to be equivalent to the form in this function with the substitutions of
-    sigma_0 -> prior_stdv, n0 -> num_prior_observations, uncertainty -> observation_uncertainty, mu_0 -> prior_mean,
-    and y -> observation_value. Additionally, note that sigma_0 * sigma_0 == sigma_0**2 and
-    uncertainty * uncertainty == uncertainty**2.
     """
     log_residual = np.log(observation_value) - np.log(prior_mean)
     mean_shift = (
@@ -497,10 +470,12 @@ def update_with_clustered_data(
     ].copy()
 
     # Build a mapping from category ID to DataFrame index for direct updates
-    id_to_idx = dict(zip(
-        posterior_df[constants.STANDARD_ID_COLUMN].astype(int),
-        posterior_df.index,
-    ))
+    id_to_idx = dict(
+        zip(
+            posterior_df[constants.STANDARD_ID_COLUMN].astype(int),
+            posterior_df.index,
+        )
+    )
 
     # Process each category ID that exists in the sites
     unique_ids = valid_sites[constants.STANDARD_ID_COLUMN].unique()
