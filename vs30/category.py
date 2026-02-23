@@ -58,7 +58,7 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
 
     Uses IwahashiPike terrain raster to determine which terrain category
     each point belongs to. Reads the category ID value from the pixel
-    containing each point (nearest neighbor, not interpolation).
+    containing each point.
 
     Parameters
     ----------
