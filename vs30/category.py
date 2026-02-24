@@ -451,6 +451,7 @@ def update_with_clustered_data(
         ]
         cluster_counts = category_sites[constants.COL_CLUSTER].value_counts()
 
+        # Effective independent observations: one per cluster, plus each unclustered point.
         effective_n = len(cluster_counts)
         if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
             effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
