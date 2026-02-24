@@ -7,8 +7,10 @@ consistent Vs30 values for known locations (major NZ cities).
 Uses CliRunner for in-process invocation to enable coverage tracking.
 """
 
+import pandas as pd
+from pandas.testing import assert_frame_equal
+
 from conftest import BENCHMARKS_DIR
-from conftest import compare_csvs
 from conftest import FIXTURES_DIR
 from conftest import run_cli
 
@@ -27,11 +29,15 @@ def test_single_process(tmp_path):
     """Test compute-at-locations with n_proc=1."""
     output_csv = tmp_path / "output.csv"
     run_cli([*LOCATIONS_CLI_ARGS, "--output-csv", str(output_csv), "--n-proc", "1"])
-    compare_csvs(output_csv, EXPECTED_CSV)
+    actual_df = pd.read_csv(output_csv)
+    expected_df = pd.read_csv(EXPECTED_CSV)
+    assert_frame_equal(actual_df, expected_df)
 
 
 def test_multiprocess(tmp_path):
     """Test that multiprocess results match single-process benchmark."""
     output_csv = tmp_path / "output.csv"
     run_cli([*LOCATIONS_CLI_ARGS, "--output-csv", str(output_csv), "--n-proc", "-1"])
-    compare_csvs(output_csv, EXPECTED_CSV)
+    actual_df = pd.read_csv(output_csv)
+    expected_df = pd.read_csv(EXPECTED_CSV)
+    assert_frame_equal(actual_df, expected_df)
