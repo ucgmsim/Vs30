@@ -121,7 +121,6 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
         If CSV file is malformed or missing required columns.
     """
     csv_file_path = constants.RESOURCE_PATH / csv_path
-
     if not csv_file_path.exists():
         raise FileNotFoundError(
             f"CSV file not found: {csv_file_path}. "
