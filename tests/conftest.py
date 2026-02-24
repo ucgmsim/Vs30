@@ -10,6 +10,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import rasterio
 from pandas.testing import assert_frame_equal
 from typer.testing import CliRunner
@@ -24,6 +25,7 @@ TEST_RTOL: float = 1e-5
 TEST_ATOL: float = 1e-8
 
 runner = CliRunner()
+
 
 def run_cli(args: list[str]) -> None:
     """
@@ -49,7 +51,9 @@ def run_cli(args: list[str]) -> None:
         raise RuntimeError(f"CLI command failed with exit code {result.exit_code}")
 
 
-def compare_output_files(output_dir: Path, benchmark_dir: Path, filenames: list[str]) -> None:
+def compare_output_files(
+    output_dir: Path, benchmark_dir: Path, filenames: list[str]
+) -> None:
     """
     Compare a list of output files against their benchmarks.
 
@@ -125,14 +129,15 @@ def compare_rasters(
                 assert np.array_equal(actual_valid, expected_valid), (
                     f"Band {band_idx}: Valid data masks differ"
                 )
-                if np.any(actual_valid):
-                    assert np.allclose(
-                        actual_data[actual_valid],
-                        expected_data[expected_valid],
-                        rtol=rtol,
-                        atol=atol,
-                    ), f"Band {band_idx}: Data values differ beyond tolerance"
+                valid_actual = actual_data[actual_valid]
+                valid_expected = expected_data[expected_valid]
             else:
-                assert np.allclose(
-                    actual_data, expected_data, rtol=rtol, atol=atol
+                valid_actual = actual_data
+                valid_expected = expected_data
+
+            if np.any(valid_actual):
+                assert valid_actual == pytest.approx(
+                    valid_expected,
+                    rel=rtol,
+                    abs=atol,
                 ), f"Band {band_idx}: Data values differ beyond tolerance"
