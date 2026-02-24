@@ -179,7 +179,7 @@ def update_with_independent_data(
     # Make a working copy to avoid modifying the input DataFrame
     updated_categorical_model_df = categorical_model_df.copy()
 
-    # Setup Bayesian prior from categorical data, if this is not the first time we are updating.
+    # Setup Bayesian prior from categorical data
     if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
         updated_categorical_model_df[constants.COL_PRIOR_MEAN] = (
             updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_CLUSTERED]
