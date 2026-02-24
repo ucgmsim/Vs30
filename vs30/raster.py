@@ -594,9 +594,8 @@ def create_slope_raster(
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    # Initialize destination array
+    # Block comment about the re-project
     destination = np.zeros((template_profile["height"], template_profile["width"]))
-
     with rasterio.open(slope_raster_path) as src:
         rasterio.warp.reproject(
             source=rasterio.band(src, 1),
