@@ -310,15 +310,10 @@ def process_locations_chunk(
     chunk_df = chunk_df.copy()
 
     # Convert coordinates to NZTM
-    nztm_coords = coordinates.wgs_depth_to_nztm(
-        np.column_stack(
-            [chunk_df[config.lat_column].values, chunk_df[config.lon_column].values]
-        )
-    )
-    northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
-    chunk_df[constants.COL_EASTING] = easting
-    chunk_df[constants.COL_NORTHING] = northing
-    points = np.column_stack([easting, northing])
+    nztm_coords = coordinates.wgs_depth_to_nztm(chunk_df[[config.lat_column, config.lon_column]].values)
+    chunk_df[constants.COL_EASTING] = nztm_coords[:, 1]
+    chunk_df[constants.COL_NORTHING] = nztm_coords[:, 0]
+    points = nztm_coords[:, ::-1]
 
     # Process geology model
     (
