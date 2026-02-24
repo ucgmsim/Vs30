@@ -195,9 +195,7 @@ def create_category_id_raster(
         If input files don't exist.
     """
     if model_type not in constants.ModelType:
-        raise ValueError(
-            f"model_type must be a valid ModelType, got '{model_type}'"
-        )
+        raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -413,7 +411,10 @@ def create_vs30_raster_from_ids(
         )
 
     id_to_vs30_values = {
-        int(row[constants.STANDARD_ID_COLUMN]): (float(row[mean_col]), float(row[std_col]))
+        int(row[constants.STANDARD_ID_COLUMN]): (
+            float(row[mean_col]),
+            float(row[std_col]),
+        )
         for _, row in df.iterrows()
     }
 
@@ -594,7 +595,7 @@ def create_slope_raster(
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    # Block comment about the re-project
+    # Reproject the slope raster onto the specified grid
     destination = np.zeros((template_profile["height"], template_profile["width"]))
     with rasterio.open(slope_raster_path) as src:
         rasterio.warp.reproject(
@@ -606,8 +607,6 @@ def create_slope_raster(
             dst_crs=template_profile["crs"],
             resampling=rasterio.enums.Resampling.nearest,
         )
-
-    # Save to file
     profile = template_profile.copy()
     profile.update(
         {
@@ -617,7 +616,6 @@ def create_slope_raster(
             "compress": "deflate",
         }
     )
-
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(destination, 1)
         dst.descriptions = (constants.BAND_DESCRIPTION_SLOPE,)
