@@ -537,12 +537,7 @@ def grid_points_in_bbox(
 
 def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float) -> int:
     """
-    Calculate the maximum number of grid points per chunk based on available memory for spatial boolean arrays.
-
-    The memory-intensive operation is the boolean array of shape (n_obs, n_grid_chunk)
-    used to determine which grid points are within bounding boxes of observations.
-    NumPy boolean arrays use 1 byte per element.
-    Memory usage per chunk: n_obs * n_grid_chunk * 1 byte
+    Calculate the max grid points per chunk given a memory budget for the mask of grid points inside observation bounding boxes.
 
     Parameters
     ----------
@@ -557,10 +552,8 @@ def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float)
         Maximum number of grid points per chunk.
     """
     memory_per_chunk_bytes = max_spatial_boolean_array_memory_gb * 1024 * 1024 * 1024
-    # Memory needed: n_obs * n_grid_chunk * 1 byte (NumPy boolean arrays are 1 byte/element)
-    # Solve for n_grid_chunk: n_grid_chunk = memory_per_chunk_bytes / n_obs
     chunk_size = int(memory_per_chunk_bytes / n_obs)
-    # Ensure at least 1 grid point per chunk
+    # Ensure at least 1 grid point per chunk.
     return max(1, chunk_size)
 
 
