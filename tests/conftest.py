@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rasterio
+from pandas.testing import assert_frame_equal
 from typer.testing import CliRunner
 
 from vs30 import cli
@@ -52,7 +53,8 @@ def compare_output_files(output_dir: Path, benchmark_dir: Path, filenames: list[
     """
     Compare a list of output files against their benchmarks.
 
-    Routes .tif files to compare_rasters and .csv files to compare_csvs.
+    Routes .tif files to compare_rasters; .csv files are compared with pandas
+    assert_frame_equal after loading.
 
     Parameters
     ----------
@@ -71,7 +73,9 @@ def compare_output_files(output_dir: Path, benchmark_dir: Path, filenames: list[
         if filename.endswith(".tif"):
             compare_rasters(actual, expected)
         elif filename.endswith(".csv"):
-            compare_csvs(actual, expected)
+            actual_df = pd.read_csv(actual)
+            expected_df = pd.read_csv(expected)
+            assert_frame_equal(actual_df, expected_df)
 
 
 def compare_rasters(
@@ -132,53 +136,3 @@ def compare_rasters(
                 assert np.allclose(
                     actual_data, expected_data, rtol=rtol, atol=atol
                 ), f"Band {band_idx}: Data values differ beyond tolerance"
-
-
-def compare_csvs(
-    actual_path: Path,
-    expected_path: Path,
-    rtol: float = TEST_RTOL,
-    atol: float = TEST_ATOL,
-) -> None:
-    """
-    Compare two CSV files for equality within tolerance.
-
-    Parameters
-    ----------
-    actual_path : Path
-        Path to the actual output CSV.
-    expected_path : Path
-        Path to the expected benchmark CSV.
-    rtol : float
-        Relative tolerance for numeric comparison.
-    atol : float
-        Absolute tolerance for numeric comparison.
-
-    Raises
-    ------
-    AssertionError
-        If the CSVs differ beyond tolerance.
-    """
-    actual_df = pd.read_csv(actual_path)
-    expected_df = pd.read_csv(expected_path)
-
-    assert set(actual_df.columns) == set(expected_df.columns), (
-        f"Column mismatch: {set(actual_df.columns)} vs {set(expected_df.columns)}"
-    )
-    assert len(actual_df) == len(expected_df), (
-        f"Row count mismatch: {len(actual_df)} vs {len(expected_df)}"
-    )
-
-    for col in actual_df.columns:
-        if pd.api.types.is_numeric_dtype(actual_df[col]):
-            assert np.allclose(
-                actual_df[col].values,
-                expected_df[col].values,
-                rtol=rtol,
-                atol=atol,
-                equal_nan=True,
-            ), f"Column '{col}' values differ beyond tolerance"
-        else:
-            assert actual_df[col].equals(expected_df[col]), (
-                f"Column '{col}' values differ"
-            )
