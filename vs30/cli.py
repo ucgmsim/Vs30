@@ -290,7 +290,7 @@ def update_categorical_vs30_models(
             unique_assigned_ids = clustered_observations_df[
                 constants.STANDARD_ID_COLUMN
             ].unique()
-            n_valid = np.sum(
+            n_valid = np.count_nonzero(
                 clustered_observations_df[constants.STANDARD_ID_COLUMN]
                 != constants.RASTER_ID_NODATA_VALUE
             )
