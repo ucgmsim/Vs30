@@ -71,7 +71,8 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
     with rasterio.open(constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
-        terrain_ids = np.array([s[0] for s in src.sample(points)], dtype=src.dtypes[0])
+        # Note: Rasterio uses 1-based band indexes
+        terrain_ids = np.array(list(src.sample(points, indexes=1)), dtype=src.dtypes[0])
 
         # Handle nodata values
         if src.nodata is not None:
