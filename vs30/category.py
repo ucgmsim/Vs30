@@ -312,9 +312,7 @@ def perform_clustering(
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
     for category_id in ids:
-        subset_mask = model_ids == category_id
-        subset = features[subset_mask]
-        if subset.shape[0] < constants.MIN_GROUP:
+        if features[model_ids == category_id].shape[0] < constants.MIN_GROUP:
             # Can't form any groups
             continue
 
