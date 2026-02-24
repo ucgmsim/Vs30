@@ -130,11 +130,8 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     # Read CSV and check what columns are available
     # Use skipinitialspace=True to handle spaces after commas in CSV
     df = pd.read_csv(csv_file_path, skipinitialspace=True)
-
-    # Check if required columns exist
     required_cols = [constants.COL_MEAN, constants.COL_STDV]
     missing_cols = [col for col in required_cols if col not in df.columns]
-
     if missing_cols:
         raise ValueError(
             f"CSV file {csv_file_path} is missing required columns. "
