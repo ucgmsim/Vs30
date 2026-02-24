@@ -64,11 +64,9 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
     ValueError
         If the directory is not found in the archive.
     """
-    # Check if shapefile already exists
     if shapefile_path.exists():
         return
 
-    # Check if archive exists
     archive_path = constants.DATA_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
     if not archive_path.exists():
         raise FileNotFoundError(
@@ -76,9 +74,7 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
             f"Cannot extract {shapefile_path.name}. Please ensure shapefiles.tar.xz exists."
         )
 
-    # Extract directory from archive
     with tarfile.open(archive_path, "r:xz") as tar:
-        # Extract only files in the specified directory
         members = [
             member
             for member in tar.getmembers()
@@ -90,7 +86,6 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
             )
         tar.extractall(path=constants.DATA_DIR, members=members)
 
-    # Verify extraction was successful
     if not shapefile_path.exists():
         raise FileNotFoundError(
             f"Failed to extract {shapefile_path.name} from {archive_path}. "
