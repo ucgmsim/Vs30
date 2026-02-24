@@ -203,8 +203,11 @@ def update_with_independent_data(
         )
 
     # Enforce minimum sigma value on prior
-    updated_categorical_model_df[constants.COL_PRIOR_STDV] = np.clip(updated_categorical_model_df[constants.COL_PRIOR_STDV].values,
-        constants.MIN_SIGMA, None)
+    updated_categorical_model_df[constants.COL_PRIOR_STDV] = np.clip(
+        updated_categorical_model_df[constants.COL_PRIOR_STDV].values,
+        constants.MIN_SIGMA,
+        None,
+    )
 
     # Initialize posterior columns
     updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = (
@@ -311,42 +314,18 @@ def perform_clustering(
     ids = np.unique(model_ids)
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
+    # Perform DBSCAN clustering
     for category_id in ids:
         if features[model_ids == category_id].shape[0] < constants.MIN_GROUP:
             # Can't form any groups
             continue
-
         dbscan = sklearn.cluster.DBSCAN(
             eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
         )
-        dbscan.fit(subset)
-
-        # Save labels
-        sites_df.loc[subset_mask, constants.COL_CLUSTER] = dbscan.labels_
+        dbscan.fit(features[model_ids == category_id])
+        sites_df.loc[model_ids == category_id, constants.COL_CLUSTER] = dbscan.labels_
 
     return sites_df
-
-
-def compute_effective_sample_size(cluster_counts: pd.Series) -> int:
-    """Count effective independent observations from cluster assignments.
-
-    Each DBSCAN cluster contributes one effective observation regardless of
-    size. Each unclustered point (label = -1) counts individually.
-
-    Parameters
-    ----------
-    cluster_counts : Series
-        Value counts of cluster labels for one category.
-
-    Returns
-    -------
-    int
-        Number of effective independent observations.
-    """
-    effective_n = len(cluster_counts)
-    if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
-        effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
-    return effective_n
 
 
 def compute_cluster_weighted_mean_and_stddev(
@@ -472,7 +451,9 @@ def update_with_clustered_data(
         ]
         cluster_counts = category_sites[constants.COL_CLUSTER].value_counts()
 
-        effective_n = compute_effective_sample_size(cluster_counts)
+        effective_n = len(cluster_counts)
+        if constants.CLUSTER_UNCLUSTERED_LABEL in cluster_counts.index:
+            effective_n += cluster_counts[constants.CLUSTER_UNCLUSTERED_LABEL] - 1
         if effective_n == 0:
             continue
 
