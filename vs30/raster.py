@@ -339,7 +339,7 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
 
 
 def create_vs30_raster_from_ids(
-    id_raster_path: Path, csv_path: str, output_path: Path
+    id_raster_path: Path, csv_path: Path, output_path: Path
 ) -> Path:
     """
     Create VS30 mean and standard deviation raster from category ID raster.
@@ -355,7 +355,7 @@ def create_vs30_raster_from_ids(
     ----------
     id_raster_path : Path
         Path to input category ID raster (contains IDs from spatial file).
-    csv_path : str
+    csv_path : Path
         Path to CSV file (relative to resources directory) containing ID-to-VS30 mapping.
         CSV must have columns: 'id', 'mean_vs30_km_per_s', 'standard_deviation_vs30_km_per_s'.
         The 'id' column values must match the ID values in the spatial raster.
@@ -862,6 +862,7 @@ def apply_hybrid_modifications_at_points(
 
     # Sample coastal distance at points (if needed)
     if mod6 or mod13:
+        assert coast_distance_raster_path is not None  # Type guard: ValueError above ensures this
         if not coast_distance_raster_path.exists():
             raise FileNotFoundError(
                 f"Coastal distance raster not found: {coast_distance_raster_path}"

@@ -8,6 +8,8 @@ Tests cover:
 """
 
 import numpy as np
+
+from vs30.constants import ModelType
 import pytest
 
 from vs30 import spatial
@@ -44,13 +46,14 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            model_type="geology",
+            model_type=ModelType.GEOLOGY,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
         )
 
         # Observation is higher (280), prior is 250, update should increase
+        assert result is not None  # Type guard: narrows Optional return type
         assert result.updated_vs30 > pixel.vs30
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
@@ -58,13 +61,14 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            model_type="geology",
+            model_type=ModelType.GEOLOGY,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
         )
 
         # Adding observation should reduce uncertainty
+        assert result is not None  # Type guard: narrows Optional return type
         assert result.updated_stdv < pixel.stdv
 
     def test_no_observations_returns_unchanged_vs30(self, pixel):
@@ -82,11 +86,12 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             far_observation,
-            model_type="geology",
+            model_type=ModelType.GEOLOGY,
             max_dist_m=5000,
         )
 
         # VS30 should be unchanged when no nearby observations
+        assert result is not None  # Type guard: narrows Optional return type
         assert result.updated_vs30 == pixel.vs30
         assert result.n_observations_used == 0
 
@@ -177,7 +182,7 @@ class TestComputeMvnAtPoints:
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
             obs_uncertainty=obs_uncertainty,
-            model_type="geology",
+            model_type=ModelType.GEOLOGY,
         )
 
         # Should return prior vs30 unchanged
@@ -206,7 +211,7 @@ class TestComputeMvnAtPoints:
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
             obs_uncertainty=obs_uncertainty,
-            model_type="geology",
+            model_type=ModelType.GEOLOGY,
             max_dist_m=5000,
         )
 
