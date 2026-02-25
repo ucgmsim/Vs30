@@ -21,7 +21,7 @@ from pathlib import Path
 import typer
 from qcore import cli
 
-from vs30 import pipeline
+from vs30 import constants, pipeline
 from vs30 import config as config_module
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ def update_priors(
         Path, typer.Argument(exists=True, dir_okay=False)
     ],
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    model_type: typing.Annotated[str, typer.Option("-t")],
+    model_type: typing.Annotated[constants.ModelType, typer.Option("-t")],
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option("-c", exists=True, dir_okay=False),

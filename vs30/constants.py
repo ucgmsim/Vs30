@@ -85,11 +85,11 @@ EPS: float = 15000.0
 # Mean and standard deviation of Vs30 values for each geology and terrain category.
 # Paths are relative to the resources directory.
 
-GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: str = (
+GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: Path = Path(
     "categorical_vs30_mean_and_stddev/geology/"
     "geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )
-TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: str = (
+TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: Path = Path(
     "categorical_vs30_mean_and_stddev/terrain/"
     "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )

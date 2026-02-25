@@ -344,7 +344,7 @@ def prepare_observation_data(
     observations: pd.DataFrame,
     raster_data: RasterData,
     updated_model_table: np.ndarray,
-    model_type: str,
+    model_type: constants.ModelType,
     output_dir: Path,
     noisy: bool,
 ) -> ObservationData:
@@ -596,7 +596,7 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
-    model_type: str,
+    model_type: constants.ModelType,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
@@ -716,7 +716,7 @@ def select_observations_for_pixel(
 def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
-    model_type: str,
+    model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
@@ -1104,7 +1104,7 @@ def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_result: BoundingBoxResult,
-    model_type: str,
+    model_type: constants.ModelType,
     max_spatial_boolean_array_memory_gb: float,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
@@ -1203,7 +1203,7 @@ def compute_spatial_adjustments(
 def apply_and_write_updates(
     raster_data: RasterData,
     updates: list[SpatialAdjustmentResult],
-    model_type: str,
+    model_type: constants.ModelType,
     output_dir: Path,
 ) -> None:
     """
@@ -1250,7 +1250,7 @@ def compute_spatial_adjustment_at_points(
     obs_model_vs30: np.ndarray,
     obs_model_stdv: np.ndarray,
     obs_uncertainty: np.ndarray,
-    model_type: str,
+    model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,

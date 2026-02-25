@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def update_categorical_vs30_models(
     categorical_model_csv: Path,
     output_dir: Path,
-    model_type: str,
+    model_type: constants.ModelType,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
     nproc: int = 1,
@@ -382,7 +382,7 @@ def spatial_fit(
     observations_csv: Path,
     model_values_csv: Path,
     output_dir: Path,
-    model_type: str,
+    model_type: constants.ModelType,
     cfg: config_module.Vs30Config,
     n_proc: int | None = None,
 ) -> None:
@@ -603,7 +603,7 @@ def combine(
 
 
 def run_pipeline_for_model_type(
-    model_type: str,
+    model_type: constants.ModelType,
     categorical_model_csv: Path,
     output_dir: Path,
     cfg: config_module.Vs30Config,
@@ -751,6 +751,12 @@ def run_pipeline_for_model_type(
 
     # Prefer independent observations for spatial fit; fall back to clustered
     spatial_obs_csv = independent_observations_csv or clustered_observations_csv
+
+    if spatial_obs_csv is None:
+        raise ValueError(
+            "No observation CSVs provided for spatial fit. "
+            "At least one of clustered or independent observations must be specified."
+        )
 
     spatial_fit(
         input_raster=current_raster,
@@ -1020,7 +1026,9 @@ def compute_at_locations(
             ignore_index=True,
         )
     else:
-        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
+        # pandas stubs don't accept list[str] for `columns`, but this is valid at runtime,
+        # so we use ty: ignore to suppress the false positive.
+        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)  # ty: ignore[invalid-argument-type]
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
