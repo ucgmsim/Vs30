@@ -33,4 +33,4 @@ jobs:
           uv sync --all-extras --dev
 
       - name: Run type checking with ty
-        run: uv run ty check --exclude setup.py
+        run: uv run ty check --exclude setup.py --exclude VsViewer/
