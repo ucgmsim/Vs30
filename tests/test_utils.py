@@ -26,7 +26,10 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.3])
 
         combined_vs30, combined_stdv = utils.combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
+            geol_vs30,
+            geol_stdv,
+            terr_vs30,
+            terr_stdv,
             combination_method=1.0,  # Equal weighting
         )
 
@@ -44,7 +47,10 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.3])
 
         combined_vs30, combined_stdv = utils.combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
+            geol_vs30,
+            geol_stdv,
+            terr_vs30,
+            terr_stdv,
             combination_method=2.0,  # Geology has 2x weight
         )
 
@@ -55,7 +61,7 @@ class TestCombineVs30Models:
         assert combined_vs30[0] < 300.0  # Below midpoint
         assert combined_vs30[0] > 200.0  # Above geology
         # More specifically, check against expected value
-        expected = np.exp((2/3) * np.log(200.0) + (1/3) * np.log(400.0))
+        expected = np.exp((2 / 3) * np.log(200.0) + (1 / 3) * np.log(400.0))
         assert np.isclose(combined_vs30[0], expected, rtol=0.01)
 
     def test_stdv_weighting_lower_stdv_gets_more_weight(self):
@@ -66,7 +72,10 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.5])  # High uncertainty
 
         combined_vs30, _ = utils.combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
+            geol_vs30,
+            geol_stdv,
+            terr_vs30,
+            terr_stdv,
             combination_method="standard_deviation_weighting",
         )
 
@@ -83,7 +92,10 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.3])  # Same stdv as geology
 
         combined_vs30, _ = utils.combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
+            geol_vs30,
+            geol_stdv,
+            terr_vs30,
+            terr_stdv,
             combination_method="standard_deviation_weighting",
         )
 
@@ -99,7 +111,10 @@ class TestCombineVs30Models:
         terr_stdv = np.array([0.4])
 
         combined_vs30, combined_stdv = utils.combine_vs30_models(
-            geol_vs30, geol_stdv, terr_vs30, terr_stdv,
+            geol_vs30,
+            geol_stdv,
+            terr_vs30,
+            terr_stdv,
             combination_method=1.0,  # Equal weighting
         )
 
@@ -109,7 +124,7 @@ class TestCombineVs30Models:
         log_t = np.log(400.0)
         log_comb = 0.5 * log_g + 0.5 * log_t
         expected_stdv = np.sqrt(
-            0.5 * ((log_g - log_comb)**2 + 0.3**2)
-            + 0.5 * ((log_t - log_comb)**2 + 0.4**2)
+            0.5 * ((log_g - log_comb) ** 2 + 0.3**2)
+            + 0.5 * ((log_t - log_comb) ** 2 + 0.4**2)
         )
         assert np.isclose(combined_stdv[0], expected_stdv, rtol=0.01)

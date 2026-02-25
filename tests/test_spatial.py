@@ -116,11 +116,23 @@ class TestSubsampleByCluster:
 
     def test_mixed_clusters(self):
         """Test with mixed clustered and unclustered."""
-        cluster_labels = np.array([
-            -1, -1, -1,  # 3 unclustered
-            0, 0, 0, 0,  # 4 in cluster 0
-            1, 1, 1, 1, 1, 1,  # 6 in cluster 1
-        ])
+        cluster_labels = np.array(
+            [
+                -1,
+                -1,
+                -1,  # 3 unclustered
+                0,
+                0,
+                0,
+                0,  # 4 in cluster 0
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,  # 6 in cluster 1
+            ]
+        )
 
         result = spatial.subsample_by_cluster(cluster_labels, step=2)
 
@@ -199,6 +211,10 @@ class TestComputeMvnAtPoints:
         )
 
         # Should adjust toward observation (increase vs30)
-        assert mvn_vs30[0] > model_vs30[0], "Adjustment should pull vs30 toward observation"
+        assert mvn_vs30[0] > model_vs30[0], (
+            "Adjustment should pull vs30 toward observation"
+        )
         # Uncertainty should decrease
-        assert mvn_stdv[0] < model_stdv[0], "Uncertainty should decrease with observation"
+        assert mvn_stdv[0] < model_stdv[0], (
+            "Uncertainty should decrease with observation"
+        )

@@ -5,7 +5,6 @@ This module contains fixtures and helper functions used across multiple test fil
 All shared test fixtures should be defined here to avoid duplication.
 """
 
-import traceback
 from pathlib import Path
 
 import numpy as np
@@ -13,9 +12,6 @@ import pandas as pd
 import pytest
 import rasterio
 from pandas.testing import assert_frame_equal
-from typer.testing import CliRunner
-
-from vs30 import cli
 
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
@@ -23,32 +19,6 @@ BENCHMARKS_DIR: Path = TESTS_DIR / "benchmarks"
 
 TEST_RTOL: float = 1e-5
 TEST_ATOL: float = 1e-8
-
-runner = CliRunner()
-
-
-def run_cli(args: list[str]) -> None:
-    """
-    Run a vs30 CLI command via CliRunner, raising on failure.
-
-    Parameters
-    ----------
-    args : list[str]
-        CLI arguments to pass to the vs30 app.
-
-    Raises
-    ------
-    RuntimeError
-        If the CLI command exits with a non-zero code.
-    """
-    result = runner.invoke(cli.app, args)
-    if result.exit_code != 0:
-        print(f"Output:\n{result.stdout}")
-        if result.exception:
-            print(
-                f"Exception:\n{''.join(traceback.format_exception(type(result.exception), result.exception, result.exception.__traceback__))}"
-            )
-        raise RuntimeError(f"CLI command failed with exit code {result.exit_code}")
 
 
 def compare_output_files(
@@ -85,8 +55,6 @@ def compare_output_files(
 def compare_rasters(
     actual_path: Path,
     expected_path: Path,
-    rtol: float = TEST_RTOL,
-    atol: float = TEST_ATOL,
 ) -> None:
     """
     Compare two raster files for equality within tolerance.
@@ -97,10 +65,6 @@ def compare_rasters(
         Path to the actual output raster.
     expected_path : Path
         Path to the expected benchmark raster.
-    rtol : float
-        Relative tolerance for numpy.allclose.
-    atol : float
-        Absolute tolerance for numpy.allclose.
 
     Raises
     ------
@@ -138,6 +102,6 @@ def compare_rasters(
             if np.any(valid_actual):
                 assert valid_actual == pytest.approx(
                     valid_expected,
-                    rel=rtol,
-                    abs=atol,
+                    rel=TEST_RTOL,
+                    abs=TEST_ATOL,
                 ), f"Band {band_idx}: Data values differ beyond tolerance"

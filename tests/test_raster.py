@@ -22,11 +22,16 @@ TEST_RASTER_SIZE = 20
 def write_single_band_raster(path, data):
     """Write a single-band GeoTIFF with the shared test extent."""
     raster_transform = from_bounds(
-        TEST_XMIN, TEST_YMIN, TEST_XMAX, TEST_YMAX,
-        TEST_RASTER_SIZE, TEST_RASTER_SIZE,
+        TEST_XMIN,
+        TEST_YMIN,
+        TEST_XMAX,
+        TEST_YMAX,
+        TEST_RASTER_SIZE,
+        TEST_RASTER_SIZE,
     )
     with rasterio.open(
-        path, "w",
+        path,
+        "w",
         driver="GTiff",
         width=TEST_RASTER_SIZE,
         height=TEST_RASTER_SIZE,
@@ -45,26 +50,35 @@ class TestApplyHybridGeologyModifications:
     @pytest.fixture
     def sample_arrays(self):
         """Create sample arrays for testing."""
-        id_array = np.array([
-            [1, 2, 3],
-            [4, 5, 6],
-            [7, 10, 11],
-        ], dtype=np.uint8)
+        id_array = np.array(
+            [
+                [1, 2, 3],
+                [4, 5, 6],
+                [7, 10, 11],
+            ],
+            dtype=np.uint8,
+        )
 
         vs30_array = np.full((3, 3), 300.0, dtype=np.float32)
         stdv_array = np.full((3, 3), 0.5, dtype=np.float32)
 
-        slope_array = np.array([
-            [0.01, 0.05, 0.1],
-            [0.2, 0.5, 1.0],
-            [2.0, 5.0, 10.0],
-        ], dtype=np.float32)
+        slope_array = np.array(
+            [
+                [0.01, 0.05, 0.1],
+                [0.2, 0.5, 1.0],
+                [2.0, 5.0, 10.0],
+            ],
+            dtype=np.float32,
+        )
 
-        coast_dist_array = np.array([
-            [5000.0, 8000.0, 12000.0],
-            [15000.0, 20000.0, 25000.0],
-            [30000.0, 10000.0, 5000.0],
-        ], dtype=np.float32)
+        coast_dist_array = np.array(
+            [
+                [5000.0, 8000.0, 12000.0],
+                [15000.0, 20000.0, 25000.0],
+                [30000.0, 10000.0, 5000.0],
+            ],
+            dtype=np.float32,
+        )
 
         return id_array, vs30_array, stdv_array, slope_array, coast_dist_array
 
@@ -215,14 +229,18 @@ class TestApplyHybridModificationsAtPoints:
         write_single_band_raster(coast_path, coast_data)
         return coast_path
 
-    def test_hybrid_slope_modifications_at_points(self, slope_raster, coast_distance_raster):
+    def test_hybrid_slope_modifications_at_points(
+        self, slope_raster, coast_distance_raster
+    ):
         """Test slope-based modifications at points."""
         # Points within the test raster extent
-        points = np.array([
-            [1745000.0, 5425000.0],
-            [1750000.0, 5430000.0],
-            [1755000.0, 5435000.0],
-        ])
+        points = np.array(
+            [
+                [1745000.0, 5425000.0],
+                [1750000.0, 5430000.0],
+                [1755000.0, 5435000.0],
+            ]
+        )
 
         vs30 = np.array([300.0, 300.0, 300.0])
         stdv = np.array([0.5, 0.5, 0.5])
@@ -230,7 +248,10 @@ class TestApplyHybridModificationsAtPoints:
         geology_ids = np.array([2, 2, 2])
 
         modified_vs30, modified_stdv = raster.apply_hybrid_modifications_at_points(
-            points, vs30.copy(), stdv.copy(), geology_ids,
+            points,
+            vs30.copy(),
+            stdv.copy(),
+            geology_ids,
             slope_raster_path=slope_raster,
             coast_distance_raster_path=coast_distance_raster,
             mod6=False,
@@ -244,13 +265,17 @@ class TestApplyHybridModificationsAtPoints:
         # Values should differ due to varying slope
         assert not np.allclose(modified_vs30, vs30)
 
-    def test_mod6_coastal_modifications_at_points(self, slope_raster, coast_distance_raster):
+    def test_mod6_coastal_modifications_at_points(
+        self, slope_raster, coast_distance_raster
+    ):
         """Test mod6 (alluvium) coastal modifications at points."""
         # Points at different locations
-        points = np.array([
-            [1745000.0, 5425000.0],
-            [1755000.0, 5435000.0],
-        ])
+        points = np.array(
+            [
+                [1745000.0, 5425000.0],
+                [1755000.0, 5435000.0],
+            ]
+        )
 
         vs30 = np.array([300.0, 300.0])
         stdv = np.array([0.5, 0.5])
@@ -258,7 +283,10 @@ class TestApplyHybridModificationsAtPoints:
         geology_ids = np.array([4, 4])
 
         modified_vs30, modified_stdv = raster.apply_hybrid_modifications_at_points(
-            points, vs30.copy(), stdv.copy(), geology_ids,
+            points,
+            vs30.copy(),
+            stdv.copy(),
+            geology_ids,
             slope_raster_path=slope_raster,
             coast_distance_raster_path=coast_distance_raster,
             mod6=True,
@@ -272,7 +300,9 @@ class TestApplyHybridModificationsAtPoints:
         assert np.all(modified_vs30 >= 240)
         assert np.all(modified_vs30 <= 500)
 
-    def test_all_modifications_disabled_returns_unchanged(self, slope_raster, coast_distance_raster):
+    def test_all_modifications_disabled_returns_unchanged(
+        self, slope_raster, coast_distance_raster
+    ):
         """Test that disabling all modifications returns unchanged values."""
         points = np.array([[1750000.0, 5430000.0]])
         vs30 = np.array([300.0])
@@ -281,7 +311,10 @@ class TestApplyHybridModificationsAtPoints:
         geology_ids = np.array([1])
 
         modified_vs30, modified_stdv = raster.apply_hybrid_modifications_at_points(
-            points, vs30.copy(), stdv.copy(), geology_ids,
+            points,
+            vs30.copy(),
+            stdv.copy(),
+            geology_ids,
             slope_raster_path=slope_raster,
             coast_distance_raster_path=coast_distance_raster,
             mod6=False,

@@ -78,13 +78,21 @@ class TestBayesianUpdateFormulas:
         # Observation close to prior
         obs_close = 205
         var_close = category.compute_bayesian_posterior_variance(
-            prior_stdv, num_prior_observations, observation_uncertainty, prior_mean, obs_close
+            prior_stdv,
+            num_prior_observations,
+            observation_uncertainty,
+            prior_mean,
+            obs_close,
         )
 
         # Observation far from prior
         obs_far = 400
         var_far = category.compute_bayesian_posterior_variance(
-            prior_stdv, num_prior_observations, observation_uncertainty, prior_mean, obs_far
+            prior_stdv,
+            num_prior_observations,
+            observation_uncertainty,
+            prior_mean,
+            obs_far,
         )
 
         # Variance should be higher when observation is far from prior

@@ -334,11 +334,13 @@ REQUIRED_OBSERVATION_COLUMNS_BASIC: list[str] = [
 # MODEL TYPE IDENTIFIERS
 # String identifiers for the two model types used in the Vs30 pipeline.
 
+
 class ModelType(StrEnum):
     """Valid model types for VS30 calculations."""
 
     GEOLOGY = "geology"
     TERRAIN = "terrain"
+
 
 # Dictionaries for convenient access by model type
 PHI: dict[ModelType, int] = {
