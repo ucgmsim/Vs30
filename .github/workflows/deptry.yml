@@ -7,11 +7,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install deptry
-        run: pip install deptry
-      - name: Run deptry to check that all dependencies are present
-        run: deptry . -ddg test
+      # Setup the minimum required python distribution
+      - uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      # Install deptry
+      - run: uv pip install deptry
+      # Run deptry to check that all dependencies are present.
+      - run: uv run deptry . -ddg test,types
