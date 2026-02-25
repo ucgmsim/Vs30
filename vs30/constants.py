@@ -1,13 +1,4 @@
-"""
-Constants for the vs30 package.
-
-These values are scientific/algorithmic constants that should not be modified
-by users. They are derived from calibration studies and define the fundamental
-behavior of the Vs30 calculation algorithms.
-
-For user-configurable parameters (grid bounds, output directories, etc.),
-see config.yaml and config.py.
-"""
+"""Scientific and algorithmic constants for Vs30 calculations."""
 
 from dataclasses import dataclass
 from enum import StrEnum

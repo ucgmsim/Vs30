@@ -1,26 +1,4 @@
-"""
-Pydantic configuration model for the vs30 package.
-
-This module provides a typed configuration class that loads and validates
-user-configurable settings from config.yaml.
-
-For scientific/algorithmic constants that should not be modified by users,
-see vs30/constants.py.
-
-Usage
------
-    from vs30 import config
-
-    # Load default config (from package's config.yaml)
-    cfg = config.get_default_config()
-
-    # Load from custom path
-    cfg = config.Vs30Config.from_yaml(Path("/path/to/custom/config.yaml"))
-
-    # Access values with IDE autocomplete
-    n_processors = cfg.n_proc
-    output_path = cfg.output_dir
-"""
+"""Pydantic configuration model for loading and validating settings from config.yaml."""
 
 from pathlib import Path
 
@@ -172,7 +150,14 @@ class Vs30Config(pydantic.BaseModel):
 
     @classmethod
     def default_config_path(cls) -> Path:
-        """Return the path to the package's default config.yaml."""
+        """
+        Get the path to the package's default config.yaml.
+
+        Returns
+        -------
+        Path
+            Path to the bundled config.yaml file.
+        """
         return Path(__file__).parent / "config.yaml"
 
     @classmethod

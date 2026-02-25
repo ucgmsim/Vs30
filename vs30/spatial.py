@@ -1,33 +1,4 @@
-"""
-Multivariate Normal (MVN) distribution-based spatial adjustment for Vs30 values.
-
-This module implements spatial interpolation using MVN conditioning, which
-adjusts model Vs30 predictions based on nearby measurements. The approach:
-
-1. For each pixel near observations, builds a covariance matrix relating
-   the pixel to nearby measurements
-2. Uses MVN conditioning to compute the posterior (updated) Vs30 and
-   uncertainty given the observations
-3. Applies updates to create spatially-adjusted Vs30 maps
-
-The covariance structure uses an exponential correlation function, with
-separate correlation lengths (phi) for geology and terrain models.
-
-Key Parameters (from config.yaml)
----------------------------------
-- phi: Correlation length controlling spatial smoothness (different for geology/terrain)
-- max_dist_m: Maximum distance (meters) to consider observations
-- max_points: Maximum number of observations per pixel update
-- noisy: Whether to apply noise weighting based on observation uncertainty
-- cov_reduc: Covariance reduction factor for dissimilar Vs30 values
-
-Scientific Background
----------------------
-The MVN conditioning approach assumes that Vs30 residuals (log(measured/model))
-are spatially correlated following an exponential correlation model. Near
-observation points, the model prediction is adjusted toward the measured value,
-with the adjustment magnitude depending on distance and correlation structure.
-"""
+"""Multivariate Normal (MVN) distribution-based spatial adjustment of Vs30 using nearby observations."""
 
 import logging
 import multiprocessing as mp
@@ -85,7 +56,14 @@ class ObservationData:
 
     @classmethod
     def empty(cls) -> "ObservationData":
-        """Create an empty ObservationData object with zero observations."""
+        """
+        Create an empty ObservationData object with zero observations.
+
+        Returns
+        -------
+        ObservationData
+            An ObservationData instance with zero-length arrays.
+        """
         return cls(
             locations=np.empty((0, 2)),
             vs30=np.empty(0),
@@ -180,7 +158,19 @@ class RasterData:
 
     @classmethod
     def from_file(cls, path: Path) -> "RasterData":
-        """Load 2-band VS30 raster."""
+        """
+        Load 2-band VS30 raster.
+
+        Parameters
+        ----------
+        path : Path
+            Path to the 2-band raster file (band 1: mean Vs30, band 2: standard deviation of Vs30).
+
+        Returns
+        -------
+        RasterData
+            Loaded raster data with valid pixel mask.
+        """
         with rasterio.open(path) as src:
             vs30 = src.read(1)
             stdv = src.read(2)
@@ -549,7 +539,7 @@ def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float)
 
     Returns
     -------
-    chunk_size : int
+    int
         Maximum number of grid points per chunk.
     """
     memory_per_chunk_bytes = max_spatial_boolean_array_memory_gb * 1024 * 1024 * 1024
@@ -611,6 +601,10 @@ def build_covariance_matrix(
         Selected observations for this pixel.
     model_type : constants.ModelType
         Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    noisy : bool, optional
+        Whether to apply noise weighting based on observation uncertainty.
+    cov_reduc : float, optional
+        Covariance reduction factor for dissimilar Vs30 values.
 
     Returns
     -------
@@ -733,6 +727,14 @@ def compute_spatial_adjustment_for_pixel(
         Full observation data.
     model_type : constants.ModelType
         Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    max_dist_m : float, optional
+        Maximum distance in meters to consider observations.
+    max_points : int, optional
+        Maximum number of observations to select per pixel.
+    noisy : bool, optional
+        Whether to apply noise weighting based on observation uncertainty.
+    cov_reduc : float, optional
+        Covariance reduction factor for dissimilar Vs30 values.
 
     Returns
     -------
@@ -946,6 +948,23 @@ def accumulate_bbox_results(
     Merge a single chunk's bounding box results into the running accumulators.
 
     Updates valid_points_in_bbox_mask and obs_to_grid_indices in place.
+
+    Parameters
+    ----------
+    valid_points_in_bbox_mask : ndarray
+        Boolean mask over valid pixels, updated in place.
+    obs_to_grid_indices : list[ndarray]
+        Per-observation list of affected grid indices, updated in place.
+    chunk_idx : int
+        Index of the current chunk.
+    chunk_size : int
+        Number of grid points per chunk.
+    chunk_mask : ndarray
+        Boolean mask of affected grid points within this chunk.
+    chunk_obs_to_grid : list[ndarray]
+        Per-observation grid indices within this chunk.
+    valid_flat_indices : ndarray
+        Flat indices of valid pixels in the full raster.
     """
     start_idx = chunk_idx * chunk_size
     valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
@@ -1124,6 +1143,16 @@ def compute_spatial_adjustments(
         Bounding box result.
     model_type : constants.ModelType
         Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    max_spatial_boolean_array_memory_gb : float
+        Memory limit (GB) for boolean arrays in spatial processing.
+    max_dist_m : float, optional
+        Maximum distance in meters to consider observations.
+    max_points : int, optional
+        Maximum number of observations to select per pixel.
+    noisy : bool, optional
+        Whether to apply noise weighting based on observation uncertainty.
+    cov_reduc : float, optional
+        Covariance reduction factor for dissimilar Vs30 values.
 
     Returns
     -------
