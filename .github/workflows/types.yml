@@ -22,6 +22,9 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install GDAL system libraries
+        run: sudo apt-get update && sudo apt-get install -y libgdal-dev
+
       - name: Install project with types
         run: uv sync --all-extras --dev
 
