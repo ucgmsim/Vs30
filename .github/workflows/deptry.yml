@@ -13,7 +13,11 @@ jobs:
         uses: astral-sh/setup-uv@v5
       - name: Install GDAL system libraries
         run: sudo apt-get update && sudo apt-get install -y libgdal-dev
-      - run: uv sync
+      # GDAL's Python bindings must match the system libgdal version exactly.
+      # Query the installed version and override uv's resolution to match.
+      - run: |
+          echo "gdal==$(gdal-config --version)" > /tmp/gdal-override.txt
+          uv sync --override /tmp/gdal-override.txt
       # Install deptry
       - run: uv pip install deptry
       # Run deptry to check that all dependencies are present.
