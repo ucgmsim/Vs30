@@ -27,6 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest"]
+types = ["ty"]
 
 [project.urls]
 Repository = "https://github.com/ucgmsim/Vs30"
