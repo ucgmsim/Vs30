@@ -56,7 +56,8 @@ vs30 = [
 exclude = ["VsViewer", "build", "temp"]
 
 [tool.deptry]
-exclude = ["VsViewer", "build", "temp"]
+# .venv must be listed explicitly because custom exclude overrides deptry's defaults.
+exclude = ["VsViewer", ".venv"]
 
 [tool.deptry.package_module_name_map]
 scikit-learn = ["sklearn"]
