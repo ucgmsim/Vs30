@@ -935,48 +935,6 @@ def apply_clustered_subsampling(
     return obs_data_for_bbox
 
 
-def accumulate_bbox_results(
-    valid_points_in_bbox_mask: np.ndarray,
-    obs_to_grid_indices: list[np.ndarray],
-    chunk_idx: int,
-    chunk_size: int,
-    chunk_mask: np.ndarray,
-    chunk_obs_to_grid: list[np.ndarray],
-    valid_flat_indices: np.ndarray,
-) -> None:
-    """
-    Merge a single chunk's bounding box results into the running accumulators.
-
-    Updates valid_points_in_bbox_mask and obs_to_grid_indices in place.
-
-    Parameters
-    ----------
-    valid_points_in_bbox_mask : ndarray
-        Boolean mask over valid pixels, updated in place.
-    obs_to_grid_indices : list[ndarray]
-        Per-observation list of affected grid indices, updated in place.
-    chunk_idx : int
-        Index of the current chunk.
-    chunk_size : int
-        Number of grid points per chunk.
-    chunk_mask : ndarray
-        Boolean mask of affected grid points within this chunk.
-    chunk_obs_to_grid : list[ndarray]
-        Per-observation grid indices within this chunk.
-    valid_flat_indices : ndarray
-        Flat indices of valid pixels in the full raster.
-    """
-    start_idx = chunk_idx * chunk_size
-    valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
-
-    for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
-        if len(grid_indices) > 0:
-            full_raster_indices = valid_flat_indices[grid_indices]
-            obs_to_grid_indices[obs_idx] = np.concatenate(
-                [obs_to_grid_indices[obs_idx], full_raster_indices]
-            )
-
-
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
@@ -1061,19 +1019,9 @@ def find_affected_pixels(
                 )
             )
 
-        # Merge results
-        for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
-            accumulate_bbox_results(
-                valid_points_in_bbox_mask,
-                obs_to_grid_indices,
-                chunk_idx,
-                chunk_size,
-                chunk_mask,
-                chunk_obs_to_grid,
-                raster_data.valid_flat_indices,
-            )
     else:
         # Sequential processing
+        results = []
         for chunk_idx in tqdm(
             range(n_chunks),
             desc="Finding affected pixels",
@@ -1091,16 +1039,18 @@ def find_affected_pixels(
                 obs_northings_max=obs_northings_max,
                 start_grid_idx=start_idx,
             )
+            results.append((chunk_idx, chunk_mask, chunk_obs_to_grid))
 
-            accumulate_bbox_results(
-                valid_points_in_bbox_mask,
-                obs_to_grid_indices,
-                chunk_idx,
-                chunk_size,
-                chunk_mask,
-                chunk_obs_to_grid,
-                raster_data.valid_flat_indices,
-            )
+    # Merge results from either parallel or sequential processing
+    for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
+        start_idx = chunk_idx * chunk_size
+        valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
+        for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
+            if len(grid_indices) > 0:
+                full_raster_indices = raster_data.valid_flat_indices[grid_indices]
+                obs_to_grid_indices[obs_idx] = np.concatenate(
+                    [obs_to_grid_indices[obs_idx], full_raster_indices]
+                )
 
     # Create full-size mask
     grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
