@@ -41,7 +41,7 @@ The package provides a `vs30` command-line interface with the following commands
 Run the complete Vs30 mapping workflow:
 
 ```bash
-vs30 full-pipeline
+vs30 map
 ```
 
 This runs both geology and terrain pipelines, then combines them into a final map. Output is saved to the directory specified in `config.yaml`.
@@ -57,7 +57,7 @@ Options:
 Calculate Vs30 at specific lat/lon points without generating full raster grids:
 
 ```bash
-vs30 compute-at-locations \
+vs30 points \
     --locations-csv sites.csv \
     --output-csv results.csv
 ```
@@ -75,7 +75,7 @@ Run specific stages of the pipeline:
 
 ```bash
 # Update categorical model values with Bayesian updates
-vs30 update-categorical-vs30-models \
+vs30 update-priors \
     --categorical-model-csv model.csv \
     --clustered-observations-csv cpt.csv \
     --output-dir output/ \
@@ -120,7 +120,7 @@ vs30 plot-posterior-values \
 Specify a custom config file for any command:
 
 ```bash
-vs30 --config /path/to/config.yaml full-pipeline
+vs30 --config /path/to/config.yaml map
 ```
 
 ## How It Works

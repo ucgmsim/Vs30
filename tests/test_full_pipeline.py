@@ -1,5 +1,5 @@
 """
-End-to-end tests for the VS30 full-pipeline command.
+End-to-end tests for the VS30 full pipeline.
 
 These tests verify that the full pipeline produces consistent results
 for different observation type combinations and processing modes.
@@ -22,7 +22,8 @@ import yaml
 from conftest import BENCHMARKS_DIR
 from conftest import compare_output_files
 from conftest import FIXTURES_DIR
-from conftest import run_cli
+from vs30 import pipeline
+from vs30.config import Vs30Config
 
 SCENARIOS = [
     "small_independent_only",
@@ -75,7 +76,8 @@ def create_test_config(scenario: str, output_dir: Path, n_proc: int = 1) -> Path
 def test_single_process(tmp_path, scenario):
     """Test pipeline with n_proc=1 for each scenario."""
     config_path = create_test_config(scenario, tmp_path, n_proc=1)
-    run_cli(["--config", str(config_path), "full-pipeline"])
+    cfg = Vs30Config.from_yaml(config_path)
+    pipeline.run_full_pipeline(cfg)
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 
 
@@ -83,5 +85,6 @@ def test_single_process(tmp_path, scenario):
 def test_multiprocess(tmp_path, scenario):
     """Test pipeline with all available CPUs for each scenario."""
     config_path = create_test_config(scenario, tmp_path, n_proc=os.cpu_count())
-    run_cli(["--config", str(config_path), "full-pipeline"])
+    cfg = Vs30Config.from_yaml(config_path)
+    pipeline.run_full_pipeline(cfg)
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)

@@ -38,6 +38,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 import scipy
+import sklearn.cluster
 from tqdm import tqdm
 
 from vs30 import category, constants, raster, utils
@@ -863,6 +864,73 @@ def subsample_by_cluster(
     selected_indices = np.array(sorted(selected_indices), dtype=np.int64)
 
     return selected_indices
+
+
+def apply_clustered_subsampling(
+    obs_data: ObservationData,
+    is_clustered_obs: bool,
+    n_proc: int,
+    obs_subsample_step: int,
+) -> ObservationData:
+    """
+    Apply DBSCAN clustering and subsampling to observations for optimized pixel search.
+
+    For clustered observations (e.g., CPT data), this function identifies spatial
+    clusters and subsamples within each cluster to reduce the number of observations
+    used for the bounding box search, while maintaining spatial coverage.
+
+    Parameters
+    ----------
+    obs_data : ObservationData
+        Full observation data.
+    is_clustered_obs : bool
+        Whether the observations are from a clustered observations file.
+    n_proc : int
+        Number of parallel jobs for DBSCAN.
+    obs_subsample_step : int
+        Step size for subsampling within each cluster.
+
+    Returns
+    -------
+    ObservationData
+        Either the original obs_data (if not clustered) or a subsampled version
+        for use in the affected pixel search.
+    """
+    if not is_clustered_obs:
+        return obs_data
+
+    logger.info("Clustering observations for optimized affected pixel search...")
+
+    dbscan = sklearn.cluster.DBSCAN(
+        eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=n_proc
+    )
+    cluster_labels = dbscan.fit_predict(obs_data.locations)
+
+    n_clusters = len(set(cluster_labels)) - (1 if -1 in cluster_labels else 0)
+    n_noise = np.sum(cluster_labels == -1)
+    logger.info(
+        f"Found {n_clusters} clusters and {n_noise} noise points "
+        f"in {len(obs_data.locations)} observations"
+    )
+
+    subsample_indices = subsample_by_cluster(cluster_labels, step=obs_subsample_step)
+
+    obs_data_for_bbox = ObservationData(
+        locations=obs_data.locations[subsample_indices],
+        vs30=obs_data.vs30[subsample_indices],
+        model_vs30=obs_data.model_vs30[subsample_indices],
+        model_stdv=obs_data.model_stdv[subsample_indices],
+        residuals=obs_data.residuals[subsample_indices],
+        omega=obs_data.omega[subsample_indices],
+        uncertainty=obs_data.uncertainty[subsample_indices],
+    )
+
+    logger.info(
+        f"Subsampled to {len(subsample_indices)} observations for affected pixel search "
+        f"(step={obs_subsample_step})"
+    )
+
+    return obs_data_for_bbox
 
 
 def accumulate_bbox_results(

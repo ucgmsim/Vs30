@@ -6,7 +6,10 @@ including the exponential correlation function for spatial interpolation and
 the model combination algorithm.
 """
 
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
 from vs30 import constants
 
@@ -126,3 +129,59 @@ def combine_vs30_models(
     )
 
     return combined_vs30, combined_stdv
+
+
+def resolve_observation_csv(
+    csv_path: Path | None,
+    config_filename: str | None,
+    res_dir: Path,
+) -> Path | None:
+    """
+    Resolve an observation CSV path from an explicit argument or config default.
+
+    Parameters
+    ----------
+    csv_path : Path or None
+        Explicitly provided path.
+    config_filename : str or None
+        Filename from config (e.g., cfg.clustered_observations_file).
+    res_dir : Path
+        Resources directory to look for config-specified files.
+
+    Returns
+    -------
+    Path or None
+        Resolved path, or None if no valid file found.
+    """
+    if csv_path is not None:
+        return csv_path
+    if config_filename is not None:
+        candidate = res_dir / config_filename
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def validate_csv_columns(
+    df: pd.DataFrame, required_cols: list[str], label: str
+) -> None:
+    """
+    Raise ValueError if the DataFrame is missing any required columns.
+
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame to validate.
+    required_cols : list[str]
+        Column names that must be present.
+    label : str
+        Descriptive label used in the error message (e.g. "Clustered observations CSV").
+
+    Raises
+    ------
+    ValueError
+        If any required columns are missing.
+    """
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"{label} missing required columns: {missing}")
