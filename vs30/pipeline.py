@@ -1026,9 +1026,7 @@ def compute_at_locations(
             ignore_index=True,
         )
     else:
-        # pandas stubs don't accept list[str] for `columns`, but this is valid at runtime,
-        # so we use ty: ignore to suppress the false positive.
-        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)  # ty: ignore[invalid-argument-type]
+        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
