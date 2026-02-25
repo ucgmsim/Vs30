@@ -1,10 +1,4 @@
-"""
-Shared utility functions for the vs30 package.
-
-This module provides general-purpose functions used across multiple modules,
-including the exponential correlation function for spatial interpolation and
-the model combination algorithm.
-"""
+"""Shared utility functions: correlation function and model combination."""
 
 from pathlib import Path
 
@@ -33,7 +27,7 @@ def correlation_function(
 
     Returns
     -------
-    correlations : ndarray
+    ndarray
         Correlation values between 0 and 1. Same shape as distances.
 
     """

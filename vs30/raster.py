@@ -1,26 +1,4 @@
-"""
-Common functions for creating categorical VS30 rasters from terrain and geology data.
-
-This module provides:
-- Category ID raster creation (terrain from IwahashiPike, geology from QMAP shapefile)
-- VS30 value mapping from categorical models (CSV files) to raster format
-- Slope and coastal distance rasters for hybrid geology modifications
-- Hybrid geology modifications based on slope and coastal distance
-
-Hybrid Geology Model
--------------------
-The geology-based Vs30 model includes empirical modifications for certain
-geology categories where Vs30 is known to vary with:
-
-1. Slope - steeper terrain generally indicates more consolidated material, leading
-   to higher Vs30 values. This relationship is captured via log-linear interpolation.
-2. Coastal distance - near-coast sediments (especially alluvium and floodplain
-   deposits) tend to be unconsolidated with lower Vs30. Values increase inland.
-
-These modifications are based on New Zealand-specific calibration studies and are
-applied to geology categories 2, 3, 4, and 6 (slope-based) and categories 4 and 10
-(coastal distance-based).
-"""
+"""Categorical VS30 raster creation and hybrid geology modifications."""
 
 import logging
 import tarfile

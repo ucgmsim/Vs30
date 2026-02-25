@@ -1,14 +1,4 @@
-"""
-Multiprocessing support for VS30 computation.
-
-This module provides parallel processing capabilities for the computationally
-expensive spatial adjustment. It divides input data into chunks and
-processes them in parallel using Python's multiprocessing module.
-
-The core spatial adjustment functions in spatial.py remain unchanged - each
-worker process simply calls them with a smaller input, unaware it's part of
-a parallel job.
-"""
+"""Multiprocessing support for parallel spatial adjustment."""
 
 import contextlib
 import multiprocessing as mp

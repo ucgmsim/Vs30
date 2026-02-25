@@ -1,18 +1,4 @@
-"""
-Command-line interface for the vs30 package.
-
-Commands
---------
-- update-priors: Bayesian update of categorical Vs30 values
-- map: Run the complete VS30 map generation workflow
-- points: Compute VS30 values at specific lat/lon locations
-
-Usage
------
-    vs30 map                                  # Run with default config
-    vs30 --config /path/to/config.yaml map    # Use custom config
-    vs30 --help                               # See all available commands
-"""
+"""Command-line interface for the vs30 package."""
 
 import logging
 import typing
@@ -38,6 +24,11 @@ def get_config() -> config_module.Vs30Config:
 
     Returns the config set by the --config option, or the default
     package config if no custom config was specified.
+
+    Returns
+    -------
+    Vs30Config
+        The current CLI configuration object.
     """
     global _cli_config
     if _cli_config is None:
