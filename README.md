@@ -47,7 +47,7 @@ vs30 map
 This runs both geology and terrain pipelines, then combines them into a final map. Output is saved to the directory specified in `config.yaml`.
 
 Options:
-- `--output-dir`, `-d`: Output directory (default from config)
+- `--output-dir`: Output directory (default from config)
 - `--n-proc`: Number of parallel processes (-1 for all cores)
 - `--geology-csv`: Custom geology categorical model CSV
 - `--terrain-csv`: Custom terrain categorical model CSV
