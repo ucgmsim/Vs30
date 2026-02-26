@@ -41,7 +41,6 @@ def main(
     config: typing.Annotated[
         Path | None,
         typer.Option(
-            "-c",
             exists=True,
             dir_okay=False,
             help="Path to config.yaml file (default: package config.yaml)",
@@ -49,7 +48,7 @@ def main(
     ] = None,
     verbose: typing.Annotated[
         bool,
-        typer.Option("-v", help="Enable verbose logging"),
+        typer.Option(help="Enable verbose logging"),
     ] = False,
 ) -> None:
     """
@@ -89,14 +88,14 @@ def update_priors(
         Path, typer.Argument(exists=True, dir_okay=False)
     ],
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    model_type: typing.Annotated[constants.ModelType, typer.Option("-t")],
+    model_type: typing.Annotated[constants.ModelType, typer.Option()],
     clustered_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-c", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     independent_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-i", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     nproc: typing.Annotated[int | None, typer.Option()] = None,
 ) -> None:
@@ -140,14 +139,14 @@ def map_(  # Trailing underscore avoids shadowing the Python builtin map(); Type
     ] = None,
     clustered_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-c", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     independent_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-i", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     output_dir: typing.Annotated[
-        Path | None, typer.Option("-d", file_okay=False)
+        Path | None, typer.Option(file_okay=False)
     ] = None,
     nproc: typing.Annotated[int | None, typer.Option()] = None,
     combination_method: typing.Annotated[str | None, typer.Option()] = None,
@@ -194,10 +193,10 @@ def map_(  # Trailing underscore avoids shadowing the Python builtin map(); Type
 @cli.from_docstring(app)
 def points(
     locations_csv: typing.Annotated[
-        Path | None, typer.Option("-l", exists=True, dir_okay=False)
+        Path | None, typer.Option(exists=True, dir_okay=False)
     ] = None,
     output_csv: typing.Annotated[
-        Path | None, typer.Option("-o", dir_okay=False)
+        Path | None, typer.Option(dir_okay=False)
     ] = None,
     lon_column: typing.Annotated[str | None, typer.Option()] = None,
     lat_column: typing.Annotated[str | None, typer.Option()] = None,
@@ -209,11 +208,11 @@ def points(
     ] = None,
     clustered_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-c", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     independent_observations_csv: typing.Annotated[
         Path | None,
-        typer.Option("-i", exists=True, dir_okay=False),
+        typer.Option(exists=True, dir_okay=False),
     ] = None,
     coast_distance_raster: typing.Annotated[
         Path | None,
