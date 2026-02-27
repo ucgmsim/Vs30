@@ -223,6 +223,9 @@ FULL_NZ_LAND_YMAX: int = 6250050
 LOCATIONS_LON_COLUMN: str = "longitude"
 LOCATIONS_LAT_COLUMN: str = "latitude"
 
+# Number of chunks to split locations into for parallel processing progress updates.
+N_PROGRESS_CHUNKS: int = 1000
+
 # Column names used in categorical model DataFrames for Bayesian updates.
 # These are used to identify posterior/prior values at different stages.
 COL_POSTERIOR_MEAN_INDEPENDENT: str = (

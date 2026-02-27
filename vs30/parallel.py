@@ -64,6 +64,7 @@ def process_geology_at_points(
     observations_df: pd.DataFrame,
     coast_distance_raster: Path | None = None,
     noisy: bool = False,
+    progress_bar: tqdm | None = None,
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -87,6 +88,8 @@ def process_geology_at_points(
         Path to coastal distance raster. If None, hybrid modifications are skipped.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
+    progress_bar : tqdm, optional
+        External progress bar to update per point during spatial adjustment.
 
     Returns
     -------
@@ -145,6 +148,7 @@ def process_geology_at_points(
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
             model_type=constants.ModelType.GEOLOGY,
             noisy=noisy,
+            progress_bar=progress_bar,
         )
     else:
         geol_mvn_vs30 = geol_vs30_hybrid
@@ -166,6 +170,7 @@ def process_terrain_at_points(
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
     noisy: bool = False,
+    progress_bar: tqdm | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Process terrain model at points, including spatial adjustment.
@@ -184,6 +189,8 @@ def process_terrain_at_points(
         Observation data with columns: easting, northing, vs30, uncertainty.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
+    progress_bar : tqdm, optional
+        External progress bar to update per point during spatial adjustment.
 
     Returns
     -------
@@ -222,6 +229,7 @@ def process_terrain_at_points(
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
             model_type=constants.ModelType.TERRAIN,
             noisy=noisy,
+            progress_bar=progress_bar,
         )
     else:
         terr_mvn_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
@@ -460,7 +468,10 @@ def run_parallel_locations(
     DataFrame
         Results with vs30, stdv, and intermediate columns (if requested)
     """
-    split_indices = np.array_split(range(len(locations_df)), n_proc)
+    # Split into many small chunks for smooth progress bar updates.
+    # pool.imap distributes chunks to n_proc workers automatically.
+    n_chunks = min(len(locations_df), constants.N_PROGRESS_CHUNKS)
+    split_indices = np.array_split(range(len(locations_df)), n_chunks)
     chunk_args = [
         (
             locations_df.iloc[idx].reset_index(drop=True),
@@ -474,20 +485,17 @@ def run_parallel_locations(
         if len(idx) > 0
     ]
 
-    actual_n_proc = len(chunk_args)
-
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
-        with _spawn_context.Pool(processes=actual_n_proc) as pool:
-            results = list(
-                tqdm(
-                    pool.imap(process_locations_chunk, chunk_args),
-                    total=actual_n_proc,
-                    desc=f"Processing locations ({actual_n_proc} workers)",
-                    unit="chunk",
-                )
-            )
+        with _spawn_context.Pool(processes=n_proc) as pool:
+            results = []
+            with tqdm(total=len(locations_df), unit="point") as pbar:
+                for chunk_id, result_df in pool.imap(
+                    process_locations_chunk, chunk_args
+                ):
+                    results.append((chunk_id, result_df))
+                    pbar.update(len(result_df))
 
     # Merge: concatenate in order
     results.sort(key=lambda x: x[0])
