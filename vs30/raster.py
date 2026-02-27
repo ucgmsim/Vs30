@@ -317,7 +317,10 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
 
 
 def create_vs30_raster_from_ids(
-    id_raster_path: Path, csv_path: Path, output_path: Path
+    id_raster_path: Path,
+    csv_path: Path,
+    output_path: Path,
+    model_type: constants.ModelType | None = None,
 ) -> Path:
     """
     Create VS30 mean and standard deviation raster from category ID raster.
@@ -402,7 +405,8 @@ def create_vs30_raster_from_ids(
         (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
     ]
 
-    for pixel_id in tqdm(valid_ids, desc="Mapping IDs to VS30", unit="ID"):
+    label = str(model_type).capitalize() if model_type else "Model"
+    for pixel_id in tqdm(valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"):
         if pixel_id in id_to_vs30_values:
             mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
             mask = id_array == pixel_id

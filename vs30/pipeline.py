@@ -279,7 +279,10 @@ def make_initial_vs30_raster(
 
         logger.info("Creating terrain VS30 raster...")
         vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
-        raster.create_vs30_raster_from_ids(id_raster, terrain_model_csv, vs30_raster)
+        raster.create_vs30_raster_from_ids(
+            id_raster, terrain_model_csv, vs30_raster,
+            model_type=constants.ModelType.TERRAIN,
+        )
 
     if geology:
         logger.info("Processing geology model...")
@@ -297,7 +300,10 @@ def make_initial_vs30_raster(
 
         logger.info("Creating geology VS30 raster...")
         vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
-        raster.create_vs30_raster_from_ids(id_raster, geology_model_csv, vs30_raster)
+        raster.create_vs30_raster_from_ids(
+            id_raster, geology_model_csv, vs30_raster,
+            model_type=constants.ModelType.GEOLOGY,
+        )
 
 
 def adjust_geology_vs30_by_slope_and_coastal_distance(
@@ -494,6 +500,7 @@ def spatial_fit(
         raster_data,
         obs_data_for_bbox,
         max_spatial_boolean_array_memory_gb=cfg.max_spatial_boolean_array_memory_gb,
+        model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
         n_proc=n_proc_resolved,
     )
@@ -1081,7 +1088,7 @@ def compute_at_locations(
             "No coastal distance raster provided, skipping hybrid modifications"
         )
 
-    with tqdm(total=2 * len(points), unit="point") as pbar:
+    with tqdm(total=len(points), desc="Geology: spatial adjustment", unit="point") as pbar:
         (
             geol_ids,
             geol_vs30,
@@ -1099,15 +1106,16 @@ def compute_at_locations(
             progress_bar=pbar,
         )
 
-        df[constants.COL_GEOLOGY_ID] = geol_ids
-        if include_intermediate:
-            df[constants.COL_GEOLOGY_VS30] = geol_vs30
-            df[constants.COL_GEOLOGY_STDV] = geol_stdv
-            df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-            df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-        df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-        df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+    df[constants.COL_GEOLOGY_ID] = geol_ids
+    if include_intermediate:
+        df[constants.COL_GEOLOGY_VS30] = geol_vs30
+        df[constants.COL_GEOLOGY_STDV] = geol_stdv
+        df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+        df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+    df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+    df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
+    with tqdm(total=len(points), desc="Terrain: spatial adjustment", unit="point") as pbar:
         (
             terr_ids,
             terr_vs30,

@@ -939,6 +939,7 @@ def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
     max_spatial_boolean_array_memory_gb: float,
+    model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
     n_proc: int = 1,
 ) -> BoundingBoxResult:
@@ -953,6 +954,9 @@ def find_affected_pixels(
         Observation data.
     max_spatial_boolean_array_memory_gb : float
         Memory limit (GB) for boolean arrays in spatial processing.
+    model_type : constants.ModelType
+        Model type (ModelType.GEOLOGY or ModelType.TERRAIN), used for
+        progress bar labelling.
     max_dist_m : float, optional
         Maximum distance for considering observations.
     n_proc : int, optional
@@ -995,51 +999,49 @@ def find_affected_pixels(
 
     logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
 
+    label = str(model_type).capitalize()
+
+    # Prepare chunk arguments
+    chunk_args = []
+    for chunk_idx in range(n_chunks):
+        start_idx = chunk_idx * chunk_size
+        end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
+        grid_locs_chunk = grid_locs[start_idx:end_idx]
+        chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds))
+
     if n_proc > 1 and n_chunks > 1:
         # Parallel processing
-        logger.info(f"Using {min(n_proc, n_chunks)} parallel workers")
-
-        # Prepare chunk arguments
-        chunk_args = []
-        for chunk_idx in range(n_chunks):
-            start_idx = chunk_idx * chunk_size
-            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
-            grid_locs_chunk = grid_locs[start_idx:end_idx]
-            chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds))
-
-        # Process in parallel using spawn context
         actual_n_proc = min(n_proc, n_chunks)
+        logger.info(f"Using {actual_n_proc} parallel workers")
         with _spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(
                     pool.imap(process_bbox_chunk, chunk_args),
                     total=n_chunks,
-                    desc=f"Finding affected pixels ({actual_n_proc} workers)",
+                    desc=f"{label}: checking pixels for nearby observations ({n_chunks} chunks)",
                     unit="chunk",
                 )
             )
 
-    else:
-        # Sequential processing
+    elif n_chunks > 1:
+        # Sequential processing with multiple chunks
         results = []
         for chunk_idx in tqdm(
             range(n_chunks),
-            desc="Finding affected pixels",
+            desc=f"{label}: checking pixels for nearby observations ({n_chunks} chunks)",
             unit="chunk",
         ):
-            start_idx = chunk_idx * chunk_size
-            end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
-            grid_locs_chunk = grid_locs[start_idx:end_idx]
+            results.append(process_bbox_chunk(chunk_args[chunk_idx]))
 
-            chunk_mask, chunk_obs_to_grid = grid_points_in_bbox(
-                grid_locs=grid_locs_chunk,
-                obs_eastings_min=obs_eastings_min,
-                obs_eastings_max=obs_eastings_max,
-                obs_northings_min=obs_northings_min,
-                obs_northings_max=obs_northings_max,
-                start_grid_idx=start_idx,
-            )
-            results.append((chunk_idx, chunk_mask, chunk_obs_to_grid))
+    else:
+        # Single chunk — no progress bar needed
+        print(
+            f"{label}: checking {len(grid_locs):,} pixels for nearby observations... ",
+            end="",
+            flush=True,
+        )
+        results = [process_bbox_chunk(chunk_args[0])]
+        print("done")
 
     # Merge results from either parallel or sequential processing
     for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
@@ -1137,9 +1139,10 @@ def compute_spatial_adjustments(
     )
 
     # Process all affected pixels with a single progress bar
+    label = str(model_type).capitalize()
     with tqdm(
         total=len(affected_flat_indices),
-        desc="Computing spatial updates",
+        desc=f"{label}: spatial adjustment",
         unit="pixel",
     ) as pbar:
         for chunk_idx in range(n_chunks):
