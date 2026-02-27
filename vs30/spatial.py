@@ -1234,6 +1234,7 @@ def compute_spatial_adjustment_at_points(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
+    progress_bar: tqdm | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute MVN spatial adjustment at specific query points.
 
@@ -1269,6 +1270,8 @@ def compute_spatial_adjustment_at_points(
         Whether to apply noise weighting.
     cov_reduc : float
         Covariance reduction factor. Default from constants.
+    progress_bar : tqdm, optional
+        External progress bar to update per point. If None, no progress is shown.
 
     Returns
     -------
@@ -1336,7 +1339,7 @@ def compute_spatial_adjustment_at_points(
     ]
 
     # Process each query point
-    for i in tqdm(range(n_points), desc="Computing MVN at points", unit="point"):
+    for i in range(n_points):
         point = points[i]
         prior_vs30 = model_vs30[i]
         prior_stdv = model_stdv[i]
@@ -1348,6 +1351,8 @@ def compute_spatial_adjustment_at_points(
             or prior_vs30 <= 0
             or prior_stdv <= 0
         ):
+            if progress_bar is not None:
+                progress_bar.update(1)
             continue
 
         # Calculate distances from this point to all observations
@@ -1432,5 +1437,8 @@ def compute_spatial_adjustment_at_points(
             logger.debug(
                 f"Singular covariance matrix at point {i}, keeping prior values"
             )
+
+        if progress_bar is not None:
+            progress_bar.update(1)
 
     return mvn_vs30, mvn_stdv

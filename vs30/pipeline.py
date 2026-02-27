@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import rasterio
 from qcore import coordinates
+from tqdm import tqdm
 
 from vs30 import category, constants, parallel, raster, spatial, utils
 from vs30 import config as config_module
@@ -1075,47 +1076,48 @@ def compute_at_locations(
     # ================================================================
     # Sequential Processing Path
     # ================================================================
-    logger.info("\nProcessing geology model...")
     if coast_distance_raster is None or not coast_distance_raster.exists():
         logger.warning(
             "No coastal distance raster provided, skipping hybrid modifications"
         )
 
-    (
-        geol_ids,
-        geol_vs30,
-        geol_stdv,
-        geol_vs30_hybrid,
-        geol_stdv_hybrid,
-        geol_mvn_vs30,
-        geol_mvn_stdv,
-    ) = parallel.process_geology_at_points(
-        points,
-        geol_model_df,
-        observations_df,
-        coast_distance_raster,
-        noisy=cfg.noisy,
-    )
+    with tqdm(total=2 * len(points), unit="point") as pbar:
+        (
+            geol_ids,
+            geol_vs30,
+            geol_stdv,
+            geol_vs30_hybrid,
+            geol_stdv_hybrid,
+            geol_mvn_vs30,
+            geol_mvn_stdv,
+        ) = parallel.process_geology_at_points(
+            points,
+            geol_model_df,
+            observations_df,
+            coast_distance_raster,
+            noisy=cfg.noisy,
+            progress_bar=pbar,
+        )
 
-    df[constants.COL_GEOLOGY_ID] = geol_ids
-    if include_intermediate:
-        df[constants.COL_GEOLOGY_VS30] = geol_vs30
-        df[constants.COL_GEOLOGY_STDV] = geol_stdv
-        df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-        df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-    df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-    df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+        df[constants.COL_GEOLOGY_ID] = geol_ids
+        if include_intermediate:
+            df[constants.COL_GEOLOGY_VS30] = geol_vs30
+            df[constants.COL_GEOLOGY_STDV] = geol_stdv
+            df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+            df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+        df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+        df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
-    logger.info("Processing terrain model...")
-    (
-        terr_ids,
-        terr_vs30,
-        terr_stdv,
-        terr_mvn_vs30,
-        terr_mvn_stdv,
-    ) = parallel.process_terrain_at_points(
-        points, terr_model_df, observations_df, noisy=cfg.noisy
-    )
+        (
+            terr_ids,
+            terr_vs30,
+            terr_stdv,
+            terr_mvn_vs30,
+            terr_mvn_stdv,
+        ) = parallel.process_terrain_at_points(
+            points, terr_model_df, observations_df, noisy=cfg.noisy,
+            progress_bar=pbar,
+        )
 
     df[constants.COL_TERRAIN_ID] = terr_ids
     if include_intermediate:
