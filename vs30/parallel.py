@@ -579,29 +579,31 @@ def run_parallel_spatial_fit(
         constants.KEY_COV_REDUC: cov_reduc,
     }
 
-    # Divide pixel indices into chunks
+    # Split into many small chunks for smooth progress bar updates.
+    # pool.imap distributes chunks to n_proc workers automatically.
     pixel_indices_list = list(range(len(affected_flat_indices)))
-    chunks = np.array_split(pixel_indices_list, n_proc)
+    n_chunks = min(len(pixel_indices_list), constants.N_PROGRESS_CHUNKS)
+    chunks = np.array_split(pixel_indices_list, n_chunks)
     chunk_args = [
         (list(chunk), i, pixel_data_dict, obs_data_dict, config_params)
         for i, chunk in enumerate(chunks)
         if len(chunk) > 0
     ]
 
-    actual_n_proc = len(chunk_args)
+    actual_n_proc = min(n_proc, len(chunk_args))
 
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
         with _spawn_context.Pool(processes=actual_n_proc) as pool:
-            results = list(
-                tqdm(
-                    pool.imap(process_pixels_chunk, chunk_args),
-                    total=actual_n_proc,
-                    desc=f"Processing pixels ({actual_n_proc} workers)",
-                    unit="chunk",
-                )
-            )
+            results = []
+            label = str(model_type).capitalize()
+            with tqdm(total=len(pixel_indices_list), desc=f"{label}: spatial adjustment", unit="pixel") as pbar:
+                for chunk_id, chunk_updates in pool.imap(
+                    process_pixels_chunk, chunk_args
+                ):
+                    results.append((chunk_id, chunk_updates))
+                    pbar.update(len(chunks[chunk_id]))
 
     # Merge: concatenate update lists (order does not matter; each update carries its pixel_index)
     all_updates = []
