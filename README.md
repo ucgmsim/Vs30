@@ -41,7 +41,7 @@ The package provides a `vs30` command-line interface with the following commands
 Run the complete Vs30 mapping workflow:
 
 ```bash
-vs30 map
+vs30 grid
 ```
 
 This runs both geology and terrain pipelines, then combines them into a final map. Output is saved to the directory specified in `config.yaml`.
@@ -120,7 +120,7 @@ vs30 plot-posterior-values \
 Specify a custom config file for any command:
 
 ```bash
-vs30 --config /path/to/config.yaml map
+vs30 --config /path/to/config.yaml grid
 ```
 
 ## How It Works

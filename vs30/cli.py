@@ -130,7 +130,7 @@ def update_priors(
 
 
 @cli.from_docstring(app)
-def map_(  # Trailing underscore avoids shadowing the Python builtin map(); Typer strips it to give CLI command name "map"
+def grid(
     geology_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = None,
