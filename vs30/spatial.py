@@ -420,7 +420,17 @@ def prepare_observation_data(
         if not coast_path.exists():
             raster.create_coast_distance_raster(coast_path, profile)
 
-        # Sample rasters at observation locations
+        # Sample resampled rasters at observation locations.
+        # Note: this introduces minor precision loss because the rasters are
+        # resampled to grid resolution, while observations are at arbitrary
+        # coordinates. For higher precision, these could be replaced with
+        # raster.sample_slope_at_points() and
+        # raster.compute_coastal_distance_at_points(), which use the source
+        # data directly. The effect on Vs30 is small (<2%), but posterior
+        # stdv can differ more (~25%) due to sensitivity in MVN conditioning.
+        # We keep it this way so that the grid pipeline consistently uses the
+        # same resampled raster values for both pixel updates and observation
+        # residuals.
         with rasterio.open(slope_path) as src:
             slope_obs = np.array([v[0] for v in src.sample(obs_locs)])
         with rasterio.open(coast_path) as src:

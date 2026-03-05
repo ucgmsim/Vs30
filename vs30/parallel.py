@@ -62,7 +62,6 @@ def process_geology_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
-    coast_distance_raster: Path | None = None,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
 ) -> tuple[
@@ -73,7 +72,7 @@ def process_geology_at_points(
 
     This function encapsulates the full geology processing pipeline:
     1. Get initial Vs30 values from categorical model
-    2. Apply hybrid modifications (slope and coastal distance) if coast raster provided
+    2. Apply hybrid modifications (slope and coastal distance)
     3. Apply spatial adjustment using observations
 
     Parameters
@@ -84,8 +83,6 @@ def process_geology_at_points(
         Categorical geology model with Vs30 mean and standard deviation per category.
     observations_df : DataFrame
         Observation data with columns: easting, northing, vs30, uncertainty.
-    coast_distance_raster : Path, optional
-        Path to coastal distance raster. If None, hybrid modifications are skipped.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     progress_bar : tqdm, optional
@@ -114,21 +111,18 @@ def process_geology_at_points(
     # Get initial Vs30 values from categorical model
     geol_vs30_df = category.get_vs30_for_ids(geol_ids, model_df)
 
+    # Get slope and coastal distance at query points
+    slope_at_points = raster.sample_slope_at_points(points)
+    coast_dist_at_points = raster.compute_coastal_distance_at_points(points)
+
     # Apply hybrid modifications (slope and coastal distance)
-    if coast_distance_raster is not None and coast_distance_raster.exists():
-        geol_vs30_hybrid, geol_stdv_hybrid = (
-            raster.apply_hybrid_modifications_at_points(
-                points,
-                geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-                geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
-                geol_ids,
-                slope_raster_path=None,  # Uses default from constants
-                coast_distance_raster_path=coast_distance_raster,
-            )
-        )
-    else:
-        geol_vs30_hybrid = geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
-        geol_stdv_hybrid = geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
+    geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
+        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values.copy(),
+        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values.copy(),
+        geol_ids,
+        slope_at_points,
+        coast_dist_at_points,
+    )
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
@@ -137,14 +131,27 @@ def process_geology_at_points(
         ].values
         obs_geol_ids = category.assign_to_category_geology(obs_locs)
         obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
+
+        # Apply hybrid modifications to observation model values so residuals
+        # are computed consistently with the grid pipeline (spatial.py:405-436)
+        obs_slope = raster.sample_slope_at_points(obs_locs)
+        obs_coast_dist = raster.compute_coastal_distance_at_points(obs_locs)
+        obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
+            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values.copy(),
+            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values.copy(),
+            obs_geol_ids,
+            obs_slope,
+            obs_coast_dist,
+        )
+
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
             obs_locations=obs_locs,
             obs_vs30=observations_df[constants.COL_VS30].values,
-            obs_model_vs30=obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-            obs_model_stdv=obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+            obs_model_vs30=obs_model_vs30,
+            obs_model_stdv=obs_model_stdv,
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
             model_type=constants.ModelType.GEOLOGY,
             noisy=noisy,
@@ -259,8 +266,6 @@ class LocationsChunkConfig:
         Whether to include intermediate values in output.
     combination_method : str or float
         Method for combining geology and terrain models.
-    coast_distance_raster : Path or None
-        Path to coastal distance raster for hybrid modifications.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     """
@@ -269,7 +274,6 @@ class LocationsChunkConfig:
     lat_column: str
     include_intermediate: bool
     combination_method: str | float
-    coast_distance_raster: Path | None
     noisy: bool
 
 
@@ -328,7 +332,6 @@ def process_locations_chunk(
         points,
         geol_model_df,
         observations_df,
-        config.coast_distance_raster,
         config.noisy,
     )
 
