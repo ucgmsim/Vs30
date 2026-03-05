@@ -214,10 +214,6 @@ def points(
         Path | None,
         typer.Option(exists=True, dir_okay=False),
     ] = None,
-    coast_distance_raster: typing.Annotated[
-        Path | None,
-        typer.Option(exists=True, dir_okay=False),
-    ] = None,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
@@ -245,8 +241,6 @@ def points(
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations.
-    coast_distance_raster : Path, optional
-        Path to coastal distance raster (required for hybrid geology modifications).
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
     combination_method : str, optional
@@ -265,7 +259,6 @@ def points(
         terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
-        coast_distance_raster=coast_distance_raster,
         include_intermediate=include_intermediate,
         combination_method=combination_method,
         n_proc=n_proc,

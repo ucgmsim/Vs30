@@ -906,7 +906,6 @@ def compute_at_locations(
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    coast_distance_raster: Path | None = None,
     include_intermediate: bool = True,
     combination_method: str | float | None = None,
     n_proc: int | None = None,
@@ -941,8 +940,6 @@ def compute_at_locations(
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations.
-    coast_distance_raster : Path, optional
-        Path to coastal distance raster (required for hybrid geology modifications).
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     combination_method : str or float, optional
@@ -1061,7 +1058,6 @@ def compute_at_locations(
             lat_column=lat_column,
             include_intermediate=include_intermediate,
             combination_method=combination_method,
-            coast_distance_raster=coast_distance_raster,
             noisy=cfg.noisy,
         )
 
@@ -1083,11 +1079,6 @@ def compute_at_locations(
     # ================================================================
     # Sequential Processing Path
     # ================================================================
-    if coast_distance_raster is None or not coast_distance_raster.exists():
-        logger.warning(
-            "No coastal distance raster provided, skipping hybrid modifications"
-        )
-
     with tqdm(total=len(points), desc="Geology: spatial adjustment", unit="point") as pbar:
         (
             geol_ids,
@@ -1101,7 +1092,6 @@ def compute_at_locations(
             points,
             geol_model_df,
             observations_df,
-            coast_distance_raster,
             noisy=cfg.noisy,
             progress_bar=pbar,
         )
