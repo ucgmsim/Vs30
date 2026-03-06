@@ -2,8 +2,29 @@
 
 from pathlib import Path
 
+from dataclasses import dataclass
 import pydantic
 import yaml
+
+
+@dataclass
+class GridConfig:
+    grid_xmin: int = pydantic.Field(
+        description="Grid minimum X coordinate (NZTM, meters)"
+    )
+    grid_xmax: int = pydantic.Field(
+        description="Grid maximum X coordinate (NZTM, meters)"
+    )
+    grid_ymin: int = pydantic.Field(
+        description="Grid minimum Y coordinate (NZTM, meters)"
+    )
+    grid_ymax: int = pydantic.Field(
+        description="Grid maximum Y coordinate (NZTM, meters)"
+    )
+    grid_dx: int = pydantic.Field(description="Grid X spacing (meters)")
+    grid_dy: int = pydantic.Field(description="Grid Y spacing (meters)")
+
+
 
 
 class Vs30Config(pydantic.BaseModel):
@@ -53,63 +74,50 @@ class Vs30Config(pydantic.BaseModel):
         Whether to perform Bayesian update of categorical values.
     """
 
-    # --- Processor settings ---
-    n_proc: int = pydantic.Field(
-        default=1,
-        description="Number of processors for parallel processing (-1 for all cores)",
-    )
+    # # --- Processor settings ---
+    # n_proc: int = pydantic.Field(
+    #     default=1,
+    #     description="Number of processors for parallel processing (-1 for all cores)",
+    # )
 
     # --- Grid parameters ---
-    grid_xmin: int = pydantic.Field(
-        description="Grid minimum X coordinate (NZTM, meters)"
-    )
-    grid_xmax: int = pydantic.Field(
-        description="Grid maximum X coordinate (NZTM, meters)"
-    )
-    grid_ymin: int = pydantic.Field(
-        description="Grid minimum Y coordinate (NZTM, meters)"
-    )
-    grid_ymax: int = pydantic.Field(
-        description="Grid maximum Y coordinate (NZTM, meters)"
-    )
-    grid_dx: int = pydantic.Field(description="Grid X spacing (meters)")
-    grid_dy: int = pydantic.Field(description="Grid Y spacing (meters)")
+
 
     # --- Compute-at-locations parameters (only used by compute-at-locations) ---
-    locations_csv: str | None = pydantic.Field(
-        default=None,
-        description="Path to input CSV with locations for compute-at-locations",
-    )
-    locations_output_csv: str | None = pydantic.Field(
-        default=None, description="Path to output CSV for compute-at-locations results"
-    )
+    # locations_csv: str | None = pydantic.Field(
+    #     default=None,
+    #     description="Path to input CSV with locations for compute-at-locations",
+    # )
+    # locations_output_csv: str | None = pydantic.Field(
+    #     default=None, description="Path to output CSV for compute-at-locations results"
+    # )
 
     # --- General configuration ---
-    noisy: bool = pydantic.Field(
-        description="Whether measurements are noisy (affects uncertainty weighting)"
-    )
-    max_spatial_boolean_array_memory_gb: float = pydantic.Field(
-        description="Maximum memory (GB) for spatial boolean arrays per process"
-    )
-    obs_subsample_step_for_clustered: int = pydantic.Field(
-        description="Subsampling step for clustered observations in affected pixel search"
-    )
+    # noisy: bool = pydantic.Field(
+    #     description="Whether measurements are noisy (affects uncertainty weighting)"
+    # )
+    # max_spatial_boolean_array_memory_gb: float = pydantic.Field(
+    #     description="Maximum memory (GB) for spatial boolean arrays per process"
+    # )
+    # obs_subsample_step_for_clustered: int = pydantic.Field(
+    #     description="Subsampling step for clustered observations in affected pixel search"
+    # )
 
     # --- File paths (relative to resources directory) ---
-    independent_observations_file: str | None = pydantic.Field(
-        default=None,
-        description="Path to independent observations CSV (relative to resources)",
-    )
-    clustered_observations_file: str | None = pydantic.Field(
-        default=None,
-        description="Path to clustered observations CSV (relative to resources)",
-    )
-    output_dir: str = pydantic.Field(description="Output directory path")
+    # independent_observations_file: str | None = pydantic.Field(
+    #     default=None,
+    #     description="Path to independent observations CSV (relative to resources)",
+    # )
+    # clustered_observations_file: str | None = pydantic.Field(
+    #     default=None,
+    #     description="Path to clustered observations CSV (relative to resources)",
+    # )
+    # output_dir: str = pydantic.Field(description="Output directory path")
 
-    # --- Combination settings ---
-    combination_method: str | float = pydantic.Field(
-        description="Method for combining models: ratio (float) or 'standard_deviation_weighting'"
-    )
+    # # --- Combination settings ---
+    # combination_method: str | float = pydantic.Field(
+    #     description="Method for combining models: ratio (float) or 'standard_deviation_weighting'"
+    # )
     do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: bool = (
         pydantic.Field(
             description="Whether to perform Bayesian update of categorical values"

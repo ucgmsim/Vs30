@@ -15,73 +15,6 @@ logger = logging.getLogger(__name__)
 # Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
-_cli_config: config_module.Vs30Config | None = None
-
-
-def get_config() -> config_module.Vs30Config:
-    """
-    Get the current CLI configuration.
-
-    Returns the config set by the --config option, or the default
-    package config if no custom config was specified.
-
-    Returns
-    -------
-    Vs30Config
-        The current CLI configuration object.
-    """
-    global _cli_config
-    if _cli_config is None:
-        _cli_config = config_module.Vs30Config.default()
-    return _cli_config
-
-
-@app.callback()
-def main(
-    config: typing.Annotated[
-        Path | None,
-        typer.Option(
-            exists=True,
-            dir_okay=False,
-            help="Path to config.yaml file (default: package config.yaml)",
-        ),
-    ] = None,
-    verbose: typing.Annotated[
-        bool,
-        typer.Option(help="Enable verbose logging"),
-    ] = False,
-) -> None:
-    """
-    VS30 map generation and categorical model updates.
-
-    This is the main entry point for the VS30 CLI. Global options like config
-    file path and verbosity are specified here and apply to all subcommands.
-
-    Parameters
-    ----------
-    config : Path, optional
-        Path to config.yaml file. If not specified, uses the default
-        configuration bundled with the package.
-    verbose : bool, optional
-        Enable verbose (DEBUG level) logging output.
-    """
-    global _cli_config
-
-    if verbose:
-        logging.basicConfig(level=logging.DEBUG)
-
-    # Load config from specified path or default
-    # Note: typer's exists=True already validates the file exists before reaching here
-    if config is not None:
-        _cli_config = config_module.Vs30Config.from_yaml(config)
-        logger.info(f"Loaded config from {config}")
-    else:
-        _cli_config = config_module.Vs30Config.default()
-        logger.debug(
-            f"Using default config from {config_module.Vs30Config.default_config_path()}"
-        )
-
-
 @cli.from_docstring(app)
 def update_priors(
     categorical_model_csv: typing.Annotated[
@@ -130,6 +63,18 @@ def update_priors(
 
 
 @cli.from_docstring(app)
+def grid_with_version(version: constants.FixedModelVersion):
+    # Load config
+
+
+    pipeline.run_full_pipeline(combination_method=constants.CombinationMethod(config["combindation_method"]))
+
+def point_with_version(version: constants.FixedModelVersion):
+    # Load config
+
+    pipeline.compute_at_locations()
+
+@cli.from_docstring(app)
 def grid(
     geology_categorical_csv: typing.Annotated[
         Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
@@ -149,8 +94,13 @@ def grid(
         Path | None, typer.Option(file_okay=False)
     ] = None,
     nproc: typing.Annotated[int | None, typer.Option()] = None,
-    combination_method: typing.Annotated[str | None, typer.Option()] = None,
+    model_type: typing.Annotated[constants.ModelType ] = constants.ModelType.COMBINED,
+    mvn: typing.Annotated[bool, typer.Option()] = False,
+    combination_method: typing.Annotated[constants.CombinationMethod] = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
+    combination_ratio: typing.Annotated[float | None, typer.Option()] = None,
     n_proc: typing.Annotated[int | None, typer.Option()] = None,
+    noisy: typing.Annotated[bool, typer.Option()] = False,
+    max_spatial_boolean_array_memory_gb: typing.Annotated[float | None, typer.Option()] = None,
 ) -> None:
     """
     Run the full VS30 generation pipeline for both geology and terrain models.
@@ -163,8 +113,10 @@ def grid(
         Path to terrain categorical CSV. Default from config/resources.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT data).
+        One of clustered_observations_csv or independent_observations_csv must be provided.
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations (e.g., measured filtered).
+        One of clustered_observations_csv or independent_observations_csv must be provided.
     output_dir : Path, optional
         Directory to save all pipeline outputs. Default from config.
     nproc : int, optional
@@ -187,6 +139,8 @@ def grid(
         nproc=nproc,
         combination_method=combination_method,
         n_proc=n_proc,
+        noisy=noisy
+        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 
 
@@ -218,6 +172,7 @@ def points(
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
     combination_method: typing.Annotated[str | None, typer.Option()] = None,
+
     n_proc: typing.Annotated[int | None, typer.Option()] = None,
 ) -> None:
     """
