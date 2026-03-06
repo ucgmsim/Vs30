@@ -280,7 +280,9 @@ def make_initial_vs30_raster(
         logger.info("Creating terrain VS30 raster...")
         vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
         raster.create_vs30_raster_from_ids(
-            id_raster, terrain_model_csv, vs30_raster,
+            id_raster,
+            terrain_model_csv,
+            vs30_raster,
             model_type=constants.ModelType.TERRAIN,
         )
 
@@ -301,7 +303,9 @@ def make_initial_vs30_raster(
         logger.info("Creating geology VS30 raster...")
         vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
         raster.create_vs30_raster_from_ids(
-            id_raster, geology_model_csv, vs30_raster,
+            id_raster,
+            geology_model_csv,
+            vs30_raster,
             model_type=constants.ModelType.GEOLOGY,
         )
 
@@ -544,7 +548,8 @@ def combine(
     geology_tif: Path,
     terrain_tif: Path,
     output_path: Path,
-    combination_method: str | float,
+    combination_method: constants.CombinationMethod,
+    combine_ratio: float | None = None,
 ) -> None:
     """
     Combine geology and terrain VS30 rasters using a weighted average.
@@ -565,6 +570,14 @@ def combine(
         Method for combining models. Either a ratio (float, e.g., 1.0 for equal
         weighting) or 'standard_deviation_weighting'.
     """
+    if (
+        combination_method is constants.CombinationMethod.RATIO
+        and combine_ratio is None
+    ):
+        raise ValueError(
+            "combination_method is set to 'ratio' but combine_ratio is not provided"
+        )
+
     logger.info(f"Averaging {geology_tif} and {terrain_tif}")
 
     with rasterio.open(geology_tif) as src_g, rasterio.open(terrain_tif) as src_t:
@@ -657,6 +670,20 @@ def run_pipeline_for_model_type(
     FileNotFoundError
         If a pipeline step fails to produce its expected output file.
     """
+    if categorical_model_csv is None:
+        if model_type == constants.ModelType.GEOLOGY:
+            categorical_model_csv = (
+                constants.RESOURCE_PATH
+                / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
+            )
+        elif model_type == constants.ModelType.TERRAIN:
+            categorical_model_csv = (
+                constants.RESOURCE_PATH
+                / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
+            )
+        else:
+            raise ValueError(f"Invalid model_type: {model_type}")
+
     output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -664,10 +691,6 @@ def run_pipeline_for_model_type(
     logger.info(f"Output directory: {output_dir}")
 
     nproc_resolved = nproc if nproc is not None else cfg.n_proc
-
-    do_bayesian_update = (
-        cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values
-    )
 
     # Resolve observations from config if not provided
     clustered_observations_csv = utils.resolve_observation_csv(
@@ -682,7 +705,7 @@ def run_pipeline_for_model_type(
     )
 
     # --- Step 1: Update Categorical Models (conditional) ---
-    if do_bayesian_update:
+    if cfg.do_bayesian_update_of_geology_and_terrain_categorical_vs30_values:
         logger.info("\n=== STEP 1: Updating Categorical Models ===")
         update_categorical_vs30_models(
             categorical_model_csv=categorical_model_csv,
@@ -711,12 +734,12 @@ def run_pipeline_for_model_type(
         cfg=cfg,
         terrain=(model_type == constants.ModelType.TERRAIN),
         geology=(model_type == constants.ModelType.GEOLOGY),
-        geology_csv=posterior_csv
-        if model_type == constants.ModelType.GEOLOGY
-        else None,
-        terrain_csv=posterior_csv
-        if model_type == constants.ModelType.TERRAIN
-        else None,
+        geology_csv=(
+            posterior_csv if model_type == constants.ModelType.GEOLOGY else None
+        ),
+        terrain_csv=(
+            posterior_csv if model_type == constants.ModelType.TERRAIN else None
+        ),
     )
 
     initial_raster = output_dir / (
@@ -829,25 +852,10 @@ def run_full_pipeline(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     nproc = nproc if nproc is not None else cfg.n_proc
-    combination_method = (
-        combination_method if combination_method is not None else cfg.combination_method
-    )
 
     n_proc_resolved = parallel.resolve_n_proc(
         n_proc if n_proc is not None else cfg.n_proc
     )
-
-    # Resolve CSV paths if not provided
-    if geology_categorical_csv is None:
-        geology_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-    if terrain_categorical_csv is None:
-        terrain_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
 
     # 1. Run Geology Pipeline
     logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
@@ -880,15 +888,15 @@ def run_full_pipeline(
         "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
     )
 
-    geol_tif = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.GEOLOGY]
-    terr_tif = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.TERRAIN]
     combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
-
     combine(
-        geology_tif=geol_tif,
-        terrain_tif=terr_tif,
+        geology_tif=output_dir
+        / constants.OUTPUT_FILENAMES[constants.ModelType.GEOLOGY],
+        terrain_tif=output_dir
+        / constants.OUTPUT_FILENAMES[constants.ModelType.TERRAIN],
         output_path=combined_tif,
         combination_method=combination_method,
+        combine_ratio=combine_ratio,
     )
 
     elapsed_time = time.time() - start_time
@@ -900,8 +908,8 @@ def compute_at_locations(
     cfg: config_module.Vs30Config,
     locations_csv: Path | None = None,
     output_csv: Path | None = None,
-    lon_column: str | None = None,
-    lat_column: str | None = None,
+    lon_column: str  = constants.LOCATIONS_LON_COLUMN,
+    lat_column: str = constants.LOCATIONS_LAT_COLUMN,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
@@ -953,29 +961,6 @@ def compute_at_locations(
     ValueError
         If required columns are missing from the locations CSV.
     """
-    if locations_csv is None:
-        if cfg.locations_csv is None:
-            raise ValueError(
-                "Missing required locations_csv. "
-                "Set in config.yaml or provide --locations-csv."
-            )
-        locations_csv = Path(cfg.locations_csv)
-    if output_csv is None:
-        if cfg.locations_output_csv is None:
-            raise ValueError(
-                "Missing required locations_output_csv. "
-                "Set in config.yaml or provide --output-csv."
-            )
-        output_csv = Path(cfg.locations_output_csv)
-
-    if lon_column is None:
-        lon_column = constants.LOCATIONS_LON_COLUMN
-    if lat_column is None:
-        lat_column = constants.LOCATIONS_LAT_COLUMN
-
-    if combination_method is None:
-        combination_method = cfg.combination_method
-
     logger.info(f"Loading locations from {locations_csv}...")
     df = pd.read_csv(locations_csv)
 
@@ -988,35 +973,8 @@ def compute_at_locations(
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([df[lat_column].values, df[lon_column].values])
     )
-    northing, easting = nztm_coords[:, 0], nztm_coords[:, 1]
-    df[constants.COL_EASTING] = easting
-    df[constants.COL_NORTHING] = northing
-    points = np.column_stack([easting, northing])
-    logger.info(f"Loaded {len(points)} locations")
-
-    # Resolve CSV paths if not provided
-    if geology_categorical_csv is None:
-        geology_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-    if terrain_categorical_csv is None:
-        terrain_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-
-    # Load observations for spatial adjustment
-    clustered_observations_csv = utils.resolve_observation_csv(
-        clustered_observations_csv,
-        cfg.clustered_observations_file,
-        constants.RESOURCE_PATH,
-    )
-    independent_observations_csv = utils.resolve_observation_csv(
-        independent_observations_csv,
-        cfg.independent_observations_file,
-        constants.RESOURCE_PATH,
-    )
+    df[constants.COL_NORTHING], df[constants.COL_EASTING] = nztm_coords[:, 0], nztm_coords[:, 1]
+    logger.info(f"Loaded {df.shape[0]} locations")
 
     # Load and combine all available observation files
     observation_csvs = [
@@ -1039,47 +997,50 @@ def compute_at_locations(
     geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
     terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
-    # Resolve n_proc from arg or config
-    n_proc_resolved = parallel.resolve_n_proc(
-        n_proc if n_proc is not None else cfg.n_proc
-    )
+    # # Resolve n_proc from arg or config
+    # n_proc_resolved = parallel.resolve_n_proc(
+    #     n_proc if n_proc is not None else cfg.n_proc
+    # )
 
-    # ================================================================
-    # Parallel Processing Path
-    # ================================================================
-    if n_proc_resolved > 1:
-        logger.info(f"\nProcessing with {n_proc_resolved} parallel workers...")
+    # # ================================================================
+    # # Parallel Processing Path
+    # # ================================================================
+    # if n_proc_resolved > 1:
+    #     logger.info(f"\nProcessing with {n_proc_resolved} parallel workers...")
 
-        # Re-read the original CSV (without NZTM conversion - workers will do it)
-        locations_df_raw = pd.read_csv(locations_csv)
+    #     # Re-read the original CSV (without NZTM conversion - workers will do it)
+    #     locations_df_raw = pd.read_csv(locations_csv)
 
-        loc_config = parallel.LocationsChunkConfig(
-            lon_column=lon_column,
-            lat_column=lat_column,
-            include_intermediate=include_intermediate,
-            combination_method=combination_method,
-            noisy=cfg.noisy,
-        )
+    #     loc_config = parallel.LocationsChunkConfig(
+    #         lon_column=lon_column,
+    #         lat_column=lat_column,
+    #         include_intermediate=include_intermediate,
+    #         combination_method=combination_method,
+    #         noisy=cfg.noisy,
+    #     )
 
-        df = parallel.run_parallel_locations(
-            locations_df=locations_df_raw,
-            observations_df=observations_df,
-            geol_model_df=geol_model_df,
-            terr_model_df=terr_model_df,
-            config=loc_config,
-            n_proc=n_proc_resolved,
-        )
+    #     df = parallel.run_parallel_locations(
+    #         locations_df=locations_df_raw,
+    #         observations_df=observations_df,
+    #         geol_model_df=geol_model_df,
+    #         terr_model_df=terr_model_df,
+    #         config=loc_config,
+    #         n_proc=n_proc_resolved,
+    #     )
 
-        output_csv.parent.mkdir(parents=True, exist_ok=True)
-        df.to_csv(output_csv, index=False)
-        logger.info(f"\nResults written to {output_csv}")
-        logger.info(f"  Total locations: {len(df)}")
-        return
+    #     output_csv.parent.mkdir(parents=True, exist_ok=True)
+    #     df.to_csv(output_csv, index=False)
+    #     logger.info(f"\nResults written to {output_csv}")
+    #     logger.info(f"  Total locations: {len(df)}")
+    #     return
 
     # ================================================================
     # Sequential Processing Path
     # ================================================================
-    with tqdm(total=len(points), desc="Geology: spatial adjustment", unit="point") as pbar:
+    points = df[[constants.COL_EASTING, constants.COL_NORTHING]].values
+    with tqdm(
+        total=len(points), desc="Geology: spatial adjustment", unit="point"
+    ) as pbar:
         (
             geol_ids,
             geol_vs30,
@@ -1105,7 +1066,9 @@ def compute_at_locations(
     df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
     df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
-    with tqdm(total=len(points), desc="Terrain: spatial adjustment", unit="point") as pbar:
+    with tqdm(
+        total=len(points), desc="Terrain: spatial adjustment", unit="point"
+    ) as pbar:
         (
             terr_ids,
             terr_vs30,
@@ -1113,7 +1076,10 @@ def compute_at_locations(
             terr_mvn_vs30,
             terr_mvn_stdv,
         ) = parallel.process_terrain_at_points(
-            points, terr_model_df, observations_df, noisy=cfg.noisy,
+            points,
+            terr_model_df,
+            observations_df,
+            noisy=cfg.noisy,
             progress_bar=pbar,
         )
 

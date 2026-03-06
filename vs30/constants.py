@@ -1,8 +1,26 @@
 """Scientific and algorithmic constants for Vs30 calculations."""
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import StrEnum, Enum, auto
 from pathlib import Path
+
+
+class CombinationMethod(StrEnum):
+    """Valid combination methods for geology and terrain Vs30."""
+
+    STANDARD_DEVIATION_WEIGHTING = "standard_deviation_weighting"
+    RATIO = "ratio"
+
+class FixedModelVersion(StrEnum):
+    """Identifiers for fixed versions of the geology and terrain models."""
+
+    FOSTER_2019 = "foster_2019"
+    JAWHEI_v1p0 = "jawhei_v1p0"
+
+MODEL_VERSION_TO_CONFIG = {
+    FixedModelVersion.FOSTER_2019: Path(__file__).parent / config / test
+    
+}
 
 # Path to the data directory containing shapefiles, rasters, and other input data
 DATA_DIR = Path(__file__).parent / "data"
@@ -334,6 +352,7 @@ class ModelType(StrEnum):
 
     GEOLOGY = "geology"
     TERRAIN = "terrain"
+    COMBINED = "combined"
 
 
 # Dictionaries for convenient access by model type

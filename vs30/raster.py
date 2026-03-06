@@ -762,6 +762,8 @@ def apply_hybrid_geology_modifications(
     """
     logger.info("Applying slope and coastal distance based geology modifications...")
 
+    ### TODO: Do the copy here
+
     # 1. Update Standard Deviation for specific groups
     if hybrid:
         # group IDs have reduction factors from constants
