@@ -1,45 +1,22 @@
-"""Pydantic configuration model for loading and validating settings from config.yaml."""
-
-from pathlib import Path
+"""Configuration data structures for Vs30 calculations."""
 
 from dataclasses import dataclass
-import pydantic
+from pathlib import Path
+
 import yaml
 
 
 @dataclass
 class GridConfig:
-    grid_xmin: int = pydantic.Field(
-        description="Grid minimum X coordinate (NZTM, meters)"
-    )
-    grid_xmax: int = pydantic.Field(
-        description="Grid maximum X coordinate (NZTM, meters)"
-    )
-    grid_ymin: int = pydantic.Field(
-        description="Grid minimum Y coordinate (NZTM, meters)"
-    )
-    grid_ymax: int = pydantic.Field(
-        description="Grid maximum Y coordinate (NZTM, meters)"
-    )
-    grid_dx: int = pydantic.Field(description="Grid X spacing (meters)")
-    grid_dy: int = pydantic.Field(description="Grid Y spacing (meters)")
-
-
-
-
-class Vs30Config(pydantic.BaseModel):
     """
-    User-configurable settings for VS30 calculations.
+    Grid domain and resolution parameters for raster-based Vs30 calculations.
 
-    All fields correspond to entries in config.yaml. See that file for
-    detailed descriptions of each parameter's meaning and units.
-
-    For scientific/algorithmic constants, see vs30/constants.py.
+    Defines the NZTM2000 (EPSG:2193) bounding box and pixel spacing for
+    the output raster grid. Only used by the grid pipeline; the points
+    pipeline does not need grid parameters.
 
     Attributes
     ----------
-    n_proc : int
-        Number of processors for parallel processing (-1 for all cores).
     grid_xmin : int
         Grid minimum X coordinate (NZTM, meters).
     grid_xmax : int
@@ -52,86 +29,22 @@ class Vs30Config(pydantic.BaseModel):
         Grid X spacing (meters).
     grid_dy : int
         Grid Y spacing (meters).
-    locations_csv : str or None
-        Path to input CSV with locations for compute-at-locations.
-    locations_output_csv : str or None
-        Path to output CSV for compute-at-locations results.
-    noisy : bool
-        Whether measurements are noisy (affects uncertainty weighting).
-    max_spatial_boolean_array_memory_gb : float
-        Maximum memory (GB) for spatial boolean arrays per process.
-    obs_subsample_step_for_clustered : int
-        Subsampling step for clustered observations in affected pixel search.
-    independent_observations_file : str or None
-        Path to independent observations CSV (relative to resources).
-    clustered_observations_file : str or None
-        Path to clustered observations CSV (relative to resources).
-    output_dir : str
-        Output directory path.
-    combination_method : str or float
-        Method for combining models: ratio (float) or 'standard_deviation_weighting'.
-    do_bayesian_update_of_geology_and_terrain_categorical_vs30_values : bool
-        Whether to perform Bayesian update of categorical values.
     """
 
-    # # --- Processor settings ---
-    # n_proc: int = pydantic.Field(
-    #     default=1,
-    #     description="Number of processors for parallel processing (-1 for all cores)",
-    # )
-
-    # --- Grid parameters ---
-
-
-    # --- Compute-at-locations parameters (only used by compute-at-locations) ---
-    # locations_csv: str | None = pydantic.Field(
-    #     default=None,
-    #     description="Path to input CSV with locations for compute-at-locations",
-    # )
-    # locations_output_csv: str | None = pydantic.Field(
-    #     default=None, description="Path to output CSV for compute-at-locations results"
-    # )
-
-    # --- General configuration ---
-    # noisy: bool = pydantic.Field(
-    #     description="Whether measurements are noisy (affects uncertainty weighting)"
-    # )
-    # max_spatial_boolean_array_memory_gb: float = pydantic.Field(
-    #     description="Maximum memory (GB) for spatial boolean arrays per process"
-    # )
-    # obs_subsample_step_for_clustered: int = pydantic.Field(
-    #     description="Subsampling step for clustered observations in affected pixel search"
-    # )
-
-    # --- File paths (relative to resources directory) ---
-    # independent_observations_file: str | None = pydantic.Field(
-    #     default=None,
-    #     description="Path to independent observations CSV (relative to resources)",
-    # )
-    # clustered_observations_file: str | None = pydantic.Field(
-    #     default=None,
-    #     description="Path to clustered observations CSV (relative to resources)",
-    # )
-    # output_dir: str = pydantic.Field(description="Output directory path")
-
-    # # --- Combination settings ---
-    # combination_method: str | float = pydantic.Field(
-    #     description="Method for combining models: ratio (float) or 'standard_deviation_weighting'"
-    # )
-    do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: bool = (
-        pydantic.Field(
-            description="Whether to perform Bayesian update of categorical values"
-        )
-    )
-
-    # =========================================================================
-    # Class methods for loading
-    # =========================================================================
+    grid_xmin: int
+    grid_xmax: int
+    grid_ymin: int
+    grid_ymax: int
+    grid_dx: int
+    grid_dy: int
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "Vs30Config":
+    def from_yaml(cls, path: Path) -> "GridConfig":
         """
-        Load configuration from a YAML file.
+        Load grid configuration from a YAML file.
+
+        The YAML file must contain keys: grid_xmin, grid_xmax, grid_ymin,
+        grid_ymax, grid_dx, grid_dy. Other keys are ignored.
 
         Parameters
         ----------
@@ -140,63 +53,34 @@ class Vs30Config(pydantic.BaseModel):
 
         Returns
         -------
-        Vs30Config
-            Validated configuration object.
-
-        Raises
-        ------
-        FileNotFoundError
-            If the configuration file does not exist.
-        pydantic.ValidationError
-            If the configuration file is missing required fields or has invalid values.
+        GridConfig
+            Grid configuration object.
         """
-        if not path.exists():
-            raise FileNotFoundError(f"Configuration file not found: {path}")
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
-        return cls(**data)
+        return cls.from_dict(data)
 
     @classmethod
-    def default_config_path(cls) -> Path:
+    def from_dict(cls, data: dict) -> "GridConfig":
         """
-        Get the path to the package's default config.yaml.
+        Create a GridConfig from a dictionary.
+
+        Parameters
+        ----------
+        data : dict
+            Dictionary containing grid_xmin, grid_xmax, grid_ymin,
+            grid_ymax, grid_dx, grid_dy keys.
 
         Returns
         -------
-        Path
-            Path to the bundled config.yaml file.
+        GridConfig
+            Grid configuration object.
         """
-        return Path(__file__).parent / "config.yaml"
-
-    @classmethod
-    def default(cls) -> "Vs30Config":
-        """
-        Load from the package's default config.yaml.
-
-        Returns
-        -------
-        Vs30Config
-            Configuration loaded from the package's bundled config.yaml.
-        """
-        return cls.from_yaml(cls.default_config_path())
-
-
-_default_config: Vs30Config | None = None
-
-
-def get_default_config() -> Vs30Config:
-    """
-    Get the default configuration, loading it on first access.
-
-    This provides lazy loading of the default config, so it's only
-    read from disk when first needed.
-
-    Returns
-    -------
-    Vs30Config
-        The default configuration object.
-    """
-    global _default_config
-    if _default_config is None:
-        _default_config = Vs30Config.default()
-    return _default_config
+        return cls(
+            grid_xmin=data["grid_xmin"],
+            grid_xmax=data["grid_xmax"],
+            grid_ymin=data["grid_ymin"],
+            grid_ymax=data["grid_ymax"],
+            grid_dx=data["grid_dx"],
+            grid_dy=data["grid_dy"],
+        )

@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import threadpoolctl
-from qcore import coordinates
 from tqdm import tqdm
 
 from vs30 import category, constants, raster, spatial, utils
@@ -117,8 +116,8 @@ def process_geology_at_points(
 
     # Apply hybrid modifications (slope and coastal distance)
     geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
-        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values.copy(),
-        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values.copy(),
+        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
         geol_ids,
         slope_at_points,
         coast_dist_at_points,
@@ -137,8 +136,8 @@ def process_geology_at_points(
         obs_slope = raster.sample_slope_at_points(obs_locs)
         obs_coast_dist = raster.compute_coastal_distance_at_points(obs_locs)
         obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
-            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values.copy(),
-            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values.copy(),
+            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_geol_ids,
             obs_slope,
             obs_coast_dist,
@@ -258,22 +257,19 @@ class LocationsChunkConfig:
 
     Attributes
     ----------
-    lon_column : str
-        Name of longitude column in input CSV.
-    lat_column : str
-        Name of latitude column in input CSV.
     include_intermediate : bool
         Whether to include intermediate values in output.
-    combination_method : str or float
+    combination_method : CombinationMethod
         Method for combining geology and terrain models.
+    combine_ratio : float or None
+        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     """
 
-    lon_column: str
-    lat_column: str
     include_intermediate: bool
-    combination_method: str | float
+    combination_method: constants.CombinationMethod
+    combine_ratio: float | None
     noisy: bool
 
 
@@ -292,7 +288,8 @@ def process_locations_chunk(
     Parameters
     ----------
     args : tuple
-        (chunk_df, chunk_id, observations_df, geol_model_df, terr_model_df, config)
+        (points, chunk_id, observations_df, geol_model_df, terr_model_df, config)
+        where points is an (N, 2) array of NZTM (easting, northing) coordinates.
 
     Returns
     -------
@@ -300,7 +297,7 @@ def process_locations_chunk(
         (chunk_id, result_df) where result_df has all computed columns
     """
     (
-        chunk_df,
+        points,
         chunk_id,
         observations_df,
         geol_model_df,
@@ -308,16 +305,7 @@ def process_locations_chunk(
         config,
     ) = args
 
-    # Make a copy to avoid modifying the original
-    chunk_df = chunk_df.copy()
-
-    # Convert coordinates to NZTM
-    nztm_coords = coordinates.wgs_depth_to_nztm(
-        chunk_df[[config.lat_column, config.lon_column]].values
-    )
-    chunk_df[constants.COL_EASTING] = nztm_coords[:, 1]
-    chunk_df[constants.COL_NORTHING] = nztm_coords[:, 0]
-    points = nztm_coords[:, ::-1]
+    result = {}
 
     # Process geology model
     (
@@ -335,14 +323,14 @@ def process_locations_chunk(
         config.noisy,
     )
 
-    chunk_df[constants.COL_GEOLOGY_ID] = geol_ids
+    result[constants.COL_GEOLOGY_ID] = geol_ids
     if config.include_intermediate:
-        chunk_df[constants.COL_GEOLOGY_VS30] = geol_vs30
-        chunk_df[constants.COL_GEOLOGY_STDV] = geol_stdv
-        chunk_df[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-        chunk_df[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-    chunk_df[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-    chunk_df[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+        result[constants.COL_GEOLOGY_VS30] = geol_vs30
+        result[constants.COL_GEOLOGY_STDV] = geol_stdv
+        result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+        result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+    result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+    result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     # Process terrain model
     (
@@ -353,12 +341,12 @@ def process_locations_chunk(
         terr_mvn_stdv,
     ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
 
-    chunk_df[constants.COL_TERRAIN_ID] = terr_ids
+    result[constants.COL_TERRAIN_ID] = terr_ids
     if config.include_intermediate:
-        chunk_df[constants.COL_TERRAIN_VS30] = terr_vs30
-        chunk_df[constants.COL_TERRAIN_STDV] = terr_stdv
-    chunk_df[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
-    chunk_df[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+        result[constants.COL_TERRAIN_VS30] = terr_vs30
+        result[constants.COL_TERRAIN_STDV] = terr_stdv
+    result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+    result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
     # Combine models
     combined_vs30, combined_stdv = utils.combine_vs30_models(
@@ -367,12 +355,13 @@ def process_locations_chunk(
         terr_mvn_vs30,
         terr_mvn_stdv,
         config.combination_method,
+        config.combine_ratio,
     )
 
-    chunk_df[constants.COL_VS30] = combined_vs30
-    chunk_df[constants.COL_COMBINED_STDV] = combined_stdv
+    result[constants.COL_VS30] = combined_vs30
+    result[constants.COL_COMBINED_STDV] = combined_stdv
 
-    return chunk_id, chunk_df
+    return chunk_id, pd.DataFrame(result)
 
 
 def process_pixels_chunk(
@@ -438,7 +427,7 @@ def process_pixels_chunk(
 
 
 def run_parallel_locations(
-    locations_df: pd.DataFrame,
+    points: np.ndarray,
     observations_df: pd.DataFrame,
     geol_model_df: pd.DataFrame,
     terr_model_df: pd.DataFrame,
@@ -448,13 +437,13 @@ def run_parallel_locations(
     """
     Process locations in parallel.
 
-    Divides the locations DataFrame into chunks and processes each chunk
+    Divides the points array into chunks and processes each chunk
     in a separate process using the full VS30 pipeline.
 
     Parameters
     ----------
-    locations_df : DataFrame
-        Input locations with lon/lat columns (not yet converted to NZTM)
+    points : ndarray
+        Array of shape (N, 2) with NZTM (easting, northing) coordinates.
     observations_df : DataFrame
         Observation data for spatial adjustment (must have easting, northing, vs30, uncertainty)
     geol_model_df : DataFrame
@@ -473,11 +462,11 @@ def run_parallel_locations(
     """
     # Split into many small chunks for smooth progress bar updates.
     # pool.imap distributes chunks to n_proc workers automatically.
-    n_chunks = min(len(locations_df), constants.N_PROGRESS_CHUNKS)
-    split_indices = np.array_split(range(len(locations_df)), n_chunks)
+    n_chunks = min(len(points), constants.N_PROGRESS_CHUNKS)
+    split_indices = np.array_split(range(len(points)), n_chunks)
     chunk_args = [
         (
-            locations_df.iloc[idx].reset_index(drop=True),
+            points[idx],
             i,
             observations_df,
             geol_model_df,
@@ -493,7 +482,7 @@ def run_parallel_locations(
     with single_threaded_blas():
         with _spawn_context.Pool(processes=n_proc) as pool:
             results = []
-            with tqdm(total=len(locations_df), unit="point") as pbar:
+            with tqdm(total=len(points), unit="point") as pbar:
                 for chunk_id, result_df in pool.imap(
                     process_locations_chunk, chunk_args
                 ):

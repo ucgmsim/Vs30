@@ -6,14 +6,13 @@ at a pixel center coordinate and checks the results match.
 """
 
 import numpy as np
-import pandas as pd
 import rasterio
 import yaml
 
 from conftest import FIXTURES_DIR
 
 from vs30 import constants, pipeline
-from vs30.config import Vs30Config
+from vs30 import config as config_module
 
 
 def test_grid_and_points_consistency(tmp_path):
@@ -21,19 +20,47 @@ def test_grid_and_points_consistency(tmp_path):
     # Use the small test config
     config_file = FIXTURES_DIR / "test_config_small_independent_only.yaml"
     with open(config_file) as f:
-        config = yaml.safe_load(f)
-    config["output_dir"] = str(tmp_path / "grid_output")
-    config["n_proc"] = 1
-    test_config = tmp_path / "config.yaml"
-    with open(test_config, "w") as f:
-        yaml.dump(config, f)
+        config_data = yaml.safe_load(f)
+
+    grid_config = config_module.GridConfig.from_dict(config_data)
+    grid_output_dir = tmp_path / "grid_output"
+
+    # Resolve observation CSVs
+    independent_observations_csv = None
+    if config_data.get("independent_observations_file") not in (None, "none"):
+        candidate = constants.RESOURCE_PATH / config_data["independent_observations_file"]
+        if candidate.exists():
+            independent_observations_csv = candidate
+
+    clustered_observations_csv = None
+    if config_data.get("clustered_observations_file") not in (None, "none"):
+        candidate = constants.RESOURCE_PATH / config_data["clustered_observations_file"]
+        if candidate.exists():
+            clustered_observations_csv = candidate
 
     # Run grid pipeline
-    cfg = Vs30Config.from_yaml(test_config)
-    pipeline.run_full_pipeline(cfg)
+    pipeline.compute_grid(
+        grid_config=grid_config,
+        output_dir=grid_output_dir,
+        combination_method=constants.CombinationMethod.RATIO,
+        combine_ratio=float(config_data["combination_method"]),
+        clustered_observations_csv=clustered_observations_csv,
+        independent_observations_csv=independent_observations_csv,
+        do_bayesian_update=config_data.get(
+            "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values", True
+        ),
+        noisy=config_data.get("noisy", True),
+        n_proc=1,
+        max_spatial_boolean_array_memory_gb=config_data.get(
+            "max_spatial_boolean_array_memory_gb", 1.0
+        ),
+        obs_subsample_step_for_clustered=config_data.get(
+            "obs_subsample_step_for_clustered", 100
+        ),
+    )
 
     # Read the combined raster and pick a pixel center coordinate
-    combined_raster = tmp_path / "grid_output" / constants.COMBINED_VS30_FILENAME
+    combined_raster = grid_output_dir / constants.COMBINED_VS30_FILENAME
     with rasterio.open(combined_raster) as src:
         vs30_grid = src.read(1)
         stdv_grid = src.read(2)
@@ -53,25 +80,19 @@ def test_grid_and_points_consistency(tmp_path):
     wgs = coordinates.nztm_to_wgs_depth(np.array([[northing, easting]]))
     lat, lon = wgs[0, 0], wgs[0, 1]
 
-    # Create a single-point CSV
-    locations_csv = tmp_path / "point.csv"
-    pd.DataFrame({"longitude": [lon], "latitude": [lat]}).to_csv(
-        locations_csv, index=False
-    )
-
-    # Run points pipeline with the same config
-    output_csv = tmp_path / "point_result.csv"
-    pipeline.compute_at_locations(
-        cfg=cfg,
-        locations_csv=locations_csv,
-        output_csv=output_csv,
-        lon_column="longitude",
-        lat_column="latitude",
+    # Run points pipeline with the same observation files
+    result = pipeline.compute_at_locations(
+        longitudes=np.array([lon]),
+        latitudes=np.array([lat]),
+        combination_method=constants.CombinationMethod.RATIO,
+        combine_ratio=float(config_data["combination_method"]),
+        clustered_observations_csv=clustered_observations_csv,
+        independent_observations_csv=independent_observations_csv,
         include_intermediate=True,
+        noisy=config_data.get("noisy", True),
         n_proc=1,
     )
 
-    result = pd.read_csv(output_csv)
     points_vs30_value = result[constants.COL_VS30].iloc[0]
     points_stdv_value = result[constants.COL_COMBINED_STDV].iloc[0]
 

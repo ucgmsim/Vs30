@@ -7,7 +7,7 @@ Tests cover:
 
 import numpy as np
 
-from vs30 import utils
+from vs30 import constants, utils
 
 
 class TestCombineVs30Models:
@@ -30,7 +30,8 @@ class TestCombineVs30Models:
             geol_stdv,
             terr_vs30,
             terr_stdv,
-            combination_method=1.0,  # Equal weighting
+            combination_method=constants.CombinationMethod.RATIO,
+            combine_ratio=1.0,
         )
 
         # Geometric mean of 200 and 400 is sqrt(200*400) ≈ 282.84
@@ -51,7 +52,8 @@ class TestCombineVs30Models:
             geol_stdv,
             terr_vs30,
             terr_stdv,
-            combination_method=2.0,  # Geology has 2x weight
+            combination_method=constants.CombinationMethod.RATIO,
+            combine_ratio=2.0,
         )
 
         # With ratio=2, w_g = 2/3, w_t = 1/3
@@ -76,7 +78,7 @@ class TestCombineVs30Models:
             geol_stdv,
             terr_vs30,
             terr_stdv,
-            combination_method="standard_deviation_weighting",
+            combination_method=constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
         )
 
         # Geology has lower stdv, so it should get more weight
@@ -96,7 +98,7 @@ class TestCombineVs30Models:
             geol_stdv,
             terr_vs30,
             terr_stdv,
-            combination_method="standard_deviation_weighting",
+            combination_method=constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
         )
 
         # Equal stdv means equal weight → geometric mean
@@ -115,7 +117,8 @@ class TestCombineVs30Models:
             geol_stdv,
             terr_vs30,
             terr_stdv,
-            combination_method=1.0,  # Equal weighting
+            combination_method=constants.CombinationMethod.RATIO,
+            combine_ratio=1.0,
         )
 
         # Manually compute expected stdv
