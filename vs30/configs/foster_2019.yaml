@@ -1,0 +1,25 @@
+# ============================================================================
+# Foster (2019) Vs30 Model Configuration
+# Standard configuration reproducing the published NZ Vs30 map.
+# ============================================================================
+
+# --- Grid Parameters (full New Zealand extent at 100m resolution) ---
+grid_xmin: 1060050
+grid_xmax: 2120050
+grid_ymin: 4730050
+grid_ymax: 6250050
+grid_dx: 100
+grid_dy: 100
+
+# --- Observation files (relative to resources directory) ---
+independent_observations_file: observations/measured_vs30_independent_observations.csv
+clustered_observations_file: observations/measured_vs30_cpt.csv
+
+# --- Pipeline settings ---
+do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
+noisy: true
+combination_method: standard_deviation_weighting
+
+# --- Spatial update parameters ---
+max_spatial_boolean_array_memory_gb: 1
+obs_subsample_step_for_clustered: 100

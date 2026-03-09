@@ -762,7 +762,8 @@ def apply_hybrid_geology_modifications(
     """
     logger.info("Applying slope and coastal distance based geology modifications...")
 
-    ### TODO: Do the copy here
+    vs30_array = vs30_array.copy()
+    stdv_array = stdv_array.copy()
 
     # 1. Update Standard Deviation for specific groups
     if hybrid:

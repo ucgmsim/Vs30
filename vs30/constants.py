@@ -1,7 +1,7 @@
 """Scientific and algorithmic constants for Vs30 calculations."""
 
 from dataclasses import dataclass
-from enum import StrEnum, Enum, auto
+from enum import StrEnum
 from pathlib import Path
 
 
@@ -11,15 +11,19 @@ class CombinationMethod(StrEnum):
     STANDARD_DEVIATION_WEIGHTING = "standard_deviation_weighting"
     RATIO = "ratio"
 
+
 class FixedModelVersion(StrEnum):
     """Identifiers for fixed versions of the geology and terrain models."""
 
     FOSTER_2019 = "foster_2019"
-    JAWHEI_v1p0 = "jawhei_v1p0"
+    JAEHWI_V1P0 = "jaehwi_v1p0"
+
+
+CONFIGS_DIR = Path(__file__).parent / "configs"
 
 MODEL_VERSION_TO_CONFIG = {
-    FixedModelVersion.FOSTER_2019: Path(__file__).parent / config / test
-    
+    FixedModelVersion.FOSTER_2019: CONFIGS_DIR / "foster_2019.yaml",
+    FixedModelVersion.JAEHWI_V1P0: CONFIGS_DIR / "jaehwi_v1p0.yaml",
 }
 
 # Path to the data directory containing shapefiles, rasters, and other input data
@@ -62,9 +66,6 @@ MAX_POINTS: int = 500
 # terrain models. Represents the exponent for inverse variance weighting:
 # weight ~ (sigma^2)^-k. Only used when combination_method is "standard_deviation_weighting".
 K_VALUE: float = 3.0
-
-# Combination method string for standard deviation weighting
-COMBINATION_METHOD_STDV_WEIGHTING: str = "standard_deviation_weighting"
 
 # Small epsilon value added to variance when computing inverse-variance weights
 # for combining geology and terrain models. Prevents division by zero when

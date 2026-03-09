@@ -39,7 +39,8 @@ def combine_vs30_models(
     geol_stdv: np.ndarray,
     terr_vs30: np.ndarray,
     terr_stdv: np.ndarray,
-    combination_method: str | float,
+    combination_method: constants.CombinationMethod,
+    combine_ratio: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Combine geology and terrain Vs30 models using log-space weighted mixture.
@@ -59,11 +60,13 @@ def combine_vs30_models(
         Terrain model Vs30 values.
     terr_stdv : ndarray
         Terrain model standard deviation (in log-space).
-    combination_method : str or float
-        Either a ratio (float) where ratio = geology_weight / terrain_weight,
-        so ratio=1.0 gives equal weighting, ratio=2.0 gives geology twice
-        the weight of terrain. Or "standard_deviation_weighting" for
-        variance-based weighting using K_VALUE exponent.
+    combination_method : CombinationMethod
+        Method for combining models: STANDARD_DEVIATION_WEIGHTING for
+        variance-based weighting, or RATIO for fixed-ratio weighting.
+    combine_ratio : float, optional
+        Geology-to-terrain weight ratio (e.g., 1.0 for equal weighting,
+        2.0 for geology having twice the weight). Required when
+        combination_method is RATIO.
 
     Returns
     -------
@@ -87,7 +90,7 @@ def combine_vs30_models(
     for standard deviation weighting calculations.
     """
     # Determine weights based on combination method
-    if str(combination_method).strip() == constants.COMBINATION_METHOD_STDV_WEIGHTING:
+    if combination_method == constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING:
         # Variance-based weighting: lower stdv gets higher weight
         m_g = (
             geol_stdv**2 + constants.WEIGHT_EPSILON_DIV_BY_ZERO
@@ -98,15 +101,16 @@ def combine_vs30_models(
         total_m = m_g + m_t
         w_g = m_g / total_m
         w_t = m_t / total_m
-    else:
-        try:
-            # Ratio-based: ratio = geology_weight / terrain_weight
-            ratio = float(combination_method)
-        except (ValueError, TypeError):
-            raise ValueError(f"Unknown combination method: {combination_method}")
-        total_w = ratio + 1.0
-        w_g = ratio / total_w
+    elif combination_method == constants.CombinationMethod.RATIO:
+        if combine_ratio is None:
+            raise ValueError(
+                "combine_ratio is required when combination_method is RATIO"
+            )
+        total_w = combine_ratio + 1.0
+        w_g = combine_ratio / total_w
         w_t = 1.0 / total_w
+    else:
+        raise ValueError(f"Unknown combination method: {combination_method}")
 
     # Combine in log-space (geometric weighting)
     log_g = np.log(geol_vs30)
