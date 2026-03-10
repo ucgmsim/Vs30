@@ -109,6 +109,8 @@ def process_geology_at_points(
 
     # Get initial Vs30 values from categorical model
     geol_vs30_df = category.get_vs30_for_ids(geol_ids, model_df)
+    geol_vs30 = geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
+    geol_stdv = geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
     # Get slope and coastal distance at query points
     slope_at_points = raster.sample_slope_at_points(points)
@@ -116,8 +118,8 @@ def process_geology_at_points(
 
     # Apply hybrid modifications (slope and coastal distance)
     geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
-        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+        geol_vs30,
+        geol_stdv,
         geol_ids,
         slope_at_points,
         coast_dist_at_points,
@@ -162,8 +164,8 @@ def process_geology_at_points(
 
     return (
         geol_ids,
-        geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-        geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+        geol_vs30,
+        geol_stdv,
         geol_vs30_hybrid,
         geol_stdv_hybrid,
         geol_mvn_vs30,
@@ -216,6 +218,8 @@ def process_terrain_at_points(
 
     # Get initial Vs30 values from categorical model
     terr_vs30_df = category.get_vs30_for_ids(terr_ids, model_df)
+    terr_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
+    terr_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
@@ -226,8 +230,8 @@ def process_terrain_at_points(
         obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, model_df)
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
-            model_vs30=terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-            model_stdv=terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+            model_vs30=terr_vs30,
+            model_stdv=terr_stdv,
             obs_locations=obs_locs,
             obs_vs30=observations_df[constants.COL_VS30].values,
             obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
@@ -238,13 +242,13 @@ def process_terrain_at_points(
             progress_bar=progress_bar,
         )
     else:
-        terr_mvn_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
-        terr_mvn_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
+        terr_mvn_vs30 = terr_vs30
+        terr_mvn_stdv = terr_stdv
 
     return (
         terr_ids,
-        terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-        terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+        terr_vs30,
+        terr_stdv,
         terr_mvn_vs30,
         terr_mvn_stdv,
     )
@@ -418,6 +422,7 @@ def process_pixels_chunk(
             max_points=config_params[constants.KEY_MAX_POINTS],
             noisy=config_params[constants.KEY_NOISY],
             cov_reduc=config_params[constants.KEY_COV_REDUC],
+            corr_zero=config_params.get(constants.KEY_CORR_ZERO),
         )
 
         if update is not None:
@@ -562,35 +567,36 @@ def run_parallel_spatial_fit(
         constants.COL_UNCERTAINTY: obs_data.uncertainty,
     }
 
-    # Config params
+    # Config params (pre-compute corr_zero once for all workers)
+    corr_zero = utils.correlation_function(
+        np.array([0.0]), constants.PHI[model_type]
+    )[0]
     config_params = {
         constants.KEY_MODEL_TYPE: model_type,
         constants.KEY_MAX_DIST_M: max_dist_m,
         constants.KEY_MAX_POINTS: max_points,
         constants.KEY_NOISY: noisy,
         constants.KEY_COV_REDUC: cov_reduc,
+        constants.KEY_CORR_ZERO: corr_zero,
     }
 
     # Split into many small chunks for smooth progress bar updates.
     # pool.imap distributes chunks to n_proc workers automatically.
-    pixel_indices_list = list(range(len(affected_flat_indices)))
-    n_chunks = min(len(pixel_indices_list), constants.N_PROGRESS_CHUNKS)
-    chunks = np.array_split(pixel_indices_list, n_chunks)
+    n_chunks = min(len(affected_flat_indices), constants.N_PROGRESS_CHUNKS)
+    chunks = np.array_split(np.arange(len(affected_flat_indices)), n_chunks)
     chunk_args = [
         (list(chunk), i, pixel_data_dict, obs_data_dict, config_params)
         for i, chunk in enumerate(chunks)
         if len(chunk) > 0
     ]
 
-    actual_n_proc = min(n_proc, len(chunk_args))
-
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
-        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+        with _spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
             results = []
             label = str(model_type).capitalize()
-            with tqdm(total=len(pixel_indices_list), desc=f"{label}: spatial adjustment", unit="pixel") as pbar:
+            with tqdm(total=len(affected_flat_indices), desc=f"{label}: spatial adjustment", unit="pixel") as pbar:
                 for chunk_id, chunk_updates in pool.imap(
                     process_pixels_chunk, chunk_args
                 ):

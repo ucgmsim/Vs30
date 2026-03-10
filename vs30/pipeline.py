@@ -3,8 +3,6 @@ Pipeline functions for generating Vs30 models.
 """
 
 import logging
-import shutil
-import tempfile
 import time
 from pathlib import Path
 
@@ -20,20 +18,24 @@ from vs30 import config as config_module
 logger = logging.getLogger(__name__)
 
 
-def update_categorical_vs30_models(
+# ============================================================================
+# Stage 1: Bayesian update of categorical model values
+# ============================================================================
+
+
+def compute_categorical_vs30_updates(
     categorical_model_csv: Path,
-    output_dir: Path,
     model_type: constants.ModelType,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
     n_proc: int = 1,
-) -> None:
+) -> pd.DataFrame:
     """
-    Update categorical model values using Bayesian updates and save to CSV files.
+    Compute Bayesian updates to categorical model values and return as DataFrame.
 
     Loads observations and categorical model values, applies Bayesian updates to the
-    categorical model values (mean and standard deviation per category), and writes
-    the updated values back to CSV files.
+    categorical model values (mean and standard deviation per category), and returns
+    the updated DataFrame.
 
     Can process clustered observations (with spatial clustering) and/or independent
     observations (without clustering). If both are provided, clustered observations
@@ -52,10 +54,8 @@ def update_categorical_vs30_models(
     categorical_model_csv : Path
         Path to CSV file with categorical Vs30 mean and standard deviation values
         (e.g., geology_model_prior_mean_and_standard_deviation.csv).
-    output_dir : Path
-        Path to output directory. Will be created if it does not exist.
-    model_type : str
-        Model type: either 'geology' or 'terrain'.
+    model_type : ModelType
+        Model type: either GEOLOGY or TERRAIN.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv).
         These will be processed with spatial clustering.
@@ -65,6 +65,11 @@ def update_categorical_vs30_models(
         These will be processed without clustering.
     n_proc : int, optional
         Number of processes for DBSCAN clustering. Use -1 for all available cores.
+
+    Returns
+    -------
+    pd.DataFrame
+        Updated categorical model with posterior mean and stdv columns.
 
     Raises
     ------
@@ -197,62 +202,45 @@ def update_categorical_vs30_models(
             current_prior_df, independent_observations_df
         )
 
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_filename = constants.POSTERIOR_PREFIX + categorical_model_csv.name
-    output_path = output_dir / output_filename
-
-    current_prior_df.to_csv(output_path, index=False)
+    return current_prior_df
 
 
-def make_initial_vs30_raster(
-    output_dir: Path,
+# ============================================================================
+# Stage 2: Create initial VS30 arrays from categorical model
+# ============================================================================
+
+
+def create_initial_vs30_arrays(
     grid_config: config_module.GridConfig,
-    terrain: bool = False,
-    geology: bool = False,
-    geology_csv: Path | None = None,
-    terrain_csv: Path | None = None,
-) -> None:
+    model_type: constants.ModelType,
+    model_values_df: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
-    Create initial VS30 mean and standard deviation rasters from category IDs.
+    Create initial VS30 arrays from categorical model in memory.
 
-    Generates initial VS30 rasters by:
-
-    1. Creating category ID rasters (from terrain raster or geology shapefile)
-    2. Mapping category IDs to VS30 mean and standard deviation values from CSV files
-    3. Writing 2-band GeoTIFFs with VS30 mean (band 1) and standard deviation (band 2)
-
-    Output files are saved as terrain_initial_vs30_with_uncertainty.tif and/or
-    geology_initial_vs30_with_uncertainty.tif in output_dir.
+    Generates category ID arrays by rasterizing terrain or geology data to the
+    target grid, then maps category IDs to VS30 mean and standard deviation
+    values from the model DataFrame.
 
     Parameters
     ----------
-    output_dir : Path
-        Output directory. Created if it does not exist.
     grid_config : GridConfig
         Grid domain and resolution parameters.
-    terrain : bool, optional
-        Create terrain VS30 raster.
-    geology : bool, optional
-        Create geology VS30 raster.
-    geology_csv : Path, optional
-        Custom geology model CSV file. Defaults to bundled resource.
-    terrain_csv : Path, optional
-        Custom terrain model CSV file. Defaults to bundled resource.
+    model_type : ModelType
+        Either GEOLOGY or TERRAIN.
+    model_values_df : pd.DataFrame
+        DataFrame with categorical model values (must have 'id' column and
+        mean/stdv columns recognized by ``select_vs30_columns_by_priority``).
 
-    Raises
-    ------
-    ValueError
-        If neither terrain nor geology is True.
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray, dict]
+        A tuple containing:
+        - vs30_array (float32): VS30 mean values.
+        - stdv_array (float32): VS30 standard deviation values.
+        - id_array (uint8): Category ID array.
+        - profile (dict): Rasterio profile describing the grid.
     """
-    if not terrain and not geology:
-        raise ValueError("At least one of terrain or geology must be True")
-
-    output_dir = output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Output directory: {output_dir}")
-
     grid_params = {
         "xmin": grid_config.grid_xmin,
         "xmax": grid_config.grid_xmax,
@@ -263,108 +251,65 @@ def make_initial_vs30_raster(
     }
     logger.info(f"Using grid parameters: {grid_params}")
 
-    if terrain:
-        logger.info("Processing terrain model...")
-        terrain_model_csv = (
-            terrain_csv
-            if terrain_csv
-            else constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-        logger.info(f"Using terrain model values from {terrain_model_csv}")
+    logger.info(f"Creating {model_type} category ID array...")
+    id_array, profile = raster.create_category_id_array(model_type, **grid_params)
 
-        logger.info("Creating terrain category ID raster...")
-        id_raster = raster.create_category_id_raster(
-            constants.ModelType.TERRAIN, output_dir, **grid_params
-        )
+    logger.info(f"Creating {model_type} VS30 arrays from IDs...")
+    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
+        id_array, model_values_df, model_type=model_type
+    )
 
-        logger.info("Creating terrain VS30 raster...")
-        vs30_raster = output_dir / constants.TERRAIN_INITIAL_VS30_FILENAME
-        raster.create_vs30_raster_from_ids(
-            id_raster,
-            terrain_model_csv,
-            vs30_raster,
-            model_type=constants.ModelType.TERRAIN,
-        )
-
-    if geology:
-        logger.info("Processing geology model...")
-        geology_model_csv = (
-            geology_csv
-            if geology_csv
-            else constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-        logger.info(f"Using geology model values from {geology_model_csv}")
-
-        logger.info("Creating geology category ID raster...")
-        id_raster = raster.create_category_id_raster(
-            constants.ModelType.GEOLOGY, output_dir, **grid_params
-        )
-
-        logger.info("Creating geology VS30 raster...")
-        vs30_raster = output_dir / constants.GEOLOGY_INITIAL_VS30_FILENAME
-        raster.create_vs30_raster_from_ids(
-            id_raster,
-            geology_model_csv,
-            vs30_raster,
-            model_type=constants.ModelType.GEOLOGY,
-        )
+    return vs30_array, stdv_array, id_array, profile
 
 
-def adjust_geology_vs30_by_slope_and_coastal_distance(
-    input_raster: Path,
-    id_raster: Path,
-    output_dir: Path,
-) -> None:
+# ============================================================================
+# Stage 3: Hybrid geology modifications (slope and coastal distance)
+# ============================================================================
+
+
+def compute_hybrid_geology_arrays(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    id_array: np.ndarray,
+    profile: dict,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Apply hybrid geology modifications to an initial VS30 raster.
+    Apply hybrid geology modifications in memory.
 
-    Adds slope-based and coast-distance-based modifications to the geology model.
-    Generates intermediate slope and coast distance rasters in the output directory.
+    Computes slope and coastal distance arrays for the grid, then applies
+    slope-based and coast-distance-based modifications to the geology VS30 model.
+
+    Slope and coast distance arrays are returned because they are also needed
+    later by ``prepare_observation_data`` to compute residuals at observation
+    locations.
 
     Parameters
     ----------
-    input_raster : Path
-        Path to initial geology VS30 raster (created by make_initial_vs30_raster).
-        Must be a 2-band raster with Vs30 and standard deviation.
-    id_raster : Path
-        Path to category ID raster (e.g., gid.tif used to create the input raster).
-    output_dir : Path
-        Directory to save output hybrid raster and intermediate files.
+    vs30_array : np.ndarray
+        Initial geology VS30 array (2D, float32).
+    stdv_array : np.ndarray
+        Initial geology standard deviation array (2D, float32).
+    id_array : np.ndarray
+        Category ID array (2D, uint8).
+    profile : dict
+        Rasterio profile for the grid (needed for slope/coast computation).
 
-    Raises
-    ------
-    ValueError
-        If raster dimensions do not match.
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
+        A tuple containing:
+        - hybrid_vs30 (float32): Modified VS30 array.
+        - hybrid_stdv (float32): Modified standard deviation array.
+        - slope_array: Slope values for the grid.
+        - coast_dist_array (float32): Distance to coast for the grid.
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Computing slope array...")
+    slope_array = raster.compute_slope_array(profile)
 
-    logger.info(
-        f"Processing slope and coastal distance adjusted model for: {input_raster}"
-    )
+    logger.info("Computing coast distance array...")
+    coast_dist_array = raster.compute_coast_distance_array(profile)
 
-    with rasterio.open(input_raster) as src:
-        vs30_array = src.read(1)
-        stdv_array = src.read(2)
-        profile = src.profile.copy()
-
-        with rasterio.open(id_raster) as id_src:
-            if id_src.width != src.width or id_src.height != src.height:
-                raise ValueError(
-                    f"Dimension mismatch! Input raster: {src.width}x{src.height}, "
-                    f"ID raster: {id_src.width}x{id_src.height}"
-                )
-            id_array = id_src.read(1)
-
-    slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
-    logger.info(f"Generating slope raster: {slope_path}")
-    slope_array, _ = raster.create_slope_raster(slope_path, profile)
-
-    coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
-    logger.info(f"Generating coast distance raster: {coast_path}")
-    coast_dist_array, _ = raster.create_coast_distance_raster(coast_path, profile)
-
-    logger.info("Applying slope and coastal distance based geology modifications...")
-    mod_vs30, mod_stdv = raster.apply_hybrid_geology_modifications(
+    hybrid_vs30, hybrid_stdv = raster.apply_hybrid_geology_modifications(
         vs30_array,
         stdv_array,
         id_array,
@@ -372,56 +317,52 @@ def adjust_geology_vs30_by_slope_and_coastal_distance(
         coast_dist_array,
     )
 
-    output_path = (
-        output_dir / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
-    )
-
-    profile.update({"dtype": "float32", "compress": "deflate"})
-
-    logger.info(f"Saving hybrid raster to: {output_path}")
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(mod_vs30, 1)
-        dst.write(mod_stdv, 2)
-        dst.descriptions = (
-            constants.BAND_DESCRIPTION_VS30_HYBRID,
-            constants.BAND_DESCRIPTION_STDV_HYBRID,
-        )
+    return hybrid_vs30, hybrid_stdv, slope_array, coast_dist_array
 
 
-def spatial_fit(
-    input_raster: Path,
+# ============================================================================
+# Stage 4: MVN spatial adjustment on grid
+# ============================================================================
+
+
+def compute_spatial_adjustment_on_grid(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    profile: dict,
     observations_csv: Path,
-    model_values_csv: Path,
-    output_dir: Path,
+    model_values_df: pd.DataFrame,
     model_type: constants.ModelType,
     noisy: bool = True,
     n_proc: int = 1,
     is_clustered_observations: bool = False,
     obs_subsample_step_for_clustered: int = 100,
     max_spatial_boolean_array_memory_gb: float = 1.0,
-) -> None:
+    slope_array: np.ndarray | None = None,
+    coast_dist_array: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Adjust a VS30 raster based on measurements using spatial conditioning.
+    Compute MVN spatial adjustment on a grid in memory.
 
-    Performs a spatial adjustment of an input raster by:
+    Performs a spatial adjustment of VS30 arrays by:
 
-    1. Loading the 2-band input raster (VS30 mean and stdv)
-    2. Loading measurements and mapping them to categories
-    3. Computing spatial fits to update pixels affected by measurements
-    4. Applying updates and saving the resulting 2-band GeoTIFF
+    1. Constructing RasterData from in-memory arrays.
+    2. Loading measurements and mapping them to categories.
+    3. Computing spatial fits to update pixels affected by measurements.
+    4. Returning the updated arrays.
 
     Parameters
     ----------
-    input_raster : Path
-        Path to input 2-band VS30 raster (Vs30 mean and standard deviation).
+    vs30_array : np.ndarray
+        Input VS30 array (2D).
+    stdv_array : np.ndarray
+        Input standard deviation array (2D).
+    profile : dict
+        Rasterio profile with transform, crs, nodata.
     observations_csv : Path
         Path to CSV file with measured VS30 values. Must contain columns:
         easting, northing, vs30, uncertainty.
-    model_values_csv : Path
-        Path to CSV file with updated categorical Vs30 values
-        (e.g., updated_geology_model.csv).
-    output_dir : Path
-        Directory to save the adjusted raster.
+    model_values_df : pd.DataFrame
+        DataFrame with updated categorical Vs30 values.
     model_type : ModelType
         Model type: either GEOLOGY or TERRAIN.
     noisy : bool, optional
@@ -434,20 +375,28 @@ def spatial_fit(
         Subsampling step for clustered observations.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
-    """
-    output_dir = output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    slope_array : np.ndarray, optional
+        Pre-computed slope array (for geology observation data preparation).
+    coast_dist_array : np.ndarray, optional
+        Pre-computed coast distance array.
 
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        (adjusted_vs30, adjusted_stdv) arrays.
+    """
     n_proc_resolved = parallel.resolve_n_proc(n_proc)
 
-    logger.info(f"Starting spatial fit for {model_type} model")
-    logger.info(f"Input raster: {input_raster}")
-    logger.info(f"Observations: {observations_csv}")
-    logger.info(f"Model values: {model_values_csv}")
+    logger.info(f"Starting spatial adjustment for {model_type} model")
 
-    # 1. Load Raster Data
-    logger.info("Loading raster data...")
-    raster_data = spatial.RasterData.from_file(input_raster)
+    # 1. Construct RasterData from arrays
+    raster_data = spatial.RasterData.from_arrays(
+        vs30=vs30_array,
+        stdv=stdv_array,
+        transform=profile["transform"],
+        crs=profile.get("crs", constants.NZTM_CRS),
+        nodata=constants.NODATA_VALUE,
+    )
     spatial.validate_raster_data(raster_data)
 
     # 2. Load Observations
@@ -455,19 +404,17 @@ def spatial_fit(
     observations = pd.read_csv(observations_csv, skipinitialspace=True)
     spatial.validate_observations(observations)
 
-    # 3. Load Model Values (updated categorical table)
-    logger.info("Loading updated model table...")
-    model_df = pd.read_csv(model_values_csv, skipinitialspace=True)
-    mean_col, std_col = raster.select_vs30_columns_by_priority(list(model_df.columns))
-
-    # Build table indexed by category ID
-    max_id = model_df[constants.STANDARD_ID_COLUMN].max()
+    # 3. Build updated model table from DataFrame
+    # Model IDs are 1-indexed; convert to 0-indexed array indices
+    mean_col, std_col = raster.select_vs30_columns_by_priority(
+        list(model_values_df.columns)
+    )
+    max_id = model_values_df[constants.STANDARD_ID_COLUMN].max()
     updated_model_table = np.full((max_id, 2), np.nan)
-    for _, row in model_df.iterrows():
-        idx = int(row[constants.STANDARD_ID_COLUMN]) - 1
-        if 0 <= idx < max_id:
-            updated_model_table[idx, 0] = row[mean_col]
-            updated_model_table[idx, 1] = row[std_col]
+    ids = model_values_df[constants.STANDARD_ID_COLUMN].values.astype(int) - 1
+    valid = (ids >= 0) & (ids < max_id)
+    updated_model_table[ids[valid], 0] = model_values_df[mean_col].values[valid]
+    updated_model_table[ids[valid], 1] = model_values_df[std_col].values[valid]
 
     # 4. Prepare Observation Data for Spatial Adjustment
     logger.info("Preparing observation data for spatial adjustment...")
@@ -476,19 +423,18 @@ def spatial_fit(
         raster_data,
         updated_model_table,
         model_type,
-        output_dir,
         noisy=noisy,
+        slope_array=slope_array,
+        coast_dist_array=coast_dist_array,
     )
     logger.info(f"Prepared {len(obs_data.locations)} valid observations")
 
     if len(obs_data.locations) == 0:
         logger.warning(
-            "No valid observations found within model bounds. Copying input raster to output."
+            "No valid observations found within model bounds. "
+            "Returning input arrays unchanged."
         )
-        output_filename = constants.OUTPUT_FILENAMES[model_type]
-        output_path = output_dir / output_filename
-        shutil.copyfile(input_raster, output_path)
-        return
+        return vs30_array.copy(), stdv_array.copy()
 
     # 5. Find Affected Pixels (with optional clustered subsampling)
     obs_data_for_bbox = spatial.apply_clustered_subsampling(
@@ -538,38 +484,55 @@ def spatial_fit(
             cov_reduc=constants.COV_REDUC,
         )
 
-    # 7. Apply Updates and Write Output
-    logger.info("Applying updates and writing output...")
-    spatial.apply_and_write_updates(raster_data, updates, model_type, output_dir)
+    # 7. Apply Updates (in memory)
+    logger.info("Applying updates...")
+    adjusted_vs30, adjusted_stdv = spatial.apply_updates(raster_data, updates)
+
+    return adjusted_vs30, adjusted_stdv
 
 
-def combine(
-    geology_tif: Path,
-    terrain_tif: Path,
-    output_path: Path,
+# ============================================================================
+# Stage 5: Combine geology and terrain models
+# ============================================================================
+
+
+def combine_model_arrays(
+    geol_vs30: np.ndarray,
+    geol_stdv: np.ndarray,
+    terr_vs30: np.ndarray,
+    terr_stdv: np.ndarray,
     combination_method: constants.CombinationMethod,
     combine_ratio: float | None = None,
-) -> None:
+    nodata: float = constants.NODATA_VALUE,
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Combine geology and terrain VS30 rasters using a weighted average.
+    Combine geology and terrain VS30 arrays in memory.
 
     Combines the two model outputs in log-space using the specified weighting
-    method. The output is a 2-band GeoTIFF with combined Vs30 mean and standard
-    deviation.
+    method.
 
     Parameters
     ----------
-    geology_tif : Path
-        Path to geology VS30 raster.
-    terrain_tif : Path
-        Path to terrain VS30 raster.
-    output_path : Path
-        Path to combined output raster.
+    geol_vs30 : np.ndarray
+        Geology model VS30 array.
+    geol_stdv : np.ndarray
+        Geology model standard deviation array.
+    terr_vs30 : np.ndarray
+        Terrain model VS30 array.
+    terr_stdv : np.ndarray
+        Terrain model standard deviation array.
     combination_method : CombinationMethod
         Method for combining models: STANDARD_DEVIATION_WEIGHTING for
         variance-based weighting, or RATIO for fixed-ratio weighting.
     combine_ratio : float, optional
         Geology-to-terrain weight ratio. Required when combination_method is RATIO.
+    nodata : float, optional
+        No-data value. Default from constants.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        (combined_vs30, combined_stdv) arrays.
     """
     if (
         combination_method is constants.CombinationMethod.RATIO
@@ -579,56 +542,156 @@ def combine(
             "combination_method is set to 'ratio' but combine_ratio is not provided"
         )
 
-    logger.info(f"Averaging {geology_tif} and {terrain_tif}")
+    # Work on copies to avoid modifying inputs
+    geol_vs30 = np.array(geol_vs30, dtype=np.float32, copy=True)
+    geol_stdv = np.array(geol_stdv, dtype=np.float32, copy=True)
+    terr_vs30 = np.array(terr_vs30, dtype=np.float32, copy=True)
+    terr_stdv = np.array(terr_stdv, dtype=np.float32, copy=True)
 
-    with rasterio.open(geology_tif) as src_g, rasterio.open(terrain_tif) as src_t:
-        profile = src_g.profile.copy()
-        geol_data = src_g.read()
-        terr_data = src_t.read()
+    # Replace nodata with NaN for calculation
+    geol_vs30[geol_vs30 == nodata] = np.nan
+    geol_stdv[geol_stdv == nodata] = np.nan
+    terr_vs30[terr_vs30 == nodata] = np.nan
+    terr_stdv[terr_stdv == nodata] = np.nan
 
-        # Use nodata from geology (should be same for terrain)
-        nodata = src_g.nodata
+    combined_vs30, combined_stdv = utils.combine_vs30_models(
+        geol_vs30=geol_vs30,
+        geol_stdv=geol_stdv,
+        terr_vs30=terr_vs30,
+        terr_stdv=terr_stdv,
+        combination_method=combination_method,
+        combine_ratio=combine_ratio,
+    )
 
-        # Set nodata values to NaN for easier calculation
-        geol_data[geol_data == nodata] = np.nan
-        terr_data[terr_data == nodata] = np.nan
-
-        # Combine models using shared function (log-space mixture)
-        combined_vs30, combined_stdv = utils.combine_vs30_models(
-            geol_vs30=geol_data[0],
-            geol_stdv=geol_data[1],
-            terr_vs30=terr_data[0],
-            terr_stdv=terr_data[1],
-            combination_method=combination_method,
-            combine_ratio=combine_ratio,
-        )
-
-        # Create output array correctly restoring nodata where things are NaN
-        combined_data = np.stack([combined_vs30, combined_stdv])
-        combined_data[np.isnan(combined_data)] = nodata
-
-        profile.update(
-            {
-                "dtype": "float32",
-                "count": 2,
-                "nodata": nodata,
-                "compress": "deflate",
-            }
-        )
-
-        logger.info(f"Saving combined raster to: {output_path}")
-        with rasterio.open(output_path, "w", **profile) as dst:
-            dst.write(combined_data)
-            dst.descriptions = (
-                constants.BAND_DESCRIPTION_VS30_COMBINED,
-                constants.BAND_DESCRIPTION_STDV_COMBINED,
-            )
+    return combined_vs30, combined_stdv
 
 
-def run_pipeline_for_model_type(
+# ============================================================================
+# Raster file writing helper
+# ============================================================================
+
+
+def write_vs30_raster(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    profile: dict,
+    output_path: Path,
+    band1_description: str = constants.BAND_DESCRIPTION_VS30,
+    band2_description: str = constants.BAND_DESCRIPTION_STDV,
+    nodata: float = constants.NODATA_VALUE,
+) -> None:
+    """
+    Write a 2-band VS30 raster (mean + standard deviation) to a GeoTIFF file.
+
+    Parameters
+    ----------
+    vs30_array : np.ndarray
+        VS30 mean values (2D array).
+    stdv_array : np.ndarray
+        VS30 standard deviation values (2D array).
+    profile : dict
+        Rasterio profile with CRS, transform, dimensions.
+    output_path : Path
+        Output file path.
+    band1_description : str, optional
+        Description for band 1. Default from constants.
+    band2_description : str, optional
+        Description for band 2. Default from constants.
+    nodata : float, optional
+        No-data value. Default from constants.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    write_profile = profile.copy()
+    write_profile.update(
+        {
+            "dtype": "float32",
+            "count": 2,
+            "nodata": nodata,
+            "compress": "deflate",
+        }
+    )
+
+    with rasterio.open(output_path, "w", **write_profile) as dst:
+        dst.write(vs30_array.astype(np.float32), 1)
+        dst.write(stdv_array.astype(np.float32), 2)
+        dst.descriptions = (band1_description, band2_description)
+
+    logger.info(f"Wrote raster: {output_path}")
+
+
+def write_single_band_raster(
+    array: np.ndarray,
+    profile: dict,
+    output_path: Path,
+    band_description: str,
+    nodata: float | None = None,
+) -> None:
+    """
+    Write a single-band raster to a GeoTIFF file.
+
+    Parameters
+    ----------
+    array : np.ndarray
+        2D array to write.
+    profile : dict
+        Rasterio profile with CRS, transform, dimensions.
+    output_path : Path
+        Output file path.
+    band_description : str
+        Description for the band.
+    nodata : float or None, optional
+        No-data value. If None, no nodata value is set.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    write_profile = profile.copy()
+    write_profile.update(
+        {
+            "dtype": "float32",
+            "count": 1,
+            "nodata": nodata,
+            "compress": "deflate",
+        }
+    )
+
+    with rasterio.open(output_path, "w", **write_profile) as dst:
+        dst.write(array.astype(np.float32), 1)
+        dst.descriptions = (band_description,)
+
+
+def write_id_raster(
+    id_array: np.ndarray,
+    profile: dict,
+    output_path: Path,
+) -> None:
+    """
+    Write a category ID raster to a GeoTIFF file.
+
+    Parameters
+    ----------
+    id_array : np.ndarray
+        Category ID array (uint8).
+    profile : dict
+        Rasterio profile with CRS, transform, dimensions.
+    output_path : Path
+        Output file path.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(id_array, 1)
+        dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
+
+
+# ============================================================================
+# Full pipeline for a single model type
+# ============================================================================
+
+
+def run_in_memory_pipeline_for_model_type(
     model_type: constants.ModelType,
     grid_config: config_module.GridConfig,
-    output_dir: Path,
     categorical_model_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
@@ -638,16 +701,19 @@ def run_pipeline_for_model_type(
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     obs_subsample_step_for_clustered: int = 100,
-) -> None:
+    output_dir: Path | None = None,
+) -> tuple[np.ndarray, np.ndarray, dict]:
     """
-    Run the full VS30 generation pipeline for a single model type.
+    Run the full VS30 generation pipeline for a single model type in memory.
 
     Executes the complete pipeline in sequence:
 
     1. Bayesian update of categorical model values using observations (conditional).
-    2. Create initial 2-band VS30 raster from categorical model.
+    2. Create initial VS30 arrays from categorical model.
     3. Apply hybrid modifications for slope and coastal distance (geology only).
     4. Spatial adjustment using MVN conditioning with observations (conditional).
+
+    When output_dir is provided, intermediate files are written at each stage.
 
     Parameters
     ----------
@@ -655,8 +721,6 @@ def run_pipeline_for_model_type(
         Model type: either GEOLOGY or TERRAIN.
     grid_config : GridConfig
         Grid domain and resolution parameters.
-    output_dir : Path
-        Directory to save all pipeline outputs.
     categorical_model_csv : Path, optional
         Path to CSV file with categorical Vs30 values. Default from resources.
     clustered_observations_csv : Path, optional
@@ -675,104 +739,113 @@ def run_pipeline_for_model_type(
         Maximum memory for spatial boolean arrays.
     obs_subsample_step_for_clustered : int, optional
         Subsampling step for clustered observations.
+    output_dir : Path, optional
+        Directory to write intermediate and final rasters. If None, no files
+        are written.
 
-    Raises
-    ------
-    FileNotFoundError
-        If a pipeline step fails to produce its expected output file.
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, dict]
+        (final_vs30, final_stdv, profile)
     """
+    default_csv_files = {
+        constants.ModelType.GEOLOGY: constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE,
+        constants.ModelType.TERRAIN: constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE,
+    }
     if categorical_model_csv is None:
-        if model_type == constants.ModelType.GEOLOGY:
-            categorical_model_csv = (
-                constants.RESOURCE_PATH
-                / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-            )
-        elif model_type == constants.ModelType.TERRAIN:
-            categorical_model_csv = (
-                constants.RESOURCE_PATH
-                / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-            )
-        else:
+        if model_type not in default_csv_files:
             raise ValueError(f"Invalid model_type: {model_type}")
+        categorical_model_csv = constants.RESOURCE_PATH / default_csv_files[model_type]
 
-    output_dir = output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is not None:
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Starting full pipeline for {model_type}")
-    logger.info(f"Output directory: {output_dir}")
 
     # --- Step 1: Bayesian update of categorical model values (conditional) ---
     if do_bayesian_update:
         logger.info("\n=== STEP 1: Updating Categorical Models ===")
-        update_categorical_vs30_models(
+        posterior_df = compute_categorical_vs30_updates(
             categorical_model_csv=categorical_model_csv,
+            model_type=model_type,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
-            output_dir=output_dir,
-            model_type=model_type,
             n_proc=n_proc,
         )
 
-        posterior_csv = (
-            output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
-        )
-        if not posterior_csv.exists():
-            raise FileNotFoundError(f"Step 1 failed to produce {posterior_csv}")
+        if output_dir is not None:
+            posterior_csv_path = (
+                output_dir
+                / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+            )
+            posterior_df.to_csv(posterior_csv_path, index=False)
     else:
         logger.info(
             "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
         )
-        posterior_csv = categorical_model_csv
+        posterior_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
 
-    # --- Step 2: Create initial VS30 raster from categorical model ---
-    logger.info("\n=== STEP 2: Creating Initial Raster ===")
-    make_initial_vs30_raster(
-        output_dir=output_dir,
-        grid_config=grid_config,
-        terrain=(model_type == constants.ModelType.TERRAIN),
-        geology=(model_type == constants.ModelType.GEOLOGY),
-        geology_csv=(
-            posterior_csv if model_type == constants.ModelType.GEOLOGY else None
-        ),
-        terrain_csv=(
-            posterior_csv if model_type == constants.ModelType.TERRAIN else None
-        ),
+    # --- Step 2: Create initial VS30 arrays from categorical model ---
+    logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
+    vs30_array, stdv_array, id_array, profile = create_initial_vs30_arrays(
+        grid_config, model_type, posterior_df
     )
 
-    initial_raster = output_dir / (
-        constants.GEOLOGY_INITIAL_VS30_FILENAME
-        if model_type == constants.ModelType.GEOLOGY
-        else constants.TERRAIN_INITIAL_VS30_FILENAME
-    )
-    id_raster_name = (
-        constants.GEOLOGY_ID_FILENAME
-        if model_type == constants.ModelType.GEOLOGY
-        else constants.TERRAIN_ID_FILENAME
-    )
-    id_raster = output_dir / id_raster_name
+    if output_dir is not None:
+        id_filename = (
+            constants.GEOLOGY_ID_FILENAME
+            if model_type == constants.ModelType.GEOLOGY
+            else constants.TERRAIN_ID_FILENAME
+        )
+        write_id_raster(id_array, profile, output_dir / id_filename)
 
-    if not initial_raster.exists():
-        raise FileNotFoundError(f"Step 2 failed to produce {initial_raster}")
+        initial_filename = (
+            constants.GEOLOGY_INITIAL_VS30_FILENAME
+            if model_type == constants.ModelType.GEOLOGY
+            else constants.TERRAIN_INITIAL_VS30_FILENAME
+        )
+        write_vs30_raster(vs30_array, stdv_array, profile, output_dir / initial_filename)
 
-    # --- Step 3: Apply hybrid modifications for slope and coastal distance (geology only) ---
-    current_raster = initial_raster
+    # --- Step 3: Apply hybrid modifications (geology only) ---
+    current_vs30 = vs30_array
+    current_stdv = stdv_array
+    slope_array = None
+    coast_dist_array = None
 
     if model_type == constants.ModelType.GEOLOGY:
         logger.info(
-            "\n=== STEP 3: Creating Slope and Coastal Distance Adjusted Geology Raster ==="
+            "\n=== STEP 3: Slope and Coastal Distance Adjusted Geology ==="
         )
 
-        adjust_geology_vs30_by_slope_and_coastal_distance(
-            input_raster=initial_raster,
-            id_raster=id_raster,
-            output_dir=output_dir,
+        current_vs30, current_stdv, slope_array, coast_dist_array = (
+            compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile)
         )
-        current_raster = (
-            output_dir
-            / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME
-        )
-        if not current_raster.exists():
-            raise FileNotFoundError(f"Step 3 failed to produce {current_raster}")
+
+        if output_dir is not None:
+            write_single_band_raster(
+                slope_array,
+                profile,
+                output_dir / constants.SLOPE_RASTER_FILENAME,
+                constants.BAND_DESCRIPTION_SLOPE,
+                nodata=constants.NODATA_VALUE,
+            )
+            write_single_band_raster(
+                coast_dist_array,
+                profile,
+                output_dir / constants.COAST_DISTANCE_RASTER_FILENAME,
+                constants.BAND_DESCRIPTION_COAST_DISTANCE,
+                nodata=None,
+            )
+            write_vs30_raster(
+                current_vs30,
+                current_stdv,
+                profile,
+                output_dir
+                / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME,
+                constants.BAND_DESCRIPTION_VS30_HYBRID,
+                constants.BAND_DESCRIPTION_STDV_HYBRID,
+            )
 
     # --- Step 4: MVN spatial adjustment using observations (conditional) ---
     if mvn:
@@ -787,27 +860,38 @@ def run_pipeline_for_model_type(
                 "At least one of clustered or independent observations must be specified."
             )
 
-        spatial_fit(
-            input_raster=current_raster,
+        current_vs30, current_stdv = compute_spatial_adjustment_on_grid(
+            vs30_array=current_vs30,
+            stdv_array=current_stdv,
+            profile=profile,
             observations_csv=spatial_obs_csv,
-            model_values_csv=posterior_csv,
-            output_dir=output_dir,
+            model_values_df=posterior_df,
             model_type=model_type,
             noisy=noisy,
             n_proc=n_proc,
             is_clustered_observations=(independent_observations_csv is None),
             obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+            slope_array=slope_array,
+            coast_dist_array=coast_dist_array,
         )
     else:
         logger.info("\n=== STEP 4: SKIPPED - MVN spatial adjustment disabled ===")
-        # Copy the current raster as the final output
+
+    if output_dir is not None:
         output_filename = constants.OUTPUT_FILENAMES[model_type]
-        output_path = output_dir / output_filename
-        shutil.copyfile(current_raster, output_path)
+        write_vs30_raster(
+            current_vs30, current_stdv, profile, output_dir / output_filename
+        )
 
     logger.info(f"\nFull pipeline for {model_type} completed successfully")
-    logger.info(f"  Final output available in: {output_dir}")
+
+    return current_vs30, current_stdv, profile
+
+
+# ============================================================================
+# Full grid pipeline (orchestration)
+# ============================================================================
 
 
 def compute_grid(
@@ -848,8 +932,8 @@ def compute_grid(
     grid_config : GridConfig
         Grid domain and resolution parameters.
     output_dir : Path, optional
-        Directory to save all pipeline outputs. If None, a temporary directory
-        is used and cleaned up after results are read.
+        Directory to save all pipeline outputs (intermediate and final rasters).
+        If None, no files are written.
     model_type : ModelType, optional
         Which model(s) to run: GEOLOGY, TERRAIN, or COMBINED (default).
     combination_method : CombinationMethod, optional
@@ -888,110 +972,63 @@ def compute_grid(
         - ``"combined_vs30"``, ``"combined_stdv"`` : 2D arrays (when both models are computed)
         - ``"profile"`` : rasterio profile dict with CRS, transform, dimensions, etc.
     """
-    # Use a temporary directory if output_dir is not provided
-    temp_dir = None
-    if output_dir is None:
-        temp_dir = tempfile.TemporaryDirectory()
-        output_dir = Path(temp_dir.name)
-
-    try:
-        result = run_grid_pipeline(
-            grid_config=grid_config,
-            output_dir=output_dir,
-            model_type=model_type,
-            combination_method=combination_method,
-            combine_ratio=combine_ratio,
-            geology_categorical_csv=geology_categorical_csv,
-            terrain_categorical_csv=terrain_categorical_csv,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
-            do_bayesian_update=do_bayesian_update,
-            mvn=mvn,
-            noisy=noisy,
-            n_proc=n_proc,
-            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-            obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
-        )
-    finally:
-        if temp_dir is not None:
-            temp_dir.cleanup()
-
-    return result
-
-
-def read_raster_bands(path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    """Read VS30 and standard deviation bands from a 2-band raster file.
-
-    Returns (vs30_array, stdv_array, profile).
-    """
-    with rasterio.open(path) as src:
-        vs30 = src.read(1)
-        stdv = src.read(2)
-        profile = src.profile.copy()
-    return vs30, stdv, profile
-
-
-def run_grid_pipeline(
-    grid_config: config_module.GridConfig,
-    output_dir: Path,
-    model_type: constants.ModelType,
-    combination_method: constants.CombinationMethod,
-    combine_ratio: float | None,
-    geology_categorical_csv: Path | None,
-    terrain_categorical_csv: Path | None,
-    clustered_observations_csv: Path | None,
-    independent_observations_csv: Path | None,
-    do_bayesian_update: bool,
-    mvn: bool,
-    noisy: bool,
-    n_proc: int,
-    max_spatial_boolean_array_memory_gb: float,
-    obs_subsample_step_for_clustered: int,
-) -> dict[str, np.ndarray | dict]:
-    """Run the grid pipeline and return computed raster data."""
     start_time = time.time()
 
-    output_dir = output_dir.resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if output_dir is not None:
+        output_dir = output_dir.resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    run_geology = model_type in (constants.ModelType.GEOLOGY, constants.ModelType.COMBINED)
-    run_terrain = model_type in (constants.ModelType.TERRAIN, constants.ModelType.COMBINED)
+    run_geology = model_type in (
+        constants.ModelType.GEOLOGY,
+        constants.ModelType.COMBINED,
+    )
+    run_terrain = model_type in (
+        constants.ModelType.TERRAIN,
+        constants.ModelType.COMBINED,
+    )
+
+    result: dict[str, np.ndarray | dict] = {}
+    profile = None
 
     # 1. Run Geology Pipeline
     if run_geology:
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
-        run_pipeline_for_model_type(
+        geol_vs30, geol_stdv, profile = run_in_memory_pipeline_for_model_type(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
             categorical_model_csv=geology_categorical_csv,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
-            output_dir=output_dir,
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
+            output_dir=output_dir,
         )
+        result["geology_vs30"] = geol_vs30
+        result["geology_stdv"] = geol_stdv
 
     # 2. Run Terrain Pipeline
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
-        run_pipeline_for_model_type(
+        terr_vs30, terr_stdv, profile = run_in_memory_pipeline_for_model_type(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
             categorical_model_csv=terrain_categorical_csv,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
-            output_dir=output_dir,
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
+            output_dir=output_dir,
         )
+        result["terrain_vs30"] = terr_vs30
+        result["terrain_stdv"] = terr_stdv
 
     # 3. Combine geology and terrain models using weighted average
     if run_geology and run_terrain:
@@ -999,46 +1036,41 @@ def run_grid_pipeline(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
-        combined_tif = output_dir / constants.COMBINED_VS30_FILENAME
-        combine(
-            geology_tif=output_dir
-            / constants.OUTPUT_FILENAMES[constants.ModelType.GEOLOGY],
-            terrain_tif=output_dir
-            / constants.OUTPUT_FILENAMES[constants.ModelType.TERRAIN],
-            output_path=combined_tif,
+        combined_vs30, combined_stdv = combine_model_arrays(
+            geol_vs30=geol_vs30,
+            geol_stdv=geol_stdv,
+            terr_vs30=terr_vs30,
+            terr_stdv=terr_stdv,
             combination_method=combination_method,
             combine_ratio=combine_ratio,
         )
+        result["combined_vs30"] = combined_vs30
+        result["combined_stdv"] = combined_stdv
 
-    elapsed_time = time.time() - start_time
-    logger.info(f"  Total execution time: {elapsed_time:.1f} seconds")
-    logger.info(f"  Output available in: {output_dir}")
-
-    # Read output rasters into the result dict
-    result: dict[str, np.ndarray | dict] = {}
-    profile = None
-
-    if run_geology:
-        geol_path = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.GEOLOGY]
-        geol_vs30, geol_stdv, profile = read_raster_bands(geol_path)
-        result["geology_vs30"] = geol_vs30
-        result["geology_stdv"] = geol_stdv
-
-    if run_terrain:
-        terr_path = output_dir / constants.OUTPUT_FILENAMES[constants.ModelType.TERRAIN]
-        terr_vs30, terr_stdv, profile = read_raster_bands(terr_path)
-        result["terrain_vs30"] = terr_vs30
-        result["terrain_stdv"] = terr_stdv
-
-    if run_geology and run_terrain:
-        combined_path = output_dir / constants.COMBINED_VS30_FILENAME
-        comb_vs30, comb_stdv, profile = read_raster_bands(combined_path)
-        result["combined_vs30"] = comb_vs30
-        result["combined_stdv"] = comb_stdv
+        if output_dir is not None:
+            # Restore nodata in combined arrays before writing
+            write_vs30_raster(
+                np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
+                np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                profile,
+                output_dir / constants.COMBINED_VS30_FILENAME,
+                constants.BAND_DESCRIPTION_VS30_COMBINED,
+                constants.BAND_DESCRIPTION_STDV_COMBINED,
+            )
 
     result["profile"] = profile
 
+    elapsed_time = time.time() - start_time
+    logger.info(f"  Total execution time: {elapsed_time:.1f} seconds")
+    if output_dir is not None:
+        logger.info(f"  Output available in: {output_dir}")
+
     return result
+
+
+# ============================================================================
+# Point-based pipeline
+# ============================================================================
 
 
 def compute_at_locations(
