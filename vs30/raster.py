@@ -1,7 +1,9 @@
 """Categorical VS30 raster creation and hybrid geology modifications."""
 
 import logging
+import os
 import tarfile
+import tempfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -117,8 +119,140 @@ def load_model_values_from_csv(csv_path: str) -> np.ndarray:
     return df[required_cols].values
 
 
+def create_category_id_array(
+    model_type: constants.ModelType,
+    xmin: float,
+    xmax: float,
+    ymin: float,
+    ymax: float,
+    dx: float,
+    dy: float,
+) -> tuple[np.ndarray, dict]:
+    """
+    Create category ID array for terrain or geology in memory.
+
+    For terrain: Resamples IwahashiPike.tif to target grid using reprojection.
+    For geology: Rasterizes qmap.shp shapefile to target grid.
+
+    Parameters
+    ----------
+    model_type : constants.ModelType
+        Either ModelType.TERRAIN or ModelType.GEOLOGY.
+    xmin : float
+        Grid minimum easting (m, NZTM2000).
+    xmax : float
+        Grid maximum easting (m, NZTM2000).
+    ymin : float
+        Grid minimum northing (m, NZTM2000).
+    ymax : float
+        Grid maximum northing (m, NZTM2000).
+    dx : float
+        Grid cell width (m).
+    dy : float
+        Grid cell height (m).
+
+    Returns
+    -------
+    tuple[np.ndarray, dict]
+        A tuple containing:
+        - The category ID array (uint8).
+        - The rasterio profile dict describing the array's spatial properties.
+
+    Raises
+    ------
+    ValueError
+        If model_type is not a valid ModelType.
+    FileNotFoundError
+        If input files don't exist.
+    """
+    if model_type not in constants.ModelType:
+        raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
+
+    # Common setup: calculate grid dimensions and transform
+    nx = round((xmax - xmin) / dx)
+    ny = round((ymax - ymin) / dy)
+    dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
+
+    # Common output raster profile
+    profile = {
+        "driver": constants.GEOTIFF_DRIVER,
+        "width": nx,
+        "height": ny,
+        "count": 1,
+        "dtype": "uint8",
+        "crs": constants.NZTM_CRS,
+        "transform": dst_transform,
+        "nodata": constants.RASTER_ID_NODATA_VALUE,
+        "compress": constants.GEOTIFF_COMPRESSION,
+    }
+
+    if model_type == constants.ModelType.TERRAIN:
+        # Resample terrain raster to target grid
+        terrain_raster_path = constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME
+        if not terrain_raster_path.exists():
+            raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
+
+        # Reproject into a numpy destination array
+        id_array = np.full((ny, nx), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
+        with rasterio.open(terrain_raster_path) as src:
+            rasterio.warp.reproject(
+                source=rasterio.band(src, 1),
+                destination=id_array,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=dst_transform,
+                dst_crs=constants.NZTM_CRS,
+                resampling=rasterio.enums.Resampling.nearest,
+            )
+
+    else:  # geology
+        # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
+        ensure_shapefile_extracted(
+            constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+        )
+
+        # Rasterize geology shapefile to target grid
+        geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+        if not geology_shapefile_path.exists():
+            raise FileNotFoundError(
+                f"Geology shapefile not found: {geology_shapefile_path}"
+            )
+
+        # Read shapefile
+        gdf = gpd.read_file(geology_shapefile_path)
+        if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
+            raise ValueError(
+                f"Shapefile {geology_shapefile_path} missing "
+                f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
+            )
+
+        # Ensure shapefile is in NZTM CRS (EPSG:2193)
+        if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
+            gdf = gdf.to_crs(constants.NZTM_CRS)
+
+        # Create shapes iterator for rasterization
+        shapes = (
+            (geom, value)
+            for geom, value in zip(
+                gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]
+            )
+        )
+
+        # Rasterize to array
+        id_array = rasterio.features.rasterize(
+            shapes=shapes,
+            out_shape=(ny, nx),
+            transform=dst_transform,
+            fill=constants.RASTER_ID_NODATA_VALUE,
+            dtype=np.uint8,
+            all_touched=False,
+        )
+
+    return id_array, profile
+
+
 def create_category_id_raster(
-    model_type: str,
+    model_type: constants.ModelType,
     output_dir: Path,
     xmin: float,
     xmax: float,
@@ -164,15 +298,11 @@ def create_category_id_raster(
     FileNotFoundError
         If input files don't exist.
     """
-    if model_type not in constants.ModelType:
-        raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
+    id_array, profile = create_category_id_array(
+        model_type, xmin, xmax, ymin, ymax, dx, dy
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Common setup: calculate grid dimensions and transform
-    nx = round((xmax - xmin) / dx)
-    ny = round((ymax - ymin) / dy)
-    dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
     output_filename = (
         constants.TERRAIN_ID_FILENAME
         if model_type == constants.ModelType.TERRAIN
@@ -180,84 +310,9 @@ def create_category_id_raster(
     )
     output_path = output_dir / output_filename
 
-    # Common output raster profile
-    profile = {
-        "driver": constants.GEOTIFF_DRIVER,
-        "width": nx,
-        "height": ny,
-        "count": 1,
-        "dtype": "uint8",
-        "crs": constants.NZTM_CRS,
-        "transform": dst_transform,
-        "nodata": constants.RASTER_ID_NODATA_VALUE,
-        "compress": constants.GEOTIFF_COMPRESSION,
-    }
-
-    if model_type == constants.ModelType.TERRAIN:
-        # Resample terrain raster to target grid
-        terrain_raster_path = constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME
-        if not terrain_raster_path.exists():
-            raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
-
-        # Read source raster and reproject
-        with rasterio.open(terrain_raster_path) as src:
-            with rasterio.open(output_path, "w", **profile) as dst:
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, 1),
-                    destination=rasterio.band(dst, 1),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=dst_transform,
-                    dst_crs=constants.NZTM_CRS,
-                    resampling=rasterio.enums.Resampling.nearest,
-                )
-                dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
-
-    else:  # geology
-        # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
-        ensure_shapefile_extracted(
-            constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
-        )
-
-        # Rasterize geology shapefile to target grid
-        geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
-        if not geology_shapefile_path.exists():
-            raise FileNotFoundError(
-                f"Geology shapefile not found: {geology_shapefile_path}"
-            )
-
-        # Read shapefile
-        gdf = gpd.read_file(geology_shapefile_path)
-        if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
-            raise ValueError(
-                f"Shapefile {geology_shapefile_path} missing "
-                f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
-            )
-
-        # Ensure shapefile is in NZTM CRS (EPSG:2193)
-        if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
-            gdf = gdf.to_crs(constants.NZTM_CRS)
-
-        # Create shapes iterator for rasterization
-        shapes = (
-            (geom, value)
-            for geom, value in zip(
-                gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]
-            )
-        )
-
-        # Rasterize to output file
-        with rasterio.open(output_path, "w", **profile) as dst:
-            burned = rasterio.features.rasterize(
-                shapes=shapes,
-                out_shape=(ny, nx),
-                transform=dst_transform,
-                fill=constants.RASTER_ID_NODATA_VALUE,
-                dtype=np.uint8,
-                all_touched=False,
-            )
-            dst.write(burned, 1)
-            dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(id_array, 1)
+        dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
 
     return output_path
 
@@ -317,6 +372,92 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
     )
 
 
+def create_vs30_arrays_from_ids(
+    id_array: np.ndarray,
+    model_values_df: pd.DataFrame,
+    model_type: constants.ModelType | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Map category IDs to VS30 mean and standard deviation arrays in memory.
+
+    Uses the priority-based column selection to find the best available VS30
+    mean and standard deviation columns in the DataFrame, then maps each
+    category ID to its corresponding values.
+
+    Parameters
+    ----------
+    id_array : np.ndarray
+        Category ID array (uint8) from terrain or geology rasterization.
+    model_values_df : pd.DataFrame
+        DataFrame containing category ID-to-VS30 mapping. Must have an 'id'
+        column and at least one pair of mean/stdv columns recognized by
+        ``select_vs30_columns_by_priority``.
+    model_type : constants.ModelType or None, optional
+        Model type label used in progress bar description. Default None.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        A tuple containing:
+        - vs30_array (float32): VS30 mean values for each pixel.
+        - stdv_array (float32): VS30 standard deviation values for each pixel.
+
+    Raises
+    ------
+    ValueError
+        If the DataFrame is missing required columns or an ID in the array
+        is not found in the DataFrame.
+    """
+    # Strip whitespace from column names without copying the DataFrame
+    stripped_columns = {c.strip(): c for c in model_values_df.columns}
+    columns_list = list(stripped_columns.keys())
+
+    mean_col, std_col = select_vs30_columns_by_priority(columns_list)
+
+    if constants.STANDARD_ID_COLUMN not in columns_list:
+        raise ValueError(
+            f"DataFrame is missing required column: {constants.STANDARD_ID_COLUMN}"
+        )
+
+    # Map original column names through stripped lookup
+    id_col_orig = stripped_columns[constants.STANDARD_ID_COLUMN]
+    mean_col_orig = stripped_columns[mean_col]
+    std_col_orig = stripped_columns[std_col]
+
+    id_to_vs30_values = dict(zip(
+        model_values_df[id_col_orig].astype(int),
+        zip(
+            model_values_df[mean_col_orig].astype(float),
+            model_values_df[std_col_orig].astype(float),
+        ),
+    ))
+
+    # Create output arrays
+    vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
+    stdv_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
+
+    # Map pixel IDs to VS30 values
+    unique_ids = np.unique(id_array)
+    valid_ids = unique_ids[
+        (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
+    ]
+
+    label = str(model_type).capitalize() if model_type else "Model"
+    for pixel_id in tqdm(valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"):
+        if pixel_id in id_to_vs30_values:
+            mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
+            mask = id_array == pixel_id
+            vs30_array[mask] = mean_vs30
+            stdv_array[mask] = stddev_vs30
+        else:
+            raise ValueError(
+                f"ID {pixel_id} found in array but not in DataFrame. "
+                f"Available IDs: {sorted(id_to_vs30_values.keys())}"
+            )
+
+    return vs30_array, stdv_array
+
+
 def create_vs30_raster_from_ids(
     id_raster_path: Path,
     csv_path: Path,
@@ -343,6 +484,8 @@ def create_vs30_raster_from_ids(
         The 'id' column values must match the ID values in the spatial raster.
     output_path : Path
         Path where output 2-band raster will be saved.
+    model_type : constants.ModelType or None, optional
+        Model type label used in progress bar description. Default None.
 
     Returns
     -------
@@ -363,7 +506,7 @@ def create_vs30_raster_from_ids(
         constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
     )
 
-    # Load CSV and create ID-to-values mapping
+    # Load CSV into DataFrame
     csv_file_path = constants.RESOURCE_PATH / csv_path
     if not csv_file_path.exists():
         raise FileNotFoundError(
@@ -372,52 +515,16 @@ def create_vs30_raster_from_ids(
         )
 
     df = pd.read_csv(csv_file_path, skipinitialspace=True)
-    df.columns = df.columns.str.strip()
-
-    mean_col, std_col = select_vs30_columns_by_priority(list(df.columns))
-
-    required_cols = [constants.STANDARD_ID_COLUMN, mean_col, std_col]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"CSV file {csv_file_path} is missing required columns: {missing_cols}"
-        )
-
-    id_to_vs30_values = {
-        int(row[constants.STANDARD_ID_COLUMN]): (
-            float(row[mean_col]),
-            float(row[std_col]),
-        )
-        for _, row in df.iterrows()
-    }
 
     # Read ID raster
     with rasterio.open(id_raster_path) as src:
         id_array = src.read(1)
         profile = src.profile.copy()
 
-    # Create output arrays
-    vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
-    stdv_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
-
-    # Map pixel IDs to VS30 values
-    unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[
-        (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
-    ]
-
-    label = str(model_type).capitalize() if model_type else "Model"
-    for pixel_id in tqdm(valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"):
-        if pixel_id in id_to_vs30_values:
-            mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
-            mask = id_array == pixel_id
-            vs30_array[mask] = mean_vs30
-            stdv_array[mask] = stddev_vs30
-        else:
-            raise ValueError(
-                f"ID {pixel_id} found in raster {id_raster_path} but not in CSV {csv_path}. "
-                f"Available IDs in CSV: {sorted(id_to_vs30_values.keys())}"
-            )
+    # Map IDs to VS30 values using the in-memory function
+    vs30_array, stdv_array = create_vs30_arrays_from_ids(
+        id_array, df, model_type=model_type
+    )
 
     profile.update(
         {
@@ -438,6 +545,102 @@ def create_vs30_raster_from_ids(
 
     logger.info(f"Completed VS30 raster: {output_path}")
     return output_path
+
+
+def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
+    """
+    Compute distance to the nearest coast (in meters) as an in-memory array.
+
+    Uses GDAL to rasterize the coast shapefile and compute proximity distances,
+    following the legacy implementation for numerical consistency. A temporary
+    file is used internally because GDAL requires a file path for rasterization
+    and proximity computation. The temporary file is cleaned up when done.
+
+    Computes on full NZ land extent to ensure accurate distances for all
+    observation locations, even those outside the configured study domain.
+
+    Parameters
+    ----------
+    template_profile : dict
+        Rasterio profile of the reference raster (to match resolution and bounds).
+
+    Returns
+    -------
+    np.ndarray
+        The distance array (float32) matching the template grid dimensions.
+    """
+    ensure_shapefile_extracted(
+        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
+    )
+
+    # Get template bounds for final output extent
+    dx = template_profile["transform"].a
+    dy = abs(template_profile["transform"].e)
+    s_xmin = template_profile["transform"].c
+    s_ymax = template_profile["transform"].f
+    s_xmax = s_xmin + template_profile["width"] * dx
+    s_ymin = s_ymax - template_profile["height"] * dy
+
+    # Extend to full NZ land coverage to ensure accurate distances
+    # (matching legacy _full_land_grid behavior)
+    g_xmin = min(constants.FULL_NZ_LAND_XMIN, s_xmin)
+    g_xmax = max(constants.FULL_NZ_LAND_XMAX, s_xmax)
+    g_ymin = min(constants.FULL_NZ_LAND_YMIN, s_ymin)
+    g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
+
+    # Check if grid was extended beyond template bounds (requires cropping later)
+    grid_was_extended = (
+        g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
+    )
+
+    # GDAL requires a file path, so use a temporary file
+    fd, tmp_path = tempfile.mkstemp(suffix=".tif")
+    os.close(fd)
+
+    try:
+        # Rasterize land polygons using GDAL (legacy approach)
+        # Use UInt16 data type as in legacy code (sufficient for distance range)
+        ds = gdal.Rasterize(
+            tmp_path,
+            str(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH),
+            creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
+            outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
+            xRes=dx,
+            yRes=dy,
+            noData=0,
+            burnValues=1,
+            outputType=gdal.GetDataTypeByName("UInt16"),
+        )
+
+        # Compute proximity distances using GDAL (legacy approach)
+        # DISTUNITS=GEO ensures distances in georeferenced units (meters)
+        band = ds.GetRasterBand(1)
+        band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
+        # Note: ComputeProximity modifies the raster in-place
+        ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
+        band = None
+        ds = None
+
+        # If grid was extended, crop back to template bounds
+        if grid_was_extended:
+            with rasterio.open(tmp_path) as src:
+                extended_data = src.read(1)
+
+            col_off = round((s_xmin - g_xmin) / dx)
+            row_off = round((g_ymax - s_ymax) / dy)
+
+            distance_meters = extended_data[
+                row_off : row_off + template_profile["height"],
+                col_off : col_off + template_profile["width"],
+            ].astype(np.float32)
+        else:
+            with rasterio.open(tmp_path) as src:
+                distance_meters = src.read(1).astype(np.float32)
+    finally:
+        # Clean up the temporary file
+        Path(tmp_path).unlink(missing_ok=True)
+
+    return distance_meters
 
 
 def create_coast_distance_raster(
@@ -466,80 +669,61 @@ def create_coast_distance_raster(
         - The updated profile used for saving.
     """
     logger.info("Creating coast distance raster...")
-    ensure_shapefile_extracted(
-        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
-    )
 
-    # Get template bounds for final output extent
-    dx = template_profile["transform"].a
-    dy = abs(template_profile["transform"].e)
-    s_xmin = template_profile["transform"].c
-    s_ymax = template_profile["transform"].f
-    s_xmax = s_xmin + template_profile["width"] * dx
-    s_ymin = s_ymax - template_profile["height"] * dy
+    distance_meters = compute_coast_distance_array(template_profile)
 
-    # Extend to full NZ land coverage to ensure accurate distances
-    # (matching legacy _full_land_grid behavior)
-    g_xmin = min(constants.FULL_NZ_LAND_XMIN, s_xmin)
-    g_xmax = max(constants.FULL_NZ_LAND_XMAX, s_xmax)
-    g_ymin = min(constants.FULL_NZ_LAND_YMIN, s_ymin)
-    g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
-
-    # Check if grid was extended beyond template bounds (requires cropping later)
-    grid_was_extended = (
-        g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
-    )
-
-    # Rasterize land polygons using GDAL (legacy approach)
-    # Use UInt16 data type as in legacy code (sufficient for distance range)
-    ds = gdal.Rasterize(
-        str(output_path),
-        str(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH),
-        creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-        outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
-        xRes=dx,
-        yRes=dy,
-        noData=0,
-        burnValues=1,
-        outputType=gdal.GetDataTypeByName("UInt16"),
-    )
-
-    # Compute proximity distances using GDAL (legacy approach)
-    # DISTUNITS=GEO ensures distances in georeferenced units (meters)
-    band = ds.GetRasterBand(1)
-    band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
-    # Note: ComputeProximity modifies the raster in-place
-    ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
-    band = None
-    ds = None
-
-    # Output profile (shared by both branches)
     profile = template_profile.copy()
     profile.update(
         {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
     )
 
-    # If grid was extended, crop back to template bounds
-    if grid_was_extended:
-        with rasterio.open(output_path) as src:
-            extended_data = src.read(1)
-
-        col_off = round((s_xmin - g_xmin) / dx)
-        row_off = round((g_ymax - s_ymax) / dy)
-
-        distance_meters = extended_data[
-            row_off : row_off + template_profile["height"],
-            col_off : col_off + template_profile["width"],
-        ].astype(np.float32)
-
-        with rasterio.open(output_path, "w", **profile) as dst:
-            dst.write(distance_meters, 1)
-            dst.descriptions = (constants.BAND_DESCRIPTION_COAST_DISTANCE,)
-    else:
-        with rasterio.open(output_path) as src:
-            distance_meters = src.read(1).astype(np.float32)
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(distance_meters, 1)
+        dst.descriptions = (constants.BAND_DESCRIPTION_COAST_DISTANCE,)
 
     return distance_meters, profile
+
+
+def compute_slope_array(template_profile: dict) -> np.ndarray:
+    """
+    Compute a slope array matching the target grid in memory.
+
+    Resamples the source slope raster to the target grid properties without
+    writing any file to disk.
+
+    Parameters
+    ----------
+    template_profile : dict
+        Rasterio profile of the reference raster (to match resolution and bounds).
+
+    Returns
+    -------
+    np.ndarray
+        The slope array matching the template grid dimensions.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the source slope raster is not found.
+    """
+    slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    if not slope_raster_path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
+
+    # Reproject the slope raster onto the specified grid
+    destination = np.zeros((template_profile["height"], template_profile["width"]))
+    with rasterio.open(slope_raster_path) as src:
+        rasterio.warp.reproject(
+            source=rasterio.band(src, 1),
+            destination=destination,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=template_profile["transform"],
+            dst_crs=template_profile["crs"],
+            resampling=rasterio.enums.Resampling.nearest,
+        )
+
+    return destination
 
 
 def create_slope_raster(
@@ -565,22 +749,9 @@ def create_slope_raster(
         - The updated profile used for saving.
     """
     logger.info("Creating slope raster...")
-    slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
-    if not slope_raster_path.exists():
-        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    # Reproject the slope raster onto the specified grid
-    destination = np.zeros((template_profile["height"], template_profile["width"]))
-    with rasterio.open(slope_raster_path) as src:
-        rasterio.warp.reproject(
-            source=rasterio.band(src, 1),
-            destination=destination,
-            src_transform=src.transform,
-            src_crs=src.crs,
-            dst_transform=template_profile["transform"],
-            dst_crs=template_profile["crs"],
-            resampling=rasterio.enums.Resampling.nearest,
-        )
+    destination = compute_slope_array(template_profile)
+
     profile = template_profile.copy()
     profile.update(
         {
@@ -776,29 +947,23 @@ def apply_hybrid_geology_modifications(
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
         # Prevent log10(0) or log10(-NODATA) by capping at constants.MIN_SLOPE_FOR_LOG
-        modified_slope = np.copy(slope_array)
-        modified_slope[
-            (modified_slope <= 0) | (modified_slope == constants.NODATA_VALUE)
-        ] = constants.MIN_SLOPE_FOR_LOG
-        safe_log_slope = np.log10(modified_slope)
+        safe_log_slope = np.log10(np.where(
+            (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
+            constants.MIN_SLOPE_FOR_LOG,
+            slope_array,
+        ))
 
         for spec in constants.HYBRID_VS30_PARAMS:
-            gid = spec.gid
-            slope_limits = spec.slope_limits
-            # Compute log10 of vs30 values at runtime
-            vs30_limits_log10 = np.log10(np.array(spec.vs30_values))
-
             # Skip ID 4 if mod6 is active (handled separately later)
-            if gid == 4 and mod6:
+            if spec.gid == 4 and mod6:
                 continue
 
-            # Find mask: ID matches
-            mask = id_array == gid
+            mask = id_array == spec.gid
 
             if np.any(mask):
-                # Interpolate for all pixels in this group
+                vs30_limits_log10 = np.log10(np.array(spec.vs30_values))
                 interpolated_val = np.interp(
-                    safe_log_slope[mask], slope_limits, vs30_limits_log10
+                    safe_log_slope[mask], spec.slope_limits, vs30_limits_log10
                 )
                 vs30_array[mask] = 10**interpolated_val
 

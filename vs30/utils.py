@@ -137,12 +137,17 @@ def resolve_observation_csv(
     """
     Resolve an observation CSV path from an explicit argument or config default.
 
+    If csv_path is already set, returns it directly. Otherwise, attempts to
+    locate the file specified by config_filename inside res_dir. The string
+    ``"none"`` is treated as absent (returns None).
+
     Parameters
     ----------
     csv_path : Path or None
         Explicitly provided path.
     config_filename : str or None
         Filename from config (e.g., cfg.clustered_observations_file).
+        The string ``"none"`` is treated as None.
     res_dir : Path
         Resources directory to look for config-specified files.
 
@@ -153,7 +158,7 @@ def resolve_observation_csv(
     """
     if csv_path is not None:
         return csv_path
-    if config_filename is not None:
+    if config_filename is not None and config_filename != "none":
         candidate = res_dir / config_filename
         if candidate.exists():
             return candidate

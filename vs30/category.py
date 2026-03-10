@@ -247,14 +247,12 @@ def update_with_independent_data(
                 observation_row[constants.COL_VS30],
             )
 
-            new_mean = compute_bayesian_posterior_mean(
+            # Update running values for next iteration
+            current_mean = compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
                 observation_row[constants.COL_VS30],
             )
-
-            # Update running values for next iteration
-            current_mean = new_mean
             current_std = np.sqrt(new_variance)
             current_n += 1
 

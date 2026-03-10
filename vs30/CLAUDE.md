@@ -61,21 +61,20 @@ pip install -e /path/to/vs30
 The package provides a `vs30` CLI entry point via Typer. Main commands:
 
 ```bash
-# Run the full pipeline (most common) - generates raster grids
-vs30 grid
+# Run the full pipeline using a fixed model version (most common) - generates raster grids
+vs30 grid output_dir foster_2019
 
-# Compute Vs30 at specific lat/lon locations (without generating rasters)
-vs30 points \
-    --locations-csv sites.csv \
-    --output-csv results.csv
+# Run the grid pipeline with a custom config file and explicit parameters
+vs30 grid-config output_dir --config my_config.yaml
 
-# Individual pipeline stages:
-vs30 update-priors                     # Bayesian update of category means/stdev
-vs30 make-initial-vs30-raster          # Convert categorical models to raster
-vs30 adjust-geology-vs30-by-slope-and-coastal-distance  # Apply hybrid modifications
-vs30 spatial-fit                       # MVN-based spatial adjustments
-vs30 combine                           # Merge geology and terrain models
-vs30 plot-posterior-values             # Visualize posterior distributions
+# Compute Vs30 at specific lat/lon locations using a fixed model version
+vs30 points sites.csv results.csv foster_2019
+
+# Compute Vs30 at locations with custom config and explicit parameters
+vs30 points-config sites.csv results.csv --config my_config.yaml
+
+# Bayesian update of category means/stdev (standalone)
+vs30 update-priors categorical_model.csv output_dir --model-type geology
 ```
 
 ### Location-Based Queries
@@ -83,23 +82,19 @@ vs30 plot-posterior-values             # Visualize posterior distributions
 The `points` command computes Vs30 at specific latitude/longitude points without generating full raster grids. This is efficient for querying a small number of sites.
 
 ```bash
-# Basic usage
-vs30 points \
-    --locations-csv sites.csv \
-    --output-csv results.csv
+# Basic usage with a fixed model version
+vs30 points sites.csv results.csv foster_2019
 
 # With custom column names
-vs30 points \
-    --locations-csv sites.csv \
+vs30 points sites.csv results.csv foster_2019 \
     --lon-column lon \
-    --lat-column lat \
-    --output-csv results.csv
+    --lat-column lat
 
-# With coastal distance raster for hybrid geology modifications
-vs30 points \
-    --locations-csv sites.csv \
-    --output-csv results.csv \
-    --coast-distance-raster /path/to/coast_distance.tif
+# Using points-config for full control over parameters
+vs30 points-config sites.csv results.csv \
+    --config my_config.yaml \
+    --geology-csv my_geology.csv \
+    --terrain-csv my_terrain.csv
 ```
 
 Input CSV must have longitude and latitude columns (WGS84). Output includes geology/terrain IDs, intermediate Vs30 values, and final combined Vs30.

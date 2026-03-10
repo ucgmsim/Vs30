@@ -330,6 +330,7 @@ KEY_MAX_DIST_M: str = "max_dist_m"
 KEY_MAX_POINTS: str = "max_points"
 KEY_NOISY: str = "noisy"
 KEY_COV_REDUC: str = "cov_reduc"
+KEY_CORR_ZERO: str = "corr_zero"
 
 # Required columns for observation DataFrames
 REQUIRED_OBSERVATION_COLUMNS: list[str] = [

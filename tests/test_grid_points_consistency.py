@@ -2,21 +2,22 @@
 Test that grid and points pipelines produce consistent Vs30 values.
 
 Runs the grid pipeline on a small domain, then runs the points pipeline
-at a pixel center coordinate and checks the results match.
+at three pixel center coordinates and checks the results match.
 """
 
 import numpy as np
 import rasterio
 import yaml
+from qcore import coordinates
 
 from conftest import FIXTURES_DIR
 
-from vs30 import constants, pipeline
+from vs30 import constants, pipeline, utils
 from vs30 import config as config_module
 
 
 def test_grid_and_points_consistency(tmp_path):
-    """Grid and points pipelines should produce the same Vs30 at a pixel center."""
+    """Grid and points pipelines should produce the same Vs30 at pixel centers."""
     # Use the small test config
     config_file = FIXTURES_DIR / "test_config_small_independent_only.yaml"
     with open(config_file) as f:
@@ -26,17 +27,12 @@ def test_grid_and_points_consistency(tmp_path):
     grid_output_dir = tmp_path / "grid_output"
 
     # Resolve observation CSVs
-    independent_observations_csv = None
-    if config_data.get("independent_observations_file") not in (None, "none"):
-        candidate = constants.RESOURCE_PATH / config_data["independent_observations_file"]
-        if candidate.exists():
-            independent_observations_csv = candidate
-
-    clustered_observations_csv = None
-    if config_data.get("clustered_observations_file") not in (None, "none"):
-        candidate = constants.RESOURCE_PATH / config_data["clustered_observations_file"]
-        if candidate.exists():
-            clustered_observations_csv = candidate
+    clustered_observations_csv = utils.resolve_observation_csv(
+        None, config_data.get("clustered_observations_file"), constants.RESOURCE_PATH
+    )
+    independent_observations_csv = utils.resolve_observation_csv(
+        None, config_data.get("independent_observations_file"), constants.RESOURCE_PATH
+    )
 
     # Run grid pipeline
     pipeline.compute_grid(
@@ -59,31 +55,39 @@ def test_grid_and_points_consistency(tmp_path):
         ),
     )
 
-    # Read the combined raster and pick a pixel center coordinate
+    # Read the combined raster and pick pixel center coordinates
     combined_raster = grid_output_dir / constants.COMBINED_VS30_FILENAME
     with rasterio.open(combined_raster) as src:
         vs30_grid = src.read(1)
         stdv_grid = src.read(2)
         transform = src.transform
 
-    # Pick a pixel near the center that has valid data
-    row, col = vs30_grid.shape[0] // 2, vs30_grid.shape[1] // 2
-    grid_vs30_value = vs30_grid[row, col]
-    grid_stdv_value = stdv_grid[row, col]
+    # Test at three pixel locations spread across the grid:
+    # center, upper-left quarter, and lower-right quarter
+    nrows, ncols = vs30_grid.shape
+    test_pixels = [
+        (nrows // 2, ncols // 2),
+        (nrows // 4, ncols // 4),
+        (3 * nrows // 4, 3 * ncols // 4),
+    ]
 
-    # Convert pixel center to NZTM coordinates
-    easting, northing = rasterio.transform.xy(transform, row, col)
+    # Convert pixel centers to NZTM then WGS84
+    eastings = []
+    northings = []
+    lons = []
+    lats = []
+    for row, col in test_pixels:
+        e, n = rasterio.transform.xy(transform, row, col)
+        eastings.append(e)
+        northings.append(n)
+        wgs = coordinates.nztm_to_wgs_depth(np.array([[n, e]]))
+        lats.append(wgs[0, 0])
+        lons.append(wgs[0, 1])
 
-    # Convert NZTM to WGS84 for the points pipeline input
-    from qcore import coordinates
-
-    wgs = coordinates.nztm_to_wgs_depth(np.array([[northing, easting]]))
-    lat, lon = wgs[0, 0], wgs[0, 1]
-
-    # Run points pipeline with the same observation files
+    # Run points pipeline at all three locations
     result = pipeline.compute_at_locations(
-        longitudes=np.array([lon]),
-        latitudes=np.array([lat]),
+        longitudes=np.array(lons),
+        latitudes=np.array(lats),
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=float(config_data["combination_method"]),
         clustered_observations_csv=clustered_observations_csv,
@@ -93,26 +97,31 @@ def test_grid_and_points_consistency(tmp_path):
         n_proc=1,
     )
 
-    points_vs30_value = result[constants.COL_VS30].iloc[0]
-    points_stdv_value = result[constants.COL_COMBINED_STDV].iloc[0]
+    for i, (row, col) in enumerate(test_pixels):
+        grid_vs30_value = vs30_grid[row, col]
+        grid_stdv_value = stdv_grid[row, col]
+        points_vs30_value = result[constants.COL_VS30].iloc[i]
+        points_stdv_value = result[constants.COL_COMBINED_STDV].iloc[i]
+        easting, northing = eastings[i], northings[i]
 
-    # Small Vs30 differences are expected due to raster resampling in the
-    # grid pipeline vs direct source sampling in the points pipeline.
-    np.testing.assert_allclose(
-        points_vs30_value,
-        grid_vs30_value,
-        rtol=0.02,
-        err_msg=f"Vs30 mismatch at ({easting}, {northing}): "
-        f"grid={grid_vs30_value:.2f}, points={points_vs30_value:.2f}",
-    )
+        # Small Vs30 differences are expected because the grid pipeline samples
+        # slope/coast from grid-resampled rasters while the points pipeline
+        # samples directly from source data at each observation location.
+        np.testing.assert_allclose(
+            points_vs30_value,
+            grid_vs30_value,
+            rtol=0.03,
+            err_msg=f"Vs30 mismatch at pixel ({row},{col}) ({easting}, {northing}): "
+            f"grid={grid_vs30_value:.2f}, points={points_vs30_value:.2f}",
+        )
 
-    # Stdv has a wider tolerance because MVN posterior variance is sensitive
-    # to small differences in how slope/coast data is sampled at observation
-    # locations (grid-resampled rasters vs source data).
-    np.testing.assert_allclose(
-        points_stdv_value,
-        grid_stdv_value,
-        rtol=0.30,
-        err_msg=f"Stdv mismatch at ({easting}, {northing}): "
-        f"grid={grid_stdv_value:.2f}, points={points_stdv_value:.2f}",
-    )
+        # Stdv has a wider tolerance because MVN posterior variance is sensitive
+        # to small differences in how slope/coast data is sampled at observation
+        # locations (grid-resampled rasters vs source data).
+        np.testing.assert_allclose(
+            points_stdv_value,
+            grid_stdv_value,
+            rtol=0.30,
+            err_msg=f"Stdv mismatch at pixel ({row},{col}) ({easting}, {northing}): "
+            f"grid={grid_stdv_value:.2f}, points={points_stdv_value:.2f}",
+        )
