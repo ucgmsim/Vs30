@@ -55,25 +55,22 @@ def load_test_config(scenario: str) -> dict:
 def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     """Run the grid pipeline for a test scenario and compare outputs to benchmarks."""
     config_data = load_test_config(scenario)
-    clustered_file = config_data.get("clustered_observations_file")
-    independent_file = config_data.get("independent_observations_file")
+    for key in constants.CSV_PATH_KEYS:
+        if config_data[key]:
+            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+
     pipeline.compute_grid(
         grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=tmp_path,
-        combination_method=constants.CombinationMethod.RATIO,
-        combine_ratio=float(config_data["combination_method"]),
-        geology_categorical_csv=constants.RESOURCE_PATH / config_data["geology_categorical_file"],
-        terrain_categorical_csv=constants.RESOURCE_PATH / config_data["terrain_categorical_file"],
-        clustered_observations_csv=constants.RESOURCE_PATH / clustered_file if clustered_file else None,
-        independent_observations_csv=constants.RESOURCE_PATH / independent_file if independent_file else None,
-        do_bayesian_update=config_data.get(
-            "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values", True
-        ),
-        noisy=config_data.get("noisy", True),
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
+        geology_categorical_csv=config_data["geology_categorical_csv"],
+        terrain_categorical_csv=config_data["terrain_categorical_csv"],
+        clustered_observations_csv=config_data["clustered_observations_csv"],
+        independent_observations_csv=config_data["independent_observations_csv"],
+        do_bayesian_update=config_data["do_bayesian_update"],
+        noisy=config_data["noisy"],
         n_proc=n_proc,
-        max_spatial_boolean_array_memory_gb=config_data.get(
-            "max_spatial_boolean_array_memory_gb", 1.0
-        ),
     )
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 

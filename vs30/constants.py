@@ -34,6 +34,14 @@ DATA_DIR = Path(__file__).parent / "data"
 # Path to the resources directory containing CSV files with categorical model parameters
 RESOURCE_PATH = Path(__file__).parent / "resources"
 
+# Config YAML keys that hold file paths relative to RESOURCE_PATH.
+CSV_PATH_KEYS = [
+    "geology_categorical_csv",
+    "terrain_categorical_csv",
+    "clustered_observations_csv",
+    "independent_observations_csv",
+]
+
 # Covariance reduction factor for dissimilar Vs30 values (dimensionless).
 # Controls how much the correlation between two points is reduced when their
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.

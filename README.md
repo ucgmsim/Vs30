@@ -61,7 +61,7 @@ vs30 update-priors model.csv output_dir --model-type geology
 
 ## Configuration
 
-The package uses predefined model configurations (`foster_2019`, `jaehwi_v1p0`) that include all necessary parameters and file paths. For custom configurations, see the advanced commands (`grid-config`, `points-config`).
+The package uses predefined model configurations (`foster_2019`, `jaehwi_v1p0`) that include all necessary parameters and file paths. For custom configurations, see the advanced commands (`grid-custom`, `points-custom`).
 
 ## How It Works
 

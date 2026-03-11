@@ -1,8 +1,6 @@
 # Test configuration - Independent observations only
 # 10km x 10km domain centered on University of Canterbury, Christchurch
 
-n_proc: 1
-
 # --- Grid Parameters ---
 grid_xmin: 1565300
 grid_xmax: 1575300
@@ -11,20 +9,16 @@ grid_ymax: 5185500
 grid_dx: 100
 grid_dy: 100
 
-# --- General Configuration ---
-do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
-noisy: true
-max_spatial_boolean_array_memory_gb: 1
-
 # --- Categorical model files ---
-geology_categorical_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
-terrain_categorical_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+geology_categorical_csv: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_csv: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 
 # --- Observation files ---
-independent_observations_file: observations/test_independent_observations.csv
+independent_observations_csv: observations/test_independent_observations.csv
+clustered_observations_csv:
 
-# Output directory - set at runtime
-output_dir: /tmp/vs30_test_independent_only
-
-# Combination method
-combination_method: 1.0
+# --- Pipeline settings ---
+do_bayesian_update: true
+noisy: true
+combination_method: ratio
+combine_ratio: 1.0
