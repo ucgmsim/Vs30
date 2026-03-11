@@ -1069,6 +1069,7 @@ def compute_at_locations(
     mvn: bool = True,
     noisy: bool = True,
     n_proc: int = 1,
+    do_bayesian_update: bool = False,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1110,6 +1111,9 @@ def compute_at_locations(
         Whether to apply noise weighting in spatial adjustment.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
+    do_bayesian_update : bool, optional
+        Whether to perform Bayesian update of categorical Vs30 values
+        using observations before computing Vs30. Default False.
 
     Returns
     -------
@@ -1145,9 +1149,26 @@ def compute_at_locations(
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
-    # Load categorical models (skipinitialspace handles spaces after commas)
-    geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
-    terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
+    # Load categorical models (with optional Bayesian update)
+    if do_bayesian_update:
+        logger.info("Performing Bayesian update of categorical model values...")
+        geol_model_df = compute_categorical_vs30_updates(
+            categorical_model_csv=geology_categorical_csv,
+            model_type=constants.ModelType.GEOLOGY,
+            clustered_observations_csv=clustered_observations_csv,
+            independent_observations_csv=independent_observations_csv,
+            n_proc=n_proc,
+        )
+        terr_model_df = compute_categorical_vs30_updates(
+            categorical_model_csv=terrain_categorical_csv,
+            model_type=constants.ModelType.TERRAIN,
+            clustered_observations_csv=clustered_observations_csv,
+            independent_observations_csv=independent_observations_csv,
+            n_proc=n_proc,
+        )
+    else:
+        geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
+        terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
     n_proc_resolved = parallel.resolve_n_proc(n_proc)
 
