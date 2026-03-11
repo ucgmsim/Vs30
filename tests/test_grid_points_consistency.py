@@ -12,7 +12,7 @@ from qcore import coordinates
 
 from conftest import FIXTURES_DIR
 
-from vs30 import constants, pipeline, utils
+from vs30 import constants, pipeline
 from vs30 import config as config_module
 
 
@@ -26,13 +26,12 @@ def test_grid_and_points_consistency(tmp_path):
     grid_config = config_module.GridConfig.from_dict(config_data)
     grid_output_dir = tmp_path / "grid_output"
 
-    # Resolve observation CSVs
-    clustered_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("clustered_observations_file"), constants.RESOURCE_PATH
-    )
-    independent_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("independent_observations_file"), constants.RESOURCE_PATH
-    )
+    clustered_file = config_data.get("clustered_observations_file")
+    independent_file = config_data.get("independent_observations_file")
+    geology_categorical_csv = constants.RESOURCE_PATH / config_data["geology_categorical_file"]
+    terrain_categorical_csv = constants.RESOURCE_PATH / config_data["terrain_categorical_file"]
+    clustered_observations_csv = constants.RESOURCE_PATH / clustered_file if clustered_file else None
+    independent_observations_csv = constants.RESOURCE_PATH / independent_file if independent_file else None
 
     # Run grid pipeline
     pipeline.compute_grid(
@@ -40,6 +39,8 @@ def test_grid_and_points_consistency(tmp_path):
         output_dir=grid_output_dir,
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=float(config_data["combination_method"]),
+        geology_categorical_csv=geology_categorical_csv,
+        terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
         do_bayesian_update=config_data.get(
@@ -49,9 +50,6 @@ def test_grid_and_points_consistency(tmp_path):
         n_proc=1,
         max_spatial_boolean_array_memory_gb=config_data.get(
             "max_spatial_boolean_array_memory_gb", 1.0
-        ),
-        obs_subsample_step_for_clustered=config_data.get(
-            "obs_subsample_step_for_clustered", 100
         ),
     )
 
@@ -90,6 +88,8 @@ def test_grid_and_points_consistency(tmp_path):
         latitudes=np.array(lats),
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=float(config_data["combination_method"]),
+        geology_categorical_csv=geology_categorical_csv,
+        terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
         include_intermediate=True,
