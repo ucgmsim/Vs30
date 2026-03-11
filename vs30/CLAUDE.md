@@ -64,17 +64,14 @@ The package provides a `vs30` CLI entry point via Typer. Main commands:
 # Run the full pipeline using a fixed model version (most common) - generates raster grids
 vs30 grid output_dir foster_2019
 
-# Run the grid pipeline with a custom config file and explicit parameters
-vs30 grid-config output_dir --config my_config.yaml
+# Run the grid pipeline with all parameters specified explicitly
+vs30 grid-custom output_dir --grid-xmin 1060050 --grid-xmax 2120050 ...
 
 # Compute Vs30 at specific lat/lon locations using a fixed model version
 vs30 points sites.csv results.csv foster_2019
 
-# Compute Vs30 at locations with custom config and explicit parameters
-vs30 points-config sites.csv results.csv --config my_config.yaml
-
-# Bayesian update of category means/stdev (standalone)
-vs30 update-priors categorical_model.csv output_dir --model-type geology
+# Compute Vs30 at locations with all parameters specified explicitly
+vs30 points-custom sites.csv results.csv --geology-csv my_geology.csv ...
 ```
 
 ### Location-Based Queries
@@ -90,11 +87,12 @@ vs30 points sites.csv results.csv foster_2019 \
     --lon-column lon \
     --lat-column lat
 
-# Using points-config for full control over parameters
-vs30 points-config sites.csv results.csv \
-    --config my_config.yaml \
+# Using points-custom for full control over parameters
+vs30 points-custom sites.csv results.csv \
     --geology-csv my_geology.csv \
-    --terrain-csv my_terrain.csv
+    --terrain-csv my_terrain.csv \
+    --combination-method ratio --combine-ratio 1.0 \
+    --noisy --mvn
 ```
 
 Input CSV must have longitude and latitude columns (WGS84). Output includes geology/terrain IDs, intermediate Vs30 values, and final combined Vs30.
