@@ -17,6 +17,7 @@ class FixedModelVersion(StrEnum):
 
     FOSTER_2019 = "foster_2019"
     JAEHWI_V1P0 = "jaehwi_v1p0"
+    VIKTOR_CPT_CLUSTERING = "viktor_cpt_clustering"
 
 
 CONFIGS_DIR = Path(__file__).parent / "configs"
@@ -24,6 +25,7 @@ CONFIGS_DIR = Path(__file__).parent / "configs"
 MODEL_VERSION_TO_CONFIG = {
     FixedModelVersion.FOSTER_2019: CONFIGS_DIR / "foster_2019.yaml",
     FixedModelVersion.JAEHWI_V1P0: CONFIGS_DIR / "jaehwi_v1p0.yaml",
+    FixedModelVersion.VIKTOR_CPT_CLUSTERING: CONFIGS_DIR / "viktor_cpt_clustering.yaml",
 }
 
 # Path to the data directory containing shapefiles, rasters, and other input data
@@ -90,19 +92,6 @@ MIN_GROUP: int = 5
 # Maximum distance (meters) between observations to be in the same cluster
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 EPS: float = 15000.0
-
-# CATEGORICAL MODEL FILES
-# Mean and standard deviation of Vs30 values for each geology and terrain category.
-# Paths are relative to the resources directory.
-
-GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: Path = Path(
-    "categorical_vs30_mean_and_stddev/geology/"
-    "geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
-)
-TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE: Path = Path(
-    "categorical_vs30_mean_and_stddev/terrain/"
-    "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
-)
 
 # INTERNAL DATA FILES
 # Filenames for input data files bundled with the package.

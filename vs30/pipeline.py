@@ -329,13 +329,11 @@ def compute_spatial_adjustment_on_grid(
     vs30_array: np.ndarray,
     stdv_array: np.ndarray,
     profile: dict,
-    observations_csv: Path,
+    observations_df: pd.DataFrame,
     model_values_df: pd.DataFrame,
     model_type: constants.ModelType,
     noisy: bool = True,
     n_proc: int = 1,
-    is_clustered_observations: bool = False,
-    obs_subsample_step_for_clustered: int = 100,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
@@ -358,8 +356,8 @@ def compute_spatial_adjustment_on_grid(
         Input standard deviation array (2D).
     profile : dict
         Rasterio profile with transform, crs, nodata.
-    observations_csv : Path
-        Path to CSV file with measured VS30 values. Must contain columns:
+    observations_df : pd.DataFrame
+        DataFrame with measured VS30 values. Must contain columns:
         easting, northing, vs30, uncertainty.
     model_values_df : pd.DataFrame
         DataFrame with updated categorical Vs30 values.
@@ -369,10 +367,6 @@ def compute_spatial_adjustment_on_grid(
         Whether to apply noise weighting in spatial adjustment.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
-    is_clustered_observations : bool, optional
-        Whether the observations are clustered (for subsampling optimization).
-    obs_subsample_step_for_clustered : int, optional
-        Subsampling step for clustered observations.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     slope_array : np.ndarray, optional
@@ -401,7 +395,7 @@ def compute_spatial_adjustment_on_grid(
 
     # 2. Load Observations
     logger.info("Loading observations...")
-    observations = pd.read_csv(observations_csv, skipinitialspace=True)
+    observations = observations_df
     spatial.validate_observations(observations)
 
     # 3. Build updated model table from DataFrame
@@ -436,18 +430,11 @@ def compute_spatial_adjustment_on_grid(
         )
         return vs30_array.copy(), stdv_array.copy()
 
-    # 5. Find Affected Pixels (with optional clustered subsampling)
-    obs_data_for_bbox = spatial.apply_clustered_subsampling(
-        obs_data,
-        is_clustered_observations,
-        n_proc_resolved,
-        obs_subsample_step_for_clustered,
-    )
-
+    # 5. Find Affected Pixels
     logger.info("Finding pixels affected by observations...")
     bbox_result = spatial.find_affected_pixels(
         raster_data,
-        obs_data_for_bbox,
+        obs_data,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
@@ -700,7 +687,6 @@ def run_in_memory_pipeline_for_model_type(
     noisy: bool = True,
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
-    obs_subsample_step_for_clustered: int = 100,
     output_dir: Path | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
@@ -721,8 +707,8 @@ def run_in_memory_pipeline_for_model_type(
         Model type: either GEOLOGY or TERRAIN.
     grid_config : GridConfig
         Grid domain and resolution parameters.
-    categorical_model_csv : Path, optional
-        Path to CSV file with categorical Vs30 values. Default from resources.
+    categorical_model_csv : Path
+        Path to CSV file with categorical Vs30 values.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
@@ -737,8 +723,6 @@ def run_in_memory_pipeline_for_model_type(
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
-    obs_subsample_step_for_clustered : int, optional
-        Subsampling step for clustered observations.
     output_dir : Path, optional
         Directory to write intermediate and final rasters. If None, no files
         are written.
@@ -748,14 +732,11 @@ def run_in_memory_pipeline_for_model_type(
     tuple[np.ndarray, np.ndarray, dict]
         (final_vs30, final_stdv, profile)
     """
-    default_csv_files = {
-        constants.ModelType.GEOLOGY: constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE,
-        constants.ModelType.TERRAIN: constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE,
-    }
     if categorical_model_csv is None:
-        if model_type not in default_csv_files:
-            raise ValueError(f"Invalid model_type: {model_type}")
-        categorical_model_csv = constants.RESOURCE_PATH / default_csv_files[model_type]
+        raise ValueError(
+            f"categorical_model_csv is required for {model_type} pipeline. "
+            "Specify it in the config YAML or pass it explicitly."
+        )
 
     if output_dir is not None:
         output_dir = output_dir.resolve()
@@ -851,26 +832,33 @@ def run_in_memory_pipeline_for_model_type(
     if mvn:
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
-        # Prefer independent observations for spatial fit; fall back to clustered
-        spatial_obs_csv = independent_observations_csv or clustered_observations_csv
+        # Combine all available observation files for spatial adjustment
+        observation_csvs = [
+            csv
+            for csv in [clustered_observations_csv, independent_observations_csv]
+            if csv is not None and csv.exists()
+        ]
 
-        if spatial_obs_csv is None:
+        if not observation_csvs:
             raise ValueError(
                 "No observation CSVs provided for spatial fit. "
                 "At least one of clustered or independent observations must be specified."
             )
 
+        observations_df = pd.concat(
+            [pd.read_csv(csv) for csv in observation_csvs],
+            ignore_index=True,
+        )
+
         current_vs30, current_stdv = compute_spatial_adjustment_on_grid(
             vs30_array=current_vs30,
             stdv_array=current_stdv,
             profile=profile,
-            observations_csv=spatial_obs_csv,
+            observations_df=observations_df,
             model_values_df=posterior_df,
             model_type=model_type,
             noisy=noisy,
             n_proc=n_proc,
-            is_clustered_observations=(independent_observations_csv is None),
-            obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             slope_array=slope_array,
             coast_dist_array=coast_dist_array,
@@ -909,7 +897,6 @@ def compute_grid(
     noisy: bool = True,
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
-    obs_subsample_step_for_clustered: int = 100,
 ) -> dict[str, np.ndarray | dict]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -941,10 +928,10 @@ def compute_grid(
         or RATIO.
     combine_ratio : float, optional
         Geology-to-terrain weight ratio. Required when combination_method is RATIO.
-    geology_categorical_csv : Path, optional
-        Path to geology categorical CSV. Default from resources.
-    terrain_categorical_csv : Path, optional
-        Path to terrain categorical CSV. Default from resources.
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
@@ -959,8 +946,6 @@ def compute_grid(
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
-    obs_subsample_step_for_clustered : int, optional
-        Subsampling step for clustered observations.
 
     Returns
     -------
@@ -1004,7 +989,6 @@ def compute_grid(
             noisy=noisy,
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-            obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
             output_dir=output_dir,
         )
         result["geology_vs30"] = geol_vs30
@@ -1024,7 +1008,6 @@ def compute_grid(
             noisy=noisy,
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-            obs_subsample_step_for_clustered=obs_subsample_step_for_clustered,
             output_dir=output_dir,
         )
         result["terrain_vs30"] = terr_vs30
@@ -1111,10 +1094,10 @@ def compute_at_locations(
         or RATIO.
     combine_ratio : float, optional
         Geology-to-terrain weight ratio. Required when combination_method is RATIO.
-    geology_categorical_csv : Path, optional
-        Path to geology categorical CSV. Default from resources.
-    terrain_categorical_csv : Path, optional
-        Path to terrain categorical CSV. Default from resources.
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
@@ -1137,18 +1120,6 @@ def compute_at_locations(
         geology_vs30, geology_stdv, geology_vs30_hybrid, geology_stdv_hybrid,
         terrain_vs30, terrain_stdv.
     """
-    # Resolve default categorical model CSVs from resources
-    if geology_categorical_csv is None:
-        geology_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.GEOLOGY_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-    if terrain_categorical_csv is None:
-        terrain_categorical_csv = (
-            constants.RESOURCE_PATH
-            / constants.TERRAIN_MEAN_AND_STANDARD_DEVIATION_PER_CATEGORY_FILE
-        )
-
     # Convert WGS84 to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([latitudes, longitudes])

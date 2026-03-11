@@ -15,7 +15,15 @@ from vs30 import constants, pipeline
 EXPECTED_CSV = BENCHMARKS_DIR / "nz_cities_vs30.csv"
 LOCATIONS_CSV = FIXTURES_DIR / "nz_cities.csv"
 
-# Default observation files from resources (matching the old default config)
+# Default files from resources (matching the foster_2019 config)
+GEOLOGY_CATEGORICAL_CSV = (
+    constants.RESOURCE_PATH
+    / "categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+)
+TERRAIN_CATEGORICAL_CSV = (
+    constants.RESOURCE_PATH
+    / "categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+)
 INDEPENDENT_OBS_CSV = (
     constants.RESOURCE_PATH / "observations/measured_vs30_independent_observations.csv"
 )
@@ -32,6 +40,8 @@ def run_and_compare(n_proc: int):
         latitudes=locations_df["latitude"].values,
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=1.0,
+        geology_categorical_csv=GEOLOGY_CATEGORICAL_CSV,
+        terrain_categorical_csv=TERRAIN_CATEGORICAL_CSV,
         include_intermediate=True,
         clustered_observations_csv=CLUSTERED_OBS_CSV,
         independent_observations_csv=INDEPENDENT_OBS_CSV,

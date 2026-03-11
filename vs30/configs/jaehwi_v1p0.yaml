@@ -11,8 +11,13 @@ grid_ymax: 6250050
 grid_dx: 100
 grid_dy: 100
 
+# --- Categorical model files (relative to resources directory) ---
+# TODO: Update with Jaehwi-specific categorical files when available
+geology_categorical_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+
 # --- Observation files (relative to resources directory) ---
-# TODO: Update with Jawhi-specific observation files when available
+# TODO: Update with Jaehwi-specific observation files when available
 independent_observations_file: observations/measured_vs30_independent_observations.csv
 clustered_observations_file: observations/measured_vs30_cpt.csv
 
@@ -23,4 +28,3 @@ combination_method: standard_deviation_weighting
 
 # --- Spatial update parameters ---
 max_spatial_boolean_array_memory_gb: 1
-obs_subsample_step_for_clustered: 100

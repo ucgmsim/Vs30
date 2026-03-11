@@ -17,10 +17,12 @@ grid_dy: 500
 do_bayesian_update_of_geology_and_terrain_categorical_vs30_values: true
 noisy: true
 max_spatial_boolean_array_memory_gb: 1
-obs_subsample_step_for_clustered: 10
+
+# --- Categorical model files ---
+geology_categorical_file: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_file: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 
 # --- Observation files ---
-independent_observations_file: none
 clustered_observations_file: observations/test_cpt_observations.csv
 
 # Output directory - set at runtime

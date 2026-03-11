@@ -89,11 +89,3 @@ noisy: true
 # Maximum memory in GB for spatial Boolean arrays during chunked processing per process.
 # Note: Total memory usage per process will be several GB more than this limit.
 max_spatial_boolean_array_memory_gb: 1
-
-# Observation subsampling step for find_affected_pixels when using clustered observations.
-# When observations are spatially clustered, nearby observations affect the same pixels.
-# Using every Nth observation (e.g., 100) significantly reduces computation time
-# while producing nearly identical results for the affected pixel mask.
-# Set to 1 for no subsampling (use all observations).
-# Only applies to clustered observations; independent observations always use step=1.
-obs_subsample_step_for_clustered: 100

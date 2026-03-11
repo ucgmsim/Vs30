@@ -96,67 +96,6 @@ class TestComputeSpatialAdjustmentForPixel:
         assert result.n_observations_used == 0
 
 
-class TestSubsampleByCluster:
-    """Tests for the subsample_by_cluster function."""
-
-    def test_unclustered_all_included(self):
-        """Test that unclustered observations (-1) are all included."""
-        # All unclustered
-        cluster_labels = np.array([-1, -1, -1, -1, -1])
-
-        result = spatial.subsample_by_cluster(cluster_labels, step=2)
-
-        # All should be included since they are unclustered
-        assert len(result) == 5
-
-    def test_clustered_subsampled(self):
-        """Test that clustered observations are subsampled."""
-        # All in one cluster
-        cluster_labels = np.array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])  # 10 points
-
-        result = spatial.subsample_by_cluster(cluster_labels, step=3)
-
-        # Should take every 3rd: indices 0, 3, 6, 9
-        assert len(result) == 4
-
-    def test_mixed_clusters(self):
-        """Test with mixed clustered and unclustered."""
-        cluster_labels = np.array(
-            [
-                -1,
-                -1,
-                -1,  # 3 unclustered
-                0,
-                0,
-                0,
-                0,  # 4 in cluster 0
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,  # 6 in cluster 1
-            ]
-        )
-
-        result = spatial.subsample_by_cluster(cluster_labels, step=2)
-
-        # Unclustered: 3 (all included)
-        # Cluster 0: 2 (indices 0, 2 within cluster -> original indices 3, 5)
-        # Cluster 1: 3 (indices 0, 2, 4 within cluster -> original indices 7, 9, 11)
-        # Total: 3 + 2 + 3 = 8
-        assert len(result) == 8
-
-    def test_at_least_one_per_cluster(self):
-        """Test that at least one observation per cluster is kept."""
-        cluster_labels = np.array([0, 1, 2])  # Each cluster has one point
-
-        result = spatial.subsample_by_cluster(cluster_labels, step=100)
-
-        # Even with large step, each cluster should keep at least one
-        assert len(result) == 3
-
-
 class TestComputeMvnAtPoints:
     """Tests for compute_spatial_adjustment_at_points function."""
 

@@ -9,7 +9,7 @@ import typer
 import yaml
 from qcore import cli
 
-from vs30 import constants, pipeline, utils
+from vs30 import constants, pipeline
 from vs30 import config as config_module
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,6 @@ def grid(
         constants.FixedModelVersion, typer.Argument()
     ],
     n_proc: typing.Annotated[int, typer.Option()] = 1,
-    noisy: typing.Annotated[bool, typer.Option()] = True,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = 1.0,
@@ -90,8 +89,6 @@ def grid(
         Model version to use (e.g., foster_2019).
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
-    noisy : bool, optional
-        Whether to apply noise weighting in spatial adjustment.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
@@ -99,35 +96,27 @@ def grid(
     with open(config_path, encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
-    grid_config = config_module.GridConfig.from_dict(config_data)
-
-    # Resolve observation CSVs from config
-    clustered_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("clustered_observations_file"), constants.RESOURCE_PATH
-    )
-    independent_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("independent_observations_file"), constants.RESOURCE_PATH
-    )
-
-    combination_method = constants.CombinationMethod(
-        config_data.get("combination_method", "standard_deviation_weighting")
-    )
+    # Resolve CSV paths relative to resources directory. Observation files are
+    # optional because some configs use only one type (e.g. foster_2019 has no
+    # clustered observations).
+    clustered_file = config_data.get("clustered_observations_file")
+    independent_file = config_data.get("independent_observations_file")
 
     pipeline.compute_grid(
-        grid_config=grid_config,
+        grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=output_dir,
-        combination_method=combination_method,
-        clustered_observations_csv=clustered_observations_csv,
-        independent_observations_csv=independent_observations_csv,
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data.get("combine_ratio"),
+        geology_categorical_csv=constants.RESOURCE_PATH / config_data["geology_categorical_file"],
+        terrain_categorical_csv=constants.RESOURCE_PATH / config_data["terrain_categorical_file"],
+        clustered_observations_csv=constants.RESOURCE_PATH / clustered_file if clustered_file else None,
+        independent_observations_csv=constants.RESOURCE_PATH / independent_file if independent_file else None,
         do_bayesian_update=config_data.get(
             "do_bayesian_update_of_geology_and_terrain_categorical_vs30_values", True
         ),
-        noisy=noisy,
+        noisy=config_data.get("noisy", True),
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-        obs_subsample_step_for_clustered=config_data.get(
-            "obs_subsample_step_for_clustered", 100
-        ),
     )
 
 
@@ -138,11 +127,11 @@ def grid_config(
         Path, typer.Option(exists=True, dir_okay=False)
     ] = constants.MODEL_VERSION_TO_CONFIG[constants.FixedModelVersion.FOSTER_2019],
     geology_categorical_csv: typing.Annotated[
-        Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
-    ] = None,
+        Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
+    ] = ...,
     terrain_categorical_csv: typing.Annotated[
-        Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
-    ] = None,
+        Path, typer.Option("--terrain-csv", exists=True, dir_okay=False)
+    ] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -174,10 +163,10 @@ def grid_config(
         Directory to save all pipeline outputs.
     config : Path, optional
         Path to YAML config file with grid parameters and observation file paths.
-    geology_categorical_csv : Path, optional
-        Path to geology categorical CSV. Default from config/resources.
-    terrain_categorical_csv : Path, optional
-        Path to terrain categorical CSV. Default from config/resources.
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
@@ -200,22 +189,8 @@ def grid_config(
     with open(config, encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
-    grid_config_obj = config_module.GridConfig.from_dict(config_data)
-
-    # Resolve observation CSVs from config if not provided on CLI
-    clustered_observations_csv = utils.resolve_observation_csv(
-        clustered_observations_csv,
-        config_data.get("clustered_observations_file"),
-        constants.RESOURCE_PATH,
-    )
-    independent_observations_csv = utils.resolve_observation_csv(
-        independent_observations_csv,
-        config_data.get("independent_observations_file"),
-        constants.RESOURCE_PATH,
-    )
-
     pipeline.compute_grid(
-        grid_config=grid_config_obj,
+        grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=output_dir,
         model_type=model_type,
         combination_method=combination_method,
@@ -231,9 +206,6 @@ def grid_config(
         noisy=noisy,
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-        obs_subsample_step_for_clustered=config_data.get(
-            "obs_subsample_step_for_clustered", 100
-        ),
     )
 
 
@@ -303,7 +275,6 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
-    noisy: typing.Annotated[bool, typer.Option()] = True,
     n_proc: typing.Annotated[int, typer.Option()] = 1,
 ) -> None:
     """
@@ -323,8 +294,6 @@ def points(
         Name of latitude column in input CSV.
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
-    noisy : bool, optional
-        Whether to apply noise weighting in spatial adjustment.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     """
@@ -332,16 +301,11 @@ def points(
     with open(config_path, encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
-    clustered_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("clustered_observations_file"), constants.RESOURCE_PATH
-    )
-    independent_observations_csv = utils.resolve_observation_csv(
-        None, config_data.get("independent_observations_file"), constants.RESOURCE_PATH
-    )
-
-    combination_method = constants.CombinationMethod(
-        config_data.get("combination_method", "standard_deviation_weighting")
-    )
+    # Resolve CSV paths relative to resources directory. Observation files are
+    # optional because some configs use only one type (e.g. foster_2019 has no
+    # clustered observations).
+    clustered_file = config_data.get("clustered_observations_file")
+    independent_file = config_data.get("independent_observations_file")
 
     _run_points_pipeline(
         locations_csv=locations_csv,
@@ -349,11 +313,14 @@ def points(
         lon_column=lon_column,
         lat_column=lat_column,
         include_intermediate=include_intermediate,
-        noisy=noisy,
+        noisy=config_data.get("noisy", True),
         n_proc=n_proc,
-        combination_method=combination_method,
-        clustered_observations_csv=clustered_observations_csv,
-        independent_observations_csv=independent_observations_csv,
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data.get("combine_ratio"),
+        geology_categorical_csv=constants.RESOURCE_PATH / config_data["geology_categorical_file"],
+        terrain_categorical_csv=constants.RESOURCE_PATH / config_data["terrain_categorical_file"],
+        clustered_observations_csv=constants.RESOURCE_PATH / clustered_file if clustered_file else None,
+        independent_observations_csv=constants.RESOURCE_PATH / independent_file if independent_file else None,
     )
 
 
@@ -365,9 +332,6 @@ def points_config(
     output_csv: typing.Annotated[
         Path, typer.Argument(dir_okay=False)
     ],
-    config: typing.Annotated[
-        Path | None, typer.Option(exists=True, dir_okay=False)
-    ] = None,
     lon_column: typing.Annotated[
         str, typer.Option()
     ] = constants.LOCATIONS_LON_COLUMN,
@@ -375,11 +339,11 @@ def points_config(
         str, typer.Option()
     ] = constants.LOCATIONS_LAT_COLUMN,
     geology_categorical_csv: typing.Annotated[
-        Path | None, typer.Option("--geology-csv", exists=True, dir_okay=False)
-    ] = None,
+        Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
+    ] = ...,
     terrain_categorical_csv: typing.Annotated[
-        Path | None, typer.Option("--terrain-csv", exists=True, dir_okay=False)
-    ] = None,
+        Path, typer.Option("--terrain-csv", exists=True, dir_okay=False)
+    ] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -400,7 +364,7 @@ def points_config(
     n_proc: typing.Annotated[int, typer.Option()] = 1,
 ) -> None:
     """
-    Compute Vs30 values at specific latitude/longitude locations with custom config.
+    Compute Vs30 values at specific latitude/longitude locations with explicit parameters.
 
     Parameters
     ----------
@@ -408,16 +372,14 @@ def points_config(
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
         Output CSV file path.
-    config : Path, optional
-        Path to YAML config file with observation file paths.
     lon_column : str, optional
         Name of longitude column in input CSV.
     lat_column : str, optional
         Name of latitude column in input CSV.
-    geology_categorical_csv : Path, optional
-        Path to geology categorical CSV (default from resources).
-    terrain_categorical_csv : Path, optional
-        Path to terrain categorical CSV (default from resources).
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
@@ -435,22 +397,6 @@ def points_config(
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     """
-    # Resolve observation CSVs from config if provided
-    if config is not None:
-        with open(config, encoding="utf-8") as f:
-            config_data = yaml.safe_load(f)
-
-        clustered_observations_csv = utils.resolve_observation_csv(
-            clustered_observations_csv,
-            config_data.get("clustered_observations_file"),
-            constants.RESOURCE_PATH,
-        )
-        independent_observations_csv = utils.resolve_observation_csv(
-            independent_observations_csv,
-            config_data.get("independent_observations_file"),
-            constants.RESOURCE_PATH,
-        )
-
     _run_points_pipeline(
         locations_csv=locations_csv,
         output_csv=output_csv,
