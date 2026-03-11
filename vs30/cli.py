@@ -24,7 +24,7 @@ def grid(
     version: typing.Annotated[
         constants.FixedModelVersion, typer.Argument()
     ],
-    n_proc: typing.Annotated[int, typer.Option()] = 1,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = 1.0,
@@ -100,7 +100,7 @@ def grid_custom(
     model_type: typing.Annotated[
         constants.ModelType, typer.Option()
     ] = constants.ModelType.COMBINED,
-    n_proc: typing.Annotated[int, typer.Option()] = 1,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = 1.0,
@@ -189,6 +189,7 @@ def run_points_pipeline(
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
     mvn: bool = True,
+    do_bayesian_update: bool = False,
 ) -> None:
     """Shared implementation for points and points_custom commands."""
     df = pd.read_csv(locations_csv)
@@ -210,6 +211,7 @@ def run_points_pipeline(
         mvn=mvn,
         noisy=noisy,
         n_proc=n_proc,
+        do_bayesian_update=do_bayesian_update,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -240,7 +242,7 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
-    n_proc: typing.Annotated[int, typer.Option()] = 1,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 at locations using a fixed model version's config.
@@ -284,6 +286,7 @@ def points(
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
+        do_bayesian_update=config_data["do_bayesian_update"],
     )
 
 
@@ -307,6 +310,7 @@ def points_custom(
     combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio (used when combination_method is ratio).")] = ...,
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
+    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -324,7 +328,7 @@ def points_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = True,
-    n_proc: typing.Annotated[int, typer.Option()] = 1,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations with explicit parameters.
@@ -350,6 +354,8 @@ def points_custom(
         Whether to apply noise weighting in spatial adjustment.
     mvn : bool
         Whether to perform MVN spatial adjustment.
+    do_bayesian_update : bool
+        Whether to perform Bayesian update of categorical Vs30 values.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
@@ -378,6 +384,7 @@ def points_custom(
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
         mvn=mvn,
+        do_bayesian_update=do_bayesian_update,
     )
 
 
