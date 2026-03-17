@@ -17,17 +17,21 @@ logger = logging.getLogger(__name__)
 # Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
-
-@cli.from_docstring(app)
 def grid(
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
     version: typing.Annotated[
         constants.FixedModelVersion, typer.Argument()
     ],
+    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
-    ] = 1.0,
+    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
 ) -> None:
     """
     Run the VS30 grid pipeline using a fixed model version's config.
@@ -38,6 +42,18 @@ def grid(
         Directory to save all pipeline outputs.
     version : FixedModelVersion
         Model version to use (e.g., foster_2019).
+    grid_xmin : int
+        Grid minimum X coordinate (NZTM, meters).
+    grid_xmax : int
+        Grid maximum X coordinate (NZTM, meters).
+    grid_ymin : int
+        Grid minimum Y coordinate (NZTM, meters).
+    grid_ymax : int
+        Grid maximum Y coordinate (NZTM, meters).
+    grid_dx : int
+        Grid X spacing (meters).
+    grid_dy : int
+        Grid Y spacing (meters).
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
@@ -52,7 +68,11 @@ def grid(
             config_data[key] = constants.RESOURCE_PATH / config_data[key]
 
     pipeline.compute_grid(
-        grid_config=config_module.GridConfig.from_dict(config_data),
+        grid_config=config_module.GridConfig(
+            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
+            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
+            grid_dx=grid_dx, grid_dy=grid_dy,
+        ),
         output_dir=output_dir,
         combination_method=constants.CombinationMethod(config_data["combination_method"]),
         combine_ratio=config_data["combine_ratio"],
@@ -66,16 +86,14 @@ def grid(
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 
-
-@cli.from_docstring(app)
 def grid_custom(
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    grid_xmin: typing.Annotated[int, typer.Option(help="Grid minimum X coordinate (NZTM, meters).")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help="Grid maximum X coordinate (NZTM, meters).")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help="Grid minimum Y coordinate (NZTM, meters).")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help="Grid maximum Y coordinate (NZTM, meters).")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help="Grid X spacing (meters).")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help="Grid Y spacing (meters).")] = ...,
+    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
     geology_categorical_csv: typing.Annotated[
         Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = ...,
@@ -103,7 +121,7 @@ def grid_custom(
     n_proc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
-    ] = 1.0,
+    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
 ) -> None:
     """
     Run the full VS30 generation pipeline on a raster grid with explicit parameters.
@@ -307,7 +325,7 @@ def points_custom(
     combination_method: typing.Annotated[
         constants.CombinationMethod, typer.Option()
     ] = ...,
-    combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio (used when combination_method is ratio).")] = ...,
+    combine_ratio: typing.Annotated[float, typer.Option()] = ...,
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
     do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
