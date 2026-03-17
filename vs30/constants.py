@@ -235,6 +235,13 @@ FULL_NZ_LAND_XMAX: int = 2120050
 FULL_NZ_LAND_YMIN: int = 4730050
 FULL_NZ_LAND_YMAX: int = 6250050
 
+# Suggested grid spacing (meters) for full New Zealand extent at standard resolution.
+SUGGESTED_GRID_DX: int = 100
+SUGGESTED_GRID_DY: int = 100
+
+# Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
+MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0
+
 # Default column names for longitude and latitude in location input CSV files.
 LOCATIONS_LON_COLUMN: str = "longitude"
 LOCATIONS_LAT_COLUMN: str = "latitude"

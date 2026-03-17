@@ -1,9 +1,6 @@
 """Configuration data structures for Vs30 calculations."""
 
 from dataclasses import dataclass
-from pathlib import Path
-
-import yaml
 
 
 @dataclass
@@ -37,28 +34,6 @@ class GridConfig:
     grid_ymax: int
     grid_dx: int
     grid_dy: int
-
-    @classmethod
-    def from_yaml(cls, path: Path) -> "GridConfig":
-        """
-        Load grid configuration from a YAML file.
-
-        The YAML file must contain keys: grid_xmin, grid_xmax, grid_ymin,
-        grid_ymax, grid_dx, grid_dy. Other keys are ignored.
-
-        Parameters
-        ----------
-        path : Path
-            Path to the YAML configuration file.
-
-        Returns
-        -------
-        GridConfig
-            Grid configuration object.
-        """
-        with open(path, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        return cls.from_dict(data)
 
     @classmethod
     def from_dict(cls, data: dict) -> "GridConfig":

@@ -1,14 +1,6 @@
 # Jaehwi v1.0 Vs30 Model Configuration (PLACEHOLDER)
 # This configuration is not yet fully implemented.
 
-# --- Grid Parameters (full New Zealand extent at 100m resolution) ---
-grid_xmin: 1060050
-grid_xmax: 2120050
-grid_ymin: 4730050
-grid_ymax: 6250050
-grid_dx: 100
-grid_dy: 100
-
 # --- Categorical model files (relative to resources directory) ---
 # TODO: Update with Jaehwi-specific categorical files when available
 geology_categorical_csv: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
