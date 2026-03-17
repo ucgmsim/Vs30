@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
+# CLI helper shared by `points` and `points_custom` to handle CSV I/O and column merging.
 def run_points_pipeline(
     locations_csv: Path,
     output_csv: Path,
@@ -34,7 +35,51 @@ def run_points_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = False,
 ) -> None:
-    """Shared implementation for points and points_custom commands."""
+    """
+    Shared implementation for points and points_custom commands.
+
+    Reads the input CSV, validates columns, delegates computation to
+    ``pipeline.compute_at_locations``, merges original columns with results,
+    and writes the output CSV.
+
+    Parameters
+    ----------
+    locations_csv : Path
+        CSV file with latitude/longitude columns (WGS84).
+    output_csv : Path
+        Output CSV file path.
+    lon_column : str
+        Name of longitude column in input CSV.
+    lat_column : str
+        Name of latitude column in input CSV.
+    include_intermediate : bool
+        Include intermediate values (geology/terrain separately) in output.
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
+    n_proc : int
+        Number of parallel processes. Use -1 for all cores.
+    combination_method : CombinationMethod
+        Method for combining geology and terrain models.
+    combine_ratio : float or None, optional
+        Geology-to-terrain weight ratio (used when combination_method is ratio).
+    geology_categorical_csv : Path or None, optional
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path or None, optional
+        Path to terrain categorical CSV.
+    clustered_observations_csv : Path or None, optional
+        Path to CSV file with clustered observations (e.g., CPT).
+    independent_observations_csv : Path or None, optional
+        Path to CSV file with independent observations.
+    mvn : bool, optional
+        Whether to perform MVN spatial adjustment.
+    do_bayesian_update : bool, optional
+        Whether to perform Bayesian update of categorical Vs30 values.
+
+    Raises
+    ------
+    typer.BadParameter
+        If the specified longitude or latitude column is not found in the input CSV.
+    """
     df = pd.read_csv(locations_csv)
     if lon_column not in df.columns:
         raise typer.BadParameter(f"Column '{lon_column}' not found in {locations_csv}")
