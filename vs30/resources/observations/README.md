@@ -76,7 +76,7 @@ independent_observations_file: observations/measured_vs30_independent_observatio
 ### Related Files
 
 - **`measured_vs30_independent_observations_unfiltered.csv`**: Same data sources but includes ALL Kaiseretal sites (not used in main pipeline)
-- **`measured_vs30_cpt.csv`**: CPT-derived measurements processed with spatial clustering
+- **`viktor_inferred_vs30_from_cpt.csv`**: CPT-derived measurements processed with spatial clustering
 
 ### Generation
 

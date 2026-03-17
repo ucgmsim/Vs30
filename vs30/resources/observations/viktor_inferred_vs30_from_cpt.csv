@@ -1,3 +1,6 @@
+# Uncertainty values are ln-scale standard deviations of Vs30.
+# All entries use a constant assumed uncertainty of 0.5 (~50% using the approximation
+# uncertainty * 100, since ln(1+x) ~= x for small x; exact value (e^0.5 - 1)*100 ~= 65%).
 index,easting,northing,vs30,uncertainty,source
 0,1.5764672e+06,5.1812625e+06,184.62537,0.5,cpt
 1,1.5706816e+06,5.180753e+06,166.26828,0.5,cpt

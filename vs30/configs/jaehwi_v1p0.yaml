@@ -9,7 +9,7 @@ terrain_categorical_csv: categorical_vs30_mean_and_stddev/terrain/terrain_model_
 # --- Observation files (relative to resources directory) ---
 # TODO: Update with Jaehwi-specific observation files when available
 independent_observations_csv: observations/measured_vs30_independent_observations.csv
-clustered_observations_csv: observations/measured_vs30_cpt.csv
+clustered_observations_csv: observations/viktor_inferred_vs30_from_cpt.csv
 
 # --- Pipeline settings ---
 do_bayesian_update: true
