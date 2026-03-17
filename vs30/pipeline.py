@@ -57,7 +57,7 @@ def compute_categorical_vs30_updates(
     model_type : ModelType
         Model type: either GEOLOGY or TERRAIN.
     clustered_observations_csv : Path, optional
-        Path to CSV file with clustered observations (e.g., measured_vs30_cpt.csv).
+        Path to CSV file with clustered observations (e.g., viktor_inferred_vs30_from_cpt.csv).
         These will be processed with spatial clustering.
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations
@@ -112,7 +112,7 @@ def compute_categorical_vs30_updates(
             f"Loading clustered observations from: {clustered_observations_csv}"
         )
         clustered_observations_df = pd.read_csv(
-            clustered_observations_csv, skipinitialspace=True
+            clustered_observations_csv, skipinitialspace=True, comment="#"
         )
 
         utils.validate_csv_columns(
@@ -166,7 +166,7 @@ def compute_categorical_vs30_updates(
             f"Loading independent observations from: {independent_observations_csv}"
         )
         independent_observations_df = pd.read_csv(
-            independent_observations_csv, skipinitialspace=True
+            independent_observations_csv, skipinitialspace=True, comment="#"
         )
 
         utils.validate_csv_columns(
@@ -846,7 +846,7 @@ def run_in_memory_pipeline_for_model_type(
             )
 
         observations_df = pd.concat(
-            [pd.read_csv(csv) for csv in observation_csvs],
+            [pd.read_csv(csv, comment="#") for csv in observation_csvs],
             ignore_index=True,
         )
 
@@ -1141,7 +1141,7 @@ def compute_at_locations(
 
     if mvn and observation_csvs:
         observations_df = pd.concat(
-            [pd.read_csv(csv) for csv in observation_csvs],
+            [pd.read_csv(csv, comment="#") for csv in observation_csvs],
             ignore_index=True,
         )
     else:

@@ -1,3 +1,14 @@
+# Uncertainty values are ln-scale standard deviations of Vs30.
+# For small values, the ln-scale uncertainty approximates the fractional uncertainty
+# (i.e. uncertainty * 100 ~= percentage), since ln(1+x) ~= x for small x.
+# For example, 0.1 ~= 10%, 0.2 ~= 20%. This approximation is less accurate for
+# larger values (e.g. 0.5 ~= 50% by approximation, but exactly (e^0.5 - 1)*100 ~= 65%).
+#
+# Assumed uncertainty values per source:
+#   mcgann:      0.2 (constant, ~20%)
+#   wotherspoon: 0.2 (constant, ~20%)
+#   kaiseretal:  variable by quality code Q: Q1=0.1 (~10%), Q2=0.2 (~20%), Q3=0.5 (~50%)
+#   cpt:         0.5 (constant, ~50%)
 easting,northing,vs30,uncertainty,source,station,q
 1576480.1104056418,5207643.269430228,224.85387,0.20000000298023224,mcgann,,
 1577001.152476283,5207261.8981841365,205.06209,0.20000000298023224,mcgann,,
