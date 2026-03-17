@@ -18,7 +18,9 @@ This codebase was refactored from legacy code to improve readability and underst
 
 **Status**: The refactoring project is nearing completion, but additional features and testing still need to be implemented.
 
-**Validation**: When making large changes, compare the `full-pipeline` output to that produced by the legacy wrapper scripts. Comparison scripts are available in the `temp/` directory (note: `temp/` contains temporary development code that will not be included in the final release).
+**Validation**: When making large changes, compare the `full-pipeline` output to that produced by the legacy wrapper scripts.
+
+**Developer Resources**: The `dev/` directory (at repo root) contains raw data files and processing scripts used to generate the clean observation CSVs. This directory is for maintainers only and is not part of the installable package.
 
 ## Environment Setup
 
