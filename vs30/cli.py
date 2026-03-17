@@ -17,181 +17,6 @@ logger = logging.getLogger(__name__)
 # Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
-def grid(
-    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    version: typing.Annotated[
-        constants.FixedModelVersion, typer.Argument()
-    ],
-    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
-    max_spatial_boolean_array_memory_gb: typing.Annotated[
-        float, typer.Option()
-    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
-) -> None:
-    """
-    Run the VS30 grid pipeline using a fixed model version's config.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Directory to save all pipeline outputs.
-    version : FixedModelVersion
-        Model version to use (e.g., foster_2019).
-    grid_xmin : int
-        Grid minimum X coordinate (NZTM, meters).
-    grid_xmax : int
-        Grid maximum X coordinate (NZTM, meters).
-    grid_ymin : int
-        Grid minimum Y coordinate (NZTM, meters).
-    grid_ymax : int
-        Grid maximum Y coordinate (NZTM, meters).
-    grid_dx : int
-        Grid X spacing (meters).
-    grid_dy : int
-        Grid Y spacing (meters).
-    n_proc : int, optional
-        Number of parallel processes. Use -1 for all cores.
-    max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
-    """
-    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
-
-    # Resolve CSV paths relative to resources directory
-    for key in constants.CSV_PATH_KEYS:
-        if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / config_data[key]
-
-    pipeline.compute_grid(
-        grid_config=config_module.GridConfig(
-            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
-            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
-            grid_dx=grid_dx, grid_dy=grid_dy,
-        ),
-        output_dir=output_dir,
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
-        geology_categorical_csv=config_data["geology_categorical_csv"],
-        terrain_categorical_csv=config_data["terrain_categorical_csv"],
-        clustered_observations_csv=config_data["clustered_observations_csv"],
-        independent_observations_csv=config_data["independent_observations_csv"],
-        do_bayesian_update=config_data["do_bayesian_update"],
-        noisy=config_data["noisy"],
-        n_proc=n_proc,
-        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-    )
-
-def grid_custom(
-    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
-    geology_categorical_csv: typing.Annotated[
-        Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
-    ] = ...,
-    terrain_categorical_csv: typing.Annotated[
-        Path, typer.Option("--terrain-csv", exists=True, dir_okay=False)
-    ] = ...,
-    combination_method: typing.Annotated[
-        constants.CombinationMethod, typer.Option()
-    ] = ...,
-    combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio. Required when combination_method is ratio.")] = ...,
-    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
-    noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
-    mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
-    clustered_observations_csv: typing.Annotated[
-        Path | None,
-        typer.Option(exists=True, dir_okay=False),
-    ] = None,
-    independent_observations_csv: typing.Annotated[
-        Path | None,
-        typer.Option(exists=True, dir_okay=False),
-    ] = None,
-    model_type: typing.Annotated[
-        constants.ModelType, typer.Option()
-    ] = constants.ModelType.COMBINED,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
-    max_spatial_boolean_array_memory_gb: typing.Annotated[
-        float, typer.Option()
-    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
-) -> None:
-    """
-    Run the full VS30 generation pipeline on a raster grid with explicit parameters.
-
-    All scientific and grid parameters must be explicitly provided. Use the
-    simpler 'grid' command to run with a predefined model version instead.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Directory to save all pipeline outputs.
-    grid_xmin : int
-        Grid minimum X coordinate (NZTM, meters).
-    grid_xmax : int
-        Grid maximum X coordinate (NZTM, meters).
-    grid_ymin : int
-        Grid minimum Y coordinate (NZTM, meters).
-    grid_ymax : int
-        Grid maximum Y coordinate (NZTM, meters).
-    grid_dx : int
-        Grid X spacing (meters).
-    grid_dy : int
-        Grid Y spacing (meters).
-    geology_categorical_csv : Path
-        Path to geology categorical CSV.
-    terrain_categorical_csv : Path
-        Path to terrain categorical CSV.
-    combination_method : CombinationMethod
-        Method for combining models.
-    combine_ratio : float
-        Geology-to-terrain weight ratio (used when combination_method is ratio).
-    do_bayesian_update : bool
-        Whether to perform Bayesian update of categorical Vs30 values.
-    noisy : bool
-        Whether to apply noise weighting in spatial adjustment.
-    mvn : bool
-        Whether to perform MVN spatial adjustment.
-    clustered_observations_csv : Path, optional
-        Path to CSV file with clustered observations (e.g., CPT data).
-    independent_observations_csv : Path, optional
-        Path to CSV file with independent observations.
-    model_type : ModelType, optional
-        Which model(s) to run: geology, terrain, or combined (default).
-    n_proc : int, optional
-        Number of parallel processes. Use -1 for all cores.
-    max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
-    """
-    pipeline.compute_grid(
-        grid_config=config_module.GridConfig(
-            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
-            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
-            grid_dx=grid_dx, grid_dy=grid_dy,
-        ),
-        output_dir=output_dir,
-        model_type=model_type,
-        combination_method=combination_method,
-        combine_ratio=combine_ratio,
-        geology_categorical_csv=geology_categorical_csv,
-        terrain_categorical_csv=terrain_categorical_csv,
-        clustered_observations_csv=clustered_observations_csv,
-        independent_observations_csv=independent_observations_csv,
-        do_bayesian_update=do_bayesian_update,
-        mvn=mvn,
-        noisy=noisy,
-        n_proc=n_proc,
-        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-    )
-
-
 def run_points_pipeline(
     locations_csv: Path,
     output_csv: Path,
@@ -404,6 +229,181 @@ def points_custom(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
     )
+
+def grid(
+    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
+    version: typing.Annotated[
+        constants.FixedModelVersion, typer.Argument()
+    ],
+    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    max_spatial_boolean_array_memory_gb: typing.Annotated[
+        float, typer.Option()
+    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+) -> None:
+    """
+    Run the VS30 grid pipeline using a fixed model version's config.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Directory to save all pipeline outputs.
+    version : FixedModelVersion
+        Model version to use (e.g., foster_2019).
+    grid_xmin : int
+        Grid minimum X coordinate (NZTM, meters).
+    grid_xmax : int
+        Grid maximum X coordinate (NZTM, meters).
+    grid_ymin : int
+        Grid minimum Y coordinate (NZTM, meters).
+    grid_ymax : int
+        Grid maximum Y coordinate (NZTM, meters).
+    grid_dx : int
+        Grid X spacing (meters).
+    grid_dy : int
+        Grid Y spacing (meters).
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores.
+    max_spatial_boolean_array_memory_gb : float, optional
+        Maximum memory for spatial boolean arrays.
+    """
+    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
+        config_data = yaml.safe_load(f)
+
+    # Resolve CSV paths relative to resources directory
+    for key in constants.CSV_PATH_KEYS:
+        if config_data[key]:
+            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+
+    pipeline.compute_grid(
+        grid_config=config_module.GridConfig(
+            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
+            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
+            grid_dx=grid_dx, grid_dy=grid_dy,
+        ),
+        output_dir=output_dir,
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
+        geology_categorical_csv=config_data["geology_categorical_csv"],
+        terrain_categorical_csv=config_data["terrain_categorical_csv"],
+        clustered_observations_csv=config_data["clustered_observations_csv"],
+        independent_observations_csv=config_data["independent_observations_csv"],
+        do_bayesian_update=config_data["do_bayesian_update"],
+        noisy=config_data["noisy"],
+        n_proc=n_proc,
+        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+    )
+
+def grid_custom(
+    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
+    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
+    geology_categorical_csv: typing.Annotated[
+        Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
+    ] = ...,
+    terrain_categorical_csv: typing.Annotated[
+        Path, typer.Option("--terrain-csv", exists=True, dir_okay=False)
+    ] = ...,
+    combination_method: typing.Annotated[
+        constants.CombinationMethod, typer.Option()
+    ] = ...,
+    combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio. Required when combination_method is ratio.")] = ...,
+    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
+    noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
+    mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
+    clustered_observations_csv: typing.Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False),
+    ] = None,
+    independent_observations_csv: typing.Annotated[
+        Path | None,
+        typer.Option(exists=True, dir_okay=False),
+    ] = None,
+    model_type: typing.Annotated[
+        constants.ModelType, typer.Option()
+    ] = constants.ModelType.COMBINED,
+    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    max_spatial_boolean_array_memory_gb: typing.Annotated[
+        float, typer.Option()
+    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+) -> None:
+    """
+    Run the full VS30 generation pipeline on a raster grid with explicit parameters.
+
+    All scientific and grid parameters must be explicitly provided. Use the
+    simpler 'grid' command to run with a predefined model version instead.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Directory to save all pipeline outputs.
+    grid_xmin : int
+        Grid minimum X coordinate (NZTM, meters).
+    grid_xmax : int
+        Grid maximum X coordinate (NZTM, meters).
+    grid_ymin : int
+        Grid minimum Y coordinate (NZTM, meters).
+    grid_ymax : int
+        Grid maximum Y coordinate (NZTM, meters).
+    grid_dx : int
+        Grid X spacing (meters).
+    grid_dy : int
+        Grid Y spacing (meters).
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
+    combination_method : CombinationMethod
+        Method for combining models.
+    combine_ratio : float
+        Geology-to-terrain weight ratio (used when combination_method is ratio).
+    do_bayesian_update : bool
+        Whether to perform Bayesian update of categorical Vs30 values.
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
+    mvn : bool
+        Whether to perform MVN spatial adjustment.
+    clustered_observations_csv : Path, optional
+        Path to CSV file with clustered observations (e.g., CPT data).
+    independent_observations_csv : Path, optional
+        Path to CSV file with independent observations.
+    model_type : ModelType, optional
+        Which model(s) to run: geology, terrain, or combined (default).
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores.
+    max_spatial_boolean_array_memory_gb : float, optional
+        Maximum memory for spatial boolean arrays.
+    """
+    pipeline.compute_grid(
+        grid_config=config_module.GridConfig(
+            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
+            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
+            grid_dx=grid_dx, grid_dy=grid_dy,
+        ),
+        output_dir=output_dir,
+        model_type=model_type,
+        combination_method=combination_method,
+        combine_ratio=combine_ratio,
+        geology_categorical_csv=geology_categorical_csv,
+        terrain_categorical_csv=terrain_categorical_csv,
+        clustered_observations_csv=clustered_observations_csv,
+        independent_observations_csv=independent_observations_csv,
+        do_bayesian_update=do_bayesian_update,
+        mvn=mvn,
+        noisy=noisy,
+        n_proc=n_proc,
+        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+    )
+
 
 
 if __name__ == "__main__":  # pragma: no cover
