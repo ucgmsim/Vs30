@@ -3,8 +3,7 @@ Create the clean combined observation CSVs for the Foster 2019 version of the Vs
 
 This script was originally used to generate the observation CSV files that ship
 with the vs30 package:
-  - measured_vs30_independent_observations.csv (filtered)
-  - measured_vs30_independent_observations_unfiltered.csv
+  - foster_2019_measured_vs30_independent_observations.csv
   - viktor_inferred_vs30_from_cpt.csv
 
 It loads data from the legacy codebase's sites_load module (three loaders:
@@ -72,33 +71,21 @@ def main():
     print(f"  Kaiser (unfiltered): {len(kaiseretal_unfiltered)} sites")
     print(f"  Kaiser (filtered): {len(kaiseretal_filtered)} sites")
 
-    # Combine sources
-    combined_unfiltered = pd.concat(
-        [mcgann, wotherspoon, kaiseretal_unfiltered], ignore_index=True
-    )
-    combined_filtered = pd.concat(
+    # Combine sources (filtered Kaiser et al.)
+    combined = pd.concat(
         [mcgann, wotherspoon, kaiseretal_filtered], ignore_index=True
     )
 
-    print(f"\n  Combined (unfiltered): {len(combined_unfiltered)} sites")
-    print(f"  Combined (filtered): {len(combined_filtered)} sites")
-    print(f"  Columns: {list(combined_unfiltered.columns)}")
+    print(f"\n  Combined: {len(combined)} sites")
+    print(f"  Columns: {list(combined.columns)}")
 
-    # Write both versions
-    output_file_unfiltered = (
-        OUTPUT_DIR / "measured_vs30_independent_observations_unfiltered.csv"
-    )
     output_file_filtered = (
-        OUTPUT_DIR / "measured_vs30_independent_observations.csv"
+        OUTPUT_DIR / "foster_2019_measured_vs30_independent_observations.csv"
     )
 
-    print(f"\n  Writing unfiltered version to {output_file_unfiltered}...")
-    combined_unfiltered.to_csv(output_file_unfiltered, index=False)
-    print(f"  Exported {len(combined_unfiltered)} sites")
-
-    print(f"\n  Writing filtered version to {output_file_filtered}...")
-    combined_filtered.to_csv(output_file_filtered, index=False)
-    print(f"  Exported {len(combined_filtered)} sites")
+    print(f"\n  Writing to {output_file_filtered}...")
+    combined.to_csv(output_file_filtered, index=False)
+    print(f"  Exported {len(combined)} sites")
 
     # Process "cpt" source
     print("\nProcessing source: 'cpt'")
@@ -119,8 +106,7 @@ def main():
     print("Export complete!")
     print("=" * 70)
     print("\nOutput files:")
-    print(f"  - {output_file_unfiltered.name} ({len(combined_unfiltered)} sites)")
-    print(f"  - {output_file_filtered.name} ({len(combined_filtered)} sites)")
+    print(f"  - {output_file_filtered.name} ({len(combined)} sites)")
     print(f"  - {output_file_cpt.name} ({len(cpt)} sites)")
 
 
