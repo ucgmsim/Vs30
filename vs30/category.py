@@ -31,7 +31,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
     """
     # load QMAP polygons
-    gdf = gpd.read_file(constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
+    gdf = gpd.read_file(constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
         [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
 
@@ -70,7 +70,7 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
-    with rasterio.open(constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
+    with rasterio.open(constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
         terrain_ids = np.array(
             [s[0] for s in src.sample(points, indexes=1)], dtype=src.dtypes[0]
         )

@@ -48,7 +48,7 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
     if shapefile_path.exists():
         return
 
-    archive_path = constants.DATA_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
+    archive_path = constants.GEOSPATIAL_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
     if not archive_path.exists():
         raise FileNotFoundError(
             f"Shapefile archive not found: {archive_path}. "
@@ -65,7 +65,7 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
             raise ValueError(
                 f"No '{directory_prefix}' directory found in archive {archive_path}"
             )
-        tar.extractall(path=constants.DATA_DIR, members=members)
+        tar.extractall(path=constants.GEOSPATIAL_DIR, members=members)
 
     if not shapefile_path.exists():
         raise FileNotFoundError(
@@ -188,7 +188,7 @@ def create_category_id_array(
 
     if model_type == constants.ModelType.TERRAIN:
         # Resample terrain raster to target grid
-        terrain_raster_path = constants.DATA_DIR / constants.TERRAIN_RASTER_FILENAME
+        terrain_raster_path = constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
         if not terrain_raster_path.exists():
             raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
 
@@ -208,11 +208,11 @@ def create_category_id_array(
     else:  # geology
         # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
         ensure_shapefile_extracted(
-            constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+            constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
         )
 
         # Rasterize geology shapefile to target grid
-        geology_shapefile_path = constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+        geology_shapefile_path = constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
         if not geology_shapefile_path.exists():
             raise FileNotFoundError(
                 f"Geology shapefile not found: {geology_shapefile_path}"
@@ -503,7 +503,7 @@ def create_vs30_raster_from_ids(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     ensure_shapefile_extracted(
-        constants.DATA_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
+        constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
     )
 
     # Load CSV into DataFrame
@@ -570,7 +570,7 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
         The distance array (float32) matching the template grid dimensions.
     """
     ensure_shapefile_extracted(
-        constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
+        constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
     )
 
     # Get template bounds for final output extent
@@ -602,7 +602,7 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
         # Use UInt16 data type as in legacy code (sufficient for distance range)
         ds = gdal.Rasterize(
             tmp_path,
-            str(constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH),
+            str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
             creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
             outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
             xRes=dx,
@@ -706,7 +706,7 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     FileNotFoundError
         If the source slope raster is not found.
     """
-    slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    slope_raster_path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
@@ -782,7 +782,7 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Slope values at each point (N,).
     """
-    slope_raster_path = constants.DATA_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    slope_raster_path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
@@ -810,7 +810,7 @@ def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Distance to coast in meters for each point (N,).
     """
-    coastline_path = constants.DATA_DIR / constants.COASTLINE_SHAPEFILE_PATH
+    coastline_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
     ensure_shapefile_extracted(coastline_path, "coast")
 
     coast_gdf = gpd.read_file(coastline_path)

@@ -39,13 +39,10 @@ packages = ["vs30"]
 
 [tool.setuptools.package-data]
 vs30 = [
-    "data/*.csv",
-    "data/*.ll",
-    "data/*.ssv",
-    "data/*.tif",
-    "data/*.qgz",
-    "data/coast/*",
-    "data/qmap/*",
+    "resources/geospatial/*.tif",
+    "resources/geospatial/*.tar.xz",
+    "resources/geospatial/coast/*",
+    "resources/geospatial/qmap/*",
     "resources/**/*.csv",
     "resources/**/*.yaml",
     "resources/**/*.npy",

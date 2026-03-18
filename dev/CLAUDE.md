@@ -55,7 +55,7 @@ Helper wrapper scripts in the legacy directory can run the legacy code with the 
 # Install in development mode (extracts shapefiles during install)
 pip install -e /path/to/vs30
 
-# The setup.py custom build step extracts vs30/data/shapefiles.tar.xz
+# The setup.py custom build step extracts vs30/resources/geospatial/shapefiles.tar.xz
 ```
 
 ## CLI Commands
