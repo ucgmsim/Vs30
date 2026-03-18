@@ -4,13 +4,13 @@
 # --- Categorical model files (relative to resources directory) ---
 # These contain the Foster (2019) posterior values, so no additional Bayesian
 # update is performed (do_bayesian_update is false).
-geology_categorical_csv: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
-terrain_categorical_csv: categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+geology_categorical_csv: geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
 
 # --- Observation files (relative to resources directory) ---
 # Only independent observations are used for MVN spatial adjustment, matching
 # the legacy default (--source original with posterior_paper mode).
-independent_observations_csv: observations/foster_2019_measured_vs30_independent_observations.csv
+independent_observations_csv: foster_2019_measured_vs30_independent_observations.csv
 clustered_observations_csv:
 
 # --- Pipeline settings ---
