@@ -10,7 +10,7 @@ terrain_categorical_csv: categorical_vs30_mean_and_stddev/terrain/terrain_model_
 # --- Observation files (relative to resources directory) ---
 # Only independent observations are used for MVN spatial adjustment, matching
 # the legacy default (--source original with posterior_paper mode).
-independent_observations_csv: observations/measured_vs30_independent_observations.csv
+independent_observations_csv: observations/foster_2019_measured_vs30_independent_observations.csv
 clustered_observations_csv:
 
 # --- Pipeline settings ---

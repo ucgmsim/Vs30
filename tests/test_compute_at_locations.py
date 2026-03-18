@@ -25,7 +25,7 @@ TERRAIN_CATEGORICAL_CSV = (
     / "categorical_vs30_mean_and_stddev/terrain/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )
 INDEPENDENT_OBS_CSV = (
-    constants.RESOURCE_PATH / "observations/measured_vs30_independent_observations.csv"
+    constants.RESOURCE_PATH / "observations/foster_2019_measured_vs30_independent_observations.csv"
 )
 CLUSTERED_OBS_CSV = (
     constants.RESOURCE_PATH / "observations/test_viktor_cpt_subset.csv"

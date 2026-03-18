@@ -61,7 +61,7 @@ def compute_categorical_vs30_updates(
         These will be processed with spatial clustering.
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations
-        (e.g., measured_vs30_independent_observations.csv).
+        (e.g., foster_2019_measured_vs30_independent_observations.csv).
         These will be processed without clustering.
     n_proc : int, optional
         Number of processes for DBSCAN clustering. Use -1 for all available cores.

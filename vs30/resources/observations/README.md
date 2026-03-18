@@ -2,7 +2,7 @@
 
 This directory contains prepared observational datasets used for Vs30 mapping. These datasets are created by processing scripts in the `dev/observations/` directory, which consolidate and prepare data from multiple raw sources.
 
-## Dataset: `measured_vs30_independent_observations.csv`
+## Dataset: `foster_2019_measured_vs30_independent_observations.csv`
 
 This file contains **independent observations** that are processed without spatial clustering in the Vs30 mapping pipeline. Each observation is treated individually when updating the categorical models.
 
@@ -57,7 +57,7 @@ easting,northing,vs30,uncertainty,source,station,q
 
 This dataset is configured in `config.yaml` as:
 ```yaml
-independent_observations_file: observations/measured_vs30_independent_observations.csv
+independent_observations_file: observations/foster_2019_measured_vs30_independent_observations.csv
 ```
 
 **Processing characteristics**:
@@ -75,7 +75,6 @@ independent_observations_file: observations/measured_vs30_independent_observatio
 
 ### Related Files
 
-- **`measured_vs30_independent_observations_unfiltered.csv`**: Same data sources but includes ALL Kaiseretal sites (not used in main pipeline)
 - **`viktor_inferred_vs30_from_cpt.csv`**: CPT-derived measurements processed with spatial clustering
 
 ### Generation
