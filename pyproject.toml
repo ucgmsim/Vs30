@@ -72,10 +72,6 @@ omit = [
     "vs30/parallel.py",
 ]
 
-[tool.pytest.ini_options]
-markers = [
-    "slow: marks tests that use clustered observations and take a long time to run (deselect with '-m \"not slow\"')",
-]
 
 [tool.deptry.per_rule_ignores]
 DEP001 = ["conftest", "setuptools"]
