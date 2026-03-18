@@ -20,7 +20,7 @@ This codebase was refactored from legacy code to improve readability and underst
 
 **Validation**: When making large changes, compare the `full-pipeline` output to that produced by the legacy wrapper scripts.
 
-**Developer Resources**: The `dev/` directory (at repo root) contains raw data files and processing scripts used to generate the clean observation CSVs. This directory is for maintainers only and is not part of the installable package.
+**Developer Resources**: The `dev/` directory (at repo root) contains raw data files, processing scripts for generating observation CSVs, and validation tools for comparing outputs against the legacy codebase. This directory is for maintainers only and is not part of the installable package.
 
 ## Environment Setup
 
