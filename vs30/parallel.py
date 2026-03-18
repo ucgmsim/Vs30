@@ -501,7 +501,7 @@ def run_parallel_spatial_fit(
     affected_flat_indices: np.ndarray,
     raster_data,  # RasterData - avoid import cycle
     obs_data: spatial.ObservationData,
-    model_type: str,
+    model_type: constants.ModelType,
     max_dist_m: float,
     max_points: int,
     noisy: bool,

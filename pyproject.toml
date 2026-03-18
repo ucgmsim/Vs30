@@ -98,3 +98,11 @@ exclude = [ # don't report on objects that match any of these regex
   '\.undocumented_method$',
   '\.__repr__$',
 ]
+
+[tool.ty.src]
+exclude = ["dev/", "build/", "VsViewer/", "tests/"]
+
+[tool.ty.rules]
+# Typer uses `= ...` (Ellipsis) for required CLI parameters, which is valid
+# at runtime but not understood by type checkers.
+invalid-parameter-default = "ignore"
