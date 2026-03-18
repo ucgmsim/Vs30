@@ -1,8 +1,8 @@
 # extras added
 *.swp
 *vs30out*
-vs30/data/coast
-vs30/data/qmap
+vs30/resources/geospatial/coast
+vs30/resources/geospatial/qmap
 vs30map
 
 # Byte-compiled / optimized / DLL files

@@ -28,8 +28,8 @@ MODEL_VERSION_TO_CONFIG = {
     FixedModelVersion.VIKTOR_CPT_CLUSTERING: CONFIGS_DIR / "viktor_cpt_clustering.yaml",
 }
 
-# Path to the data directory containing shapefiles, rasters, and other input data
-DATA_DIR = Path(__file__).parent / "data"
+# Path to the geospatial directory containing shapefiles, rasters, and other input data
+GEOSPATIAL_DIR = Path(__file__).parent / "resources" / "geospatial"
 
 # Path to the resources directory containing CSV files with categorical model parameters
 RESOURCE_PATH = Path(__file__).parent / "resources"
@@ -103,7 +103,7 @@ EPS: float = 15000.0
 
 # INTERNAL DATA FILES
 # Filenames for input data files bundled with the package.
-# These are relative to the vs30/data directory.
+# These are relative to the vs30/resources/geospatial directory.
 
 # Terrain classification raster (IwahashiPike terrain categories)
 TERRAIN_RASTER_FILENAME: str = "IwahashiPike.tif"
