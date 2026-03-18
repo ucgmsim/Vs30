@@ -504,6 +504,8 @@ def prepare_observation_data(
     # For geology, we must apply hybrid modifications to model values at observation points
     if model_type == constants.ModelType.GEOLOGY:
         if has_in_memory_arrays:
+            assert slope_array is not None
+            assert coast_dist_array is not None
             # Convert observation coordinates to grid pixel indices
             rows, cols = rasterio.transform.rowcol(
                 raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
@@ -543,6 +545,7 @@ def prepare_observation_data(
                 )
         else:
             # File-based path: read slope and coast distance from rasters
+            assert output_dir is not None
             slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
             coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
 

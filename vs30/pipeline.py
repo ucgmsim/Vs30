@@ -897,7 +897,7 @@ def compute_grid(
     noisy: bool = True,
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
-) -> dict[str, np.ndarray | dict]:
+) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
 
@@ -972,8 +972,8 @@ def compute_grid(
         constants.ModelType.COMBINED,
     )
 
-    result: dict[str, np.ndarray | dict] = {}
-    profile = None
+    result: dict[str, np.ndarray | dict | None] = {}
+    profile: dict | None = None
 
     # 1. Run Geology Pipeline
     if run_geology:
@@ -1031,6 +1031,7 @@ def compute_grid(
         result["combined_stdv"] = combined_stdv
 
         if output_dir is not None:
+            assert profile is not None
             # Restore nodata in combined arrays before writing
             write_vs30_raster(
                 np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
@@ -1145,11 +1146,14 @@ def compute_at_locations(
             ignore_index=True,
         )
     else:
-        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
+        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)  # ty: ignore[invalid-argument-type]
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
     # Load categorical models (with optional Bayesian update)
+    assert geology_categorical_csv is not None, "geology_categorical_csv is required"
+    assert terrain_categorical_csv is not None, "terrain_categorical_csv is required"
+
     if do_bayesian_update:
         logger.info("Performing Bayesian update of categorical model values...")
         geol_model_df = compute_categorical_vs30_updates(
