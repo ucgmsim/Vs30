@@ -158,7 +158,7 @@ def points(
     # Resolve CSV paths relative to resources directory
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
     run_points_pipeline(
         locations_csv=locations_csv,
@@ -323,7 +323,7 @@ def grid(
     # Resolve CSV paths relative to resources directory
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
     pipeline.compute_grid(
         grid_config=config_module.GridConfig(

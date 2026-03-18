@@ -24,7 +24,10 @@ def test_grid_and_points_consistency(tmp_path):
 
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+            if key in constants.OBSERVATION_CSV_KEYS:
+                config_data[key] = FIXTURES_DIR / config_data[key]
+            else:
+                config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
     grid_output_dir = tmp_path / "grid_output"
 

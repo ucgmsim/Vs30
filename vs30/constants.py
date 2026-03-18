@@ -42,6 +42,18 @@ CSV_PATH_KEYS = [
     "independent_observations_csv",
 ]
 
+OBSERVATION_CSV_KEYS = {
+    "clustered_observations_csv",
+    "independent_observations_csv",
+}
+
+RESOURCE_SUBDIRS: dict[str, str] = {
+    "geology_categorical_csv": "categorical_vs30_mean_and_stddev",
+    "terrain_categorical_csv": "categorical_vs30_mean_and_stddev",
+    "clustered_observations_csv": "observations",
+    "independent_observations_csv": "observations",
+}
+
 # Covariance reduction factor for dissimilar Vs30 values (dimensionless).
 # Controls how much the correlation between two points is reduced when their
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.

@@ -52,7 +52,10 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     config_data = load_test_config(scenario)
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / config_data[key]
+            if key in constants.OBSERVATION_CSV_KEYS:
+                config_data[key] = FIXTURES_DIR / config_data[key]
+            else:
+                config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
     pipeline.compute_grid(
         grid_config=config_module.GridConfig.from_dict(config_data),
