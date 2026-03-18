@@ -5,14 +5,12 @@ These tests verify that the full pipeline produces consistent results
 for different observation type combinations and processing modes.
 
 Test scenarios (using small domain for fast execution):
-- Independent observations only (fast)
-- Clustered (CPT) observations only (slow — ~19K observations)
-- Both observation types combined (slow — ~19K observations)
+- Independent observations only
+- Clustered (CPT) observations only
+- Both observation types combined
 
 Each scenario is tested with both single-process (n_proc=1) and
 multi-process (n_proc=cpu_count) modes to ensure parallel processing works correctly.
-
-Slow tests can be skipped with: pytest -m "not slow"
 """
 
 import os
@@ -27,11 +25,8 @@ from conftest import FIXTURES_DIR
 from vs30 import constants, pipeline
 from vs30 import config as config_module
 
-FAST_SCENARIOS = [
+SCENARIOS = [
     "small_independent_only",
-]
-
-SLOW_SCENARIOS = [
     "small_both",
     "small_clustered_only",
 ]
@@ -75,28 +70,14 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 
 
-@pytest.mark.parametrize("scenario", FAST_SCENARIOS)
+@pytest.mark.parametrize("scenario", SCENARIOS)
 def test_single_process(tmp_path, scenario):
     """Test pipeline with n_proc=1 for each scenario."""
     run_pipeline_scenario(tmp_path, scenario, n_proc=1)
 
 
-@pytest.mark.parametrize("scenario", FAST_SCENARIOS)
+@pytest.mark.parametrize("scenario", SCENARIOS)
 def test_multiprocess(tmp_path, scenario):
     """Test pipeline with all available CPUs for each scenario."""
     # `or 1` guards against None return from os.cpu_count() to satisfy the type checker.
-    run_pipeline_scenario(tmp_path, scenario, n_proc=os.cpu_count() or 1)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("scenario", SLOW_SCENARIOS)
-def test_single_process_slow(tmp_path, scenario):
-    """Test pipeline with n_proc=1 for scenarios using clustered observations."""
-    run_pipeline_scenario(tmp_path, scenario, n_proc=1)
-
-
-@pytest.mark.slow
-@pytest.mark.parametrize("scenario", SLOW_SCENARIOS)
-def test_multiprocess_slow(tmp_path, scenario):
-    """Test pipeline with all available CPUs for scenarios using clustered observations."""
     run_pipeline_scenario(tmp_path, scenario, n_proc=os.cpu_count() or 1)

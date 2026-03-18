@@ -1,13 +1,13 @@
 # Test configuration - Both observation types
-# 10km x 10km domain at 500m resolution for fast testing
+# 10km x 10km domain at 1000m resolution for fast testing
 
 # --- Grid Parameters ---
 grid_xmin: 1565300
 grid_xmax: 1575300
 grid_ymin: 5175500
 grid_ymax: 5185500
-grid_dx: 500
-grid_dy: 500
+grid_dx: 1000
+grid_dy: 1000
 
 # --- Categorical model files ---
 geology_categorical_csv: categorical_vs30_mean_and_stddev/geology/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv

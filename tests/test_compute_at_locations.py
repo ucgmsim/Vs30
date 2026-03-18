@@ -28,7 +28,7 @@ INDEPENDENT_OBS_CSV = (
     constants.RESOURCE_PATH / "observations/measured_vs30_independent_observations.csv"
 )
 CLUSTERED_OBS_CSV = (
-    constants.RESOURCE_PATH / "observations/viktor_inferred_vs30_from_cpt.csv"
+    constants.RESOURCE_PATH / "observations/test_viktor_cpt_subset.csv"
 )
 
 
