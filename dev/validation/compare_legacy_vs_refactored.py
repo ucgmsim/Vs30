@@ -144,10 +144,6 @@ def compare_rasters(legacy_path: Path, refactored_path: Path, description: str) 
                     max_rel_diff = 0.0
                     mean_rel_diff = 0.0
 
-                # Tolerance thresholds
-                abs_tolerance = 1e-5
-                rel_tolerance = 1e-4  # 0.01%
-
                 band_stats = {
                     "band": band_idx,
                     "n_valid_pixels": int(n_valid),
@@ -236,7 +232,6 @@ def assess_comparison(results: list[dict]) -> str:
                 continue
 
             max_abs = band["max_abs_diff"]
-            max_rel = band["max_rel_diff"]
             pct_gt_1 = band["pct_diff_gt_1"]
 
             # Thresholds for acceptable differences
