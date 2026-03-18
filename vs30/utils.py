@@ -1,7 +1,5 @@
 """Shared utility functions: correlation function and model combination."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
