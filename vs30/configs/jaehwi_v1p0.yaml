@@ -1,15 +1,12 @@
-# Jaehwi v1.0 Vs30 Model Configuration (PLACEHOLDER)
-# This configuration is not yet fully implemented.
+# Jaehwi v1.0 Vs30 Model Configuration
 
 # --- Categorical model files (relative to resources directory) ---
-# TODO: Update with Jaehwi-specific categorical files when available
-geology_categorical_csv: geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
-terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+geology_categorical_csv: geology_model_prior_mean_and_standard_deviation.csv
+terrain_categorical_csv: terrain_model_prior_mean_and_standard_deviation.csv
 
 # --- Observation files (relative to resources directory) ---
-# TODO: Update with Jaehwi-specific observation files when available
 independent_observations_csv: jaehwi_v1p0_independent_observations.csv
-clustered_observations_csv: viktor_inferred_vs30_from_cpt.csv
+clustered_observations_csv:
 
 # --- Pipeline settings ---
 do_bayesian_update: true
