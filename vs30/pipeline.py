@@ -688,6 +688,7 @@ def run_in_memory_pipeline_for_model_type(
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     output_dir: Path | None = None,
+    include_intermediate: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     Run the full VS30 generation pipeline for a single model type in memory.
@@ -699,7 +700,8 @@ def run_in_memory_pipeline_for_model_type(
     3. Apply hybrid modifications for slope and coastal distance (geology only).
     4. Spatial adjustment using MVN conditioning with observations (conditional).
 
-    When output_dir is provided, intermediate files are written at each stage.
+    When output_dir is provided, intermediate files are written at each stage
+    (gated by include_intermediate for non-final outputs).
 
     Parameters
     ----------
@@ -726,6 +728,9 @@ def run_in_memory_pipeline_for_model_type(
     output_dir : Path, optional
         Directory to write intermediate and final rasters. If None, no files
         are written.
+    include_intermediate : bool, optional
+        Whether to write intermediate files (ID rasters, initial VS30, slope,
+        coast distance, hybrid geology). Default False.
 
     Returns
     -------
@@ -755,7 +760,7 @@ def run_in_memory_pipeline_for_model_type(
             n_proc=n_proc,
         )
 
-        if output_dir is not None:
+        if output_dir is not None and include_intermediate:
             posterior_csv_path = (
                 output_dir
                 / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
@@ -773,7 +778,7 @@ def run_in_memory_pipeline_for_model_type(
         grid_config, model_type, posterior_df
     )
 
-    if output_dir is not None:
+    if output_dir is not None and include_intermediate:
         id_filename = (
             constants.GEOLOGY_ID_FILENAME
             if model_type == constants.ModelType.GEOLOGY
@@ -803,7 +808,7 @@ def run_in_memory_pipeline_for_model_type(
             compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile)
         )
 
-        if output_dir is not None:
+        if output_dir is not None and include_intermediate:
             write_single_band_raster(
                 slope_array,
                 profile,
@@ -896,6 +901,7 @@ def compute_grid(
     mvn: bool = True,
     noisy: bool = True,
     n_proc: int = 1,
+    include_intermediate: bool = False,
     max_spatial_boolean_array_memory_gb: float = 1.0,
 ) -> dict[str, np.ndarray | dict | None]:
     """
@@ -944,6 +950,9 @@ def compute_grid(
         Whether to apply noise weighting in spatial adjustment.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
+    include_intermediate : bool, optional
+        Whether to write intermediate files (ID rasters, initial VS30, slope,
+        coast distance, hybrid geology). Default False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
 
@@ -990,6 +999,7 @@ def compute_grid(
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
+            include_intermediate=include_intermediate,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -1009,6 +1019,7 @@ def compute_grid(
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
+            include_intermediate=include_intermediate,
         )
         result["terrain_vs30"] = terr_vs30
         result["terrain_stdv"] = terr_stdv
@@ -1032,7 +1043,8 @@ def compute_grid(
 
         if output_dir is not None:
             assert profile is not None
-            # Restore nodata in combined arrays before writing
+            # Write combined model output. Band 1 is the median Vs30 in
+            # linear space (m/s), band 2 is the lognormal standard deviation.
             write_vs30_raster(
                 np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
                 np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
@@ -1060,13 +1072,14 @@ def compute_grid(
 def compute_at_locations(
     longitudes: np.ndarray,
     latitudes: np.ndarray,
+    model_type: constants.ModelType = constants.ModelType.COMBINED,
     combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
     combine_ratio: float | None = None,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    include_intermediate: bool = True,
+    include_intermediate: bool = False,
     mvn: bool = True,
     noisy: bool = True,
     n_proc: int = 1,
@@ -1119,11 +1132,11 @@ def compute_at_locations(
     Returns
     -------
     DataFrame
-        Results with columns: easting, northing, geology_id, geology_mvn_vs30,
-        geology_mvn_stdv, terrain_id, terrain_mvn_vs30, terrain_mvn_stdv,
-        vs30, stdv. If include_intermediate is True, also includes
+        Results with columns: easting, northing, vs30, stdv.
+        If include_intermediate is True, also includes geology_id,
         geology_vs30, geology_stdv, geology_vs30_hybrid, geology_stdv_hybrid,
-        terrain_vs30, terrain_stdv.
+        geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
+        terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
     """
     # Convert WGS84 to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
@@ -1150,29 +1163,46 @@ def compute_at_locations(
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
-    # Load categorical models (with optional Bayesian update)
-    assert geology_categorical_csv is not None, "geology_categorical_csv is required"
-    assert terrain_categorical_csv is not None, "terrain_categorical_csv is required"
+    run_geology = model_type in (
+        constants.ModelType.GEOLOGY,
+        constants.ModelType.COMBINED,
+    )
+    run_terrain = model_type in (
+        constants.ModelType.TERRAIN,
+        constants.ModelType.COMBINED,
+    )
 
-    if do_bayesian_update:
-        logger.info("Performing Bayesian update of categorical model values...")
-        geol_model_df = compute_categorical_vs30_updates(
-            categorical_model_csv=geology_categorical_csv,
-            model_type=constants.ModelType.GEOLOGY,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
-            n_proc=n_proc,
-        )
-        terr_model_df = compute_categorical_vs30_updates(
-            categorical_model_csv=terrain_categorical_csv,
-            model_type=constants.ModelType.TERRAIN,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
-            n_proc=n_proc,
-        )
-    else:
-        geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
-        terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
+    # Load categorical models (with optional Bayesian update)
+    geol_model_df = None
+    terr_model_df = None
+
+    if run_geology:
+        assert geology_categorical_csv is not None, "geology_categorical_csv is required"
+        if do_bayesian_update:
+            logger.info("Performing Bayesian update of geology categorical model values...")
+            geol_model_df = compute_categorical_vs30_updates(
+                categorical_model_csv=geology_categorical_csv,
+                model_type=constants.ModelType.GEOLOGY,
+                clustered_observations_csv=clustered_observations_csv,
+                independent_observations_csv=independent_observations_csv,
+                n_proc=n_proc,
+            )
+        else:
+            geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
+
+    if run_terrain:
+        assert terrain_categorical_csv is not None, "terrain_categorical_csv is required"
+        if do_bayesian_update:
+            logger.info("Performing Bayesian update of terrain categorical model values...")
+            terr_model_df = compute_categorical_vs30_updates(
+                categorical_model_csv=terrain_categorical_csv,
+                model_type=constants.ModelType.TERRAIN,
+                clustered_observations_csv=clustered_observations_csv,
+                independent_observations_csv=independent_observations_csv,
+                n_proc=n_proc,
+            )
+        else:
+            terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
     n_proc_resolved = parallel.resolve_n_proc(n_proc)
 
@@ -1184,6 +1214,7 @@ def compute_at_locations(
 
         loc_config = parallel.LocationsChunkConfig(
             include_intermediate=include_intermediate,
+            model_type=model_type,
             combination_method=combination_method,
             combine_ratio=combine_ratio,
             noisy=noisy,
@@ -1213,72 +1244,80 @@ def compute_at_locations(
     result[constants.COL_NORTHING] = points[:, 1]
 
     # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
-    with tqdm(
-        total=len(points), desc="Geology: spatial adjustment", unit="point"
-    ) as pbar:
-        (
-            geol_ids,
-            geol_vs30,
-            geol_stdv,
-            geol_vs30_hybrid,
-            geol_stdv_hybrid,
-            geol_mvn_vs30,
-            geol_mvn_stdv,
-        ) = parallel.process_geology_at_points(
-            points,
-            geol_model_df,
-            observations_df,
-            noisy=noisy,
-            progress_bar=pbar,
-        )
+    if run_geology:
+        with tqdm(
+            total=len(points), desc="Geology: spatial adjustment", unit="point"
+        ) as pbar:
+            (
+                geol_ids,
+                geol_vs30,
+                geol_stdv,
+                geol_vs30_hybrid,
+                geol_stdv_hybrid,
+                geol_mvn_vs30,
+                geol_mvn_stdv,
+            ) = parallel.process_geology_at_points(
+                points,
+                geol_model_df,
+                observations_df,
+                noisy=noisy,
+                progress_bar=pbar,
+            )
 
-    result[constants.COL_GEOLOGY_ID] = geol_ids
-    if include_intermediate:
-        result[constants.COL_GEOLOGY_VS30] = geol_vs30
-        result[constants.COL_GEOLOGY_STDV] = geol_stdv
-        result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-        result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-    result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-    result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+        if include_intermediate:
+            result[constants.COL_GEOLOGY_ID] = geol_ids
+            result[constants.COL_GEOLOGY_VS30] = geol_vs30
+            result[constants.COL_GEOLOGY_STDV] = geol_stdv
+            result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+            result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+            result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+            result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
-    with tqdm(
-        total=len(points), desc="Terrain: spatial adjustment", unit="point"
-    ) as pbar:
-        (
-            terr_ids,
-            terr_vs30,
-            terr_stdv,
+    if run_terrain:
+        with tqdm(
+            total=len(points), desc="Terrain: spatial adjustment", unit="point"
+        ) as pbar:
+            (
+                terr_ids,
+                terr_vs30,
+                terr_stdv,
+                terr_mvn_vs30,
+                terr_mvn_stdv,
+            ) = parallel.process_terrain_at_points(
+                points,
+                terr_model_df,
+                observations_df,
+                noisy=noisy,
+                progress_bar=pbar,
+            )
+
+        if include_intermediate:
+            result[constants.COL_TERRAIN_ID] = terr_ids
+            result[constants.COL_TERRAIN_VS30] = terr_vs30
+            result[constants.COL_TERRAIN_STDV] = terr_stdv
+            result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+            result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+
+    # --- Stage 4: Combine geology and terrain models or use single model result ---
+    if run_geology and run_terrain:
+        logger.info("Combining models...")
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
+            geol_mvn_vs30,
+            geol_mvn_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
-        ) = parallel.process_terrain_at_points(
-            points,
-            terr_model_df,
-            observations_df,
-            noisy=noisy,
-            progress_bar=pbar,
+            combination_method,
+            combine_ratio,
         )
-
-    result[constants.COL_TERRAIN_ID] = terr_ids
-    if include_intermediate:
-        result[constants.COL_TERRAIN_VS30] = terr_vs30
-        result[constants.COL_TERRAIN_STDV] = terr_stdv
-    result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
-    result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
-
-    # --- Stage 4: Combine geology and terrain models using weighted average ---
-    logger.info("Combining models...")
-    combined_vs30, combined_stdv = utils.combine_vs30_models(
-        geol_mvn_vs30,
-        geol_mvn_stdv,
-        terr_mvn_vs30,
-        terr_mvn_stdv,
-        combination_method,
-        combine_ratio,
-    )
-
-    result[constants.COL_VS30] = combined_vs30
-    result[constants.COL_COMBINED_STDV] = combined_stdv
+        result[constants.COL_VS30] = combined_vs30
+        result[constants.COL_COMBINED_STDV] = combined_stdv
+    elif run_geology:
+        result[constants.COL_VS30] = geol_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
+    elif run_terrain:
+        result[constants.COL_VS30] = terr_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
     logger.info(f"  Total locations: {len(points)}")
     return pd.DataFrame(result)

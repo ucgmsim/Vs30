@@ -270,6 +270,7 @@ class LocationsChunkConfig:
     """
 
     include_intermediate: bool
+    model_type: constants.ModelType
     combination_method: constants.CombinationMethod
     combine_ratio: float | None
     noisy: bool
@@ -309,59 +310,76 @@ def process_locations_chunk(
 
     result = {}
 
-    # Process geology model
-    (
-        geol_ids,
-        geol_vs30,
-        geol_stdv,
-        geol_vs30_hybrid,
-        geol_stdv_hybrid,
-        geol_mvn_vs30,
-        geol_mvn_stdv,
-    ) = process_geology_at_points(
-        points,
-        geol_model_df,
-        observations_df,
-        config.noisy,
+    run_geology = config.model_type in (
+        constants.ModelType.GEOLOGY,
+        constants.ModelType.COMBINED,
+    )
+    run_terrain = config.model_type in (
+        constants.ModelType.TERRAIN,
+        constants.ModelType.COMBINED,
     )
 
-    result[constants.COL_GEOLOGY_ID] = geol_ids
-    if config.include_intermediate:
-        result[constants.COL_GEOLOGY_VS30] = geol_vs30
-        result[constants.COL_GEOLOGY_STDV] = geol_stdv
-        result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-        result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-    result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-    result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+    # Process geology model
+    if run_geology:
+        (
+            geol_ids,
+            geol_vs30,
+            geol_stdv,
+            geol_vs30_hybrid,
+            geol_stdv_hybrid,
+            geol_mvn_vs30,
+            geol_mvn_stdv,
+        ) = process_geology_at_points(
+            points,
+            geol_model_df,
+            observations_df,
+            config.noisy,
+        )
+
+        if config.include_intermediate:
+            result[constants.COL_GEOLOGY_ID] = geol_ids
+            result[constants.COL_GEOLOGY_VS30] = geol_vs30
+            result[constants.COL_GEOLOGY_STDV] = geol_stdv
+            result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+            result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+            result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+            result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     # Process terrain model
-    (
-        terr_ids,
-        terr_vs30,
-        terr_stdv,
-        terr_mvn_vs30,
-        terr_mvn_stdv,
-    ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
+    if run_terrain:
+        (
+            terr_ids,
+            terr_vs30,
+            terr_stdv,
+            terr_mvn_vs30,
+            terr_mvn_stdv,
+        ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
 
-    result[constants.COL_TERRAIN_ID] = terr_ids
-    if config.include_intermediate:
-        result[constants.COL_TERRAIN_VS30] = terr_vs30
-        result[constants.COL_TERRAIN_STDV] = terr_stdv
-    result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
-    result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+        if config.include_intermediate:
+            result[constants.COL_TERRAIN_ID] = terr_ids
+            result[constants.COL_TERRAIN_VS30] = terr_vs30
+            result[constants.COL_TERRAIN_STDV] = terr_stdv
+            result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+            result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
-    # Combine models
-    combined_vs30, combined_stdv = utils.combine_vs30_models(
-        geol_mvn_vs30,
-        geol_mvn_stdv,
-        terr_mvn_vs30,
-        terr_mvn_stdv,
-        config.combination_method,
-        config.combine_ratio,
-    )
-
-    result[constants.COL_VS30] = combined_vs30
-    result[constants.COL_COMBINED_STDV] = combined_stdv
+    # Combine models or use single model result
+    if run_geology and run_terrain:
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
+            geol_mvn_vs30,
+            geol_mvn_stdv,
+            terr_mvn_vs30,
+            terr_mvn_stdv,
+            config.combination_method,
+            config.combine_ratio,
+        )
+        result[constants.COL_VS30] = combined_vs30
+        result[constants.COL_COMBINED_STDV] = combined_stdv
+    elif run_geology:
+        result[constants.COL_VS30] = geol_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
+    elif run_terrain:
+        result[constants.COL_VS30] = terr_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
     return chunk_id, pd.DataFrame(result)
 
