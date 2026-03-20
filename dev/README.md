@@ -12,5 +12,6 @@ here.
   - `jaehwi_v1p0/` — Data and script for the Jaehwi v1.0 model observations.
   - `foster_2019/` — Script that generated the Foster 2019 model observations
     (requires the legacy codebase environment).
-- `validation/` — Scripts for comparing pipeline outputs against the legacy
-  codebase or between different runs.
+- `compare_rasters.py` — Compares any two GeoTIFFs:
+  - `stats` prints pixel-level comparison statistics over the overlapping region.
+  - `diff` saves signed, absolute, and log-space difference GeoTIFFs.
