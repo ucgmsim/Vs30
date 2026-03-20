@@ -24,15 +24,19 @@ This codebase was refactored from legacy code to improve readability and underst
 
 ## Environment Setup
 
-Activate the Python environment before running any commands:
+Activate the Python environment before running any commands. Because `mamba activate` requires shell initialisation that non-interactive shells skip, source the conda/mamba init scripts explicitly before activating:
+
 ```bash
+source /home/arr65/miniforge-pypy3/etc/profile.d/conda.sh && \
+source /home/arr65/miniforge-pypy3/etc/profile.d/mamba.sh && \
 mamba activate vs30_venv
 ```
 
 All Python/pytest/vs30 commands must be run with the environment activated, e.g.:
 ```bash
+source /home/arr65/miniforge-pypy3/etc/profile.d/conda.sh && \
+source /home/arr65/miniforge-pypy3/etc/profile.d/mamba.sh && \
 mamba activate vs30_venv && pytest tests/
-mamba activate vs30_venv && vs30 grid
 ```
 
 ## Legacy Codebase Reference
