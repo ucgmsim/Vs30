@@ -69,6 +69,7 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
         do_bayesian_update=config_data["do_bayesian_update"],
         noisy=config_data["noisy"],
         n_proc=n_proc,
+        include_intermediate=True,
     )
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 

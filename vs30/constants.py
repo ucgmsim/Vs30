@@ -407,6 +407,9 @@ BAND_DESCRIPTION_STDV: str = "Standard Deviation"
 BAND_DESCRIPTION_VS30_HYBRID: str = "Vs30 (Hybrid)"
 BAND_DESCRIPTION_STDV_HYBRID: str = "Standard Deviation (Hybrid)"
 BAND_DESCRIPTION_VS30_COMBINED: str = "Vs30 (Combined Average)"
+# The combined standard deviation is derived from the mixture of log-normals
+# formula (see utils.combine_models), accounting for both individual model
+# variances and the spread between the weighted log-space Vs30 values.
 BAND_DESCRIPTION_STDV_COMBINED: str = "Standard Deviation (Combined Average)"
 BAND_DESCRIPTION_COAST_DISTANCE: str = "Distance to Coast (m)"
 BAND_DESCRIPTION_SLOPE: str = "Slope"

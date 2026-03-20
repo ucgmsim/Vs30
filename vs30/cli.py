@@ -34,6 +34,7 @@ def run_points_pipeline(
     independent_observations_csv: Path | None = None,
     mvn: bool = True,
     do_bayesian_update: bool = False,
+    model_type: constants.ModelType = constants.ModelType.COMBINED,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -80,6 +81,13 @@ def run_points_pipeline(
     typer.BadParameter
         If the specified longitude or latitude column is not found in the input CSV.
     """
+    if model_type != constants.ModelType.COMBINED and not include_intermediate:
+        raise typer.BadParameter(
+            "Single-model output (--model-type geology or terrain) requires "
+            "--include-intermediate, as per-model results are intermediate "
+            "data products. The only final product is the combined model."
+        )
+
     df = pd.read_csv(locations_csv)
     if lon_column not in df.columns:
         raise typer.BadParameter(f"Column '{lon_column}' not found in {locations_csv}")
@@ -89,6 +97,7 @@ def run_points_pipeline(
     result_df = pipeline.compute_at_locations(
         longitudes=df[lon_column].values,
         latitudes=df[lat_column].values,
+        model_type=model_type,
         combination_method=combination_method,
         combine_ratio=combine_ratio,
         geology_categorical_csv=geology_categorical_csv,
@@ -129,7 +138,7 @@ def points(
     ] = constants.LOCATIONS_LAT_COLUMN,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
-    ] = True,
+    ] = False,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
@@ -207,6 +216,9 @@ def points_custom(
         Path | None,
         typer.Option(exists=True, dir_okay=False),
     ] = None,
+    model_type: typing.Annotated[
+        constants.ModelType, typer.Option()
+    ] = constants.ModelType.COMBINED,
     lon_column: typing.Annotated[
         str, typer.Option()
     ] = constants.LOCATIONS_LON_COLUMN,
@@ -215,7 +227,7 @@ def points_custom(
     ] = constants.LOCATIONS_LAT_COLUMN,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
-    ] = True,
+    ] = False,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
@@ -248,6 +260,8 @@ def points_custom(
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations.
+    model_type : ModelType, optional
+        Which model(s) to run: geology, terrain, or combined (default).
     lon_column : str, optional
         Name of longitude column in input CSV.
     lat_column : str, optional
@@ -273,8 +287,10 @@ def points_custom(
         independent_observations_csv=independent_observations_csv,
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
+        model_type=model_type,
     )
 
+@cli.from_docstring(app)
 def grid(
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
     version: typing.Annotated[
@@ -287,6 +303,9 @@ def grid(
     grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
     grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
+    include_intermediate: typing.Annotated[
+        bool, typer.Option("--include-intermediate/--final-only")
+    ] = False,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
@@ -314,6 +333,8 @@ def grid(
         Grid Y spacing (meters).
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
+    include_intermediate : bool
+        Include intermediate rasters in output.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
@@ -341,9 +362,11 @@ def grid(
         do_bayesian_update=config_data["do_bayesian_update"],
         noisy=config_data["noisy"],
         n_proc=n_proc,
+        include_intermediate=include_intermediate,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 
+@cli.from_docstring(app)
 def grid_custom(
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
     grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
@@ -376,6 +399,9 @@ def grid_custom(
     model_type: typing.Annotated[
         constants.ModelType, typer.Option()
     ] = constants.ModelType.COMBINED,
+    include_intermediate: typing.Annotated[
+        bool, typer.Option("--include-intermediate/--final-only")
+    ] = False,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
@@ -423,11 +449,20 @@ def grid_custom(
         Path to CSV file with independent observations.
     model_type : ModelType, optional
         Which model(s) to run: geology, terrain, or combined (default).
+    include_intermediate : bool
+        Include intermediate rasters in output.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
+    if model_type != constants.ModelType.COMBINED and not include_intermediate:
+        raise typer.BadParameter(
+            "Single-model output (--model-type geology or terrain) requires "
+            "--include-intermediate, as per-model results are intermediate "
+            "data products. The only final product is the combined model."
+        )
+
     pipeline.compute_grid(
         grid_config=config_module.GridConfig(
             grid_xmin=grid_xmin, grid_xmax=grid_xmax,
@@ -446,6 +481,7 @@ def grid_custom(
         mvn=mvn,
         noisy=noisy,
         n_proc=n_proc,
+        include_intermediate=include_intermediate,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 
