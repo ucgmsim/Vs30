@@ -21,20 +21,20 @@ app = typer.Typer(name="vs30", help="VS30 map generation and categorical model u
 def run_points_pipeline(
     locations_csv: Path,
     output_csv: Path,
-    lon_column: str,
-    lat_column: str,
-    include_intermediate: bool,
-    noisy: bool,
-    n_proc: int,
-    combination_method: constants.CombinationMethod,
-    combine_ratio: float | None = None,
+    model_type: constants.ModelType = constants.ModelType.COMBINED,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
+    combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
+    combine_ratio: float | None = None,
+    noisy: bool = True,
     mvn: bool = True,
     do_bayesian_update: bool = False,
-    model_type: constants.ModelType = constants.ModelType.COMBINED,
+    include_intermediate: bool = False,
+    n_proc: int = 1,
+    lon_column: str = constants.LOCATIONS_LON_COLUMN,
+    lat_column: str = constants.LOCATIONS_LAT_COLUMN,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -49,20 +49,8 @@ def run_points_pipeline(
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
         Output CSV file path.
-    lon_column : str
-        Name of longitude column in input CSV.
-    lat_column : str
-        Name of latitude column in input CSV.
-    include_intermediate : bool
-        Include intermediate values (geology/terrain separately) in output.
-    noisy : bool
-        Whether to apply noise weighting in spatial adjustment.
-    n_proc : int
-        Number of parallel processes. Use -1 for all cores.
-    combination_method : CombinationMethod
-        Method for combining geology and terrain models.
-    combine_ratio : float or None, optional
-        Geology-to-terrain weight ratio (used when combination_method is ratio).
+    model_type : ModelType, optional
+        Which model(s) to run: geology, terrain, or combined (default).
     geology_categorical_csv : Path or None, optional
         Path to geology categorical CSV.
     terrain_categorical_csv : Path or None, optional
@@ -71,10 +59,24 @@ def run_points_pipeline(
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path or None, optional
         Path to CSV file with independent observations.
+    combination_method : CombinationMethod, optional
+        Method for combining geology and terrain models.
+    combine_ratio : float or None, optional
+        Geology-to-terrain weight ratio (used when combination_method is ratio).
+    noisy : bool, optional
+        Whether to apply noise weighting in spatial adjustment.
     mvn : bool, optional
         Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical Vs30 values.
+    include_intermediate : bool, optional
+        Include intermediate values (geology/terrain separately) in output.
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores.
+    lon_column : str, optional
+        Name of longitude column in input CSV.
+    lat_column : str, optional
+        Name of latitude column in input CSV.
 
     Raises
     ------
@@ -98,17 +100,17 @@ def run_points_pipeline(
         longitudes=df[lon_column].values,
         latitudes=df[lat_column].values,
         model_type=model_type,
-        combination_method=combination_method,
-        combine_ratio=combine_ratio,
         geology_categorical_csv=geology_categorical_csv,
         terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
-        include_intermediate=include_intermediate,
-        mvn=mvn,
+        combination_method=combination_method,
+        combine_ratio=combine_ratio,
         noisy=noisy,
-        n_proc=n_proc,
+        mvn=mvn,
         do_bayesian_update=do_bayesian_update,
+        include_intermediate=include_intermediate,
+        n_proc=n_proc,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -121,14 +123,14 @@ def run_points_pipeline(
 
 @cli.from_docstring(app)
 def points(
+    version: typing.Annotated[
+        constants.FixedModelVersion, typer.Argument()
+    ],
     locations_csv: typing.Annotated[
         Path, typer.Argument(exists=True, dir_okay=False)
     ],
     output_csv: typing.Annotated[
         Path, typer.Argument(dir_okay=False)
-    ],
-    version: typing.Annotated[
-        constants.FixedModelVersion, typer.Argument()
     ],
     lon_column: typing.Annotated[
         str, typer.Option()
@@ -146,12 +148,12 @@ def points(
 
     Parameters
     ----------
+    version : FixedModelVersion
+        Model version to use (e.g., foster_2019).
     locations_csv : Path
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
         Output CSV file path.
-    version : FixedModelVersion
-        Model version to use (e.g., foster_2019).
     lon_column : str, optional
         Name of longitude column in input CSV.
     lat_column : str, optional
@@ -172,29 +174,23 @@ def points(
     run_points_pipeline(
         locations_csv=locations_csv,
         output_csv=output_csv,
-        lon_column=lon_column,
-        lat_column=lat_column,
-        include_intermediate=include_intermediate,
-        noisy=config_data["noisy"],
-        n_proc=n_proc,
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
+        noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
+        include_intermediate=include_intermediate,
+        n_proc=n_proc,
+        lon_column=lon_column,
+        lat_column=lat_column,
     )
 
 
 @cli.from_docstring(app)
 def points_custom(
-    locations_csv: typing.Annotated[
-        Path, typer.Argument(exists=True, dir_okay=False)
-    ],
-    output_csv: typing.Annotated[
-        Path, typer.Argument(dir_okay=False)
-    ],
     geology_categorical_csv: typing.Annotated[
         Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = ...,
@@ -208,6 +204,12 @@ def points_custom(
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
     do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
+    locations_csv: typing.Annotated[
+        Path, typer.Option(exists=True, dir_okay=False)
+    ] = ...,
+    output_csv: typing.Annotated[
+        Path, typer.Option(dir_okay=False)
+    ] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -238,10 +240,6 @@ def points_custom(
 
     Parameters
     ----------
-    locations_csv : Path
-        CSV file with latitude/longitude columns (WGS84).
-    output_csv : Path
-        Output CSV file path.
     geology_categorical_csv : Path
         Path to geology categorical CSV.
     terrain_categorical_csv : Path
@@ -256,6 +254,10 @@ def points_custom(
         Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool
         Whether to perform Bayesian update of categorical Vs30 values.
+    locations_csv : Path
+        CSV file with latitude/longitude columns (WGS84).
+    output_csv : Path
+        Output CSV file path.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
@@ -274,34 +276,34 @@ def points_custom(
     run_points_pipeline(
         locations_csv=locations_csv,
         output_csv=output_csv,
-        lon_column=lon_column,
-        lat_column=lat_column,
-        include_intermediate=include_intermediate,
-        noisy=noisy,
-        n_proc=n_proc,
-        combination_method=combination_method,
-        combine_ratio=combine_ratio,
+        model_type=model_type,
         geology_categorical_csv=geology_categorical_csv,
         terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
+        combination_method=combination_method,
+        combine_ratio=combine_ratio,
+        noisy=noisy,
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
-        model_type=model_type,
+        include_intermediate=include_intermediate,
+        n_proc=n_proc,
+        lon_column=lon_column,
+        lat_column=lat_column,
     )
 
 @cli.from_docstring(app)
 def grid(
-    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
     version: typing.Annotated[
-        constants.FixedModelVersion, typer.Argument()
-    ],
+        constants.FixedModelVersion, typer.Option()
+    ] = ...,
     grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
     grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
     grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
     grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
     grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
     grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
+    output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
@@ -315,8 +317,6 @@ def grid(
 
     Parameters
     ----------
-    output_dir : Path
-        Directory to save all pipeline outputs.
     version : FixedModelVersion
         Model version to use (e.g., foster_2019).
     grid_xmin : int
@@ -331,6 +331,8 @@ def grid(
         Grid X spacing (meters).
     grid_dy : int
         Grid Y spacing (meters).
+    output_dir : Path
+        Directory to save all pipeline outputs.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     include_intermediate : bool
@@ -353,28 +355,21 @@ def grid(
             grid_dx=grid_dx, grid_dy=grid_dy,
         ),
         output_dir=output_dir,
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        do_bayesian_update=config_data["do_bayesian_update"],
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
-        n_proc=n_proc,
+        do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
+        n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 
 @cli.from_docstring(app)
 def grid_custom(
-    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
     geology_categorical_csv: typing.Annotated[
         Path, typer.Option("--geology-csv", exists=True, dir_okay=False)
     ] = ...,
@@ -385,9 +380,16 @@ def grid_custom(
         constants.CombinationMethod, typer.Option()
     ] = ...,
     combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio. Required when combination_method is ratio.")] = ...,
-    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
+    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
+    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMIN}.")] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_XMAX}.")] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMIN}.")] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_LAND_YMAX}.")] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.SUGGESTED_GRID_DX}.")] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.SUGGESTED_GRID_DY}.")] = ...,
+    output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -415,8 +417,20 @@ def grid_custom(
 
     Parameters
     ----------
-    output_dir : Path
-        Directory to save all pipeline outputs.
+    geology_categorical_csv : Path
+        Path to geology categorical CSV.
+    terrain_categorical_csv : Path
+        Path to terrain categorical CSV.
+    combination_method : CombinationMethod
+        Method for combining models.
+    combine_ratio : float
+        Geology-to-terrain weight ratio (used when combination_method is ratio).
+    noisy : bool
+        Whether to apply noise weighting in spatial adjustment.
+    mvn : bool
+        Whether to perform MVN spatial adjustment.
+    do_bayesian_update : bool
+        Whether to perform Bayesian update of categorical Vs30 values.
     grid_xmin : int
         Grid minimum X coordinate (NZTM, meters).
     grid_xmax : int
@@ -429,20 +443,8 @@ def grid_custom(
         Grid X spacing (meters).
     grid_dy : int
         Grid Y spacing (meters).
-    geology_categorical_csv : Path
-        Path to geology categorical CSV.
-    terrain_categorical_csv : Path
-        Path to terrain categorical CSV.
-    combination_method : CombinationMethod
-        Method for combining models.
-    combine_ratio : float
-        Geology-to-terrain weight ratio (used when combination_method is ratio).
-    do_bayesian_update : bool
-        Whether to perform Bayesian update of categorical Vs30 values.
-    noisy : bool
-        Whether to apply noise weighting in spatial adjustment.
-    mvn : bool
-        Whether to perform MVN spatial adjustment.
+    output_dir : Path
+        Directory to save all pipeline outputs.
     clustered_observations_csv : Path, optional
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
@@ -471,17 +473,17 @@ def grid_custom(
         ),
         output_dir=output_dir,
         model_type=model_type,
-        combination_method=combination_method,
-        combine_ratio=combine_ratio,
         geology_categorical_csv=geology_categorical_csv,
         terrain_categorical_csv=terrain_categorical_csv,
         clustered_observations_csv=clustered_observations_csv,
         independent_observations_csv=independent_observations_csv,
-        do_bayesian_update=do_bayesian_update,
-        mvn=mvn,
+        combination_method=combination_method,
+        combine_ratio=combine_ratio,
         noisy=noisy,
-        n_proc=n_proc,
+        mvn=mvn,
+        do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
+        n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
 

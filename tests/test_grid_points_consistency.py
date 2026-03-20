@@ -35,14 +35,14 @@ def test_grid_and_points_consistency(tmp_path):
     pipeline.compute_grid(
         grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=grid_output_dir,
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        do_bayesian_update=config_data["do_bayesian_update"],
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
+        do_bayesian_update=config_data["do_bayesian_update"],
         n_proc=1,
     )
 
@@ -79,14 +79,14 @@ def test_grid_and_points_consistency(tmp_path):
     result = pipeline.compute_at_locations(
         longitudes=np.array(lons),
         latitudes=np.array(lats),
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        include_intermediate=True,
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
+        include_intermediate=True,
         n_proc=1,
     )
 

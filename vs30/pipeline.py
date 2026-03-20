@@ -891,17 +891,17 @@ def compute_grid(
     grid_config: config_module.GridConfig,
     output_dir: Path | None = None,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
-    combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
-    combine_ratio: float | None = None,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    do_bayesian_update: bool = True,
-    mvn: bool = True,
+    combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
+    combine_ratio: float | None = None,
     noisy: bool = True,
-    n_proc: int = 1,
+    mvn: bool = True,
+    do_bayesian_update: bool = True,
     include_intermediate: bool = False,
+    n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
 ) -> dict[str, np.ndarray | dict | None]:
     """
@@ -929,11 +929,6 @@ def compute_grid(
         If None, no files are written.
     model_type : ModelType, optional
         Which model(s) to run: GEOLOGY, TERRAIN, or COMBINED (default).
-    combination_method : CombinationMethod, optional
-        Method for combining models: STANDARD_DEVIATION_WEIGHTING (default)
-        or RATIO.
-    combine_ratio : float, optional
-        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
     geology_categorical_csv : Path
         Path to geology categorical CSV.
     terrain_categorical_csv : Path
@@ -942,17 +937,22 @@ def compute_grid(
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations.
-    do_bayesian_update : bool, optional
-        Whether to perform Bayesian update of categorical model values.
-    mvn : bool, optional
-        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+    combination_method : CombinationMethod, optional
+        Method for combining models: STANDARD_DEVIATION_WEIGHTING (default)
+        or RATIO.
+    combine_ratio : float, optional
+        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    n_proc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    mvn : bool, optional
+        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+    do_bayesian_update : bool, optional
+        Whether to perform Bayesian update of categorical model values.
     include_intermediate : bool, optional
         Whether to write intermediate files (ID rasters, initial VS30, slope,
         coast distance, hybrid geology). Default False.
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
 
@@ -1073,17 +1073,17 @@ def compute_at_locations(
     longitudes: np.ndarray,
     latitudes: np.ndarray,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
-    combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
-    combine_ratio: float | None = None,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    include_intermediate: bool = False,
-    mvn: bool = True,
+    combination_method: constants.CombinationMethod = constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING,
+    combine_ratio: float | None = None,
     noisy: bool = True,
-    n_proc: int = 1,
+    mvn: bool = True,
     do_bayesian_update: bool = False,
+    include_intermediate: bool = False,
+    n_proc: int = 1,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1104,11 +1104,8 @@ def compute_at_locations(
         Array of longitude values (WGS84).
     latitudes : ndarray
         Array of latitude values (WGS84).
-    combination_method : CombinationMethod, optional
-        Method for combining models: STANDARD_DEVIATION_WEIGHTING (default)
-        or RATIO.
-    combine_ratio : float, optional
-        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
+    model_type : ModelType, optional
+        Which model(s) to run: GEOLOGY, TERRAIN, or COMBINED (default).
     geology_categorical_csv : Path
         Path to geology categorical CSV.
     terrain_categorical_csv : Path
@@ -1117,17 +1114,22 @@ def compute_at_locations(
         Path to CSV file with clustered observations (e.g., CPT).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations.
-    include_intermediate : bool, optional
-        Include intermediate values (geology/terrain separately) in output.
-    mvn : bool, optional
-        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+    combination_method : CombinationMethod, optional
+        Method for combining models: STANDARD_DEVIATION_WEIGHTING (default)
+        or RATIO.
+    combine_ratio : float, optional
+        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    n_proc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    mvn : bool, optional
+        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical Vs30 values
         using observations before computing Vs30. Default False.
+    include_intermediate : bool, optional
+        Include intermediate values (geology/terrain separately) in output.
+    n_proc : int, optional
+        Number of parallel processes. Use -1 for all cores.
 
     Returns
     -------

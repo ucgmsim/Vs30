@@ -36,14 +36,14 @@ def run_and_compare(n_proc: int):
     result_df = pipeline.compute_at_locations(
         longitudes=locations_df["longitude"].values,
         latitudes=locations_df["latitude"].values,
-        combination_method=constants.CombinationMethod.RATIO,
-        combine_ratio=1.0,
         geology_categorical_csv=GEOLOGY_CATEGORICAL_CSV,
         terrain_categorical_csv=TERRAIN_CATEGORICAL_CSV,
-        include_intermediate=True,
         clustered_observations_csv=CLUSTERED_OBS_CSV,
         independent_observations_csv=INDEPENDENT_OBS_CSV,
+        combination_method=constants.CombinationMethod.RATIO,
+        combine_ratio=1.0,
         noisy=True,
+        include_intermediate=True,
         n_proc=n_proc,
     )
     # Prepend original columns to match benchmark format
