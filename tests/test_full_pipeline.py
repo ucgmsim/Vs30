@@ -60,16 +60,16 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     pipeline.compute_grid(
         grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=tmp_path,
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
-        combine_ratio=config_data["combine_ratio"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        do_bayesian_update=config_data["do_bayesian_update"],
+        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
-        n_proc=n_proc,
+        do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=True,
+        n_proc=n_proc,
     )
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 
