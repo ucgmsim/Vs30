@@ -1,15 +1,13 @@
-# Foster (2019) Vs30 Model Configuration
-# Standard configuration reproducing the published NZ Vs30 map.
+# Original Foster (2019) Vs30 Model Configuration
+# Reproduces the published model from Foster et al. (2019, Earthquake Spectra).
 
-# --- Categorical model files (relative to resources directory) ---
-# These contain the Foster (2019) posterior values, so no additional Bayesian
-# update is performed (do_bayesian_update is false).
-geology_categorical_csv: geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
-terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+# --- Categorical model files ---
+# Same posteriors as modified_foster_2019 (computed by the original R code).
+geology_categorical_csv: geology_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_csv: terrain_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv
 
-# --- Observation files (relative to resources directory) ---
-# Only independent observations are used for MVN spatial adjustment, matching
-# the legacy default (--source original with posterior_paper mode).
+# --- Observation files ---
+# Original excludes ALL Kaiser Q3 stations.
 independent_observations_csv: foster_2019_measured_vs30_independent_observations.csv
 clustered_observations_csv:
 
@@ -18,3 +16,22 @@ do_bayesian_update: false
 noisy: true
 combination_method: ratio
 combine_ratio: 1.0
+
+# --- Hybrid geology modifications ---
+# Original: slope only, no coastal distance adjustments.
+apply_coastal_distance_mod: false
+
+# --- Spatial correlation ---
+# Geology: Matérn (κ=0.9) as fitted in the original R code.
+geology_correlation:
+  model: matern
+  range: 20000
+  sill: 0.15
+  nugget: 0.05
+  kappa: 0.9
+
+# Terrain: Exponential. The original R code uses Matérn with κ=0.5,
+# which is mathematically equivalent to exponential.
+terrain_correlation:
+  model: exponential
+  phi: 993

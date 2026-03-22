@@ -13,3 +13,13 @@ do_bayesian_update: true
 noisy: true
 combination_method: standard_deviation_weighting
 combine_ratio:
+
+apply_coastal_distance_mod: true
+
+geology_correlation:
+  model: exponential
+  phi: 1407
+
+terrain_correlation:
+  model: exponential
+  phi: 993

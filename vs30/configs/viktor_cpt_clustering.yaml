@@ -18,3 +18,13 @@ do_bayesian_update: true
 noisy: true
 combination_method: ratio
 combine_ratio: 1.0
+
+apply_coastal_distance_mod: true
+
+geology_correlation:
+  model: exponential
+  phi: 1407
+
+terrain_correlation:
+  model: exponential
+  phi: 993
