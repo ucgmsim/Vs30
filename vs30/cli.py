@@ -75,6 +75,8 @@ def run_points_pipeline(
     n_proc: int = 1,
     lon_column: str = constants.LOCATIONS_LON_COLUMN,
     lat_column: str = constants.LOCATIONS_LAT_COLUMN,
+    geology_corr_fn: Callable | None = None,
+    terrain_corr_fn: Callable | None = None,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -151,6 +153,8 @@ def run_points_pipeline(
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
         n_proc=n_proc,
+        geology_corr_fn=geology_corr_fn,
+        terrain_corr_fn=terrain_corr_fn,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -206,10 +210,21 @@ def points(
     with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
+    # Validate required config fields (no defaults — all configs must be explicit)
+    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
+        if field not in config_data:
+            raise typer.BadParameter(
+                f"Config missing required field '{field}'. "
+                "All configs must specify correlation and coastal distance parameters."
+            )
+
     # Resolve CSV paths relative to resources directory
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
             config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
+
+    geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
+    terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
 
     run_points_pipeline(
         locations_csv=locations_csv,
@@ -226,6 +241,8 @@ def points(
         n_proc=n_proc,
         lon_column=lon_column,
         lat_column=lat_column,
+        geology_corr_fn=geology_corr_fn,
+        terrain_corr_fn=terrain_corr_fn,
     )
 
 
@@ -383,10 +400,21 @@ def grid(
     with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
+    # Validate required config fields (no defaults — all configs must be explicit)
+    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
+        if field not in config_data:
+            raise typer.BadParameter(
+                f"Config missing required field '{field}'. "
+                "All configs must specify correlation and coastal distance parameters."
+            )
+
     # Resolve CSV paths relative to resources directory
     for key in constants.CSV_PATH_KEYS:
         if config_data[key]:
             config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
+
+    geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
+    terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
 
     pipeline.compute_grid(
         grid_config=config_module.GridConfig(
@@ -406,6 +434,8 @@ def grid(
         include_intermediate=include_intermediate,
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+        geology_corr_fn=geology_corr_fn,
+        terrain_corr_fn=terrain_corr_fn,
     )
 
 @cli.from_docstring(app)
