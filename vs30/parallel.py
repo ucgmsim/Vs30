@@ -63,6 +63,7 @@ def process_geology_at_points(
     corr_fn: Callable,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
+    apply_coastal_distance_mod: bool = True,
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -114,7 +115,10 @@ def process_geology_at_points(
 
     # Get slope and coastal distance at query points
     slope_at_points = raster.sample_slope_at_points(points)
-    coast_dist_at_points = raster.compute_coastal_distance_at_points(points)
+    if apply_coastal_distance_mod:
+        coast_dist_at_points = raster.compute_coastal_distance_at_points(points)
+    else:
+        coast_dist_at_points = np.zeros(len(points))
 
     # Apply hybrid modifications (slope and coastal distance)
     geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
@@ -123,6 +127,8 @@ def process_geology_at_points(
         geol_ids,
         slope_at_points,
         coast_dist_at_points,
+        mod6=apply_coastal_distance_mod,
+        mod13=apply_coastal_distance_mod,
     )
 
     # Apply spatial adjustment if observations are available
@@ -136,13 +142,18 @@ def process_geology_at_points(
         # Apply hybrid modifications to observation model values so residuals
         # are computed consistently with the grid pipeline (spatial.py:405-436)
         obs_slope = raster.sample_slope_at_points(obs_locs)
-        obs_coast_dist = raster.compute_coastal_distance_at_points(obs_locs)
+        if apply_coastal_distance_mod:
+            obs_coast_dist = raster.compute_coastal_distance_at_points(obs_locs)
+        else:
+            obs_coast_dist = np.zeros(len(obs_locs))
         obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
             obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
             obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_geol_ids,
             obs_slope,
             obs_coast_dist,
+            mod6=apply_coastal_distance_mod,
+            mod13=apply_coastal_distance_mod,
         )
 
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -279,6 +290,7 @@ class LocationsChunkConfig:
     noisy: bool
     geology_corr_fn: Callable | None
     terrain_corr_fn: Callable | None
+    apply_coastal_distance_mod: bool
 
 
 def process_locations_chunk(
@@ -340,6 +352,7 @@ def process_locations_chunk(
             observations_df,
             config.geology_corr_fn,
             config.noisy,
+            apply_coastal_distance_mod=config.apply_coastal_distance_mod,
         )
 
         if config.include_intermediate:

@@ -77,6 +77,7 @@ def run_points_pipeline(
     lat_column: str = constants.LOCATIONS_LAT_COLUMN,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
+    apply_coastal_distance_mod: bool = True,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -155,6 +156,7 @@ def run_points_pipeline(
         n_proc=n_proc,
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -225,6 +227,7 @@ def points(
 
     geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
     terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
+    apply_coastal_distance_mod = config_data["apply_coastal_distance_mod"]
 
     run_points_pipeline(
         locations_csv=locations_csv,
@@ -243,6 +246,7 @@ def points(
         lat_column=lat_column,
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
 
@@ -415,6 +419,7 @@ def grid(
 
     geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
     terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
+    apply_coastal_distance_mod = config_data["apply_coastal_distance_mod"]
 
     pipeline.compute_grid(
         grid_config=config_module.GridConfig(
@@ -436,6 +441,7 @@ def grid(
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
 @cli.from_docstring(app)
