@@ -274,6 +274,7 @@ def compute_hybrid_geology_arrays(
     stdv_array: np.ndarray,
     id_array: np.ndarray,
     profile: dict,
+    apply_coastal_distance_mod: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Apply hybrid geology modifications in memory.
@@ -308,8 +309,12 @@ def compute_hybrid_geology_arrays(
     logger.info("Computing slope array...")
     slope_array = raster.compute_slope_array(profile)
 
-    logger.info("Computing coast distance array...")
-    coast_dist_array = raster.compute_coast_distance_array(profile)
+    if apply_coastal_distance_mod:
+        logger.info("Computing coast distance array...")
+        coast_dist_array = raster.compute_coast_distance_array(profile)
+    else:
+        logger.info("Skipping coast distance computation (disabled in config)")
+        coast_dist_array = np.zeros_like(vs30_array)
 
     hybrid_vs30, hybrid_stdv = raster.apply_hybrid_geology_modifications(
         vs30_array,
@@ -317,6 +322,8 @@ def compute_hybrid_geology_arrays(
         id_array,
         slope_array,
         coast_dist_array,
+        mod6=apply_coastal_distance_mod,
+        mod13=apply_coastal_distance_mod,
     )
 
     return hybrid_vs30, hybrid_stdv, slope_array, coast_dist_array
@@ -694,6 +701,7 @@ def run_in_memory_pipeline_for_model_type(
     output_dir: Path | None = None,
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
+    apply_coastal_distance_mod: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     Run the full VS30 generation pipeline for a single model type in memory.
@@ -810,7 +818,8 @@ def run_in_memory_pipeline_for_model_type(
         )
 
         current_vs30, current_stdv, slope_array, coast_dist_array = (
-            compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile)
+            compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile,
+                                          apply_coastal_distance_mod=apply_coastal_distance_mod)
         )
 
         if output_dir is not None and include_intermediate:
@@ -911,6 +920,7 @@ def compute_grid(
     max_spatial_boolean_array_memory_gb: float = 1.0,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
+    apply_coastal_distance_mod: bool = True,
 ) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -1018,6 +1028,7 @@ def compute_grid(
             output_dir=output_dir,
             include_intermediate=include_intermediate,
             corr_fn=geology_corr_fn,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -1039,6 +1050,7 @@ def compute_grid(
             output_dir=output_dir,
             include_intermediate=include_intermediate,
             corr_fn=terrain_corr_fn,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
         result["terrain_vs30"] = terr_vs30
         result["terrain_stdv"] = terr_stdv
@@ -1105,6 +1117,7 @@ def compute_at_locations(
     n_proc: int = 1,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
+    apply_coastal_distance_mod: bool = True,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1252,6 +1265,7 @@ def compute_at_locations(
             noisy=noisy,
             geology_corr_fn=geology_corr_fn,
             terrain_corr_fn=terrain_corr_fn,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
         result_df = parallel.run_parallel_locations(
@@ -1297,6 +1311,7 @@ def compute_at_locations(
                 corr_fn=geology_corr_fn,
                 noisy=noisy,
                 progress_bar=pbar,
+                apply_coastal_distance_mod=apply_coastal_distance_mod,
             )
 
         if include_intermediate:
