@@ -61,15 +61,10 @@ RESOURCE_SUBDIRS: dict[str, str] = {
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 COV_REDUC: float = 1.5
 
-# Correlation length parameters (phi) in meters.
+# Correlation length parameters (phi) in meters are now part of config files.
 # Phi represents the distance at which spatial correlation decays to ~37% (1/e).
 # Larger phi = smoother spatial interpolation, smaller phi = more localized updates.
-# These values were calibrated for New Zealand geology and terrain data.
-PHI_GEOLOGY: int = 1407
-PHI_TERRAIN: int = 993
-
-# Dictionary for convenient access by model type
-# Note: PHI uses string keys for now; will be updated after ModelType is defined below.
+# Values are calibrated per model version and stored in YAML configs.
 
 # Minimum distance (meters) enforced in correlation calculations to prevent
 # division by zero or correlation=1 when points are exactly co-located.
@@ -173,7 +168,7 @@ GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distanc
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 
-# OUTPUT_FILENAMES and PHI dictionaries are defined after ModelType class below
+# OUTPUT_FILENAMES dictionary is defined after ModelType class below
 
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
@@ -374,12 +369,6 @@ class ModelType(StrEnum):
     TERRAIN = "terrain"
     COMBINED = "combined"
 
-
-# Dictionaries for convenient access by model type
-PHI: dict[ModelType, int] = {
-    ModelType.GEOLOGY: PHI_GEOLOGY,
-    ModelType.TERRAIN: PHI_TERRAIN,
-}
 
 OUTPUT_FILENAMES: dict[ModelType, str] = {
     ModelType.GEOLOGY: GEOLOGY_VS30_MEAN_STDDEV_FILENAME,
