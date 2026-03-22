@@ -584,7 +584,7 @@ def run_parallel_spatial_fit(
     }
 
     # Config params (pre-compute corr_zero once for all workers)
-    corr_zero = utils.correlation_function(
+    corr_zero = utils.exponential_correlation_function(
         np.array([0.0]), constants.PHI[model_type]
     )[0]
     config_params = {

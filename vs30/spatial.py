@@ -767,7 +767,7 @@ def build_covariance_matrix(
     )
 
     # Step 2: Apply correlation function
-    corr = utils.correlation_function(distance_matrix, constants.PHI[model_type])
+    corr = utils.exponential_correlation_function(distance_matrix, constants.PHI[model_type])
 
     # Step 3: Scale by standard deviations
     stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
@@ -898,7 +898,7 @@ def compute_spatial_adjustment_for_pixel(
     # enforced minimum distance (nugget effect). This shrinks the prior
     # variance to match the legacy implementation's behavior.
     if corr_zero is None:
-        corr_zero = utils.correlation_function(
+        corr_zero = utils.exponential_correlation_function(
             np.array([0.0]), constants.PHI[model_type]
         )[0]
     initial_var = (pixel.stdv**2) * corr_zero
@@ -1164,7 +1164,7 @@ def compute_spatial_adjustments(
     )
 
     # Pre-compute correlation at zero distance (constant for all pixels)
-    corr_zero = utils.correlation_function(
+    corr_zero = utils.exponential_correlation_function(
         np.array([0.0]), constants.PHI[model_type]
     )[0]
 
@@ -1383,7 +1383,7 @@ def compute_spatial_adjustment_at_points(
     )
 
     # Pre-compute correlation at zero distance
-    corr_zero = utils.correlation_function(
+    corr_zero = utils.exponential_correlation_function(
         np.array([0.0]), constants.PHI[model_type]
     )[0]
 

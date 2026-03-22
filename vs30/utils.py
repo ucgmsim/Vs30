@@ -6,7 +6,7 @@ import pandas as pd
 from vs30 import constants
 
 
-def correlation_function(
+def exponential_correlation_function(
     distances: np.ndarray,
     phi: float,
     min_dist: float = constants.MIN_DIST_ENFORCED,
