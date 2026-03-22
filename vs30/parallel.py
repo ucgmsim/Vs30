@@ -2,6 +2,7 @@
 
 import contextlib
 import multiprocessing as mp
+from collections.abc import Callable
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
@@ -59,6 +60,7 @@ def process_geology_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
+    corr_fn: Callable,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
 ) -> tuple[
@@ -152,7 +154,7 @@ def process_geology_at_points(
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
-            model_type=constants.ModelType.GEOLOGY,
+            corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
         )
@@ -175,6 +177,7 @@ def process_terrain_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
+    corr_fn: Callable,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -235,7 +238,7 @@ def process_terrain_at_points(
             obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
             obs_model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
             obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
-            model_type=constants.ModelType.TERRAIN,
+            corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
         )
@@ -274,6 +277,8 @@ class LocationsChunkConfig:
     combination_method: constants.CombinationMethod
     combine_ratio: float | None
     noisy: bool
+    geology_corr_fn: Callable | None
+    terrain_corr_fn: Callable | None
 
 
 def process_locations_chunk(
@@ -333,6 +338,7 @@ def process_locations_chunk(
             points,
             geol_model_df,
             observations_df,
+            config.geology_corr_fn,
             config.noisy,
         )
 
@@ -353,7 +359,7 @@ def process_locations_chunk(
             terr_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
-        ) = process_terrain_at_points(points, terr_model_df, observations_df, config.noisy)
+        ) = process_terrain_at_points(points, terr_model_df, observations_df, config.terrain_corr_fn, config.noisy)
 
         if config.include_intermediate:
             result[constants.COL_TERRAIN_ID] = terr_ids
@@ -433,7 +439,7 @@ def process_pixels_chunk(
         update = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
-            config_params[constants.KEY_MODEL_TYPE],
+            config_params["corr_fn"],
             max_dist_m=config_params[constants.KEY_MAX_DIST_M],
             max_points=config_params[constants.KEY_MAX_POINTS],
             noisy=config_params[constants.KEY_NOISY],
@@ -519,6 +525,7 @@ def run_parallel_spatial_fit(
     affected_flat_indices: np.ndarray,
     raster_data,  # RasterData - avoid import cycle
     obs_data: spatial.ObservationData,
+    corr_fn: Callable,
     model_type: constants.ModelType,
     max_dist_m: float,
     max_points: int,
@@ -584,11 +591,10 @@ def run_parallel_spatial_fit(
     }
 
     # Config params (pre-compute corr_zero once for all workers)
-    corr_zero = utils.exponential_correlation_function(
-        np.array([0.0]), constants.PHI[model_type]
-    )[0]
+    corr_zero = corr_fn(np.array([0.0]))[0]
     config_params = {
         constants.KEY_MODEL_TYPE: model_type,
+        "corr_fn": corr_fn,
         constants.KEY_MAX_DIST_M: max_dist_m,
         constants.KEY_MAX_POINTS: max_points,
         constants.KEY_NOISY: noisy,

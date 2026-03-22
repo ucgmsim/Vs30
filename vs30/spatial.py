@@ -2,6 +2,7 @@
 
 import logging
 import multiprocessing as mp
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -731,7 +732,7 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
 def build_covariance_matrix(
     pixel: PixelData,
     selected_observations: ObservationData,
-    model_type: constants.ModelType,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
@@ -744,8 +745,8 @@ def build_covariance_matrix(
         Pixel data for the pixel being updated.
     selected_observations : ObservationData
         Selected observations for this pixel.
-    model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations (ndarray).
     noisy : bool, optional
         Whether to apply noise weighting based on observation uncertainty.
     cov_reduc : float, optional
@@ -767,7 +768,7 @@ def build_covariance_matrix(
     )
 
     # Step 2: Apply correlation function
-    corr = utils.exponential_correlation_function(distance_matrix, constants.PHI[model_type])
+    corr = corr_fn(distance_matrix)
 
     # Step 3: Scale by standard deviations
     stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
@@ -855,7 +856,7 @@ def select_observations_for_pixel(
 def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
-    model_type: constants.ModelType,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
@@ -871,8 +872,8 @@ def compute_spatial_adjustment_for_pixel(
         Pixel data.
     obs_data : ObservationData
         Full observation data.
-    model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations (ndarray).
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
@@ -883,7 +884,7 @@ def compute_spatial_adjustment_for_pixel(
         Covariance reduction factor for dissimilar Vs30 values.
     corr_zero : float or None, optional
         Pre-computed correlation at zero distance. If None, computed from
-        model_type. Pass this when calling in a loop to avoid recomputing.
+        corr_fn. Pass this when calling in a loop to avoid recomputing.
 
     Returns
     -------
@@ -898,9 +899,7 @@ def compute_spatial_adjustment_for_pixel(
     # enforced minimum distance (nugget effect). This shrinks the prior
     # variance to match the legacy implementation's behavior.
     if corr_zero is None:
-        corr_zero = utils.exponential_correlation_function(
-            np.array([0.0]), constants.PHI[model_type]
-        )[0]
+        corr_zero = corr_fn(np.array([0.0]))[0]
     initial_var = (pixel.stdv**2) * corr_zero
 
     # Select observations for this pixel
@@ -924,7 +923,7 @@ def compute_spatial_adjustment_for_pixel(
     cov_matrix = build_covariance_matrix(
         pixel,
         selected_obs,
-        model_type,
+        corr_fn,
         noisy=noisy,
         cov_reduc=cov_reduc,
     )
@@ -1100,7 +1099,7 @@ def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_result: BoundingBoxResult,
-    model_type: constants.ModelType,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
     max_spatial_boolean_array_memory_gb: float,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
@@ -1118,8 +1117,8 @@ def compute_spatial_adjustments(
         Observation data.
     bbox_result : BoundingBoxResult
         Bounding box result.
-    model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations (ndarray).
     max_spatial_boolean_array_memory_gb : float
         Memory limit (GB) for boolean arrays in spatial processing.
     max_dist_m : float, optional
@@ -1164,15 +1163,12 @@ def compute_spatial_adjustments(
     )
 
     # Pre-compute correlation at zero distance (constant for all pixels)
-    corr_zero = utils.exponential_correlation_function(
-        np.array([0.0]), constants.PHI[model_type]
-    )[0]
+    corr_zero = corr_fn(np.array([0.0]))[0]
 
     # Process all affected pixels with a single progress bar
-    label = str(model_type).capitalize()
     with tqdm(
         total=len(affected_flat_indices),
-        desc=f"{label}: spatial adjustment",
+        desc="Spatial adjustment",
         unit="pixel",
     ) as pbar:
         for chunk_idx in range(n_chunks):
@@ -1195,7 +1191,7 @@ def compute_spatial_adjustments(
                 update_result = compute_spatial_adjustment_for_pixel(
                     pixel,
                     obs_data,
-                    model_type,
+                    corr_fn,
                     max_dist_m=max_dist_m,
                     max_points=max_points,
                     noisy=noisy,
@@ -1286,7 +1282,7 @@ def compute_spatial_adjustment_at_points(
     obs_model_vs30: np.ndarray,
     obs_model_stdv: np.ndarray,
     obs_uncertainty: np.ndarray,
-    model_type: constants.ModelType,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
@@ -1317,8 +1313,8 @@ def compute_spatial_adjustment_at_points(
         (M,) array of model standard deviation at observation locations.
     obs_uncertainty : np.ndarray
         (M,) array of observation uncertainties.
-    model_type : constants.ModelType
-        Either ModelType.GEOLOGY or ModelType.TERRAIN (determines phi correlation length).
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations (ndarray).
     max_dist_m : float, optional
         Maximum distance (meters) to consider observations. Default from constants.
     max_points : int, optional
@@ -1383,9 +1379,7 @@ def compute_spatial_adjustment_at_points(
     )
 
     # Pre-compute correlation at zero distance
-    corr_zero = utils.exponential_correlation_function(
-        np.array([0.0]), constants.PHI[model_type]
-    )[0]
+    corr_zero = corr_fn(np.array([0.0]))[0]
 
     # Process each query point using the shared per-pixel MVN function
     for i in range(len(points)):
@@ -1399,7 +1393,7 @@ def compute_spatial_adjustment_at_points(
         result = compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
-            model_type,
+            corr_fn,
             max_dist_m=max_dist_m,
             max_points=max_points,
             noisy=noisy,

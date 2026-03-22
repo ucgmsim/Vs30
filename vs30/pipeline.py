@@ -2,8 +2,10 @@
 Pipeline functions for generating Vs30 models.
 """
 
+import functools
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -61,7 +63,7 @@ def compute_categorical_vs30_updates(
         These will be processed with spatial clustering.
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations
-        (e.g., foster_2019_measured_vs30_independent_observations.csv).
+        (e.g., modified_foster_2019_measured_vs30_independent_observations.csv).
         These will be processed without clustering.
     n_proc : int, optional
         Number of processes for DBSCAN clustering. Use -1 for all available cores.
@@ -332,6 +334,7 @@ def compute_spatial_adjustment_on_grid(
     observations_df: pd.DataFrame,
     model_values_df: pd.DataFrame,
     model_type: constants.ModelType,
+    corr_fn: Callable,
     noisy: bool = True,
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
@@ -451,6 +454,7 @@ def compute_spatial_adjustment_on_grid(
             affected_flat_indices=affected_flat_indices,
             raster_data=raster_data,
             obs_data=obs_data,
+            corr_fn=corr_fn,
             model_type=model_type,
             max_dist_m=constants.MAX_DIST_M,
             max_points=constants.MAX_POINTS,
@@ -463,7 +467,7 @@ def compute_spatial_adjustment_on_grid(
             raster_data,
             obs_data,
             bbox_result,
-            model_type,
+            corr_fn,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             max_dist_m=constants.MAX_DIST_M,
             max_points=constants.MAX_POINTS,
@@ -689,6 +693,7 @@ def run_in_memory_pipeline_for_model_type(
     max_spatial_boolean_array_memory_gb: float = 1.0,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
+    corr_fn: Callable | None = None,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     Run the full VS30 generation pipeline for a single model type in memory.
@@ -862,6 +867,7 @@ def run_in_memory_pipeline_for_model_type(
             observations_df=observations_df,
             model_values_df=posterior_df,
             model_type=model_type,
+            corr_fn=corr_fn,
             noisy=noisy,
             n_proc=n_proc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
@@ -903,6 +909,8 @@ def compute_grid(
     include_intermediate: bool = False,
     n_proc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
+    geology_corr_fn: Callable | None = None,
+    terrain_corr_fn: Callable | None = None,
 ) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -968,6 +976,15 @@ def compute_grid(
     """
     start_time = time.time()
 
+    if geology_corr_fn is None:
+        geology_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=1407
+        )
+    if terrain_corr_fn is None:
+        terrain_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=993
+        )
+
     if output_dir is not None:
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -1000,6 +1017,7 @@ def compute_grid(
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
+            corr_fn=geology_corr_fn,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -1020,6 +1038,7 @@ def compute_grid(
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
+            corr_fn=terrain_corr_fn,
         )
         result["terrain_vs30"] = terr_vs30
         result["terrain_stdv"] = terr_stdv
@@ -1084,6 +1103,8 @@ def compute_at_locations(
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
     n_proc: int = 1,
+    geology_corr_fn: Callable | None = None,
+    terrain_corr_fn: Callable | None = None,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1140,6 +1161,15 @@ def compute_at_locations(
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
         terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
     """
+    if geology_corr_fn is None:
+        geology_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=1407
+        )
+    if terrain_corr_fn is None:
+        terrain_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=993
+        )
+
     # Convert WGS84 to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([latitudes, longitudes])
@@ -1220,6 +1250,8 @@ def compute_at_locations(
             combination_method=combination_method,
             combine_ratio=combine_ratio,
             noisy=noisy,
+            geology_corr_fn=geology_corr_fn,
+            terrain_corr_fn=terrain_corr_fn,
         )
 
         result_df = parallel.run_parallel_locations(
@@ -1262,6 +1294,7 @@ def compute_at_locations(
                 points,
                 geol_model_df,
                 observations_df,
+                corr_fn=geology_corr_fn,
                 noisy=noisy,
                 progress_bar=pbar,
             )
@@ -1290,6 +1323,7 @@ def compute_at_locations(
                 points,
                 terr_model_df,
                 observations_df,
+                corr_fn=terrain_corr_fn,
                 noisy=noisy,
                 progress_bar=pbar,
             )
