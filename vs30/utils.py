@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+from scipy.special import gamma, kv
 
 from vs30 import constants
 
@@ -30,6 +31,50 @@ def exponential_correlation_function(
 
     """
     return np.exp(-np.maximum(min_dist, distances) / phi)
+
+
+def matern_correlation_function(
+    distances: np.ndarray,
+    range_m: float,
+    sill: float,
+    nugget: float,
+    kappa: float,
+    min_dist: float = constants.MIN_DIST_ENFORCED,
+) -> np.ndarray:
+    """
+    Calculate Matérn correlation with nugget from distances.
+
+    Uses the gstat parameterization where the range parameter is used
+    directly as the scale (NOT multiplied by sqrt(2*kappa)). This matches
+    R's gstat::vgm() which was used to fit the original model parameters.
+
+    Parameters
+    ----------
+    distances : ndarray
+        Array of distances in meters.
+    range_m : float
+        Matérn range (scale) parameter in meters (gstat convention).
+    sill : float
+        Partial sill (variance contribution from spatial correlation).
+    nugget : float
+        Nugget variance (micro-scale variation / measurement noise).
+    kappa : float
+        Matérn smoothness parameter.
+    min_dist : float, optional
+        Minimum distance enforced to prevent numerical issues.
+
+    Returns
+    -------
+    ndarray
+        Correlation values. Same shape as distances.
+        Near zero distance, returns approximately sill/(sill+nugget).
+    """
+    d = np.maximum(min_dist, distances)
+    scaled = d / range_m
+    rho = (2 ** (1 - kappa) / gamma(kappa)) * (scaled ** kappa) * kv(kappa, scaled)
+    # Clamp NaN from numerical edge cases (kv can overflow for very small d)
+    rho = np.where(np.isfinite(rho), rho, 1.0)
+    return rho * sill / (sill + nugget)
 
 
 def combine_vs30_models(

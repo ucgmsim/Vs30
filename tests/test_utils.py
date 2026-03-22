@@ -160,3 +160,57 @@ class TestExponentialCorrelationFunction:
         distances = np.array([3 * phi])
         result = utils.exponential_correlation_function(distances, phi=phi)
         assert np.isclose(result[0], np.exp(-3), rtol=0.01)
+
+
+class TestMaternCorrelationFunction:
+    """Tests for the Matérn correlation function.
+
+    Uses the original Foster (2019) parameters: range=20000, sill=0.15,
+    nugget=0.05, kappa=0.9.
+    """
+
+    def test_near_zero_distance_returns_sill_over_total(self):
+        """At d≈0, correlation ≈ sill/(sill+nugget) = 0.15/0.20 = 0.75."""
+        distances = np.array([0.0])
+        result = utils.matern_correlation_function(
+            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
+        )
+        assert np.isclose(result[0], 0.75, atol=0.02)
+
+    def test_correlation_decays_with_distance(self):
+        """Correlation decays as distance increases."""
+        distances = np.array([100.0, 1000.0, 5000.0, 20000.0, 50000.0])
+        result = utils.matern_correlation_function(
+            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
+        )
+        assert np.all(np.diff(result) < 0)
+
+    def test_kappa_half_matches_exponential_shape(self):
+        """Matérn with kappa=0.5 and no nugget should match exponential shape.
+
+        This is a mathematical identity: Matérn(κ=0.5) ∝ exp(-d/range).
+        With nugget=0, the correlation at d should equal exp(-d/range).
+        """
+        distances = np.array([100.0, 500.0, 1000.0, 5000.0])
+        range_m = 993.0
+        result = utils.matern_correlation_function(
+            distances, range_m=range_m, sill=1.0, nugget=0.0, kappa=0.5,
+        )
+        expected = np.exp(-distances / range_m)
+        np.testing.assert_allclose(result, expected, rtol=0.05)
+
+    def test_large_distance_approaches_zero(self):
+        """At very large distances, correlation → 0."""
+        distances = np.array([200000.0])
+        result = utils.matern_correlation_function(
+            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
+        )
+        assert result[0] < 0.01
+
+    def test_returns_correct_shape(self):
+        """Output shape matches input shape."""
+        distances = np.array([[100, 200], [300, 400]], dtype=float)
+        result = utils.matern_correlation_function(
+            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
+        )
+        assert result.shape == (2, 2)
