@@ -16,6 +16,7 @@ class FixedModelVersion(StrEnum):
     """Identifiers for fixed versions of the geology and terrain models."""
 
     FOSTER_2019 = "foster_2019"
+    MODIFIED_FOSTER_2019 = "modified_foster_2019"
     JAEHWI_V1P0 = "jaehwi_v1p0"
     VIKTOR_CPT_CLUSTERING = "viktor_cpt_clustering"
 
@@ -24,6 +25,7 @@ CONFIGS_DIR = Path(__file__).parent / "configs"
 
 MODEL_VERSION_TO_CONFIG = {
     FixedModelVersion.FOSTER_2019: CONFIGS_DIR / "foster_2019.yaml",
+    FixedModelVersion.MODIFIED_FOSTER_2019: CONFIGS_DIR / "modified_foster_2019.yaml",
     FixedModelVersion.JAEHWI_V1P0: CONFIGS_DIR / "jaehwi_v1p0.yaml",
     FixedModelVersion.VIKTOR_CPT_CLUSTERING: CONFIGS_DIR / "viktor_cpt_clustering.yaml",
 }

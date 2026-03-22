@@ -10,8 +10,8 @@ grid_dx: 1000
 grid_dy: 1000
 
 # --- Categorical model files ---
-geology_categorical_csv: geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
-terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+geology_categorical_csv: geology_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_csv: terrain_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv
 
 # --- Observation files ---
 independent_observations_csv: test_independent_observations.csv
@@ -22,3 +22,13 @@ do_bayesian_update: true
 noisy: true
 combination_method: ratio
 combine_ratio: 1.0
+
+apply_coastal_distance_mod: true
+
+geology_correlation:
+  model: exponential
+  phi: 1407
+
+terrain_correlation:
+  model: exponential
+  phi: 993
