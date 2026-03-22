@@ -1,21 +1,61 @@
 """Command-line interface for the vs30 package."""
 
+import functools
 import logging
 import typing
+from collections.abc import Callable
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import typer
 import yaml
 from qcore import cli
 
-from vs30 import constants, pipeline
+from vs30 import constants, pipeline, utils
 from vs30 import config as config_module
 
 logger = logging.getLogger(__name__)
 
 # Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
+
+
+def resolve_correlation_function(
+    config_section: dict,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Resolve a correlation config section into a picklable callable.
+
+    Parameters
+    ----------
+    config_section : dict
+        Must contain a "model" key ("exponential" or "matern") plus the
+        model-specific parameters.
+
+    Returns
+    -------
+    callable
+        Function with signature (distances: ndarray) -> ndarray.
+        Uses functools.partial for picklability in multiprocessing.
+    """
+    model = config_section["model"]
+    if model == "exponential":
+        return functools.partial(
+            utils.exponential_correlation_function,
+            phi=config_section["phi"],
+        )
+    elif model == "matern":
+        return functools.partial(
+            utils.matern_correlation_function,
+            range_m=config_section["range"],
+            sill=config_section["sill"],
+            nugget=config_section["nugget"],
+            kappa=config_section["kappa"],
+        )
+    else:
+        raise ValueError(f"Unknown correlation model: {model}")
+
 
 # CLI helper shared by `points` and `points_custom` to handle CSV I/O and column merging.
 def run_points_pipeline(
@@ -149,7 +189,7 @@ def points(
     Parameters
     ----------
     version : FixedModelVersion
-        Model version to use (e.g., foster_2019).
+        Model version to use (e.g., modified_foster_2019).
     locations_csv : Path
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
@@ -318,7 +358,7 @@ def grid(
     Parameters
     ----------
     version : FixedModelVersion
-        Model version to use (e.g., foster_2019).
+        Model version to use (e.g., modified_foster_2019).
     grid_xmin : int
         Grid minimum X coordinate (NZTM, meters).
     grid_xmax : int
