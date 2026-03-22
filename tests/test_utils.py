@@ -131,3 +131,32 @@ class TestCombineVs30Models:
             + 0.5 * ((log_t - log_comb) ** 2 + 0.4**2)
         )
         assert np.isclose(combined_stdv[0], expected_stdv, rtol=0.01)
+
+
+class TestExponentialCorrelationFunction:
+    """Tests for the exponential correlation function."""
+
+    def test_zero_distance_returns_near_one(self):
+        """Correlation at zero distance ≈ 1.0 (limited by MIN_DIST_ENFORCED)."""
+        distances = np.array([0.0])
+        result = utils.exponential_correlation_function(distances, phi=1407)
+        assert result[0] > 0.999
+
+    def test_correlation_decays_with_distance(self):
+        """Correlation decays as distance increases."""
+        distances = np.array([0.0, 100.0, 500.0, 1407.0, 5000.0])
+        result = utils.exponential_correlation_function(distances, phi=1407)
+        assert np.all(np.diff(result) < 0)  # Monotonically decreasing
+
+    def test_at_phi_correlation_is_1_over_e(self):
+        """At distance=phi, correlation ≈ 1/e ≈ 0.368."""
+        distances = np.array([1407.0])
+        result = utils.exponential_correlation_function(distances, phi=1407)
+        assert np.isclose(result[0], np.exp(-1), rtol=0.01)
+
+    def test_practical_range_three_phi(self):
+        """At 3*phi, correlation ≈ 0.05 (5% practical range)."""
+        phi = 1407
+        distances = np.array([3 * phi])
+        result = utils.exponential_correlation_function(distances, phi=phi)
+        assert np.isclose(result[0], np.exp(-3), rtol=0.01)
