@@ -214,3 +214,68 @@ class TestMaternCorrelationFunction:
             distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
         )
         assert result.shape == (2, 2)
+
+
+import functools
+import pickle
+
+import pytest
+from vs30.cli import resolve_correlation_function
+
+
+class TestResolveCorrelationFunction:
+    """Tests for config → correlation callable resolution."""
+
+    def test_exponential_resolution(self):
+        """Exponential config resolves to callable that matches direct call."""
+        config = {"model": "exponential", "phi": 1407}
+        fn = resolve_correlation_function(config)
+        distances = np.array([0.0, 100.0, 1407.0])
+        expected = utils.exponential_correlation_function(distances, phi=1407)
+        np.testing.assert_array_equal(fn(distances), expected)
+
+    def test_matern_resolution(self):
+        """Matern config resolves to callable that matches direct call."""
+        config = {
+            "model": "matern",
+            "range": 20000,
+            "sill": 0.15,
+            "nugget": 0.05,
+            "kappa": 0.9,
+        }
+        fn = resolve_correlation_function(config)
+        distances = np.array([100.0, 5000.0, 20000.0])
+        expected = utils.matern_correlation_function(
+            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
+        )
+        np.testing.assert_array_equal(fn(distances), expected)
+
+    def test_unknown_model_raises_error(self):
+        """Unknown model type raises ValueError."""
+        config = {"model": "unknown"}
+        with pytest.raises(ValueError, match="Unknown correlation model"):
+            resolve_correlation_function(config)
+
+    def test_result_is_picklable(self):
+        """Resolved callable must be picklable for multiprocessing."""
+        config = {"model": "exponential", "phi": 1407}
+        fn = resolve_correlation_function(config)
+        pickled = pickle.dumps(fn)
+        fn2 = pickle.loads(pickled)
+        distances = np.array([100.0, 1000.0])
+        np.testing.assert_array_equal(fn(distances), fn2(distances))
+
+    def test_matern_is_picklable(self):
+        """Matern callable must also be picklable."""
+        config = {
+            "model": "matern",
+            "range": 20000,
+            "sill": 0.15,
+            "nugget": 0.05,
+            "kappa": 0.9,
+        }
+        fn = resolve_correlation_function(config)
+        pickled = pickle.dumps(fn)
+        fn2 = pickle.loads(pickled)
+        distances = np.array([100.0, 5000.0])
+        np.testing.assert_array_equal(fn(distances), fn2(distances))
