@@ -1,0 +1,17 @@
+id,mean_vs30_km_per_s,standard_deviation_vs30_km_per_s,description,comment
+1,791.7739432728187,0.3521,"Well dissected alpine summits, mountains, etc.",
+2,730.7145141619013,0.4161,"Large volcano, high block plateaus, etc.",
+3,934.9651192936204,0.4695,"Well dissected, low mountains, etc.",
+4,1023.5221321685392,0.354,"Volcanic fan, foot slope of high block plateaus, etc.",
+5,736.6329413357618,0.3136,"Dissected plateaus, etc.",
+6,491.11569641178613,0.28,"Basalt lava plain, glaciated plateau, etc.",
+7,769.9565566203404,0.4161,"Moderately eroded mountains, lava flow, etc.",
+8,614.3238828275928,0.3249,"Desert alluvial slope, volcanic fan, etc.",
+9,495.7422697382159,0.3516,"Well eroded plain of weak rocks, etc.",
+10,361.86105001793186,0.28,"Valley, till plain, etc.",
+11,691.4176635279092,0.2736,"Eroded plain of weak rocks, etc.",
+12,502.12626290850693,0.2931,"Desert plain, delta plain, etc.",
+13,255.2742099791484,0.5,"Incised terrace, etc.",Mean and standard deviation estimated were estimated by Kevin Foster
+14,302.07278290975614,0.1749,"Eroded alluvial fan, till plain, etc.",
+15,220.05884956618584,0.28,"Dune, incised terrace, etc.",
+16,218.11824511183696,0.2206,"Fluvial plain, alluvial fan, low-lying flat plains, etc.",

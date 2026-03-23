@@ -64,6 +64,7 @@ def process_geology_at_points(
     noisy: bool = False,
     progress_bar: tqdm | None = None,
     apply_coastal_distance_mod: bool = True,
+    skip_alluvium_slope: bool = False,
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -127,7 +128,7 @@ def process_geology_at_points(
         geol_ids,
         slope_at_points,
         coast_dist_at_points,
-        mod6=apply_coastal_distance_mod,
+        mod6=apply_coastal_distance_mod or skip_alluvium_slope,
         mod13=apply_coastal_distance_mod,
     )
 
@@ -152,7 +153,7 @@ def process_geology_at_points(
             obs_geol_ids,
             obs_slope,
             obs_coast_dist,
-            mod6=apply_coastal_distance_mod,
+            mod6=apply_coastal_distance_mod or skip_alluvium_slope,
             mod13=apply_coastal_distance_mod,
         )
 
@@ -291,6 +292,7 @@ class LocationsChunkConfig:
     geology_corr_fn: Callable | None
     terrain_corr_fn: Callable | None
     apply_coastal_distance_mod: bool
+    skip_alluvium_slope: bool = False
 
 
 def process_locations_chunk(
@@ -353,6 +355,7 @@ def process_locations_chunk(
             config.geology_corr_fn,
             config.noisy,
             apply_coastal_distance_mod=config.apply_coastal_distance_mod,
+            skip_alluvium_slope=config.skip_alluvium_slope,
         )
 
         if config.include_intermediate:

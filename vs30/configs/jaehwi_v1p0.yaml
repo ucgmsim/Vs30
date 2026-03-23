@@ -1,4 +1,10 @@
 # Jaehwi v1.0 Vs30 Model Configuration
+#
+# Reproduces V1.0_26Mar.tif. Jaehwi ran with "-g posterior" (Bayesian update
+# from priors), ratio 1:1 combination (50/50 geometric mean), and coastal
+# distance commented out.  mod6=True skips GID 4 slope interpolation.
+# Observations are the reconstructed 671-station dataset (McGann 276 +
+# Wotherspoon 36 + Kaiser 359), matching applied_Vs30_data.csv.
 
 # --- Categorical model files (relative to resources directory) ---
 geology_categorical_csv: geology_model_prior_mean_and_standard_deviation.csv
@@ -11,10 +17,11 @@ clustered_observations_csv:
 # --- Pipeline settings ---
 do_bayesian_update: true
 noisy: true
-combination_method: standard_deviation_weighting
-combine_ratio:
+combination_method: ratio
+combine_ratio: 1.0
 
-apply_coastal_distance_mod: true
+apply_coastal_distance_mod: false
+skip_alluvium_slope: true
 
 geology_correlation:
   model: exponential

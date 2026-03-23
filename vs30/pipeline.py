@@ -275,6 +275,7 @@ def compute_hybrid_geology_arrays(
     id_array: np.ndarray,
     profile: dict,
     apply_coastal_distance_mod: bool = True,
+    skip_alluvium_slope: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Apply hybrid geology modifications in memory.
@@ -296,6 +297,13 @@ def compute_hybrid_geology_arrays(
         Category ID array (2D, uint8).
     profile : dict
         Rasterio profile for the grid (needed for slope/coast computation).
+    apply_coastal_distance_mod : bool, optional
+        Whether to apply coastal distance modification for GID 4 and GID 10.
+    skip_alluvium_slope : bool, optional
+        Whether to skip slope-based interpolation for GID 4 (alluvium),
+        independently of apply_coastal_distance_mod. In Jaehwi's v1p0 code,
+        GID 4 slope interpolation was skipped (mod6=True) while coastal
+        distance was separately disabled. Default False.
 
     Returns
     -------
@@ -316,13 +324,17 @@ def compute_hybrid_geology_arrays(
         logger.info("Skipping coast distance computation (disabled in config)")
         coast_dist_array = np.zeros_like(vs30_array)
 
+    # mod6 controls both GID 4 slope skip and coastal distance application.
+    # skip_alluvium_slope allows skipping GID 4 slope independently.
+    mod6 = apply_coastal_distance_mod or skip_alluvium_slope
+
     hybrid_vs30, hybrid_stdv = raster.apply_hybrid_geology_modifications(
         vs30_array,
         stdv_array,
         id_array,
         slope_array,
         coast_dist_array,
-        mod6=apply_coastal_distance_mod,
+        mod6=mod6,
         mod13=apply_coastal_distance_mod,
     )
 
@@ -702,6 +714,7 @@ def run_in_memory_pipeline_for_model_type(
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    skip_alluvium_slope: bool = False,
 ) -> tuple[np.ndarray, np.ndarray, dict]:
     """
     Run the full VS30 generation pipeline for a single model type in memory.
@@ -819,7 +832,8 @@ def run_in_memory_pipeline_for_model_type(
 
         current_vs30, current_stdv, slope_array, coast_dist_array = (
             compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile,
-                                          apply_coastal_distance_mod=apply_coastal_distance_mod)
+                                          apply_coastal_distance_mod=apply_coastal_distance_mod,
+                                          skip_alluvium_slope=skip_alluvium_slope)
         )
 
         if output_dir is not None and include_intermediate:
@@ -921,6 +935,7 @@ def compute_grid(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    skip_alluvium_slope: bool = False,
 ) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -1029,6 +1044,7 @@ def compute_grid(
             include_intermediate=include_intermediate,
             corr_fn=geology_corr_fn,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
+            skip_alluvium_slope=skip_alluvium_slope,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -1118,6 +1134,7 @@ def compute_at_locations(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    skip_alluvium_slope: bool = False,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1266,6 +1283,7 @@ def compute_at_locations(
             geology_corr_fn=geology_corr_fn,
             terrain_corr_fn=terrain_corr_fn,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
+            skip_alluvium_slope=skip_alluvium_slope,
         )
 
         result_df = parallel.run_parallel_locations(
@@ -1312,6 +1330,7 @@ def compute_at_locations(
                 noisy=noisy,
                 progress_bar=pbar,
                 apply_coastal_distance_mod=apply_coastal_distance_mod,
+                skip_alluvium_slope=skip_alluvium_slope,
             )
 
         if include_intermediate:
