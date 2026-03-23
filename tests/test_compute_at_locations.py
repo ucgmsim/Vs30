@@ -18,11 +18,11 @@ LOCATIONS_CSV = FIXTURES_DIR / "nz_cities.csv"
 # Default files from resources (matching the modified_foster_2019 config)
 GEOLOGY_CATEGORICAL_CSV = (
     constants.RESOURCE_PATH
-    / "categorical_vs30_mean_and_stddev/geology_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv"
+    / "categorical_vs30_mean_and_stddev/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )
 TERRAIN_CATEGORICAL_CSV = (
     constants.RESOURCE_PATH
-    / "categorical_vs30_mean_and_stddev/terrain_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv"
+    / "categorical_vs30_mean_and_stddev/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
 )
 INDEPENDENT_OBS_CSV = (
     constants.RESOURCE_PATH / "observations/modified_foster_2019_measured_vs30_independent_observations.csv"
