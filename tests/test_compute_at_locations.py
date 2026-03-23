@@ -15,17 +15,17 @@ from vs30 import constants, pipeline
 EXPECTED_CSV = BENCHMARKS_DIR / "nz_cities_vs30.csv"
 LOCATIONS_CSV = FIXTURES_DIR / "nz_cities.csv"
 
-# Default files from resources (matching the foster_2019 config)
+# Default files from resources (matching the modified_foster_2019 config)
 GEOLOGY_CATEGORICAL_CSV = (
     constants.RESOURCE_PATH
-    / "categorical_vs30_mean_and_stddev/geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+    / "categorical_vs30_mean_and_stddev/geology_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv"
 )
 TERRAIN_CATEGORICAL_CSV = (
     constants.RESOURCE_PATH
-    / "categorical_vs30_mean_and_stddev/terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+    / "categorical_vs30_mean_and_stddev/terrain_model_posterior_from_modified_foster_2019_mean_and_standard_deviation.csv"
 )
 INDEPENDENT_OBS_CSV = (
-    constants.RESOURCE_PATH / "observations/foster_2019_measured_vs30_independent_observations.csv"
+    constants.RESOURCE_PATH / "observations/modified_foster_2019_measured_vs30_independent_observations.csv"
 )
 CLUSTERED_OBS_CSV = FIXTURES_DIR / "test_viktor_cpt_subset.csv"
 

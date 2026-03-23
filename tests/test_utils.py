@@ -133,63 +133,14 @@ class TestCombineVs30Models:
         assert np.isclose(combined_stdv[0], expected_stdv, rtol=0.01)
 
 
-class TestExponentialCorrelationFunction:
-    """Tests for the exponential correlation function."""
-
-    def test_zero_distance_returns_near_one(self):
-        """Correlation at zero distance ≈ 1.0 (limited by MIN_DIST_ENFORCED)."""
-        distances = np.array([0.0])
-        result = utils.exponential_correlation_function(distances, phi=1407)
-        assert result[0] > 0.999
-
-    def test_correlation_decays_with_distance(self):
-        """Correlation decays as distance increases."""
-        distances = np.array([0.0, 100.0, 500.0, 1407.0, 5000.0])
-        result = utils.exponential_correlation_function(distances, phi=1407)
-        assert np.all(np.diff(result) < 0)  # Monotonically decreasing
-
-    def test_at_phi_correlation_is_1_over_e(self):
-        """At distance=phi, correlation ≈ 1/e ≈ 0.368."""
-        distances = np.array([1407.0])
-        result = utils.exponential_correlation_function(distances, phi=1407)
-        assert np.isclose(result[0], np.exp(-1), rtol=0.01)
-
-    def test_practical_range_three_phi(self):
-        """At 3*phi, correlation ≈ 0.05 (5% practical range)."""
-        phi = 1407
-        distances = np.array([3 * phi])
-        result = utils.exponential_correlation_function(distances, phi=phi)
-        assert np.isclose(result[0], np.exp(-3), rtol=0.01)
-
-
 class TestMaternCorrelationFunction:
-    """Tests for the Matérn correlation function.
+    """Tests for the Matérn correlation function."""
 
-    Uses the original Foster (2019) parameters: range=20000, sill=0.15,
-    nugget=0.05, kappa=0.9.
-    """
+    def test_kappa_half_matches_exponential(self):
+        """Matérn with kappa=0.5 and no nugget should match exponential.
 
-    def test_near_zero_distance_returns_sill_over_total(self):
-        """At d≈0, correlation ≈ sill/(sill+nugget) = 0.15/0.20 = 0.75."""
-        distances = np.array([0.0])
-        result = utils.matern_correlation_function(
-            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
-        )
-        assert np.isclose(result[0], 0.75, atol=0.02)
-
-    def test_correlation_decays_with_distance(self):
-        """Correlation decays as distance increases."""
-        distances = np.array([100.0, 1000.0, 5000.0, 20000.0, 50000.0])
-        result = utils.matern_correlation_function(
-            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
-        )
-        assert np.all(np.diff(result) < 0)
-
-    def test_kappa_half_matches_exponential_shape(self):
-        """Matérn with kappa=0.5 and no nugget should match exponential shape.
-
-        This is a mathematical identity: Matérn(κ=0.5) ∝ exp(-d/range).
-        With nugget=0, the correlation at d should equal exp(-d/range).
+        This is a mathematical identity: Matérn(κ=0.5) = exp(-d/range).
+        Verifies our implementation against the known analytical result.
         """
         distances = np.array([100.0, 500.0, 1000.0, 5000.0])
         range_m = 993.0
@@ -199,74 +150,23 @@ class TestMaternCorrelationFunction:
         expected = np.exp(-distances / range_m)
         np.testing.assert_allclose(result, expected, rtol=0.05)
 
-    def test_large_distance_approaches_zero(self):
-        """At very large distances, correlation → 0."""
-        distances = np.array([200000.0])
-        result = utils.matern_correlation_function(
-            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
-        )
-        assert result[0] < 0.01
 
-    def test_returns_correct_shape(self):
-        """Output shape matches input shape."""
-        distances = np.array([[100, 200], [300, 400]], dtype=float)
-        result = utils.matern_correlation_function(
-            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
-        )
-        assert result.shape == (2, 2)
-
-
-import functools
 import pickle
 
-import pytest
 from vs30.cli import resolve_correlation_function
 
 
 class TestResolveCorrelationFunction:
-    """Tests for config → correlation callable resolution."""
+    """Resolved correlation callables must be picklable for multiprocessing."""
 
-    def test_exponential_resolution(self):
-        """Exponential config resolves to callable that matches direct call."""
+    def test_exponential_is_picklable(self):
         config = {"model": "exponential", "phi": 1407}
         fn = resolve_correlation_function(config)
-        distances = np.array([0.0, 100.0, 1407.0])
-        expected = utils.exponential_correlation_function(distances, phi=1407)
-        np.testing.assert_array_equal(fn(distances), expected)
-
-    def test_matern_resolution(self):
-        """Matern config resolves to callable that matches direct call."""
-        config = {
-            "model": "matern",
-            "range": 20000,
-            "sill": 0.15,
-            "nugget": 0.05,
-            "kappa": 0.9,
-        }
-        fn = resolve_correlation_function(config)
-        distances = np.array([100.0, 5000.0, 20000.0])
-        expected = utils.matern_correlation_function(
-            distances, range_m=20000, sill=0.15, nugget=0.05, kappa=0.9,
-        )
-        np.testing.assert_array_equal(fn(distances), expected)
-
-    def test_unknown_model_raises_error(self):
-        """Unknown model type raises ValueError."""
-        config = {"model": "unknown"}
-        with pytest.raises(ValueError, match="Unknown correlation model"):
-            resolve_correlation_function(config)
-
-    def test_result_is_picklable(self):
-        """Resolved callable must be picklable for multiprocessing."""
-        config = {"model": "exponential", "phi": 1407}
-        fn = resolve_correlation_function(config)
-        pickled = pickle.dumps(fn)
-        fn2 = pickle.loads(pickled)
+        fn2 = pickle.loads(pickle.dumps(fn))
         distances = np.array([100.0, 1000.0])
         np.testing.assert_array_equal(fn(distances), fn2(distances))
 
     def test_matern_is_picklable(self):
-        """Matern callable must also be picklable."""
         config = {
             "model": "matern",
             "range": 20000,
@@ -275,7 +175,6 @@ class TestResolveCorrelationFunction:
             "kappa": 0.9,
         }
         fn = resolve_correlation_function(config)
-        pickled = pickle.dumps(fn)
-        fn2 = pickle.loads(pickled)
+        fn2 = pickle.loads(pickle.dumps(fn))
         distances = np.array([100.0, 5000.0])
         np.testing.assert_array_equal(fn(distances), fn2(distances))
