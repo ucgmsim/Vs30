@@ -61,11 +61,6 @@ RESOURCE_SUBDIRS: dict[str, str] = {
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 COV_REDUC: float = 1.5
 
-# Correlation length parameters (phi) in meters are now part of config files.
-# Phi represents the distance at which spatial correlation decays to ~37% (1/e).
-# Larger phi = smoother spatial interpolation, smaller phi = more localized updates.
-# Values are calibrated per model version and stored in YAML configs.
-
 # Minimum distance (meters) enforced in correlation calculations to prevent
 # division by zero or correlation=1 when points are exactly co-located.
 # The correlation function uses exp(-distance/phi), so distance=0 gives correlation=1.
@@ -290,9 +285,6 @@ STANDARD_ID_COLUMN: str = "id"
 # Coordinate Reference System for New Zealand Transverse Mercator 2000
 NZTM_CRS: str = "EPSG:2193"
 
-PLOT_FIGSIZE: list[int] = [12, 8]
-PLOT_DPI: int = 300
-
 # OBSERVATION DATA COLUMN NAMES
 # Standard column names for observation DataFrames used throughout the package.
 
@@ -416,16 +408,3 @@ SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
 
 # Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
 PIXEL_CENTER_OFFSET: float = 0.5
-
-# PLOT STYLING CONSTANTS
-# Standard styling parameters for matplotlib plots.
-
-PLOT_X_OFFSET: float = 0.2
-PLOT_ERRORBAR_CAPSIZE: int = 5
-PLOT_ERRORBAR_CAPTHICK: float = 1.5
-PLOT_MARKER_SIZE: int = 6
-PLOT_ALPHA: float = 0.7
-PLOT_GRID_ALPHA: float = 0.3
-PLOT_LABEL_FONTSIZE: int = 12
-PLOT_TITLE_FONTSIZE: int = 14
-PLOT_LEGEND_FONTSIZE: int = 11
