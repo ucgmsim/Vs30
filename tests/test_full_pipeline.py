@@ -18,9 +18,7 @@ import os
 import pytest
 import yaml
 
-from conftest import BENCHMARKS_DIR
-from conftest import compare_output_files
-from conftest import FIXTURES_DIR
+from conftest import BENCHMARKS_DIR, FIXTURES_DIR, compare_output_files
 
 from vs30 import constants, pipeline
 from vs30 import config as config_module
