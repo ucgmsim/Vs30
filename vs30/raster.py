@@ -8,13 +8,13 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
-import shapely
 import pandas as pd
 import rasterio
 import rasterio.enums
 import rasterio.features
 import rasterio.transform
 import rasterio.warp
+import shapely
 from osgeo import gdal
 from tqdm import tqdm
 
@@ -72,7 +72,6 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
             f"Failed to extract {shapefile_path.name} from {archive_path}. "
             f"Expected file at {shapefile_path} but it was not created."
         )
-
 
 
 def create_category_id_array(
@@ -412,7 +411,6 @@ def create_vs30_arrays_from_ids(
             )
 
     return vs30_array, stdv_array
-
 
 
 def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
