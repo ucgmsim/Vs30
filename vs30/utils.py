@@ -172,7 +172,6 @@ def combine_vs30_models(
     return combined_vs30, combined_stdv
 
 
-
 def validate_csv_columns(
     df: pd.DataFrame, required_cols: list[str], label: str
 ) -> None:
