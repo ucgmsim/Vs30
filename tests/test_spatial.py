@@ -12,7 +12,7 @@ import functools
 import numpy as np
 import pytest
 
-from vs30 import spatial, utils, constants
+from vs30 import spatial, utils
 
 # Create a standard geology correlation callable for tests
 _geology_corr_fn = functools.partial(utils.exponential_correlation_function, phi=1407)
