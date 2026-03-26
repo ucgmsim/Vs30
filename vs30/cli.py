@@ -57,6 +57,51 @@ def resolve_correlation_function(
         raise ValueError(f"Unknown correlation model: {model}")
 
 
+def load_model_config(version: constants.FixedModelVersion) -> dict:
+    """
+    Load and resolve a fixed model version's YAML config.
+
+    Validates required fields, resolves CSV paths relative to the resources
+    directory, and builds correlation function callables.
+
+    Parameters
+    ----------
+    version : FixedModelVersion
+        Model version to load.
+
+    Returns
+    -------
+    dict
+        Resolved config with keys including geology_corr_fn, terrain_corr_fn,
+        apply_coastal_distance_mod, skip_alluvium_slope, and all CSV paths
+        resolved to absolute Paths.
+
+    Raises
+    ------
+    typer.BadParameter
+        If the config is missing required fields.
+    """
+    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
+        config_data = yaml.safe_load(f)
+
+    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
+        if field not in config_data:
+            raise typer.BadParameter(
+                f"Config missing required field '{field}'. "
+                "All configs must specify correlation and coastal distance parameters."
+            )
+
+    for key in constants.CSV_PATH_KEYS:
+        if config_data[key]:
+            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
+
+    config_data["geology_corr_fn"] = resolve_correlation_function(config_data["geology_correlation"])
+    config_data["terrain_corr_fn"] = resolve_correlation_function(config_data["terrain_correlation"])
+    config_data["skip_alluvium_slope"] = config_data.get("skip_alluvium_slope", False)
+
+    return config_data
+
+
 # CLI helper shared by `points` and `points_custom` to handle CSV I/O and column merging.
 def run_points_pipeline(
     locations_csv: Path,
@@ -211,26 +256,7 @@ def points(
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
     """
-    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
-
-    # Validate required config fields (no defaults — all configs must be explicit)
-    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
-        if field not in config_data:
-            raise typer.BadParameter(
-                f"Config missing required field '{field}'. "
-                "All configs must specify correlation and coastal distance parameters."
-            )
-
-    # Resolve CSV paths relative to resources directory
-    for key in constants.CSV_PATH_KEYS:
-        if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
-
-    geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
-    terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
-    apply_coastal_distance_mod = config_data["apply_coastal_distance_mod"]
-    skip_alluvium_slope = config_data.get("skip_alluvium_slope", False)
+    config_data = load_model_config(version)
 
     run_points_pipeline(
         locations_csv=locations_csv,
@@ -247,10 +273,10 @@ def points(
         n_proc=n_proc,
         lon_column=lon_column,
         lat_column=lat_column,
-        geology_corr_fn=geology_corr_fn,
-        terrain_corr_fn=terrain_corr_fn,
-        apply_coastal_distance_mod=apply_coastal_distance_mod,
-        skip_alluvium_slope=skip_alluvium_slope,
+        geology_corr_fn=config_data["geology_corr_fn"],
+        terrain_corr_fn=config_data["terrain_corr_fn"],
+        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+        skip_alluvium_slope=config_data["skip_alluvium_slope"],
     )
 
 
@@ -357,6 +383,7 @@ def points_custom(
         lat_column=lat_column,
     )
 
+
 @cli.from_docstring(app)
 def grid(
     version: typing.Annotated[
@@ -405,26 +432,7 @@ def grid(
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
-    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
-        config_data = yaml.safe_load(f)
-
-    # Validate required config fields (no defaults — all configs must be explicit)
-    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
-        if field not in config_data:
-            raise typer.BadParameter(
-                f"Config missing required field '{field}'. "
-                "All configs must specify correlation and coastal distance parameters."
-            )
-
-    # Resolve CSV paths relative to resources directory
-    for key in constants.CSV_PATH_KEYS:
-        if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
-
-    geology_corr_fn = resolve_correlation_function(config_data["geology_correlation"])
-    terrain_corr_fn = resolve_correlation_function(config_data["terrain_correlation"])
-    apply_coastal_distance_mod = config_data["apply_coastal_distance_mod"]
-    skip_alluvium_slope = config_data.get("skip_alluvium_slope", False)
+    config_data = load_model_config(version)
 
     pipeline.compute_grid(
         grid_config=config_module.GridConfig(
@@ -444,11 +452,12 @@ def grid(
         include_intermediate=include_intermediate,
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-        geology_corr_fn=geology_corr_fn,
-        terrain_corr_fn=terrain_corr_fn,
-        apply_coastal_distance_mod=apply_coastal_distance_mod,
-        skip_alluvium_slope=skip_alluvium_slope,
+        geology_corr_fn=config_data["geology_corr_fn"],
+        terrain_corr_fn=config_data["terrain_corr_fn"],
+        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+        skip_alluvium_slope=config_data["skip_alluvium_slope"],
     )
+
 
 @cli.from_docstring(app)
 def grid_custom(
@@ -568,7 +577,6 @@ def grid_custom(
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
     )
-
 
 
 if __name__ == "__main__":  # pragma: no cover
