@@ -5,9 +5,12 @@ Tests cover:
 - combine_vs30_models: Model combination in log-space
 """
 
+import pickle
+
 import numpy as np
 
 from vs30 import constants, utils
+from vs30.cli import resolve_correlation_function
 
 
 class TestCombineVs30Models:
@@ -149,11 +152,6 @@ class TestMaternCorrelationFunction:
         )
         expected = np.exp(-distances / range_m)
         np.testing.assert_allclose(result, expected, rtol=0.05)
-
-
-import pickle
-
-from vs30.cli import resolve_correlation_function
 
 
 class TestResolveCorrelationFunction:
