@@ -4,6 +4,7 @@ import contextlib
 import multiprocessing as mp
 from collections.abc import Callable
 from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 import threadpoolctl
@@ -116,10 +117,11 @@ def process_geology_at_points(
 
     # Get slope and coastal distance at query points
     slope_at_points = raster.sample_slope_at_points(points)
-    if apply_coastal_distance_mod:
-        coast_dist_at_points = raster.compute_coastal_distance_at_points(points)
-    else:
-        coast_dist_at_points = np.zeros(len(points))
+    coast_dist_at_points = (
+        raster.compute_coastal_distance_at_points(points)
+        if apply_coastal_distance_mod
+        else np.zeros(len(points))
+    )
 
     # Apply hybrid modifications (slope and coastal distance)
     geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
@@ -143,10 +145,11 @@ def process_geology_at_points(
         # Apply hybrid modifications to observation model values so residuals
         # are computed consistently with the grid pipeline (spatial.py:405-436)
         obs_slope = raster.sample_slope_at_points(obs_locs)
-        if apply_coastal_distance_mod:
-            obs_coast_dist = raster.compute_coastal_distance_at_points(obs_locs)
-        else:
-            obs_coast_dist = np.zeros(len(obs_locs))
+        obs_coast_dist = (
+            raster.compute_coastal_distance_at_points(obs_locs)
+            if apply_coastal_distance_mod
+            else np.zeros(len(obs_locs))
+        )
         obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
             obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
             obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
@@ -642,8 +645,4 @@ def run_parallel_spatial_fit(
                     pbar.update(len(chunks[chunk_id]))
 
     # Merge: concatenate update lists (order does not matter; each update carries its pixel_index)
-    all_updates = []
-    for _, chunk_updates in results:
-        all_updates.extend(chunk_updates)
-
-    return all_updates
+    return [update for _, chunk_updates in results for update in chunk_updates]
