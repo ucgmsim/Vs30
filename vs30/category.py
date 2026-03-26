@@ -70,7 +70,9 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
-    with rasterio.open(constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME) as src:
+    with rasterio.open(
+        constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+    ) as src:
         terrain_ids = np.array(
             [s[0] for s in src.sample(points, indexes=1)], dtype=src.dtypes[0]
         )
@@ -407,15 +409,16 @@ def update_with_clustered_data(
     # Create a copy to update
     posterior_df = prior_df.copy()
 
-    if constants.COL_PRIOR_MEAN not in posterior_df.columns:
-        if constants.COL_MEAN in posterior_df.columns:
-            # Initial prior format - rename to prior_ columns
-            posterior_df = posterior_df.rename(
-                columns={
-                    constants.COL_MEAN: constants.COL_PRIOR_MEAN,
-                    constants.COL_STDV: constants.COL_PRIOR_STDV,
-                }
-            )
+    if (
+        constants.COL_PRIOR_MEAN not in posterior_df.columns
+        and constants.COL_MEAN in posterior_df.columns
+    ):
+        posterior_df = posterior_df.rename(
+            columns={
+                constants.COL_MEAN: constants.COL_PRIOR_MEAN,
+                constants.COL_STDV: constants.COL_PRIOR_STDV,
+            }
+        )
 
     # Initialize posterior columns with suffix
     posterior_df[constants.COL_POSTERIOR_MEAN_CLUSTERED] = posterior_df[
@@ -428,7 +431,7 @@ def update_with_clustered_data(
     # Filter out sites with ID_NODATA
     valid_sites = sites_df[
         sites_df[constants.STANDARD_ID_COLUMN] != constants.RASTER_ID_NODATA_VALUE
-    ].copy()
+    ]
 
     # Build a mapping from category ID to DataFrame index for direct updates
     id_to_idx = dict(
@@ -505,27 +508,20 @@ def get_vs30_for_ids(
         list(categorical_model_df.columns)
     )
 
-    # Build lookup dictionaries from category ID to Vs30 values
-    id_to_vs30 = dict(
+    # Build lookup from category ID to (mean, stdv) pair
+    lookup = dict(
         zip(
             categorical_model_df[constants.STANDARD_ID_COLUMN],
-            categorical_model_df[mean_col],
-        )
-    )
-    id_to_stdv = dict(
-        zip(
-            categorical_model_df[constants.STANDARD_ID_COLUMN],
-            categorical_model_df[stdv_col],
+            zip(
+                categorical_model_df[mean_col],
+                categorical_model_df[stdv_col],
+            ),
         )
     )
 
-    # Look up Vs30 values for each point
-    vs30_mean = np.array(
-        [id_to_vs30.get(cid, np.nan) for cid in category_ids], dtype=np.float64
-    )
-    vs30_stdv = np.array(
-        [id_to_stdv.get(cid, np.nan) for cid in category_ids], dtype=np.float64
-    )
+    pairs = [lookup.get(cid, (np.nan, np.nan)) for cid in category_ids]
+    vs30_mean = np.array([p[0] for p in pairs], dtype=np.float64)
+    vs30_stdv = np.array([p[1] for p in pairs], dtype=np.float64)
 
     return pd.DataFrame(
         {
