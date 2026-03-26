@@ -8,8 +8,7 @@ for known locations (major NZ cities).
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from conftest import BENCHMARKS_DIR
-from conftest import FIXTURES_DIR
+from conftest import BENCHMARKS_DIR, FIXTURES_DIR
 from vs30 import constants, pipeline
 
 EXPECTED_CSV = BENCHMARKS_DIR / "nz_cities_vs30.csv"
