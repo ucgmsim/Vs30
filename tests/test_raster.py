@@ -8,40 +8,8 @@ Tests cover:
 
 import numpy as np
 import pytest
-import rasterio
-from rasterio.transform import from_bounds
 
 from vs30 import raster
-
-# Shared extent for test rasters used by TestApplyHybridModificationsAtPoints
-TEST_XMIN, TEST_XMAX = 1740000, 1760000
-TEST_YMIN, TEST_YMAX = 5420000, 5440000
-TEST_RASTER_SIZE = 20
-
-
-def write_single_band_raster(path, data):
-    """Write a single-band GeoTIFF with the shared test extent."""
-    raster_transform = from_bounds(
-        TEST_XMIN,
-        TEST_YMIN,
-        TEST_XMAX,
-        TEST_YMAX,
-        TEST_RASTER_SIZE,
-        TEST_RASTER_SIZE,
-    )
-    with rasterio.open(
-        path,
-        "w",
-        driver="GTiff",
-        width=TEST_RASTER_SIZE,
-        height=TEST_RASTER_SIZE,
-        count=1,
-        dtype="float32",
-        crs="EPSG:2193",
-        transform=raster_transform,
-        nodata=-9999.0,
-    ) as dst:
-        dst.write(data, 1)
 
 
 class TestApplyHybridGeologyModifications:
