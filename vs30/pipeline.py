@@ -415,10 +415,8 @@ def compute_spatial_adjustment_on_grid(
     )
     spatial.validate_raster_data(raster_data)
 
-    # 2. Load Observations
-    logger.info("Loading observations...")
-    observations = observations_df
-    spatial.validate_observations(observations)
+    # 2. Validate observations
+    spatial.validate_observations(observations_df)
 
     # 3. Build updated model table from DataFrame
     # Model IDs are 1-indexed; convert to 0-indexed array indices
@@ -435,7 +433,7 @@ def compute_spatial_adjustment_on_grid(
     # 4. Prepare Observation Data for Spatial Adjustment
     logger.info("Preparing observation data for spatial adjustment...")
     obs_data = spatial.prepare_observation_data(
-        observations,
+        observations_df,
         raster_data,
         updated_model_table,
         model_type,
@@ -1239,7 +1237,8 @@ def compute_at_locations(
     terr_model_df = None
 
     if run_geology:
-        assert geology_categorical_csv is not None, "geology_categorical_csv is required"
+        if geology_categorical_csv is None:
+            raise ValueError("geology_categorical_csv is required when running geology model")
         if do_bayesian_update:
             logger.info("Performing Bayesian update of geology categorical model values...")
             geol_model_df = compute_categorical_vs30_updates(
@@ -1253,7 +1252,8 @@ def compute_at_locations(
             geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
 
     if run_terrain:
-        assert terrain_categorical_csv is not None, "terrain_categorical_csv is required"
+        if terrain_categorical_csv is None:
+            raise ValueError("terrain_categorical_csv is required when running terrain model")
         if do_bayesian_update:
             logger.info("Performing Bayesian update of terrain categorical model values...")
             terr_model_df = compute_categorical_vs30_updates(
