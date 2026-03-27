@@ -9,10 +9,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rasterio
-import scipy
+import scipy.spatial.distance
 from tqdm import tqdm
 
-from vs30 import category, constants, raster, utils
+from vs30 import category, constants, raster
 
 # Use spawn context to avoid GDAL fork issues
 _spawn_context = mp.get_context("spawn")
@@ -189,40 +189,6 @@ class RasterData:
     valid_flat_indices: np.ndarray
 
     @classmethod
-    def from_file(cls, path: Path) -> "RasterData":
-        """
-        Load 2-band VS30 raster.
-
-        Parameters
-        ----------
-        path : Path
-            Path to the 2-band raster file (band 1: mean Vs30, band 2: standard deviation of Vs30).
-
-        Returns
-        -------
-        RasterData
-            Loaded raster data with valid pixel mask.
-        """
-        with rasterio.open(path) as src:
-            vs30 = src.read(1)
-            stdv = src.read(2)
-            transform = src.transform
-            crs = src.crs
-            nodata = src.nodata
-
-            valid_mask, valid_flat_indices = _compute_valid_mask(vs30, stdv, nodata)
-
-            return cls(
-                vs30=vs30,
-                stdv=stdv,
-                transform=transform,
-                crs=crs,
-                nodata=nodata,
-                valid_mask=valid_mask,
-                valid_flat_indices=valid_flat_indices,
-            )
-
-    @classmethod
     def from_arrays(
         cls,
         vs30: np.ndarray,
@@ -293,40 +259,6 @@ class RasterData:
         ys = y_origin + rows_center * y_scale
 
         return np.column_stack((xs, ys)).astype(np.float32)
-
-    def write_updated(
-        self, path: Path, updated_vs30: np.ndarray, updated_stdv: np.ndarray
-    ) -> None:
-        """
-        Write updated raster to file.
-
-        Parameters
-        ----------
-        path : Path
-            Output file path.
-        updated_vs30 : ndarray
-            Updated vs30 values (same shape as self.vs30).
-        updated_stdv : ndarray
-            Updated stdv values (same shape as self.stdv).
-        """
-        # Write using rasterio with compression
-        with rasterio.open(
-            path,
-            "w",
-            driver=constants.GEOTIFF_DRIVER,
-            height=self.vs30.shape[0],
-            width=self.vs30.shape[1],
-            count=2,
-            dtype=self.vs30.dtype,
-            crs=self.crs,
-            transform=self.transform,
-            nodata=self.nodata,
-            compress=constants.GEOTIFF_COMPRESSION,
-            tiled=constants.GEOTIFF_TILED,
-            bigtiff=constants.GEOTIFF_BIGTIFF,
-        ) as dst:
-            dst.write(updated_vs30, 1)
-            dst.write(updated_stdv, 2)
 
 
 @dataclass
@@ -505,8 +437,6 @@ def prepare_observation_data(
     # For geology, we must apply hybrid modifications to model values at observation points
     if model_type == constants.ModelType.GEOLOGY:
         if has_in_memory_arrays:
-            assert slope_array is not None
-            assert coast_dist_array is not None
             # Convert observation coordinates to grid pixel indices
             rows, cols = rasterio.transform.rowcol(
                 raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
@@ -546,7 +476,6 @@ def prepare_observation_data(
                 )
         else:
             # File-based path: read slope and coast distance from rasters
-            assert output_dir is not None
             slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
             coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
 
@@ -1238,39 +1167,6 @@ def apply_updates(
         updated_stdv.flat[update.pixel_index] = update.updated_stdv
 
     return updated_vs30, updated_stdv
-
-
-def apply_and_write_updates(
-    raster_data: RasterData,
-    updates: list[SpatialAdjustmentResult],
-    model_type: constants.ModelType,
-    output_dir: Path,
-) -> None:
-    """
-    Apply updates to raster and write output file.
-
-    Parameters
-    ----------
-    raster_data : RasterData
-        Raster data object.
-    updates : list
-        List of SpatialAdjustmentResult objects.
-    model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
-    output_dir : Path
-        Directory where output raster will be saved.
-    """
-    updated_vs30, updated_stdv = apply_updates(raster_data, updates)
-
-    # Write output using filename from constants
-    output_path = output_dir / constants.OUTPUT_FILENAMES[model_type]
-
-    raster_data.write_updated(output_path, updated_vs30, updated_stdv)
-
-    logger.info(
-        f"Wrote updated raster to {output_path} "
-        f"({len(updates):,} pixels updated out of {np.sum(raster_data.valid_mask):,} valid)"
-    )
 
 
 def compute_spatial_adjustment_at_points(
