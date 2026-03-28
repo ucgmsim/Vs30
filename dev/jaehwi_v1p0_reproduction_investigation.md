@@ -94,6 +94,52 @@ Test setup: 200 randomly sampled points from the Wellington test subgrid
 The 18 m/s mean abs diff is from MVN grid-vs-points artifacts, not from a
 configuration mismatch.
 
+## Full-Grid Reproduction with Jaehwi's Code
+
+Ran `run_vs30calc_V1.py --gupdate posterior --tupdate posterior --nproc 1` on the
+full grid to confirm that V1.0_26Mar.tif cannot be exactly reproduced even with
+the same codebase.
+
+A patch was required: Jaehwi's `mvn.mvn_tiff` creates a multiprocessing `Pool`
+even when `nproc=1`, causing a deadlock. Bypassed with a `nproc == 1` branch
+(list comprehension instead of `pool.starmap`).
+
+### Timing
+
+| Step | Duration |
+|------|----------|
+| Geology Bayesian update | ~11s |
+| Geology MVN | 23 min |
+| Terrain MVN | 22 min |
+| Combination | 17s |
+| **Total** | **46 min** |
+
+### Comparison: Jaehwi's code (nproc=1) vs V1.0_26Mar.tif
+
+```
+Valid pixels:      25,913,941
+Mean abs diff:     10.78 m/s
+Median abs diff:   0.00 m/s
+Mean % diff:       2.83%
+Median % diff:     0.00%
+Max % diff:        162.87%
+
+Pixels with >  0.1% diff: 15.99%
+Pixels with >  1.0% diff: 14.75%
+Pixels with >  5.0% diff: 14.49%
+Pixels with > 10.0% diff: 14.33%
+Pixels with > 25.0% diff:  1.99%
+Pixels with > 50.0% diff:  0.73%
+```
+
+**73% of pixels match exactly** (median diff = 0). The ~15% that differ are
+MVN-affected pixels near observations where the distance caching optimization
+produces different results depending on processing order (`nproc=1` vs the
+original multi-worker run). Even Jaehwi's own code cannot reproduce
+V1.0_26Mar.tif with a different `nproc` setting.
+
+Output: `/home/arr65/data/vs30/grid_models/jaehwi_v1p0_reproduced_with_jaehwi_code/`
+
 ## Remaining Investigation Items
 
 - **Observation set difference** (0.37 m/s): Our reconstructed 671-station CSV
