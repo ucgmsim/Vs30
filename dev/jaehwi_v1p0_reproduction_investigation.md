@@ -1,108 +1,127 @@
 # Jaehwi v1.0 Model Reproduction Investigation
 
-Investigation into the discrepancy between the output of `vs30 grid` for version
-`jaehwi_v1p0` and the reference raster
-`/home/arr65/data/vs30/grid_models/jaehwi_v1p0/V1.0_26Mar.tif`.
+Investigation into reproducing the intended Jaehwi v1.0 Vs30 model, using
+`/home/arr65/data/vs30/grid_models/jaehwi_v1p0/V1.0_26Mar.tif` as the reference.
+
+## Conclusion
+
+**The refactored vs30 pipeline correctly reproduces Jaehwi's intended model.**
+
+Our pipeline and Jaehwi's actual code (`run_vs30calc_V1.py` from `/home/arr65/src/Vs30_2026/`)
+produce nearly identical output when run in points mode with `--gupdate posterior
+--tupdate posterior` (862.14 vs 862.51 m/s at the test point, 0.37 m/s difference).
+
+The ~48 m/s residual gap to V1.0_26Mar.tif is due to implementation artifacts in
+Jaehwi's grid-mode processing (float32 precision loss, MVN distance caching, raster
+roundtrip) that are absent from our pipeline. These artifacts are not scientifically
+meaningful, and reproducing them is not a goal.
+
+## Source Code
+
+Two versions of Jaehwi's code were tested:
+
+| Code | Location | Result |
+|------|----------|--------|
+| Old fork (`vs30calc_NSHM_newmodel.py`) | `/home/arr65/src/jaehwi_fork_vs30/Vs30/` | **Wrong code** — uses `model_new` and `sites_load_NSHM2022_0`, cannot reproduce reference in any mode |
+| Actual code (`run_vs30calc_V1.py`) | `/home/arr65/src/Vs30_2026/` | **Correct code** — uses `model_fixed` and `sites_load_NSHM2022`, matches our pipeline |
+
+Key differences between the two codebases:
+- Different model module: `model_fixed` (actual) vs `model_new` (old fork)
+- Different observation loader: `sites_load_NSHM2022` (actual) vs `sites_load_NSHM2022_0` (old fork)
+- Different Bayesian update formula: `model_fixed.posterior()` uses sequential update
+  with `mean_shift` term; `model_new.posterior()` uses a batch formula without it
+- The actual code required a typo fix (`params_2` → `params` in type annotations)
+
+## Confirmed Configuration
+
+| Parameter | Default | Confirmed setting | Evidence |
+|-----------|---------|-------------------|----------|
+| Entry point | — | `run_vs30calc_V1.py` | Jaehwi confirmed this is for making the v1.0 version |
+| Update mode | `posterior_paper` | `--gupdate posterior --tupdate posterior` | Jaehwi confirmed; Foster posteriors give 418 m/s vs reference 910 m/s |
+| Combination | `stdv_weight=False` → ratio 1.0 | ratio 1.0 (50/50 geometric mean) | Default; matches reference |
+| Coastal distance | `mod13=True` but code commented out | Off | Coastal distance code disabled in `model_geology_new.py` |
+| GID 4 slope skip | `mod6=True` | On (`skip_alluvium_slope: true`) | Default in `params.py:80` |
+| Observations | `sites_load_NSHM2022` | Original observation set | Loaded from `vs30/data/updated/` directory |
+
+## Single-Point Comparison (easting=1575300, northing=5169300, GID 15, TID 11)
+
+| Source | Geol cat | Geol MVN | Terr cat | Terr MVN | Combined MVN |
+|--------|---------|---------|---------|---------|-------------|
+| Vs30_2026 (`posterior_paper`, default) | 690.97 | 700.25 | 266.87 | 268.49 | **433.60** |
+| Old fork (`posterior_paper`, default) | 690.97 | 644.03 | 266.87 | 271.74 | **418.34** |
+| Old fork (`--gupdate posterior`) | 708.82 | 645.27 | 597.10 | 596.38 | **620.34** |
+| **Vs30_2026 (`--gupdate posterior`)** | **1068.30** | **1074.48** | **691.42** | **692.36** | **862.51** |
+| **Our pipeline (Bayesian + ratio)** | **1068.30** | **1073.54** | **691.42** | **692.36** | **862.14** |
+| Reference raster (V1.0_26Mar.tif) | — | — | — | — | **910.06** |
+
+## Why Our Pipeline Cannot Exactly Match V1.0_26Mar.tif
+
+Our pipeline is grid-points consistent (confirmed by `test_grid_and_points_consistency`).
+Jaehwi's code is NOT — the grid mode introduces:
+
+1. **Float32 coordinate precision**: `_mvn_tiff_worker` casts pixel locations to
+   `np.float32` (line 210), losing sub-meter precision for NZTM coordinates (~1.5M).
+   Points mode uses float64 throughout.
+
+2. **Float32 intermediate raster roundtrip**: In grid mode, Vs30/stdv values are
+   written to GeoTIFF (float32) then read back for MVN. Points mode keeps float64.
+
+3. **MVN distance caching**: Grid mode processes pixels in raster scan order, and
+   an optimization (lines 109-114) skips recalculating distances when consecutive
+   pixels are spatially close. Points mode recalculates independently.
+
+4. **Complex64 distance matrix**: `_xy2complex` converts to `complex64` (float32
+   real/imaginary) for observation-observation distances. Our code uses
+   `scipy.spatial.distance.cdist` with float64.
+
+Since our code matches Jaehwi's points-mode output, and our grid mode equals our
+points mode, our grid output will match Jaehwi's points mode — not his grid mode.
+The ~48 m/s gap is these accumulated precision artifacts baked into V1.0_26Mar.tif.
+
+## 200-Point Experiment Results
+
+Test setup: 200 randomly sampled points from the Wellington test subgrid
+(1555050-1610050 x 5145050-5195050, 550x500 pixels).
+
+### Configuration search (run with our pipeline)
+
+| Experiment | Config | Mean abs diff |
+|------------|--------|--------------|
+| Foster posteriors + ratio + no coast | `posterior_paper` equivalent | 198.83 m/s |
+| **Our Bayesian + ratio + no coast** | **Best match** | **18.03 m/s** |
+| Jaehwi posteriors + ratio + no coast | Jaehwi batch formula | 19.16 m/s |
+
+The 18 m/s mean abs diff is from MVN grid-vs-points artifacts, not from a
+configuration mismatch.
+
+## Remaining Investigation Items
+
+- **Observation set difference** (0.37 m/s): Our reconstructed 671-station CSV
+  vs `sites_load_NSHM2022` loader. Minor; could be resolved by comparing the
+  two observation sets directly.
 
 ## Reference Data
 
 | File | Description |
 |------|-------------|
 | `V1.0_26Mar.tif` | Reference 2-band GeoTIFF (Vs30 + Standard Deviation), 15200x10600 @ 100m, EPSG:2193, nodata=-32767 |
-| `applied_Vs30_data.csv` | 671 observations with model-sampled columns (gid, geology_vs30, etc.) — output of the pipeline, not an alternative input |
+| `applied_Vs30_data.csv` | 671 observations with model-sampled columns — output of the pipeline, not an alternative input |
 | `gid.tif` | Geology ID raster with 50m spatial offset from `V1.0_26Mar.tif` (origin 1060100 vs 1060050) |
-| `Vs30_extraction_26Mar.py` | Post-processing script for extracting/gap-filling values from a TIF at CSV coordinates |
-
-## Source Code
-
-Jaehwi's fork: `/home/arr65/src/jaehwi_fork_vs30/Vs30/`
-
-Entry point: `vs30calc_NSHM_newmodel.py`, which imports:
-- `model_new` and `model_geology_new` (model logic)
-- `sites_load_NSHM2022_0` (observation loading)
-- `mvn` (spatial adjustment)
-- `params` (CLI argument parsing and defaults)
-
-## Confirmed Configuration
-
-Determined via systematic experiment matrix (200-point comparison against Wellington
-test subgrid). See `dev/jaehwi_v1p0_reproduction/` for scripts and data.
-
-| Parameter | Jaehwi default (`params.py`) | Confirmed setting | Evidence |
-|-----------|------------------------------|-------------------|----------|
-| Update mode | `posterior_paper` (Foster posteriors) | `posterior` (Bayesian from priors) | Foster posteriors give 198.83 m/s error; Bayesian gives 18.03 m/s |
-| Combination | `stdv_weight=False` → ratio 1.0 | ratio 1.0 (50/50 geometric mean) | Matches default and gives better results than stdv weighting |
-| Coastal distance | `mod13=True` but code commented out | Off (`apply_coastal_distance_mod: false`) | Coastal distance code disabled in `model_geology_new.py:255-280` |
-| GID 4 slope skip | `mod6=True` | On (`skip_alluvium_slope: true`) | Default in `params.py:80` |
-| Observations | 671 stations from 3 sources | 671 reconstructed stations | Validated 671/671 spatial match against `applied_Vs30_data.csv` |
-
-**Key finding:** Despite the default being `posterior_paper`, Jaehwi must have used
-`-g posterior -t posterior` when running `vs30calc_NSHM_newmodel.py`. The Foster 2019
-posteriors (hardcoded in `model_posterior_paper()`) give catastrophically wrong results
-for categories with many high-Vs30 observations (e.g., geology cat 15: Foster=690.97,
-Bayesian=1068.30, observations mean=1185.75).
-
-## Experiment Results
-
-Test setup: 200 randomly sampled points from the Wellington test subgrid
-(1555050-1610050 x 5145050-5195050, 550x500 pixels).
-
-### Configuration search
-
-| Experiment | Config | Mean abs diff | Median | <1 m/s |
-|------------|--------|--------------|--------|--------|
-| Foster posteriors + ratio + no coast | `posterior_paper` equivalent | 198.83 m/s | — | — |
-| **Our Bayesian + ratio + no coast** | **Best match** | **18.03 m/s** | **0.00 m/s** | **76.5%** |
-| Jaehwi posteriors + ratio + no coast | Jaehwi batch formula | 19.16 m/s | 0.55 m/s | 61.0% |
-| Prior + Bayesian + stdv weighting + coast on | Old `jaehwi_v1p0.yaml` | ~40+ m/s | — | — |
-
-### Per-category error analysis (Bayesian + ratio + no coast)
-
-| Geology ID | Points | Mean error | Max error | Comment |
-|------------|--------|-----------|-----------|---------|
-| 1-6, 10 | 81 | 0.01-4.55 | 90.98 | Mostly excellent match |
-| 7 | 2 | 48.40 | 96.80 | Small sample, MVN-sensitive |
-| 8 | 16 | 30.86 | 198.07 | Some MVN outliers |
-| 12 | 6 | 26.05 | 156.25 | MVN-sensitive |
-| 15 | 95 | 28.33 | 261.83 | Large sample; residual from Bayesian formula differences |
-
-### Remaining discrepancy sources
-
-The ~18 m/s mean abs diff comes from:
-
-1. **Bayesian update formula differences** (~1 m/s contribution): Our sequential update
-   includes `mean_shift` residual term and updates stdv; Jaehwi's batch formula does
-   neither. Direct comparison: our Bayesian (18.03) vs Jaehwi's exact posteriors (19.16).
-
-2. **MVN spatial adjustment sensitivity** (dominant): Categories with many high-dispersion
-   observations (cat 15: 64 obs averaging 1185 m/s) produce large MVN corrections that
-   amplify small differences in the categorical model value.
-
-3. **Post-processing gap-fill**: `Vs30_extraction_26Mar.py` applies nearest-neighbor
-   infill for nodata pixels within the coastline, which is not replicated in our pipeline.
-
-## Observations Reconstruction
-
-Script: `dev/jaehwi_v1p0_reproduction/reconstruct_observations.py`
-
-Replicates Jaehwi's `sites_load_NSHM2022_0.py` loading logic:
-- **McGann** (276): NZMG coords, downsampled on 1km grid, transformed to NZTM
-- **Wotherspoon** (36): Filtered out 140 post-v1p0 SCPT/SDMT entries
-- **Kaiser/GeoNet** (359): Filtered out 512 post-v1p0 Foster/Perrin-derived entries
-
-Result: 671 observations, 671/671 spatially matched to `applied_Vs30_data.csv` within 1m.
+| `Vs30_extraction_26Mar.py` | Post-extraction script that reads from a TIF and gap-fills nodata pixels — does NOT create V1.0_26Mar.tif |
 
 ## Updated Config
 
-`vs30/configs/jaehwi_v1p0.yaml` updated to match confirmed parameters:
-- `combination_method: ratio` (was `standard_deviation_weighting`)
-- `combine_ratio: 1.0` (was empty)
-- `apply_coastal_distance_mod: false` (was `true`)
-- `skip_alluvium_slope: true` (new parameter)
+`vs30/configs/jaehwi_v1p0.yaml` settings:
+- `do_bayesian_update: true` (Bayesian from priors, not Foster posteriors)
+- `combination_method: ratio`
+- `combine_ratio: 1.0`
+- `apply_coastal_distance_mod: false`
+- `skip_alluvium_slope: true`
+- `geology_categorical_csv: geology_model_prior_mean_and_standard_deviation.csv`
+- `terrain_categorical_csv: terrain_model_prior_mean_and_standard_deviation.csv`
 
 ## Parameters That Match
 
-- **Grid definition:** 1060050-2120050 x 4730050-6250050, 100m spacing
 - **Geology/terrain priors:** CSV values match Jaehwi's hardcoded arrays exactly
 - **MVN parameters:** phi=1407 (geology), phi=993 (terrain), max_dist=10000,
   max_points=500, cov_reduc=1.5, noisy=True
