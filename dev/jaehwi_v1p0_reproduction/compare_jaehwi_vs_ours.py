@@ -3,7 +3,7 @@
 Reads:
 - jaehwi_output/vs30points.csv  (Jaehwi's code output on 200 test points)
 - reference_subgrid.tif          (V1.0_26Mar.tif Wellington subgrid)
-- Our pipeline output via pipeline.compute_at_locations()
+- Our pipeline output via pipeline.points_pipeline()
 
 Compares intermediate values (geology_vs30, terrain_vs30, MVN corrections)
 to identify where the implementations diverge.
@@ -54,7 +54,7 @@ def sample_reference_at_points(eastings, northings):
 def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
     """Run our pipeline with Foster posteriors (matching Jaehwi defaults)."""
     if mode == "foster_posterior":
-        return pipeline.compute_at_locations(
+        return pipeline.points_pipeline(
             longitudes=longitudes, latitudes=latitudes,
             geology_categorical_csv=FOSTER_GEOL_POST,
             terrain_categorical_csv=FOSTER_TERR_POST,
@@ -67,7 +67,7 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
         )
     elif mode == "bayesian":
-        return pipeline.compute_at_locations(
+        return pipeline.points_pipeline(
             longitudes=longitudes, latitudes=latitudes,
             geology_categorical_csv=GEOL_PRIOR,
             terrain_categorical_csv=TERR_PRIOR,

@@ -48,7 +48,7 @@ if __name__ == "__main__":
     eastings, northings, ref_vs30, ref_stdv = sample_reference_points(200)
     longitudes, latitudes = nztm2wgs.transform(eastings, northings)
 
-    result_df = pipeline.compute_at_locations(
+    result_df = pipeline.points_pipeline(
         longitudes=longitudes,
         latitudes=latitudes,
         noisy=True,

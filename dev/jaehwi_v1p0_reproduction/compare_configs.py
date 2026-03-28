@@ -46,7 +46,7 @@ def sample_reference_points(n_points=200, seed=42):
 
 def run_config(name, longitudes, latitudes, **params):
     print(f"\n  Running {name}...")
-    return pipeline.compute_at_locations(
+    return pipeline.points_pipeline(
         longitudes=longitudes, latitudes=latitudes,
         noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
         **params,

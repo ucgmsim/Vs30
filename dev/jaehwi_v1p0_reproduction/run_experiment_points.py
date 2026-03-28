@@ -1,7 +1,7 @@
 """Fast point-based experiment comparison.
 
 Instead of generating full grids (~hours per experiment due to MVN),
-sample ~200 points from the reference raster and run compute_at_locations()
+sample ~200 points from the reference raster and run points_pipeline()
 at those points. Each experiment takes seconds instead of hours.
 """
 import sys
@@ -188,7 +188,7 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
         vstr = Path(v).name if isinstance(v, Path) else str(v)
         print(f"  {k}: {vstr}")
 
-    result_df = pipeline.compute_at_locations(
+    result_df = pipeline.points_pipeline(
         longitudes=longitudes,
         latitudes=latitudes,
         noisy=True,

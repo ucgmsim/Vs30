@@ -697,7 +697,7 @@ def write_id_raster(
 # ============================================================================
 
 
-def run_in_memory_pipeline_for_model_type(
+def compute_model_grid(
     model_type: constants.ModelType,
     grid_config: config_module.GridConfig,
     categorical_model_csv: Path | None = None,
@@ -914,7 +914,7 @@ def run_in_memory_pipeline_for_model_type(
 # ============================================================================
 
 
-def compute_grid(
+def grid_pipeline(
     grid_config: config_module.GridConfig,
     output_dir: Path | None = None,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
@@ -1027,7 +1027,7 @@ def compute_grid(
     # 1. Run Geology Pipeline
     if run_geology:
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
-        geol_vs30, geol_stdv, profile = run_in_memory_pipeline_for_model_type(
+        geol_vs30, geol_stdv, profile = compute_model_grid(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
             categorical_model_csv=geology_categorical_csv,
@@ -1050,7 +1050,7 @@ def compute_grid(
     # 2. Run Terrain Pipeline
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
-        terr_vs30, terr_stdv, profile = run_in_memory_pipeline_for_model_type(
+        terr_vs30, terr_stdv, profile = compute_model_grid(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
             categorical_model_csv=terrain_categorical_csv,
@@ -1114,7 +1114,7 @@ def compute_grid(
 # ============================================================================
 
 
-def compute_at_locations(
+def points_pipeline(
     longitudes: np.ndarray,
     latitudes: np.ndarray,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
@@ -1141,7 +1141,7 @@ def compute_at_locations(
     raster grids. This is efficient for querying Vs30 at a small number of
     locations.
 
-    The pipeline stages mirror those in compute_grid:
+    The pipeline stages mirror those in grid_pipeline:
     1. Look up categorical model values at each point.
     2. Apply hybrid modifications for slope and coastal distance (geology only).
     3. MVN spatial adjustment using observations (conditional).
