@@ -55,7 +55,7 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
             else:
                 config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
-    pipeline.compute_grid(
+    pipeline.grid_pipeline(
         grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=tmp_path,
         geology_categorical_csv=config_data["geology_categorical_csv"],

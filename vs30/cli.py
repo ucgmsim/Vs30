@@ -129,7 +129,7 @@ def run_points_pipeline(
     Shared implementation for points and points_custom commands.
 
     Reads the input CSV, validates columns, delegates computation to
-    ``pipeline.compute_at_locations``, merges original columns with results,
+    ``pipeline.points_pipeline``, merges original columns with results,
     and writes the output CSV.
 
     Parameters
@@ -185,7 +185,7 @@ def run_points_pipeline(
     if lat_column not in df.columns:
         raise typer.BadParameter(f"Column '{lat_column}' not found in {locations_csv}")
 
-    result_df = pipeline.compute_at_locations(
+    result_df = pipeline.points_pipeline(
         longitudes=df[lon_column].values,
         latitudes=df[lat_column].values,
         model_type=model_type,
@@ -434,7 +434,7 @@ def grid(
     """
     config_data = load_model_config(version)
 
-    pipeline.compute_grid(
+    pipeline.grid_pipeline(
         grid_config=config_module.GridConfig(
             grid_xmin=grid_xmin, grid_xmax=grid_xmax,
             grid_ymin=grid_ymin, grid_ymax=grid_ymax,
@@ -556,7 +556,7 @@ def grid_custom(
             "data products. The only final product is the combined model."
         )
 
-    pipeline.compute_grid(
+    pipeline.grid_pipeline(
         grid_config=config_module.GridConfig(
             grid_xmin=grid_xmin, grid_xmax=grid_xmax,
             grid_ymin=grid_ymin, grid_ymax=grid_ymax,

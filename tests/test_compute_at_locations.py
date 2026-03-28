@@ -1,7 +1,7 @@
 """
 Tests for the VS30 compute-at-locations functionality.
 
-These tests verify that compute_at_locations produces consistent Vs30 values
+These tests verify that points_pipeline produces consistent Vs30 values
 for known locations (major NZ cities).
 """
 
@@ -30,9 +30,9 @@ CLUSTERED_OBS_CSV = FIXTURES_DIR / "test_viktor_cpt_subset.csv"
 
 
 def run_and_compare(n_proc: int):
-    """Run compute_at_locations and compare against benchmark."""
+    """Run points_pipeline and compare against benchmark."""
     locations_df = pd.read_csv(LOCATIONS_CSV)
-    result_df = pipeline.compute_at_locations(
+    result_df = pipeline.points_pipeline(
         longitudes=locations_df["longitude"].values,
         latitudes=locations_df["latitude"].values,
         geology_categorical_csv=GEOLOGY_CATEGORICAL_CSV,
@@ -55,7 +55,7 @@ def run_and_compare(n_proc: int):
 
 
 def test_single_process():
-    """Test compute_at_locations with n_proc=1."""
+    """Test points_pipeline with n_proc=1."""
     run_and_compare(n_proc=1)
 
 

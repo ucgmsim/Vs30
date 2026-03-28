@@ -32,7 +32,7 @@ def test_grid_and_points_consistency(tmp_path):
     grid_output_dir = tmp_path / "grid_output"
 
     # Run grid pipeline
-    pipeline.compute_grid(
+    pipeline.grid_pipeline(
         grid_config=config_module.GridConfig.from_dict(config_data),
         output_dir=grid_output_dir,
         geology_categorical_csv=config_data["geology_categorical_csv"],
@@ -76,7 +76,7 @@ def test_grid_and_points_consistency(tmp_path):
         lons.append(wgs[0, 1])
 
     # Run points pipeline at all three locations
-    result = pipeline.compute_at_locations(
+    result = pipeline.points_pipeline(
         longitudes=np.array(lons),
         latitudes=np.array(lats),
         geology_categorical_csv=config_data["geology_categorical_csv"],
