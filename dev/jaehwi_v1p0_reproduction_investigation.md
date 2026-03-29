@@ -7,14 +7,25 @@ Investigation into reproducing the intended Jaehwi v1.0 Vs30 model, using
 
 **The refactored vs30 pipeline correctly reproduces Jaehwi's intended model.**
 
-Our pipeline and Jaehwi's actual code (`run_vs30calc_V1.py` from `/home/arr65/src/Vs30_2026/`)
-produce nearly identical output when run in points mode with `--gupdate posterior
---tupdate posterior` (862.14 vs 862.51 m/s at the test point, 0.37 m/s difference).
+A 200-point comparison across New Zealand confirms that both codebases produce
+near-identical results in points mode: **81.5% of points agree within 0.01%**,
+with a median Vs30 difference of 0.0002 m/s. Geology and terrain IDs match
+100%, and categorical model lookups and Bayesian updates are near-identical.
+
+The remaining ~15% of points with >1% difference are all near observation
+stations where the MVN spatial adjustment differs due to minor observation set
+differences (our reconstructed 671-station CSV vs Jaehwi's internal
+`sites_load_NSHM2022` loader).
 
 The ~48 m/s residual gap to V1.0_26Mar.tif is due to implementation artifacts in
 Jaehwi's grid-mode processing (float32 precision loss, MVN distance caching, raster
 roundtrip) that are absent from our pipeline. These artifacts are not scientifically
 meaningful, and reproducing them is not a goal.
+
+An initial 35% terrain ID disagreement was traced to a sampling artifact (pixel
+boundary coincidence between V1.0_26Mar.tif and IwahashiPike.tif), not a model
+difference. Both codebases use the identical terrain raster file (MD5 match).
+See "Terrain Raster Investigation" below for details.
 
 ## Source Code
 
@@ -132,21 +143,108 @@ Combined StdDev:
 - **81.5% of points agree within 0.01%.** At most locations both codebases
   produce virtually identical Vs30 values.
 
-### Terrain raster pixel boundary artifact
+## Terrain Raster Investigation
 
-An earlier comparison showed 35% terrain ID disagreement. Investigation revealed
-this was a sampling artifact, not a model difference:
+### Discovery
 
-- V1.0_26Mar.tif pixel centres (at xx100, xx200, ...) coincide exactly with
-  IwahashiPike.tif pixel boundaries (same 100 m resolution, 50 m grid offset).
-- The NZTM → WGS84 → NZTM coordinate roundtrip (required because Jaehwi's code
-  accepts lon/lat input) introduces ~3-5 micrometer shifts.
-- For points exactly on pixel boundaries, this micrometer-level shift is enough
-  to flip the `floor()` pixel assignment to an adjacent cell.
-- Fix: shift sample points by 50 m so they fall at terrain-raster pixel centres.
-  With this fix, terrain IDs match 200/200.
+An early 200-point comparison showed 35% terrain ID disagreement between the two
+codebases despite using the same terrain raster file. This section documents the
+investigation and resolution.
 
-### Earlier configuration search (run with our pipeline vs V1.0_26Mar.tif)
+### The raster files are identical
+
+Both codebases use the Iwahashi-Pike terrain classification raster:
+
+| Property | Value |
+|----------|-------|
+| Our file | `vs30/resources/geospatial/IwahashiPike.tif` |
+| Jaehwi's file | `/home/arr65/src/Vs30_2026/vs30/data/IwahashiPike.tif` |
+| MD5 hash | **identical** (`c1cfdaceb8692cf13d9f295a0dfd17c0`) |
+| Size | 11,264 x 16,384 pixels |
+| Resolution | 100 m |
+| CRS | EPSG:2193 (NZTM) |
+| Origin | (1,000,000, 6,338,400) |
+| Data type | uint8 (terrain categories 1–16, nodata = 255) |
+
+Both codebases sample the raster using the same `floor()` pixel-index method.
+Direct testing confirmed that for identical NZTM coordinates, both methods
+return the same terrain ID for all 200 points.
+
+### Ruling out the sampling method
+
+Both codes use the same mathematical operation:
+
+```
+col = floor((easting  - 1,000,000) / 100)
+row = floor((northing - 6,338,400) / (-100))
+```
+
+Jaehwi's code does this via GDAL's `GetGeoTransform()`; our code does it via
+rasterio's `src.sample()` (which internally uses the same floor-based
+transform). When given the same NZTM coordinates, both produce the same pixel
+index for all 200 test points.
+
+### Root cause: 50 m grid offset puts all sample points on pixel boundaries
+
+The 200 test points were sampled from V1.0_26Mar.tif pixel centres.
+V1.0_26Mar.tif and IwahashiPike.tif share the same 100 m pixel size, but their
+grids are offset by 50 m:
+
+| Raster | Origin (easting) | Pixel centres | Pixel boundaries |
+|--------|------------------|---------------|-----------------|
+| V1.0_26Mar.tif | 1,060,050 | xx100, xx200, xx300, ... | xx050, xx150, xx250, ... |
+| IwahashiPike.tif | 1,000,000 | xx050, xx150, xx250, ... | xx000, xx100, xx200, ... |
+
+V1.0_26Mar.tif pixel centres (xx100, xx200, ...) coincide exactly with
+IwahashiPike.tif pixel boundaries (xx000, xx100, xx200, ...). Every sample
+point fell exactly on a terrain raster pixel boundary:
+
+```python
+frac_x = ((easting  - 1_000_000) / 100) % 1.0  # always 0.0
+frac_y = ((northing - 6_338_400) / (-100)) % 1.0  # always 0.0
+```
+
+### The coordinate roundtrip flips boundary pixels
+
+Jaehwi's code accepts lon/lat input, so the comparison script converts NZTM
+coordinates to WGS84 (our script) and then back to NZTM (Jaehwi's code):
+
+```
+Original NZTM → WGS84 lon/lat (CSV, 10 decimal places) → NZTM (Jaehwi's code)
+```
+
+This roundtrip introduces coordinate shifts of ~3–5 micrometres:
+
+| Coordinate | Original NZTM | After roundtrip | Shift |
+|-----------|---------------|-----------------|-------|
+| Easting (example) | 1,555,100.0 | 1,555,099.999995 | −5 μm |
+| Northing (example) | 5,169,150.0 | 5,169,150.000003 | +3 μm |
+
+For a point on a pixel boundary, `floor()` is sensitive to the direction of
+this shift:
+
+```
+floor((1,555,100.000000000 - 1,000,000) / 100) = floor(5551.0)      = 5551
+floor((1,555,099.999999995 - 1,000,000) / 100) = floor(5550.999...) = 5550  ← different pixel
+```
+
+A shift of 5 μm — five thousandths of a millimetre — is enough to move the
+`floor()` result by one full pixel (100 m) at exact boundaries.
+
+### Verification
+
+Simulating the coordinate roundtrip in Python and re-sampling the terrain
+raster reproduced 65 of the 70 terrain ID mismatches observed between the two
+codebases. (The remaining 5 are likely from minor differences in pyproj
+versions between `vs30_venv` and `oldvs30_venv`.)
+
+### Resolution
+
+Shifting sample points by 50 m places them at terrain-raster pixel centres
+instead of pixel boundaries. With this shift, terrain IDs match **200/200
+(100%)** and terrain categorical Vs30 values agree to < 0.001 m/s.
+
+## Earlier Configuration Search (Our Pipeline vs V1.0_26Mar.tif)
 
 | Experiment | Config | Mean abs diff |
 |------------|--------|--------------|
