@@ -6,10 +6,11 @@ produces slightly different grid output from Jaehwi's reference file
 
 ## The Short Version
 
-Our code computes the **same model** as Jaehwi's code. When both are run on the
-same point, they agree (862.14 vs 862.51 m/s — a 0.04% difference). However,
-Jaehwi's grid-mode code introduces several precision-reducing shortcuts that our
-code avoids. These shortcuts change ~15% of pixels by a few percent.
+Our code computes the **same model** as Jaehwi's code. When both are run in
+points mode on 200 random locations, **81.5% of points agree within 0.01%** and
+the median difference is 0.0002 m/s. However, Jaehwi's grid-mode code introduces
+several precision-reducing shortcuts that our code avoids. These shortcuts change
+~15% of pixels by a few percent.
 
 **The strongest evidence:** even Jaehwi's own code cannot reproduce
 V1.0_26Mar.tif when run with a different number of processors (2.83% mean
@@ -107,17 +108,23 @@ independently, so results do not depend on processing order.
 
 ### Test A: Points mode agrees between codebases
 
-We ran Jaehwi's code and our code on the **same point** (easting=1575300,
-northing=5169300):
+We ran both codebases on **200 random points** across New Zealand
+(script: `dev/compare_points_mode.py`):
 
-| Source | Vs30 (m/s) |
-|--------|-----------|
-| Jaehwi's code (points mode) | 862.51 |
-| Our refactored code | 862.14 |
-| V1.0_26Mar.tif (grid mode) | 910.06 |
+| Metric | Value |
+|--------|-------|
+| Points compared | 200 |
+| Geology and terrain IDs matching | 100% (200/200) |
+| Median Vs30 difference | 0.0002 m/s |
+| Mean Vs30 difference | 8.9 m/s |
+| Points within 0.01% | 81.5% |
+| Points within 1% | 85.5% |
 
-Points mode: **0.04% difference** — the two codebases agree.
-Grid vs points: **5.5% difference** — the grid artifacts are significant.
+**81.5% of points agree within 0.01%.** The 14.5% with >1% difference are all
+near observation stations where the two codebases use slightly different
+observation datasets for the MVN spatial adjustment. The categorical model
+lookups (geology and terrain type assignments, Bayesian updates) match
+near-perfectly.
 
 ### Test B: Jaehwi's own code cannot reproduce V1.0_26Mar.tif
 

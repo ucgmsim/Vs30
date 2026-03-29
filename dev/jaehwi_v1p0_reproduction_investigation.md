@@ -78,12 +78,75 @@ Since our code matches Jaehwi's points-mode output, and our grid mode equals our
 points mode, our grid output will match Jaehwi's points mode — not his grid mode.
 The ~48 m/s gap is these accumulated precision artifacts baked into V1.0_26Mar.tif.
 
-## 200-Point Experiment Results
+## 200-Point Comparison: Our Pipeline vs Jaehwi's Code (Points Mode)
 
-Test setup: 200 randomly sampled points from the Wellington test subgrid
-(1555050-1610050 x 5145050-5195050, 550x500 pixels).
+Test setup: 200 randomly sampled points across New Zealand from valid pixels
+in V1.0_26Mar.tif. Both codebases run in points mode on the same locations.
+Jaehwi's code run via `run_vs30calc_V1.py --gupdate posterior --tupdate posterior`
+in `oldvs30_venv`; our pipeline via `pipeline.points_pipeline()` with the
+671-station reconstructed observation set.
 
-### Configuration search (run with our pipeline)
+Script: `dev/compare_points_mode.py`
+
+### Results
+
+```
+Combined Vs30 (200 points):
+  Mean abs diff:    8.90 m/s
+  Median abs diff:  0.0002 m/s
+  Max abs diff:     91.10 m/s
+  Mean % diff:      2.43%
+  Median % diff:    0.00%
+
+  Points with >  0.01% diff:  37/200 (18.5%)
+  Points with >  0.10% diff:  30/200 (15.0%)
+  Points with >  1.00% diff:  29/200 (14.5%)
+  Points with >  5.00% diff:  28/200 (14.0%)
+
+Combined StdDev:
+  Mean abs diff:    0.0089
+  Median abs diff:  0.0004
+  Max abs diff:     0.1174
+```
+
+### Intermediate value agreement
+
+| Stage                      | Mean abs diff | Max abs diff |
+|----------------------------|--------------|-------------|
+| Geology categorical Vs30   | 0.098        | 10.21       |
+| Geology categorical StdDev | 0.001        | 0.116       |
+| Terrain categorical Vs30   | 0.000        | 0.000       |
+| Terrain categorical StdDev | 0.000        | 0.001       |
+| Geology MVN Vs30           | 15.59        | 110.85      |
+| Terrain MVN Vs30           | 0.002        | 0.272       |
+
+**Key findings:**
+- Geology and terrain IDs match 100% (200/200) — same rasters, same sampling.
+- Terrain categorical and MVN values are near-identical (< 0.001 m/s).
+- Geology categorical values nearly match (0.098 m/s mean diff) — the small
+  residual is from reconstructed vs original observation sets affecting the
+  Bayesian category-level update.
+- Geology MVN is the dominant source of combined difference: 28 of 200 points
+  show >5% diff, all near observation stations where the reconstructed
+  671-station set differs from Jaehwi's `sites_load_NSHM2022` loader.
+- **81.5% of points agree within 0.01%.** At most locations both codebases
+  produce virtually identical Vs30 values.
+
+### Terrain raster pixel boundary artifact
+
+An earlier comparison showed 35% terrain ID disagreement. Investigation revealed
+this was a sampling artifact, not a model difference:
+
+- V1.0_26Mar.tif pixel centres (at xx100, xx200, ...) coincide exactly with
+  IwahashiPike.tif pixel boundaries (same 100 m resolution, 50 m grid offset).
+- The NZTM → WGS84 → NZTM coordinate roundtrip (required because Jaehwi's code
+  accepts lon/lat input) introduces ~3-5 micrometer shifts.
+- For points exactly on pixel boundaries, this micrometer-level shift is enough
+  to flip the `floor()` pixel assignment to an adjacent cell.
+- Fix: shift sample points by 50 m so they fall at terrain-raster pixel centres.
+  With this fix, terrain IDs match 200/200.
+
+### Earlier configuration search (run with our pipeline vs V1.0_26Mar.tif)
 
 | Experiment | Config | Mean abs diff |
 |------------|--------|--------------|
@@ -142,8 +205,11 @@ Output: `/home/arr65/data/vs30/grid_models/jaehwi_v1p0_reproduced_with_jaehwi_co
 
 ## Remaining Investigation Items
 
-- **Observation set difference** (0.37 m/s): Our reconstructed 671-station CSV
-  vs `sites_load_NSHM2022` loader. Minor; could be resolved by comparing the
+- **Observation set difference**: Our reconstructed 671-station CSV vs
+  `sites_load_NSHM2022` loader. The 200-point comparison shows this affects
+  ~15% of points (those near observations) with a mean geology MVN diff of
+  ~110 m/s at affected points. This is the only remaining source of
+  disagreement between the two codebases. Could be resolved by comparing the
   two observation sets directly.
 
 ## Reference Data
