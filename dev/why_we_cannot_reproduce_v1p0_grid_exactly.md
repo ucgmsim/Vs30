@@ -7,8 +7,8 @@ produces slightly different grid output from Jaehwi's reference file
 ## The Short Version
 
 Our code computes the **same model** as Jaehwi's code. When both are run in
-points mode on 200 random locations, **81.5% of points agree within 0.01%** and
-the median difference is 0.0002 m/s. However, Jaehwi's grid-mode code introduces
+points mode on 200 random locations, **99.5% of points agree within 0.01%** and
+the mean difference is 0.032 m/s. However, Jaehwi's grid-mode code introduces
 several precision-reducing shortcuts that our code avoids. These shortcuts change
 ~15% of pixels by a few percent.
 
@@ -116,15 +116,13 @@ We ran both codebases on **200 random points** across New Zealand
 | Points compared | 200 |
 | Geology and terrain IDs matching | 100% (200/200) |
 | Median Vs30 difference | 0.0002 m/s |
-| Mean Vs30 difference | 8.9 m/s |
-| Points within 0.01% | 81.5% |
-| Points within 1% | 85.5% |
+| Mean Vs30 difference | 0.032 m/s |
+| Points within 0.01% | 99.5% |
+| Points within 1% | 99.5% |
 
-**81.5% of points agree within 0.01%.** The 14.5% with >1% difference are all
-near observation stations where the two codebases use slightly different
-observation datasets for the MVN spatial adjustment. The categorical model
-lookups (geology and terrain type assignments, Bayesian updates) match
-near-perfectly.
+**99.5% of points agree within 0.01%.** Only 1 of 200 points has >1% difference.
+The categorical model lookups (geology and terrain type assignments, Bayesian
+updates) and MVN spatial adjustments match near-perfectly.
 
 ### Test B: Jaehwi's own code cannot reproduce V1.0_26Mar.tif
 

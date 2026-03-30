@@ -1,241 +1,44 @@
-# Legacy Codebase Bug Analysis
+# Legacy Python Codebase Bugs
 
-This document catalogues mathematical bugs that were present in the legacy Python
-codebase ([ucgmsim/Vs30 at `6db1ad6`](https://github.com/ucgmsim/Vs30/tree/6db1ad6))
-and how they were resolved during the refactoring. The legacy Python codebase was translated
-from Kevin Foster's original R code
-([fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ)) by Viktor Polak,
-with the first commit on 2021-02-04.
+Three mathematical bugs were present in Viktor Polak's R-to-Python translation
+([ucgmsim/Vs30 at `6db1ad6`](https://github.com/ucgmsim/Vs30/tree/6db1ad6),
+first commit 2021-02-04). The original R code
+([fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ)) is correct.
+All three bugs are fixed in the refactored codebase.
 
+| Bug | Description | Affected code path | Affects foster_2019 or viktor_cpt_clustering? |
+|-----|-------------|-------------------|----------------------------------------------|
+| 1 | Missing mean-shift term in Bayesian variance update | `posterior()` | No — neither version calls this path |
+| 2 | Off-by-one category indexing in Bayesian update loop | `posterior()` | No — same reason |
+| 3 | `log(stdv)` instead of `log(vs30)` in model combination | `combine()` | Fixed within 21 days; predates any archived outputs |
 
-## Summary
+## Bug 1: Missing mean-shift term in posterior variance
 
-| Bug | Description | Duration | Affects foster_2019? | Affects viktor_cpt_clustering? |
-|-----|-------------|----------|----------------------|-------------------------------|
-| 1   | Missing mean-shift term in `_new_var` | 2021-02 to 2026-01 (~5 years) | No (pre-computed posteriors from correct R code; `posterior()` not called) | No (`cluster_update()` used instead) |
-| 2   | Off-by-one indexing in `posterior()` | 2021-02 to 2026-01 (~5 years) | No (same reason as Bug 1) | No (same reason as Bug 1) |
-| 3   | `log(stdv)` instead of `log(vs30)` in combine | 2021-02-04 to 2021-02-25 (21 days) | No (Foster 2019 results from R code) | Only if outputs were generated in that 21-day window |
+The R code (`bayes.R`, `priorToPostVar()`) implements Gelman (2013) Eq. 3.9:
 
-### Key conclusions
-
-1. **The Foster (2019) published posterior values are correct.** They were
-   computed using Kevin Foster's original R code
-   ([fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ)) which
-   contains the correct formulas (Gelman 2014, Eq. 3.8 and 3.9). The refactored codebase loads
-   these values directly from CSV files.
-
-2. **All three Python bugs were introduced during the R-to-Python translation**
-   by Viktor Polak. The original R code is correct.
-
-3. **None of the bugs affect the current refactored codebase's ability to
-   reproduce the foster_2019 or viktor_cpt_clustering model versions.** Bugs 1
-   and 2 are in a code path (`posterior()`) that neither version exercises. Bug
-   3 was fixed within 21 days and predates any archived outputs.
-
-4. **The refactored codebase has the correct formulas for all code paths.**
-   No bugs need to be reintroduced.
-
-
-## Bug 1: Missing mean-shift term in posterior variance update
-
-**Affected function:** `_new_var()` in `model.py`
-
-**Present from:** first commit (`d32d7dc`, 2021-02-04)
-**Fixed in:** `0633a0b` (2026-01-08, by Andrew Ridden-Harper)
-
-### Original R code (correct)
-
-From [`R/bayes.R`](https://github.com/fostergeotech/Vs30_NZ/blob/master/R/bayes.R), function `priorToPostVar()`, implementing Gelman (2013) Eq. 3.9:
-
-```r
-# Single observation case:
-nu_n_sigma_n_sq <- nu_0*sigma_0*sigma_0 + measUncer^2
-                       + kappa_0*n/(kappa_0 + n)*(y_bar - mu_0)^2
-sigma_n_sq <- nu_n_sigma_n_sq / nu_n
+```
+ν_n σ²_n = ν₀ σ²₀ + σ²_meas + κ₀n/(κ₀+n) · (ȳ - μ₀)²
 ```
 
-The three terms are:
-1. `nu_0 * sigma_0^2` — prior variance contribution
-2. `measUncer^2` — observation uncertainty
-3. `kappa_0 * n / (kappa_0 + n) * (y_bar - mu_0)^2` — **mean-shift term**
-   accounting for disagreement between observation and prior mean
+The Python translation omitted the third (mean-shift) term, underestimating
+posterior variance when observations disagree with the prior mean.
 
-### Buggy Python translation
+## Bug 2: Off-by-one category indexing
 
-```python
-def _new_var(sigma_0, n0, uncertainty):
-    return (n0 * sigma_0 * sigma_0 + uncertainty * uncertainty) / (n0 + 1)
-```
+Category IDs in rasters are 1-indexed (1..15), but the model arrays are
+0-indexed (0..14). The Python code used the raster ID directly as an array
+index without subtracting 1, so every observation updated the wrong category.
 
-The mean-shift term was omitted entirely.
+## Bug 3: `log(stdv)` instead of `log(vs30)` in model combination
 
-### Fixed Python
-
-```python
-def _new_var(sigma_0, n0, uncertainty, mu_0, y):
-    mean_shift = (n0 / (n0 + 1)) * (log(y) - log(mu_0)) ** 2
-    return (n0 * sigma_0 * sigma_0 + uncertainty * uncertainty + mean_shift) / (n0 + 1)
-```
-
-### Refactored equivalent
-
-`compute_bayesian_posterior_variance()` in `vs30/category.py` (lines 114-149)
-correctly includes the mean-shift term.
-
-### Impact assessment
-
-**Practical impact: NONE on any established model version.**
-
-This function is only called by `posterior()` (renamed `update_with_independent_data()`
-in the refactored code), which performs sequential Bayesian updates with
-independent (non-clustered) observations. Neither of the two established model
-versions invokes this code path:
-
-- **foster_2019:** Sets `do_bayesian_update: false` and loads pre-computed
-  posterior CSVs that were generated by the correct R code. The `posterior()`
-  function is never called.
-- **viktor_cpt_clustering:** Uses `cluster_update()` (renamed
-  `update_with_clustered_data()`) which computes weighted geometric means — a
-  completely different algorithm that does not call `_new_var`.
-
-**Mathematical effect when the code path IS used:** Without the mean-shift term
-the posterior variance is underestimated whenever an observation disagrees with
-the prior mean. The magnitude scales with `(log(y) - log(mu_0))^2`; for
-observations near the prior mean the difference is negligible, but for outlying
-observations it can be substantial. In all cases the buggy formula produces a
-posterior variance that is too small.
-
-
-## Bug 2: Off-by-one indexing in posterior update loop
-
-**Affected function:** `posterior()` / `bayes_posterior()` in `model.py`
-
-**Present from:** first commit (`d32d7dc`, 2021-02-04)
-**Partially fixed in:** `0943b2c` (2022-06-09, by Sung Bae, on a side branch)
-**Fully fixed in:** `0633a0b` (2026-01-08, by Andrew Ridden-Harper)
-
-### The bugs
-
-The `posterior()` function iterates over observations and uses the observation's
-category ID `m` to index into model arrays. Two related issues existed:
-
-1. **Undefined variable `mid`** (earliest version only): The initial commit used
-   `stdv[mid]` and `vs30[mid]` where `mid` was never defined. This would have
-   produced a `NameError` at runtime, indicating this code path was never
-   exercised at that point.
-
-2. **Missing index adjustment** (after `mid` was fixed to `m`): Category IDs in
-   rasters are 1-indexed (1..15, with 0 representing nodata), but the model
-   arrays are 0-indexed (0..14). Without `m -= 1`, every observation updated the
-   **wrong** category — one position too high. Additionally, observations with
-   `m == 0` (nodata) were not filtered and would index position 0 incorrectly.
-
-### Fix
-
-```python
-# Before fix:
-m = r[idcol]
-if m == ID_NODATA:
-    continue
-var = _new_var(stdv[m], n0[m], r.uncertainty)
-
-# After fix:
-m = r[idcol]
-if m == ID_NODATA or m == 0:
-    continue
-m -= 1
-var = _new_var(stdv[m], n0[m], r.uncertainty, vs30[m], r.vs30)
-```
-
-### Refactored equivalent
-
-`update_with_independent_data()` in `vs30/category.py` (lines 152-270) avoids
-this class of bug entirely by iterating over categories in the model DataFrame
-and matching observations by ID, rather than using observation IDs as direct
-array indices.
-
-### Impact assessment
-
-**Practical impact: NONE on any established model version.**
-
-Same reasoning as Bug 1 — this function is only called in the `posterior()` code
-path, which is not used by either `foster_2019` or `viktor_cpt_clustering`.
-
-
-## Bug 3: Wrong variable in model-combination standard deviation formula
-
-**Affected function:** `combine()` (later `combine_models()`) in `model.py`
-
-**Present from:** first commit (`d32d7dc`, 2021-02-04)
-**Fixed in:** `82aafc1` (2021-02-25, by Viktor Polak)
-
-### Original R code (correct)
-
-From [`R/makeRaster_AhdiYongWeighted1_sigma.R`](https://github.com/fostergeotech/Vs30_NZ/blob/master/R/makeRaster_AhdiYongWeighted1_sigma.R):
-
-```r
-mu1 <- log(YongMu)       # log of Vs30 model A
-mu2 <- log(AhdiMu)       # log of Vs30 model B
-mu  <- log(AhdiYong)     # log of combined Vs30
-
-sigsq <- 0.5 * ( ((mu1 - mu)^2) + sig1sq +
-                 ((mu2 - mu)^2) + sig2sq )
-```
-
-Each term `(mu_i - mu)^2` is the squared difference between a model's
-log-Vs30 and the combined log-Vs30 mean.
-
-### Buggy Python translation
-
-```python
-stdv = (
-    w_a * ((np.log(stdva) - log_ab) ** 2 + stdva ** 2)
-    + w_b * ((np.log(stdvb) - log_ab) ** 2 + stdvb ** 2)
-) ** 0.5
-```
-
-`np.log(stdva)` and `np.log(stdvb)` were used instead of `np.log(vs30a)` and
-`np.log(vs30b)`. This computes the difference between the log of the *standard
-deviation* and the combined log-Vs30 mean — a physically meaningless quantity.
-
-### Fixed Python
-
-```python
-stdv = np.sqrt(
-    w_a * ((np.log(vs30a) - log_ab) ** 2 + stdva ** 2)
-    + w_b * ((np.log(vs30b) - log_ab) ** 2 + stdvb ** 2)
-)
-```
-
-### Refactored equivalent
-
-`combine_vs30_models()` in `vs30/utils.py` (lines 37-129) uses the correct
-formula with `log(vs30)`.
-
-### Impact assessment
-
-**Practical impact: SIGNIFICANT, but only for outputs generated between
-2021-02-04 and 2021-02-25 (21 days).**
-
-Unlike bugs 1 and 2, this function IS called by all model versions — it is
-the final step that combines geology and terrain models. The bug was fixed
-early in the codebase's life (within 3 weeks of the first commit).
-
-**Mathematical effect:** Standard deviations in log-space are typically
-0.3-0.8, while Vs30 values are typically 100-1000 m/s (log values ~4.6-6.9).
-The buggy formula substitutes `log(stdv)` (roughly -1.2 to -0.2) for
-`log(vs30)` (roughly 4.6 to 6.9) in the squared-difference term. This
-drastically changes the combined standard deviation. The direction and
-magnitude depend on the input values, but the error would generally be large.
-
-**Note:** The Foster (2019) published results were generated entirely with
-Kevin Foster's R code, which has the correct formula. Those results are not
-affected by any Python bugs.
-
+The combined standard deviation formula (Foster 2019, Eq. 9) requires
+`(log(vs30_a) - log(vs30_combined))²`. The Python translation used
+`log(stdv_a)` instead of `log(vs30_a)`, producing meaningless results.
+Fixed by Viktor Polak 21 days after first commit.
 
 ## References
 
 - Gelman, A. et al. (2013). *Bayesian Data Analysis*, 3rd Edition, Section 3.3.
-- Original R code: [fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ) (see `R/bayes.R` and `R/makeRaster_AhdiYongWeighted1_sigma.R`)
-- Legacy Python code: [ucgmsim/Vs30 at `6db1ad6`](https://github.com/ucgmsim/Vs30/tree/6db1ad6) (pre-refactor, see `vs30/model.py`)
+- Original R code: [fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ)
+- Legacy Python code: [ucgmsim/Vs30 at `6db1ad6`](https://github.com/ucgmsim/Vs30/tree/6db1ad6)
 - Refactored implementations: `vs30/category.py`, `vs30/utils.py`

@@ -34,7 +34,8 @@ categories:
 
 - **Original**: Vs30 varies with topographic slope via piecewise-linear interpolation
   in log-log space (slope limits log₁₀ = [-3.44, -0.88], Vs30 = [252, 275] m/s).
-- **Modified**: Slope modification is **skipped** (see `raster.py:826`). Instead, Vs30
+- **Modified**: Slope modification is **skipped** (controlled by `apply_alluvium_slope_mod: false`
+  in the config; see `raster.py:827`). Instead, Vs30
   is linearly interpolated based on distance from coast:
   - Distance < 8 km from coast → Vs30 = 240 m/s
   - Distance > 20 km from coast → Vs30 = 500 m/s
@@ -56,9 +57,10 @@ far from the coast is older and stiffer.
   - Between 8–20 km → linear interpolation
 
 **Code locations:**
-- Coastal distance parameters: `vs30/constants.py:179–187`
-- Coastal distance modification logic: `vs30/raster.py:694–734`
-- Slope skip for alluvium when mod6 active: `vs30/raster.py:826–827`
+- Coastal distance parameters: `vs30/constants.py:171–179`
+- Coastal distance modification logic: `vs30/raster.py:692–734`
+- Slope skip for alluvium: `vs30/raster.py:827` (gated by `apply_alluvium_slope_mod`)
+- Coastal distance application: `vs30/raster.py:838–852` (gated by `apply_coastal_distance_mod`)
 
 
 ## Difference 2: Spatial Correlation Function
