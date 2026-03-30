@@ -11,7 +11,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import rasterio
+import yaml
 from pandas.testing import assert_frame_equal
+
+from vs30 import constants
 
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
@@ -105,3 +108,38 @@ def compare_rasters(
                     rel=TEST_RTOL,
                     abs=TEST_ATOL,
                 ), f"Band {band_idx}: Data values differ beyond tolerance"
+
+
+def load_test_config(scenario: str) -> dict:
+    """
+    Load a test configuration YAML and resolve CSV paths.
+
+    Observation CSVs are resolved relative to FIXTURES_DIR. Categorical model
+    CSVs are resolved relative to the package resource directory.
+
+    Parameters
+    ----------
+    scenario : str
+        Name of the test scenario (used to find the YAML config file).
+
+    Returns
+    -------
+    dict
+        Loaded config with all CSV paths resolved to absolute Paths.
+    """
+    config_file = FIXTURES_DIR / f"test_config_{scenario}.yaml"
+    with open(config_file) as f:
+        config_data = yaml.safe_load(f)
+
+    for key in constants.CSV_PATH_KEYS:
+        if config_data[key]:
+            if key in constants.OBSERVATION_CSV_KEYS:
+                config_data[key] = FIXTURES_DIR / config_data[key]
+            else:
+                config_data[key] = (
+                    constants.RESOURCE_PATH
+                    / constants.RESOURCE_SUBDIRS[key]
+                    / config_data[key]
+                )
+
+    return config_data

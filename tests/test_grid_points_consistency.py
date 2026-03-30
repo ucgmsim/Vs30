@@ -7,27 +7,16 @@ at three pixel center coordinates and checks the results match.
 
 import numpy as np
 import rasterio
-import yaml
 from qcore import coordinates
 
-from conftest import FIXTURES_DIR
+from conftest import load_test_config
 
 from vs30 import constants, pipeline
 from vs30 import config as config_module
 
 def test_grid_and_points_consistency(tmp_path):
     """Grid and points pipelines should produce the same Vs30 at pixel centers."""
-    # Use the small test config
-    config_file = FIXTURES_DIR / "test_config_small_independent_only.yaml"
-    with open(config_file) as f:
-        config_data = yaml.safe_load(f)
-
-    for key in constants.CSV_PATH_KEYS:
-        if config_data[key]:
-            if key in constants.OBSERVATION_CSV_KEYS:
-                config_data[key] = FIXTURES_DIR / config_data[key]
-            else:
-                config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
+    config_data = load_test_config("small_independent_only")
 
     grid_output_dir = tmp_path / "grid_output"
 

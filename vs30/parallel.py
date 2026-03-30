@@ -51,10 +51,12 @@ def resolve_n_proc(n_proc: int | None) -> int:
     return min(n_proc, mp.cpu_count())
 
 
-# Use spawn context to avoid GDAL fork issues
+# Use spawn context to avoid GDAL fork issues.
 # GDAL is not fork-safe; using spawn starts fresh processes without inheriting
-# the parent's GDAL state, which prevents deadlocks
-_spawn_context = mp.get_context("spawn")
+# the parent's GDAL state, which prevents deadlocks.
+# This is the single source of truth for the spawn context used across the
+# package (parallel.py and spatial.py both need it).
+spawn_context = mp.get_context("spawn")
 
 
 def process_geology_at_points(
@@ -526,7 +528,7 @@ def run_parallel_locations(
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
-        with _spawn_context.Pool(processes=n_proc) as pool:
+        with spawn_context.Pool(processes=n_proc) as pool:
             results = []
             with tqdm(total=len(points), unit="point") as pbar:
                 for chunk_id, result_df in pool.imap(
@@ -634,7 +636,7 @@ def run_parallel_spatial_fit(
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
-        with _spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
+        with spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
             results = []
             label = str(model_type).capitalize()
             with tqdm(total=len(affected_flat_indices), desc=f"{label}: spatial adjustment", unit="pixel") as pbar:

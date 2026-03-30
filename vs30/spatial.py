@@ -1,7 +1,6 @@
 """Multivariate Normal (MVN) distribution-based spatial adjustment of Vs30 using nearby observations."""
 
 import logging
-import multiprocessing as mp
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,9 +12,6 @@ import scipy.spatial.distance
 from tqdm import tqdm
 
 from vs30 import category, constants, raster
-
-# Use spawn context to avoid GDAL fork issues
-_spawn_context = mp.get_context("spawn")
 
 logger = logging.getLogger(__name__)
 
@@ -970,7 +966,8 @@ def find_affected_pixels(
         # Parallel processing
         actual_n_proc = min(n_proc, n_chunks)
         logger.info(f"Using {actual_n_proc} parallel workers")
-        with _spawn_context.Pool(processes=actual_n_proc) as pool:
+        from vs30 import parallel
+        with parallel.spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(
                     pool.imap(process_bbox_chunk, chunk_args),
