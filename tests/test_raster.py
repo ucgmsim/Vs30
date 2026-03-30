@@ -50,8 +50,8 @@ class TestApplyHybridGeologyModifications:
 
         return id_array, vs30_array, stdv_array, slope_array, coast_dist_array
 
-    def test_mod6_applies_to_gid4(self, sample_arrays):
-        """Test that mod6 modification applies to geology ID 4."""
+    def test_coastal_distance_mod_applies_to_gid4(self, sample_arrays):
+        """Test that coastal distance modification applies to geology ID 4."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
         # Set specific ID for testing
@@ -63,8 +63,8 @@ class TestApplyHybridGeologyModifications:
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=True,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=True,
             hybrid=False,
             hybrid_mod6_dist_min=8000.0,
             hybrid_mod6_dist_max=20000.0,
@@ -78,8 +78,8 @@ class TestApplyHybridGeologyModifications:
         expected_vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000)
         assert np.isclose(result_vs30[1, 0], expected_vs30, rtol=0.01)
 
-    def test_mod13_applies_to_gid10(self, sample_arrays):
-        """Test that mod13 modification applies to geology ID 10."""
+    def test_coastal_distance_mod_applies_to_gid10(self, sample_arrays):
+        """Test that coastal distance modification applies to geology ID 10."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
         # GID 10 is at position (2, 1) with coast_dist=10000
@@ -89,8 +89,8 @@ class TestApplyHybridGeologyModifications:
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=False,
-            mod13=True,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=True,
             hybrid=False,
             hybrid_mod13_dist_min=8000.0,
             hybrid_mod13_dist_max=20000.0,
@@ -104,8 +104,8 @@ class TestApplyHybridGeologyModifications:
         expected_vs30 = 197 + (500 - 197) * (10000 - 8000) / (20000 - 8000)
         assert np.isclose(result_vs30[2, 1], expected_vs30, rtol=0.01)
 
-    def test_mod6_clamps_at_minimum(self, sample_arrays):
-        """Test that mod6 clamps vs30 at minimum value."""
+    def test_coastal_distance_mod_clamps_at_minimum(self, sample_arrays):
+        """Test that coastal distance modification clamps vs30 at minimum value."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
         id_array[0, 0] = 4  # Alluvium
@@ -117,8 +117,8 @@ class TestApplyHybridGeologyModifications:
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=True,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=True,
             hybrid=False,
             hybrid_mod6_dist_min=8000.0,
             hybrid_mod6_dist_max=20000.0,
@@ -129,8 +129,8 @@ class TestApplyHybridGeologyModifications:
         # Should clamp at minimum (240)
         assert result_vs30[0, 0] == 240.0
 
-    def test_mod6_clamps_at_maximum(self, sample_arrays):
-        """Test that mod6 clamps vs30 at maximum value."""
+    def test_coastal_distance_mod_clamps_at_maximum(self, sample_arrays):
+        """Test that coastal distance modification clamps vs30 at maximum value."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
         id_array[0, 0] = 4  # Alluvium
@@ -142,8 +142,8 @@ class TestApplyHybridGeologyModifications:
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=True,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=True,
             hybrid=False,
             hybrid_mod6_dist_min=8000.0,
             hybrid_mod6_dist_max=20000.0,
@@ -167,8 +167,8 @@ class TestApplyHybridGeologyModifications:
             id_array,
             slope_array,
             coast_dist_array,
-            mod6=False,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=False,
             hybrid=False,
         )
 
@@ -195,8 +195,8 @@ class TestApplyHybridModificationsWithArrays:
             geology_ids,
             slope,
             coast_dist,
-            mod6=False,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=False,
             hybrid=True,
         )
 
@@ -206,11 +206,11 @@ class TestApplyHybridModificationsWithArrays:
         # Values should differ due to varying slope
         assert not np.allclose(modified_vs30, vs30)
 
-    def test_mod6_coastal_modifications_with_1d_arrays(self):
-        """Test mod6 (alluvium) coastal modifications on 1D arrays."""
+    def test_coastal_distance_modifications_with_1d_arrays(self):
+        """Test alluvium coastal distance modifications on 1D arrays."""
         vs30 = np.array([300.0, 300.0])
         stdv = np.array([0.5, 0.5])
-        # GID 4 = Alluvium (mod6 applies)
+        # GID 4 = Alluvium
         geology_ids = np.array([4, 4])
         slope = np.array([0.1, 0.1])
         # One point near coast, one far inland
@@ -222,14 +222,14 @@ class TestApplyHybridModificationsWithArrays:
             geology_ids,
             slope,
             coast_dist,
-            mod6=True,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=True,
             hybrid=False,
         )
 
         # VS30 values should be modified (different from input)
         assert modified_vs30.shape == vs30.shape
-        # Values should be within mod6 range [240, 500]
+        # Values should be within coastal distance range [240, 500]
         assert np.all(modified_vs30 >= 240)
         assert np.all(modified_vs30 <= 500)
 
@@ -248,8 +248,8 @@ class TestApplyHybridModificationsWithArrays:
             geology_ids,
             slope,
             coast_dist,
-            mod6=False,
-            mod13=False,
+            apply_alluvium_slope_mod=True,
+            apply_coastal_distance_mod=False,
             hybrid=False,
         )
 

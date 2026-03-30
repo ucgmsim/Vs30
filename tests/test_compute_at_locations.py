@@ -44,6 +44,8 @@ def run_and_compare(n_proc: int):
         noisy=True,
         include_intermediate=True,
         n_proc=n_proc,
+        apply_alluvium_slope_mod=True,
+        apply_coastal_distance_mod=True,
     )
     # Prepend original columns to match benchmark format
     original_cols = [c for c in locations_df.columns if c not in result_df.columns]

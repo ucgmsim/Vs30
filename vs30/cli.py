@@ -73,7 +73,7 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
     -------
     dict
         Resolved config with keys including geology_corr_fn, terrain_corr_fn,
-        apply_coastal_distance_mod, skip_alluvium_slope, and all CSV paths
+        apply_coastal_distance_mod, apply_alluvium_slope_mod, and all CSV paths
         resolved to absolute Paths.
 
     Raises
@@ -84,11 +84,11 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
     with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
-    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod"):
+    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod", "apply_alluvium_slope_mod"):
         if field not in config_data:
             raise typer.BadParameter(
                 f"Config missing required field '{field}'. "
-                "All configs must specify correlation and coastal distance parameters."
+                "All configs must explicitly specify this parameter."
             )
 
     for key in constants.CSV_PATH_KEYS:
@@ -97,7 +97,6 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
 
     config_data["geology_corr_fn"] = resolve_correlation_function(config_data["geology_correlation"])
     config_data["terrain_corr_fn"] = resolve_correlation_function(config_data["terrain_correlation"])
-    config_data["skip_alluvium_slope"] = config_data.get("skip_alluvium_slope", False)
 
     return config_data
 
@@ -123,7 +122,7 @@ def run_points_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
-    skip_alluvium_slope: bool = False,
+    apply_alluvium_slope_mod: bool = False,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -203,7 +202,7 @@ def run_points_pipeline(
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
-        skip_alluvium_slope=skip_alluvium_slope,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -276,7 +275,7 @@ def points(
         geology_corr_fn=config_data["geology_corr_fn"],
         terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-        skip_alluvium_slope=config_data["skip_alluvium_slope"],
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
     )
 
 
@@ -455,7 +454,7 @@ def grid(
         geology_corr_fn=config_data["geology_corr_fn"],
         terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-        skip_alluvium_slope=config_data["skip_alluvium_slope"],
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
     )
 
 

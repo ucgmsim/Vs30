@@ -62,7 +62,7 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             combination_method=constants.CombinationMethod.RATIO,
             combine_ratio=1.0,
             apply_coastal_distance_mod=False,
-            skip_alluvium_slope=True,
+            apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
             noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
         )
@@ -75,7 +75,7 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             combination_method=constants.CombinationMethod.RATIO,
             combine_ratio=1.0,
             apply_coastal_distance_mod=False,
-            skip_alluvium_slope=True,
+            apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
             noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
         )

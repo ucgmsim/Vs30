@@ -51,7 +51,7 @@ Key differences between the two codebases:
 | Update mode | `posterior_paper` | `--gupdate posterior --tupdate posterior` | Jaehwi confirmed; Foster posteriors give 418 m/s vs reference 910 m/s |
 | Combination | `stdv_weight=False` → ratio 1.0 | ratio 1.0 (50/50 geometric mean) | Default; matches reference |
 | Coastal distance | `mod13=True` but code commented out | Off | Coastal distance code disabled in `model_geology_new.py` |
-| GID 4 slope skip | `mod6=True` | On (`skip_alluvium_slope: true`) | Default in `params.py:80` |
+| GID 4 slope skip | `mod6=True` | Off (`apply_alluvium_slope_mod: false`) | Default in `params.py:80` |
 | Observations | `sites_load_NSHM2022` | Original observation set | Loaded from `vs30/data/updated/` directory |
 
 ## Single-Point Comparison (easting=1575300, northing=5169300, GID 15, TID 11)
@@ -301,14 +301,20 @@ V1.0_26Mar.tif with a different `nproc` setting.
 
 Output: `/home/arr65/data/vs30/grid_models/jaehwi_v1p0_reproduced_with_jaehwi_code/`
 
-## Remaining Investigation Items
+## Observation Set
 
-- **Observation set difference**: Our reconstructed 671-station CSV vs
-  `sites_load_NSHM2022` loader. The 200-point comparison shows this affects
-  ~15% of points (those near observations) with a mean geology MVN diff of
-  ~110 m/s at affected points. This is the only remaining source of
-  disagreement between the two codebases. Could be resolved by comparing the
-  two observation sets directly.
+`jaehwi_reconstructed_observations.csv` (671 stations) is produced by
+running Jaehwi's `sites_load_NSHM2022.load_vs()` from `/home/arr65/src/Vs30_2026/vs30/`
+and dumping the resulting DataFrame directly to CSV. This is the ground-truth
+observation set — no manual reconstruction or re-derivation.
+
+The loader combines three sources:
+- **McGann** (276 stations): CPT-derived Vs30, downsampled on 1 km NZMG grid,
+  NZMG→NZTM transform, uncertainty = 0.2
+- **Wotherspoon** (36 stations): measured Vs30, WGS84→NZTM transform,
+  uncertainty = `0.5 if q == 3 else q / 10`
+- **Kaiser/GeoNet** (359 stations): GeoNet metadata, WGS84→NZTM transform,
+  same uncertainty formula, Q3 stations included (filter commented out)
 
 ## Reference Data
 
@@ -326,7 +332,7 @@ Output: `/home/arr65/data/vs30/grid_models/jaehwi_v1p0_reproduced_with_jaehwi_co
 - `combination_method: ratio`
 - `combine_ratio: 1.0`
 - `apply_coastal_distance_mod: false`
-- `skip_alluvium_slope: true`
+- `apply_alluvium_slope_mod: false`
 - `geology_categorical_csv: geology_model_prior_mean_and_standard_deviation.csv`
 - `terrain_categorical_csv: terrain_model_prior_mean_and_standard_deviation.csv`
 

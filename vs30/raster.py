@@ -738,8 +738,8 @@ def apply_hybrid_geology_modifications(
     id_array: np.ndarray,
     slope_array: np.ndarray,
     coast_dist_array: np.ndarray,
-    mod6: bool = True,
-    mod13: bool = True,
+    apply_alluvium_slope_mod: bool,
+    apply_coastal_distance_mod: bool,
     hybrid: bool = True,
     hybrid_mod6_dist_min: float = constants.HYBRID_MOD6_DIST_MIN,
     hybrid_mod6_dist_max: float = constants.HYBRID_MOD6_DIST_MAX,
@@ -769,28 +769,30 @@ def apply_hybrid_geology_modifications(
         Slope array (float).
     coast_dist_array : np.ndarray
         Distance to coast array (float).
-    mod6 : bool, optional
-        Whether to apply modification for Group 6 (Alluvium). Default True.
-    mod13 : bool, optional
-        Whether to apply modification for Group 13 (Floodplain). Default True.
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
+        When False, GID 4 keeps its categorical Vs30 value.
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modifications for GID 4 (alluvium)
+        and GID 10 (floodplain).
     hybrid : bool, optional
         Whether to apply general hybrid slope-based modifications. Default True.
     hybrid_mod6_dist_min : float
-        Min distance threshold for mod6. Default from constants.
+        Min distance threshold for GID 4 coastal distance mod.
     hybrid_mod6_dist_max : float
-        Max distance threshold for mod6. Default from constants.
+        Max distance threshold for GID 4 coastal distance mod.
     hybrid_mod6_vs30_min : float
-        Min Vs30 for mod6. Default from constants.
+        Min Vs30 for GID 4 coastal distance mod.
     hybrid_mod6_vs30_max : float
-        Max Vs30 for mod6. Default from constants.
+        Max Vs30 for GID 4 coastal distance mod.
     hybrid_mod13_dist_min : float
-        Min distance threshold for mod13. Default from constants.
+        Min distance threshold for GID 10 coastal distance mod.
     hybrid_mod13_dist_max : float
-        Max distance threshold for mod13. Default from constants.
+        Max distance threshold for GID 10 coastal distance mod.
     hybrid_mod13_vs30_min : float
-        Min Vs30 for mod13. Default from constants.
+        Min Vs30 for GID 10 coastal distance mod.
     hybrid_mod13_vs30_max : float
-        Max Vs30 for mod13. Default from constants.
+        Max Vs30 for GID 10 coastal distance mod.
 
     Returns
     -------
@@ -820,8 +822,9 @@ def apply_hybrid_geology_modifications(
         ))
 
         for spec in constants.HYBRID_VS30_PARAMS:
-            # Skip ID 4 if mod6 is active (handled separately later)
-            if spec.gid == 4 and mod6:
+            # Skip GID 4 slope interpolation when apply_alluvium_slope_mod is False
+            # (GID 4 may instead get coastal distance modification below)
+            if spec.gid == 4 and not apply_alluvium_slope_mod:
                 continue
 
             mask = id_array == spec.gid
@@ -833,8 +836,8 @@ def apply_hybrid_geology_modifications(
                 )
                 vs30_array[mask] = 10**interpolated_val
 
-    # 3. Distance-based modification for alluvium (GID 4) and floodplain (GID 10)
-    if mod6:
+    # 3. Coastal distance modification for alluvium (GID 4) and floodplain (GID 10)
+    if apply_coastal_distance_mod:
         apply_coastal_distance_modification(
             vs30_array,
             id_array,
@@ -846,7 +849,6 @@ def apply_hybrid_geology_modifications(
             vs30_max=hybrid_mod6_vs30_max,
         )
 
-    if mod13:
         apply_coastal_distance_modification(
             vs30_array,
             id_array,

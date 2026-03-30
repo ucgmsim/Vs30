@@ -2,7 +2,7 @@
 #
 # Reproduces V1.0_26Mar.tif. Jaehwi ran with "-g posterior" (Bayesian update
 # from priors), ratio 1:1 combination (50/50 geometric mean), and coastal
-# distance commented out.  mod6=True skips GID 4 slope interpolation.
+# distance commented out.  GID 4 (alluvium) slope interpolation is off.
 # Observations are the reconstructed 671-station dataset (McGann 276 +
 # Wotherspoon 36 + Kaiser 359), matching applied_Vs30_data.csv.
 
@@ -20,8 +20,8 @@ noisy: true
 combination_method: ratio
 combine_ratio: 1.0
 
+apply_alluvium_slope_mod: false
 apply_coastal_distance_mod: false
-skip_alluvium_slope: true
 
 geology_correlation:
   model: exponential

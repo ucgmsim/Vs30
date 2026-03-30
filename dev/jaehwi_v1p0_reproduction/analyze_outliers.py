@@ -61,7 +61,7 @@ if __name__ == "__main__":
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=1.0,
         apply_coastal_distance_mod=False,
-        skip_alluvium_slope=True,
+        apply_alluvium_slope_mod=False,
         independent_observations_csv=RECONSTRUCTED_OBS,
     )
 

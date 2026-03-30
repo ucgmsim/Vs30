@@ -337,6 +337,8 @@ def prepare_observation_data(
     raster_data: RasterData,
     updated_model_table: np.ndarray,
     model_type: constants.ModelType,
+    apply_alluvium_slope_mod: bool,
+    apply_coastal_distance_mod: bool,
     output_dir: Path | None = None,
     noisy: bool = False,
     slope_array: np.ndarray | None = None,
@@ -514,6 +516,8 @@ def prepare_observation_data(
             model_ids[valid_obs_mask],
             slope_obs,
             coast_obs,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
     residuals = np.log(vs30_obs / model_vs30)

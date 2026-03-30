@@ -123,7 +123,7 @@ def run_our_pipeline(points_nztm: np.ndarray) -> pd.DataFrame:
 
     # Use the reconstructed 671-station observation set that matches Jaehwi's
     # sites_load_NSHM2022 loader (not the 608-station filtered set).
-    obs_csv = Path("/home/arr65/src/vs30/dev/jaehwi_v1p0_reproduction/jaehwi_reconstructed_observations.csv")
+    obs_csv = constants.RESOURCE_PATH / "observations" / "jaehwi_v1p0_independent_observations.csv"
 
     result_df = pipeline.points_pipeline(
         longitudes=lons,
@@ -134,8 +134,8 @@ def run_our_pipeline(points_nztm: np.ndarray) -> pd.DataFrame:
         do_bayesian_update=True,
         combination_method=constants.CombinationMethod.RATIO,
         combine_ratio=1.0,
+        apply_alluvium_slope_mod=False,
         apply_coastal_distance_mod=False,
-        skip_alluvium_slope=True,
         noisy=True,
         mvn=True,
         include_intermediate=True,
