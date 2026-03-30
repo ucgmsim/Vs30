@@ -16,9 +16,8 @@ multi-process (n_proc=cpu_count) modes to ensure parallel processing works corre
 import os
 
 import pytest
-import yaml
 
-from conftest import BENCHMARKS_DIR, FIXTURES_DIR, compare_output_files
+from conftest import BENCHMARKS_DIR, compare_output_files, load_test_config
 
 from vs30 import constants, pipeline
 from vs30 import config as config_module
@@ -38,22 +37,9 @@ KEY_OUTPUT_FILES = [
 ]
 
 
-def load_test_config(scenario: str) -> dict:
-    """Load a test configuration YAML file and return its data."""
-    config_file = FIXTURES_DIR / f"test_config_{scenario}.yaml"
-    with open(config_file) as f:
-        return yaml.safe_load(f)
-
-
 def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     """Run the grid pipeline for a test scenario and compare outputs to benchmarks."""
     config_data = load_test_config(scenario)
-    for key in constants.CSV_PATH_KEYS:
-        if config_data[key]:
-            if key in constants.OBSERVATION_CSV_KEYS:
-                config_data[key] = FIXTURES_DIR / config_data[key]
-            else:
-                config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
 
     pipeline.grid_pipeline(
         grid_config=config_module.GridConfig.from_dict(config_data),

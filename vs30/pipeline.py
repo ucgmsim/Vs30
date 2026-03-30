@@ -19,6 +19,72 @@ from vs30 import config as config_module
 
 logger = logging.getLogger(__name__)
 
+# Default correlation length parameters (meters) from the Foster 2019 model.
+_DEFAULT_GEOLOGY_PHI = 1407
+_DEFAULT_TERRAIN_PHI = 993
+
+
+def _default_correlation_functions(
+    geology_corr_fn: Callable | None,
+    terrain_corr_fn: Callable | None,
+) -> tuple[Callable, Callable]:
+    """
+    Fill in default exponential correlation functions where None is given.
+
+    Parameters
+    ----------
+    geology_corr_fn : callable or None
+        Geology correlation function. If None, uses exponential with phi=1407.
+    terrain_corr_fn : callable or None
+        Terrain correlation function. If None, uses exponential with phi=993.
+
+    Returns
+    -------
+    tuple[callable, callable]
+        (geology_corr_fn, terrain_corr_fn) with defaults filled in.
+    """
+    if geology_corr_fn is None:
+        geology_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=_DEFAULT_GEOLOGY_PHI
+        )
+    if terrain_corr_fn is None:
+        terrain_corr_fn = functools.partial(
+            utils.exponential_correlation_function, phi=_DEFAULT_TERRAIN_PHI
+        )
+    return geology_corr_fn, terrain_corr_fn
+
+
+def _collect_observation_csvs(
+    clustered_observations_csv: Path | None,
+    independent_observations_csv: Path | None,
+) -> pd.DataFrame:
+    """
+    Collect and concatenate available observation CSV files into a single DataFrame.
+
+    Parameters
+    ----------
+    clustered_observations_csv : Path or None
+        Path to clustered observations CSV.
+    independent_observations_csv : Path or None
+        Path to independent observations CSV.
+
+    Returns
+    -------
+    pd.DataFrame
+        Concatenated observations, or an empty DataFrame if no files are available.
+    """
+    csvs = [
+        csv
+        for csv in [clustered_observations_csv, independent_observations_csv]
+        if csv is not None and csv.exists()
+    ]
+    if csvs:
+        return pd.concat(
+            [pd.read_csv(csv, comment="#") for csv in csvs],
+            ignore_index=True,
+        )
+    return pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
+
 
 # ============================================================================
 # Stage 1: Bayesian update of categorical model values
@@ -861,23 +927,14 @@ def compute_model_grid(
     if mvn:
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
-        # Combine all available observation files for spatial adjustment
-        observation_csvs = [
-            csv
-            for csv in [clustered_observations_csv, independent_observations_csv]
-            if csv is not None and csv.exists()
-        ]
-
-        if not observation_csvs:
+        observations_df = _collect_observation_csvs(
+            clustered_observations_csv, independent_observations_csv
+        )
+        if len(observations_df) == 0:
             raise ValueError(
                 "No observation CSVs provided for spatial fit. "
                 "At least one of clustered or independent observations must be specified."
             )
-
-        observations_df = pd.concat(
-            [pd.read_csv(csv, comment="#") for csv in observation_csvs],
-            ignore_index=True,
-        )
 
         current_vs30, current_stdv = compute_spatial_adjustment_on_grid(
             vs30_array=current_vs30,
@@ -999,14 +1056,9 @@ def grid_pipeline(
     """
     start_time = time.time()
 
-    if geology_corr_fn is None:
-        geology_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=1407
-        )
-    if terrain_corr_fn is None:
-        terrain_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=993
-        )
+    geology_corr_fn, terrain_corr_fn = _default_correlation_functions(
+        geology_corr_fn, terrain_corr_fn
+    )
 
     if output_dir is not None:
         output_dir = output_dir.resolve()
@@ -1190,14 +1242,9 @@ def points_pipeline(
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
         terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
     """
-    if geology_corr_fn is None:
-        geology_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=1407
-        )
-    if terrain_corr_fn is None:
-        terrain_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=993
-        )
+    geology_corr_fn, terrain_corr_fn = _default_correlation_functions(
+        geology_corr_fn, terrain_corr_fn
+    )
 
     # Convert WGS84 to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
@@ -1208,19 +1255,12 @@ def points_pipeline(
     logger.info(f"Processing {len(points)} locations")
 
     # Load and combine all available observation files for spatial adjustment
-    observation_csvs = [
-        csv
-        for csv in [clustered_observations_csv, independent_observations_csv]
-        if csv is not None and csv.exists()
-    ]
-
-    if mvn and observation_csvs:
-        observations_df = pd.concat(
-            [pd.read_csv(csv, comment="#") for csv in observation_csvs],
-            ignore_index=True,
+    if mvn:
+        observations_df = _collect_observation_csvs(
+            clustered_observations_csv, independent_observations_csv
         )
     else:
-        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)  # ty: ignore[invalid-argument-type]
+        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
