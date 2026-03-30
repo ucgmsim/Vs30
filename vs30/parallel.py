@@ -62,10 +62,10 @@ def process_geology_at_points(
     model_df: pd.DataFrame,
     observations_df: pd.DataFrame,
     corr_fn: Callable,
+    apply_alluvium_slope_mod: bool,
+    apply_coastal_distance_mod: bool,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
-    apply_coastal_distance_mod: bool = True,
-    skip_alluvium_slope: bool = False,
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
@@ -130,8 +130,8 @@ def process_geology_at_points(
         geol_ids,
         slope_at_points,
         coast_dist_at_points,
-        mod6=apply_coastal_distance_mod or skip_alluvium_slope,
-        mod13=apply_coastal_distance_mod,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
     # Apply spatial adjustment if observations are available
@@ -156,8 +156,8 @@ def process_geology_at_points(
             obs_geol_ids,
             obs_slope,
             obs_coast_dist,
-            mod6=apply_coastal_distance_mod or skip_alluvium_slope,
-            mod13=apply_coastal_distance_mod,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -294,8 +294,8 @@ class LocationsChunkConfig:
     noisy: bool
     geology_corr_fn: Callable | None
     terrain_corr_fn: Callable | None
+    apply_alluvium_slope_mod: bool
     apply_coastal_distance_mod: bool
-    skip_alluvium_slope: bool = False
 
 
 def process_locations_chunk(
@@ -356,9 +356,9 @@ def process_locations_chunk(
             geol_model_df,
             observations_df,
             config.geology_corr_fn,
-            config.noisy,
+            apply_alluvium_slope_mod=config.apply_alluvium_slope_mod,
             apply_coastal_distance_mod=config.apply_coastal_distance_mod,
-            skip_alluvium_slope=config.skip_alluvium_slope,
+            noisy=config.noisy,
         )
 
         if config.include_intermediate:

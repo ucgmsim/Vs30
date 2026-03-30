@@ -68,6 +68,8 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=True,
         n_proc=n_proc,
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
     )
     compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
 

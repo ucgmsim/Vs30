@@ -19,6 +19,7 @@ noisy: true
 combination_method: ratio
 combine_ratio: 1.0
 
+apply_alluvium_slope_mod: true
 apply_coastal_distance_mod: true
 
 geology_correlation:

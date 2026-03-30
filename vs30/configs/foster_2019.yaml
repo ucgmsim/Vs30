@@ -19,6 +19,7 @@ combine_ratio: 1.0
 
 # --- Hybrid geology modifications ---
 # Original: slope only, no coastal distance adjustments.
+apply_alluvium_slope_mod: true
 apply_coastal_distance_mod: false
 
 # --- Spatial correlation ---

@@ -44,6 +44,8 @@ def test_grid_and_points_consistency(tmp_path):
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
         n_proc=1,
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
     )
 
     # Read the combined raster and pick pixel center coordinates
@@ -88,6 +90,8 @@ def test_grid_and_points_consistency(tmp_path):
         noisy=config_data["noisy"],
         include_intermediate=True,
         n_proc=1,
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
     )
 
     for i, (row, col) in enumerate(test_pixels):
