@@ -14,7 +14,7 @@ import rasterio
 from qcore import coordinates
 from tqdm import tqdm
 
-from vs30 import category, constants, parallel, raster, spatial, utils
+from vs30 import category, constants, gapfill, parallel, raster, spatial, utils
 from vs30 import config as config_module
 
 logger = logging.getLogger(__name__)
@@ -1137,13 +1137,30 @@ def grid_pipeline(
             combination_method=combination_method,
             combine_ratio=combine_ratio,
         )
+
+        # 6. Gap-fill on-land nodata pixels in combined output
+        logger.info(
+            "\n" + "=" * 80 + "\nGAP-FILLING COMBINED OUTPUT\n" + "=" * 80
+        )
+
+        if output_dir is not None and include_intermediate:
+            write_vs30_raster(
+                np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
+                np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                profile,
+                output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
+                constants.BAND_DESCRIPTION_VS30_COMBINED,
+                constants.BAND_DESCRIPTION_STDV_COMBINED,
+            )
+
+        combined_vs30, combined_stdv = gapfill.fill_nodata_grid(
+            combined_vs30, combined_stdv, geol_ids, profile
+        )
         result["combined_vs30"] = combined_vs30
         result["combined_stdv"] = combined_stdv
 
         if output_dir is not None:
             assert profile is not None
-            # Write combined model output. Band 1 is the median Vs30 in
-            # linear space (m/s), band 2 is the lognormal standard deviation.
             write_vs30_raster(
                 np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
                 np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
