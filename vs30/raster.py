@@ -143,7 +143,9 @@ def create_category_id_array(
 
     if model_type == constants.ModelType.TERRAIN:
         # Resample terrain raster to target grid
-        terrain_raster_path = constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+        terrain_raster_path = (
+            constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+        )
         if not terrain_raster_path.exists():
             raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
 
@@ -167,7 +169,9 @@ def create_category_id_array(
         )
 
         # Rasterize geology shapefile to target grid
-        geology_shapefile_path = constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+        geology_shapefile_path = (
+            constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+        )
         if not geology_shapefile_path.exists():
             raise FileNotFoundError(
                 f"Geology shapefile not found: {geology_shapefile_path}"
@@ -379,13 +383,15 @@ def create_vs30_arrays_from_ids(
     mean_col_orig = stripped_columns[mean_col]
     std_col_orig = stripped_columns[std_col]
 
-    id_to_vs30_values = dict(zip(
-        model_values_df[id_col_orig].astype(int),
+    id_to_vs30_values = dict(
         zip(
-            model_values_df[mean_col_orig].astype(float),
-            model_values_df[std_col_orig].astype(float),
-        ),
-    ))
+            model_values_df[id_col_orig].astype(int),
+            zip(
+                model_values_df[mean_col_orig].astype(float),
+                model_values_df[std_col_orig].astype(float),
+            ),
+        )
+    )
 
     # Create output arrays
     vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
@@ -398,7 +404,9 @@ def create_vs30_arrays_from_ids(
     ]
 
     label = str(model_type).capitalize() if model_type else "Model"
-    for pixel_id in tqdm(valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"):
+    for pixel_id in tqdm(
+        valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"
+    ):
         if pixel_id in id_to_vs30_values:
             mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
             mask = id_array == pixel_id
@@ -449,10 +457,11 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
 
     # Extend to full NZ land coverage to ensure accurate distances
     # (matching legacy _full_land_grid behavior)
-    g_xmin = min(constants.FULL_NZ_LAND_XMIN, s_xmin)
-    g_xmax = max(constants.FULL_NZ_LAND_XMAX, s_xmax)
-    g_ymin = min(constants.FULL_NZ_LAND_YMIN, s_ymin)
-    g_ymax = max(constants.FULL_NZ_LAND_YMAX, s_ymax)
+    nz = constants.FULL_NZ_GRID_CONFIG
+    g_xmin = min(nz.grid_xmin, s_xmin)
+    g_xmax = max(nz.grid_xmax, s_xmax)
+    g_ymin = min(nz.grid_ymin, s_ymin)
+    g_ymax = max(nz.grid_ymax, s_ymax)
 
     # Check if grid was extended beyond template bounds (requires cropping later)
     grid_was_extended = (
@@ -572,7 +581,9 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     FileNotFoundError
         If the source slope raster is not found.
     """
-    slope_raster_path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    slope_raster_path = (
+        constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    )
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
@@ -648,14 +659,14 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Slope values at each point (N,).
     """
-    slope_raster_path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    slope_raster_path = (
+        constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    )
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
     with rasterio.open(slope_raster_path) as src:
-        return np.array(
-            [sample[0] for sample in src.sample(points)], dtype=np.float64
-        )
+        return np.array([sample[0] for sample in src.sample(points)], dtype=np.float64)
 
 
 def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
@@ -815,11 +826,13 @@ def apply_hybrid_geology_modifications(
     # 2. Hybrid slope-based VS30 calculation
     if hybrid:
         # Prevent log10(0) or log10(-NODATA) by capping at constants.MIN_SLOPE_FOR_LOG
-        safe_log_slope = np.log10(np.where(
-            (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
-            constants.MIN_SLOPE_FOR_LOG,
-            slope_array,
-        ))
+        safe_log_slope = np.log10(
+            np.where(
+                (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
+                constants.MIN_SLOPE_FOR_LOG,
+                slope_array,
+            )
+        )
 
         for spec in constants.HYBRID_VS30_PARAMS:
             # Skip GID 4 slope interpolation when apply_alluvium_slope_mod is False

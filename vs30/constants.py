@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from vs30 import config
+
 
 class CombinationMethod(StrEnum):
     """Valid combination methods for geology and terrain Vs30."""
@@ -231,20 +233,17 @@ RASTER_ID_NODATA_VALUE: int = 255
 # (minimum value for signed 16-bit integers)
 NODATA_VALUE: int = -32767
 
-# FULL NEW ZEALAND LAND EXTENT BOUNDS
-# (For coastal distance calculations)
-# IMPORTANT: These values define the full extent of New Zealand land coverage
-# and MUST NOT be changed. They are used to ensure coastal distance calculations
-# are computed on the full NZ land extent, regardless of the configured study
-# domain bounds.
-FULL_NZ_LAND_XMIN: int = 1060050
-FULL_NZ_LAND_XMAX: int = 2120050
-FULL_NZ_LAND_YMIN: int = 4730050
-FULL_NZ_LAND_YMAX: int = 6250050
-
-# Suggested grid spacing (meters) for full New Zealand extent at standard resolution.
-SUGGESTED_GRID_DX: int = 100
-SUGGESTED_GRID_DY: int = 100
+# Full New Zealand land extent at standard 100m resolution.
+# IMPORTANT: These bounds define the canonical NZ domain and MUST NOT be changed.
+# Used for coastal distance calculations, gap-fill grid alignment, and CLI defaults.
+FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
+    grid_xmin=1060050,
+    grid_xmax=2120050,
+    grid_ymin=4730050,
+    grid_ymax=6250050,
+    grid_dx=100,
+    grid_dy=100,
+)
 
 # Gap-fill constants
 # Half-width (meters) of the local grid generated around each fillable point
@@ -426,18 +425,3 @@ SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
 
 # Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
 PIXEL_CENTER_OFFSET: float = 0.5
-
-from vs30 import config as config_module
-
-# Default grid alignment for gap-fill in points mode. Uses the standard NZ
-# domain at 100m spacing with the *050 origin, matching jaehwi_v1p0 and
-# modified_foster_2019 grid configs. This ensures local grids generated for
-# gap-filling have pixel centers aligned with full grid runs.
-DEFAULT_GAPFILL_GRID_CONFIG: config_module.GridConfig = config_module.GridConfig(
-    grid_xmin=FULL_NZ_LAND_XMIN,
-    grid_xmax=FULL_NZ_LAND_XMAX,
-    grid_ymin=FULL_NZ_LAND_YMIN,
-    grid_ymax=FULL_NZ_LAND_YMAX,
-    grid_dx=SUGGESTED_GRID_DX,
-    grid_dy=SUGGESTED_GRID_DY,
-)

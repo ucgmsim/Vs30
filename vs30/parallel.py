@@ -380,7 +380,9 @@ def process_locations_chunk(
             terr_stdv,
             terr_mvn_vs30,
             terr_mvn_stdv,
-        ) = process_terrain_at_points(points, terr_model_df, observations_df, config.terrain_corr_fn, config.noisy)
+        ) = process_terrain_at_points(
+            points, terr_model_df, observations_df, config.terrain_corr_fn, config.noisy
+        )
 
         if config.include_intermediate:
             result[constants.COL_TERRAIN_ID] = terr_ids
@@ -639,7 +641,11 @@ def run_parallel_spatial_fit(
         with spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
             results = []
             label = str(model_type).capitalize()
-            with tqdm(total=len(affected_flat_indices), desc=f"{label}: spatial adjustment", unit="pixel") as pbar:
+            with tqdm(
+                total=len(affected_flat_indices),
+                desc=f"{label}: spatial adjustment",
+                unit="pixel",
+            ) as pbar:
                 for chunk_id, chunk_updates in pool.imap(
                     process_pixels_chunk, chunk_args
                 ):

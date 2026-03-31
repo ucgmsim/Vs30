@@ -851,8 +851,7 @@ def compute_model_grid(
 
         if output_dir is not None and include_intermediate:
             posterior_csv_path = (
-                output_dir
-                / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+                output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
             )
             posterior_df.to_csv(posterior_csv_path, index=False)
     else:
@@ -880,7 +879,9 @@ def compute_model_grid(
             if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_INITIAL_VS30_FILENAME
         )
-        write_vs30_raster(vs30_array, stdv_array, profile, output_dir / initial_filename)
+        write_vs30_raster(
+            vs30_array, stdv_array, profile, output_dir / initial_filename
+        )
 
     # --- Step 3: Apply hybrid modifications (geology only) ---
     current_vs30 = vs30_array
@@ -889,14 +890,17 @@ def compute_model_grid(
     coast_dist_array = None
 
     if model_type == constants.ModelType.GEOLOGY:
-        logger.info(
-            "\n=== STEP 3: Slope and Coastal Distance Adjusted Geology ==="
-        )
+        logger.info("\n=== STEP 3: Slope and Coastal Distance Adjusted Geology ===")
 
         current_vs30, current_stdv, slope_array, coast_dist_array = (
-            compute_hybrid_geology_arrays(vs30_array, stdv_array, id_array, profile,
-                                          apply_coastal_distance_mod=apply_coastal_distance_mod,
-                                          apply_alluvium_slope_mod=apply_alluvium_slope_mod)
+            compute_hybrid_geology_arrays(
+                vs30_array,
+                stdv_array,
+                id_array,
+                profile,
+                apply_coastal_distance_mod=apply_coastal_distance_mod,
+                apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            )
         )
 
         if output_dir is not None and include_intermediate:
@@ -1138,15 +1142,19 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        # 6. Gap-fill on-land nodata pixels in combined output
+        # Stage 6: Gap-fill on-land nodata pixels in combined output
         logger.info(
-            "\n" + "=" * 80 + "\nGAP-FILLING COMBINED OUTPUT\n" + "=" * 80
+            "\n" + "=" * 80 + "\nSTAGE 6: GAP-FILLING COMBINED OUTPUT\n" + "=" * 80
         )
 
         if output_dir is not None and include_intermediate:
             write_vs30_raster(
-                np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
-                np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                np.where(
+                    np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
+                ),
+                np.where(
+                    np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
+                ),
                 profile,
                 output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                 constants.BAND_DESCRIPTION_VS30_COMBINED,
@@ -1162,8 +1170,12 @@ def grid_pipeline(
         if output_dir is not None:
             assert profile is not None
             write_vs30_raster(
-                np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
-                np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                np.where(
+                    np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
+                ),
+                np.where(
+                    np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
+                ),
                 profile,
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 constants.BAND_DESCRIPTION_VS30_COMBINED,
@@ -1204,7 +1216,7 @@ def points_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
-    gapfill_grid_config: config_module.GridConfig = constants.DEFAULT_GAPFILL_GRID_CONFIG,
+    gapfill_grid_config: config_module.GridConfig = constants.FULL_NZ_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1304,9 +1316,13 @@ def points_pipeline(
 
     if run_geology:
         if geology_categorical_csv is None:
-            raise ValueError("geology_categorical_csv is required when running geology model")
+            raise ValueError(
+                "geology_categorical_csv is required when running geology model"
+            )
         if do_bayesian_update:
-            logger.info("Performing Bayesian update of geology categorical model values...")
+            logger.info(
+                "Performing Bayesian update of geology categorical model values..."
+            )
             geol_model_df = compute_categorical_vs30_updates(
                 categorical_model_csv=geology_categorical_csv,
                 model_type=constants.ModelType.GEOLOGY,
@@ -1319,9 +1335,13 @@ def points_pipeline(
 
     if run_terrain:
         if terrain_categorical_csv is None:
-            raise ValueError("terrain_categorical_csv is required when running terrain model")
+            raise ValueError(
+                "terrain_categorical_csv is required when running terrain model"
+            )
         if do_bayesian_update:
-            logger.info("Performing Bayesian update of terrain categorical model values...")
+            logger.info(
+                "Performing Bayesian update of terrain categorical model values..."
+            )
             terr_model_df = compute_categorical_vs30_updates(
                 categorical_model_csv=terrain_categorical_csv,
                 model_type=constants.ModelType.TERRAIN,
@@ -1461,7 +1481,7 @@ def points_pipeline(
     # ================================================================
     # Gap-fill: fill on-land nodata points
     # ================================================================
-    if model_type in (constants.ModelType.COMBINED,):
+    if model_type == constants.ModelType.COMBINED:
         combined_vs30 = result_df[constants.COL_VS30].values
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
@@ -1469,9 +1489,7 @@ def points_pipeline(
         # threading IDs through both parallel and sequential paths)
         geology_ids = category.assign_to_category_geology(points)
 
-        fillable_mask = gapfill.classify_nodata(
-            combined_vs30, geology_ids, points
-        )
+        fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, points)
 
         if np.any(fillable_mask):
             if include_intermediate:
@@ -1542,7 +1560,7 @@ def points_pipeline(
                     )
 
                 if not np.isnan(fill_vs30):
-                    result_df.iloc[idx, result_df.columns.get_loc(constants.COL_VS30)] = fill_vs30
-                    result_df.iloc[idx, result_df.columns.get_loc(constants.COL_COMBINED_STDV)] = fill_stdv
+                    result_df.at[idx, constants.COL_VS30] = fill_vs30
+                    result_df.at[idx, constants.COL_COMBINED_STDV] = fill_stdv
 
     return result_df
