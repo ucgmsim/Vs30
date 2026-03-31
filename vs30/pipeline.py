@@ -1204,6 +1204,7 @@ def points_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    gapfill_grid_config: config_module.GridConfig = constants.DEFAULT_GAPFILL_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1250,6 +1251,12 @@ def points_pipeline(
         Include intermediate values (geology/terrain separately) in output.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
+    apply_coastal_distance_mod : bool, optional
+        Whether to apply coastal distance modification for GID 4 and GID 10.
+    gapfill_grid_config : GridConfig, optional
+        Grid alignment used when generating local grids for gap-fill in
+        points mode. Defaults to the standard NZ domain at 100m spacing.
+        Pass explicitly to align with a specific grid mode run.
 
     Returns
     -------
@@ -1359,94 +1366,183 @@ def points_pipeline(
         result_df.insert(1, constants.COL_NORTHING, points[:, 1])
 
         logger.info(f"  Total locations: {len(result_df)}")
-        return result_df
 
-    # ================================================================
-    # Sequential Processing Path
-    # ================================================================
-    result = {}
-    result[constants.COL_EASTING] = points[:, 0]
-    result[constants.COL_NORTHING] = points[:, 1]
+    else:
+        # ================================================================
+        # Sequential Processing Path
+        # ================================================================
+        result = {}
+        result[constants.COL_EASTING] = points[:, 0]
+        result[constants.COL_NORTHING] = points[:, 1]
 
-    # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
-    if run_geology:
-        with tqdm(
-            total=len(points), desc="Geology: spatial adjustment", unit="point"
-        ) as pbar:
-            (
-                geol_ids,
-                geol_vs30,
-                geol_stdv,
-                geol_vs30_hybrid,
-                geol_stdv_hybrid,
+        # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
+        if run_geology:
+            with tqdm(
+                total=len(points), desc="Geology: spatial adjustment", unit="point"
+            ) as pbar:
+                (
+                    geol_ids,
+                    geol_vs30,
+                    geol_stdv,
+                    geol_vs30_hybrid,
+                    geol_stdv_hybrid,
+                    geol_mvn_vs30,
+                    geol_mvn_stdv,
+                ) = parallel.process_geology_at_points(
+                    points,
+                    geol_model_df,
+                    observations_df,
+                    corr_fn=geology_corr_fn,
+                    noisy=noisy,
+                    progress_bar=pbar,
+                    apply_coastal_distance_mod=apply_coastal_distance_mod,
+                    apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+                )
+
+            if include_intermediate:
+                result[constants.COL_GEOLOGY_ID] = geol_ids
+                result[constants.COL_GEOLOGY_VS30] = geol_vs30
+                result[constants.COL_GEOLOGY_STDV] = geol_stdv
+                result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+                result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+                result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+                result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+
+        # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
+        if run_terrain:
+            with tqdm(
+                total=len(points), desc="Terrain: spatial adjustment", unit="point"
+            ) as pbar:
+                (
+                    terr_ids,
+                    terr_vs30,
+                    terr_stdv,
+                    terr_mvn_vs30,
+                    terr_mvn_stdv,
+                ) = parallel.process_terrain_at_points(
+                    points,
+                    terr_model_df,
+                    observations_df,
+                    corr_fn=terrain_corr_fn,
+                    noisy=noisy,
+                    progress_bar=pbar,
+                )
+
+            if include_intermediate:
+                result[constants.COL_TERRAIN_ID] = terr_ids
+                result[constants.COL_TERRAIN_VS30] = terr_vs30
+                result[constants.COL_TERRAIN_STDV] = terr_stdv
+                result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+                result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+
+        # --- Stage 4: Combine geology and terrain models or use single model result ---
+        if run_geology and run_terrain:
+            logger.info("Combining models...")
+            combined_vs30, combined_stdv = utils.combine_vs30_models(
                 geol_mvn_vs30,
                 geol_mvn_stdv,
-            ) = parallel.process_geology_at_points(
-                points,
-                geol_model_df,
-                observations_df,
-                corr_fn=geology_corr_fn,
-                noisy=noisy,
-                progress_bar=pbar,
-                apply_coastal_distance_mod=apply_coastal_distance_mod,
-                apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-            )
-
-        if include_intermediate:
-            result[constants.COL_GEOLOGY_ID] = geol_ids
-            result[constants.COL_GEOLOGY_VS30] = geol_vs30
-            result[constants.COL_GEOLOGY_STDV] = geol_stdv
-            result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-            result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-            result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-            result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
-
-    # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
-    if run_terrain:
-        with tqdm(
-            total=len(points), desc="Terrain: spatial adjustment", unit="point"
-        ) as pbar:
-            (
-                terr_ids,
-                terr_vs30,
-                terr_stdv,
                 terr_mvn_vs30,
                 terr_mvn_stdv,
-            ) = parallel.process_terrain_at_points(
-                points,
-                terr_model_df,
-                observations_df,
-                corr_fn=terrain_corr_fn,
-                noisy=noisy,
-                progress_bar=pbar,
+                combination_method,
+                combine_ratio,
+            )
+            result[constants.COL_VS30] = combined_vs30
+            result[constants.COL_COMBINED_STDV] = combined_stdv
+        elif run_geology:
+            result[constants.COL_VS30] = geol_mvn_vs30
+            result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
+        elif run_terrain:
+            result[constants.COL_VS30] = terr_mvn_vs30
+            result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
+
+        logger.info(f"  Total locations: {len(points)}")
+        result_df = pd.DataFrame(result)
+
+    # ================================================================
+    # Gap-fill: fill on-land nodata points
+    # ================================================================
+    if model_type in (constants.ModelType.COMBINED,):
+        combined_vs30 = result_df[constants.COL_VS30].values
+        combined_stdv = result_df[constants.COL_COMBINED_STDV].values
+
+        # Get geology IDs for query points (redundant sample, avoids
+        # threading IDs through both parallel and sequential paths)
+        geology_ids = category.assign_to_category_geology(points)
+
+        fillable_mask = gapfill.classify_nodata(
+            combined_vs30, geology_ids, points
+        )
+
+        if np.any(fillable_mask):
+            if include_intermediate:
+                result_df[constants.COL_VS30_BEFORE_GAPFILL] = combined_vs30.copy()
+                result_df[constants.COL_STDV_BEFORE_GAPFILL] = combined_stdv.copy()
+
+            fillable_indices = np.where(fillable_mask)[0]
+            logger.info(
+                f"  Gap-fill: filling {len(fillable_indices)} point(s) "
+                f"via local grid pipeline"
             )
 
-        if include_intermediate:
-            result[constants.COL_TERRAIN_ID] = terr_ids
-            result[constants.COL_TERRAIN_VS30] = terr_vs30
-            result[constants.COL_TERRAIN_STDV] = terr_stdv
-            result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
-            result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+            for idx in fillable_indices:
+                e, n = points[idx]
+                half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
+                fill_vs30 = np.nan
+                fill_stdv = np.nan
 
-    # --- Stage 4: Combine geology and terrain models or use single model result ---
-    if run_geology and run_terrain:
-        logger.info("Combining models...")
-        combined_vs30, combined_stdv = utils.combine_vs30_models(
-            geol_mvn_vs30,
-            geol_mvn_stdv,
-            terr_mvn_vs30,
-            terr_mvn_stdv,
-            combination_method,
-            combine_ratio,
-        )
-        result[constants.COL_VS30] = combined_vs30
-        result[constants.COL_COMBINED_STDV] = combined_stdv
-    elif run_geology:
-        result[constants.COL_VS30] = geol_mvn_vs30
-        result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
-    elif run_terrain:
-        result[constants.COL_VS30] = terr_mvn_vs30
-        result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
+                while half_width <= constants.GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M:
+                    local_config = gapfill.create_local_grid_config(
+                        e, n, gapfill_grid_config, half_width
+                    )
 
-    logger.info(f"  Total locations: {len(points)}")
-    return pd.DataFrame(result)
+                    local_result = grid_pipeline(
+                        grid_config=local_config,
+                        output_dir=None,
+                        model_type=constants.ModelType.COMBINED,
+                        geology_categorical_csv=geology_categorical_csv,
+                        terrain_categorical_csv=terrain_categorical_csv,
+                        clustered_observations_csv=clustered_observations_csv,
+                        independent_observations_csv=independent_observations_csv,
+                        combination_method=combination_method,
+                        combine_ratio=combine_ratio,
+                        noisy=noisy,
+                        mvn=mvn,
+                        do_bayesian_update=do_bayesian_update,
+                        include_intermediate=False,
+                        n_proc=1,
+                        geology_corr_fn=geology_corr_fn,
+                        terrain_corr_fn=terrain_corr_fn,
+                        apply_coastal_distance_mod=apply_coastal_distance_mod,
+                        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+                    )
+
+                    local_profile = local_result["profile"]
+                    local_vs30 = local_result["combined_vs30"]
+                    local_stdv = local_result["combined_stdv"]
+
+                    row, col = rasterio.transform.rowcol(
+                        local_profile["transform"], e, n
+                    )
+                    fill_vs30 = local_vs30[row, col]
+                    fill_stdv = local_stdv[row, col]
+
+                    if not np.isnan(fill_vs30):
+                        break
+
+                    half_width += constants.GAPFILL_LOCAL_GRID_EXPANSION_M
+                    logger.info(
+                        f"  Gap-fill: expanding local grid to "
+                        f"{half_width * 2}m for point ({e:.0f}, {n:.0f})"
+                    )
+                else:
+                    logger.warning(
+                        f"  Gap-fill: no valid donor found for point "
+                        f"({e:.0f}, {n:.0f}) after expanding to "
+                        f"{half_width * 2}m, leaving as nodata"
+                    )
+
+                if not np.isnan(fill_vs30):
+                    result_df.iloc[idx, result_df.columns.get_loc(constants.COL_VS30)] = fill_vs30
+                    result_df.iloc[idx, result_df.columns.get_loc(constants.COL_COMBINED_STDV)] = fill_stdv
+
+    return result_df
