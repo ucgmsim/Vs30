@@ -163,6 +163,9 @@ GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distanc
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 
+# Combined VS30 output before gap-fill (intermediate output)
+COMBINED_VS30_BEFORE_GAPFILL_FILENAME: str = "combined_vs30_before_gapfill.tif"
+
 # OUTPUT_FILENAMES dictionary is defined after ModelType class below
 
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
@@ -243,6 +246,19 @@ FULL_NZ_LAND_YMAX: int = 6250050
 SUGGESTED_GRID_DX: int = 100
 SUGGESTED_GRID_DY: int = 100
 
+# Gap-fill constants
+# Half-width (meters) of the local grid generated around each fillable point
+# in the points pipeline. A value of 5000 gives a 10 km x 10 km local grid.
+GAPFILL_LOCAL_GRID_SIZE_M: int = 5000
+
+# Amount (meters) to expand the local grid half-width if the initial local
+# grid has no valid donor pixels for a fillable point.
+GAPFILL_LOCAL_GRID_EXPANSION_M: int = 5000
+
+# Maximum half-width (meters) for local grid expansion. Prevents unbounded
+# growth if a fillable point has no valid donors nearby.
+GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M: int = 50000
+
 # Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0
 
@@ -318,6 +334,8 @@ COL_TERRAIN_STDV: str = "terrain_stdv"
 COL_TERRAIN_MVN_VS30: str = "terrain_mvn_vs30"
 COL_TERRAIN_MVN_STDV: str = "terrain_mvn_stdv"
 COL_COMBINED_STDV: str = "stdv"
+COL_VS30_BEFORE_GAPFILL: str = "vs30_before_gapfill"
+COL_STDV_BEFORE_GAPFILL: str = "stdv_before_gapfill"
 
 # PARALLEL PROCESSING DICTIONARY KEYS
 # Keys used in dictionaries for multiprocessing data transfer.
@@ -408,3 +426,18 @@ SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
 
 # Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
 PIXEL_CENTER_OFFSET: float = 0.5
+
+from vs30 import config as config_module
+
+# Default grid alignment for gap-fill in points mode. Uses the standard NZ
+# domain at 100m spacing with the *050 origin, matching jaehwi_v1p0 and
+# modified_foster_2019 grid configs. This ensures local grids generated for
+# gap-filling have pixel centers aligned with full grid runs.
+DEFAULT_GAPFILL_GRID_CONFIG: config_module.GridConfig = config_module.GridConfig(
+    grid_xmin=FULL_NZ_LAND_XMIN,
+    grid_xmax=FULL_NZ_LAND_XMAX,
+    grid_ymin=FULL_NZ_LAND_YMIN,
+    grid_ymax=FULL_NZ_LAND_YMAX,
+    grid_dx=SUGGESTED_GRID_DX,
+    grid_dy=SUGGESTED_GRID_DY,
+)
