@@ -50,14 +50,16 @@ def classify_nodata(
     ndarray
         Boolean mask where True = eligible for filling.
     """
+    empty_mask = np.zeros(len(combined_vs30), dtype=bool)
+
     nodata_mask = np.isnan(combined_vs30)
     if not np.any(nodata_mask):
-        return np.zeros(len(combined_vs30), dtype=bool)
+        return empty_mask
 
     # Exclude water pixels (GID=0)
     candidate_mask = nodata_mask & (geology_ids != 0)
     if not np.any(candidate_mask):
-        return np.zeros(len(combined_vs30), dtype=bool)
+        return empty_mask
 
     # Load coastline and test point-in-polygon for candidates only
     coastline_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
@@ -72,7 +74,7 @@ def classify_nodata(
     fillable_mask = np.zeros(len(combined_vs30), dtype=bool)
     fillable_mask[candidate_indices] = inside
 
-    n_fillable = int(np.sum(fillable_mask))
+    n_fillable = np.count_nonzero(fillable_mask)
     if n_fillable > 0:
         logger.info(
             f"  Gap-fill: {n_fillable} on-land nodata pixel(s) identified for filling"
@@ -113,6 +115,7 @@ def fill_nodata_grid(
     """
     nrows, ncols = vs30.shape
     vs30_flat = vs30.ravel()
+    stdv_flat = stdv.ravel()
 
     # Fast path: no nodata pixels
     nodata_mask = np.isnan(vs30_flat)
@@ -126,10 +129,12 @@ def fill_nodata_grid(
 
     # Build full locations array for classify_nodata
     cols_2d, rows_2d = np.meshgrid(np.arange(ncols), np.arange(nrows))
-    locations = np.column_stack([
-        x_centers[cols_2d.ravel()],
-        y_centers[rows_2d.ravel()],
-    ])
+    locations = np.column_stack(
+        [
+            x_centers[cols_2d.ravel()],
+            y_centers[rows_2d.ravel()],
+        ]
+    )
 
     fillable_mask = classify_nodata(vs30_flat, geology_ids.ravel(), locations)
     if not np.any(fillable_mask):
@@ -153,9 +158,9 @@ def fill_nodata_grid(
     filled_stdv_flat = filled_stdv.ravel()
 
     filled_vs30_flat[fillable_mask] = vs30_flat[valid_mask][nn_indices]
-    filled_stdv_flat[fillable_mask] = stdv.ravel()[valid_mask][nn_indices]
+    filled_stdv_flat[fillable_mask] = stdv_flat[valid_mask][nn_indices]
 
-    n_filled = int(np.sum(fillable_mask))
+    n_filled = np.count_nonzero(fillable_mask)
     logger.info(f"  Gap-fill: filled {n_filled} pixel(s) with nearest-neighbor values")
 
     return filled_vs30, filled_stdv
@@ -195,12 +200,14 @@ def create_local_grid_config(
     dy = gapfill_grid_config.grid_dy
 
     # Snap to nearest pixel center
-    snap_e = gapfill_grid_config.grid_xmin + round(
-        (easting - gapfill_grid_config.grid_xmin) / dx
-    ) * dx
-    snap_n = gapfill_grid_config.grid_ymin + round(
-        (northing - gapfill_grid_config.grid_ymin) / dy
-    ) * dy
+    snap_e = (
+        gapfill_grid_config.grid_xmin
+        + round((easting - gapfill_grid_config.grid_xmin) / dx) * dx
+    )
+    snap_n = (
+        gapfill_grid_config.grid_ymin
+        + round((northing - gapfill_grid_config.grid_ymin) / dy) * dy
+    )
 
     return config_module.GridConfig(
         grid_xmin=snap_e - half_width,
