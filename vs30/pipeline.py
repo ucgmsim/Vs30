@@ -777,7 +777,7 @@ def compute_model_grid(
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
-) -> tuple[np.ndarray, np.ndarray, dict]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
     Run the full VS30 generation pipeline for a single model type in memory.
 
@@ -822,8 +822,9 @@ def compute_model_grid(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray, dict]
-        (final_vs30, final_stdv, profile)
+    tuple[ndarray, ndarray, ndarray, dict]
+        (vs30, stdv, id_array, profile) — the final VS30 array, standard
+        deviation array, category ID array, and rasterio profile.
     """
     if categorical_model_csv is None:
         raise ValueError(
@@ -963,7 +964,7 @@ def compute_model_grid(
 
     logger.info(f"\nFull pipeline for {model_type} completed successfully")
 
-    return current_vs30, current_stdv, profile
+    return current_vs30, current_stdv, id_array, profile
 
 
 # ============================================================================
@@ -1079,7 +1080,7 @@ def grid_pipeline(
     # 1. Run Geology Pipeline
     if run_geology:
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
-        geol_vs30, geol_stdv, profile = compute_model_grid(
+        geol_vs30, geol_stdv, geol_ids, profile = compute_model_grid(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
             categorical_model_csv=geology_categorical_csv,
@@ -1102,7 +1103,7 @@ def grid_pipeline(
     # 2. Run Terrain Pipeline
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
-        terr_vs30, terr_stdv, profile = compute_model_grid(
+        terr_vs30, terr_stdv, _, profile = compute_model_grid(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
             categorical_model_csv=terrain_categorical_csv,
