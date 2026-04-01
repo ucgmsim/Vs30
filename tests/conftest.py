@@ -141,3 +141,43 @@ def load_test_config(scenario: str) -> dict:
                 )
 
     return config_data
+
+
+def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
+    """
+    Load and resolve a fixed model version's YAML config for testing.
+
+    Mirrors cli.load_model_config but without the typer dependency.
+    Resolves CSV paths relative to the resources directory and builds
+    correlation function callables.
+
+    Parameters
+    ----------
+    version : FixedModelVersion
+        Model version to load.
+
+    Returns
+    -------
+    dict
+        Resolved config dict ready to pass to pipeline functions.
+    """
+    from vs30.cli import resolve_correlation_function
+
+    config_path = constants.MODEL_VERSION_TO_CONFIG[version]
+    with open(config_path) as f:
+        config_data = yaml.safe_load(f)
+
+    # Resolve CSV paths
+    for key, subdir in constants.RESOURCE_SUBDIRS.items():
+        if config_data.get(key):
+            config_data[key] = constants.RESOURCE_PATH / subdir / config_data[key]
+
+    # Build correlation functions
+    config_data["geology_corr_fn"] = resolve_correlation_function(
+        config_data["geology_correlation"]
+    )
+    config_data["terrain_corr_fn"] = resolve_correlation_function(
+        config_data["terrain_correlation"]
+    )
+
+    return config_data
