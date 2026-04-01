@@ -244,16 +244,16 @@ def update_with_independent_data(
             new_variance = compute_bayesian_posterior_variance(
                 current_std,
                 current_n,
-                observation_row[constants.COL_UNCERTAINTY],
+                observation_row[constants.ObservationColumn.UNCERTAINTY],
                 current_mean,
-                observation_row[constants.COL_VS30],
+                observation_row[constants.ObservationColumn.VS30],
             )
 
             # Update running values for next iteration
             current_mean = compute_bayesian_posterior_mean(
                 current_mean,
                 current_n,
-                observation_row[constants.COL_VS30],
+                observation_row[constants.ObservationColumn.VS30],
             )
             current_std = np.sqrt(new_variance)
             current_n += 1
@@ -304,12 +304,12 @@ def perform_clustering(
     """
     sites_df = sites_df.copy()
     # Default not a member of any cluster
-    sites_df[constants.COL_CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
+    sites_df[constants.ObservationColumn.CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
 
     features = np.column_stack(
         (
-            sites_df[constants.COL_EASTING].values,
-            sites_df[constants.COL_NORTHING].values,
+            sites_df[constants.ObservationColumn.EASTING].values,
+            sites_df[constants.ObservationColumn.NORTHING].values,
         )
     )
     model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
@@ -325,7 +325,7 @@ def perform_clustering(
             eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
         )
         dbscan.fit(features[model_ids == category_id])
-        sites_df.loc[model_ids == category_id, constants.COL_CLUSTER] = dbscan.labels_
+        sites_df.loc[model_ids == category_id, constants.ObservationColumn.CLUSTER] = dbscan.labels_
 
     return sites_df
 
@@ -358,15 +358,15 @@ def compute_cluster_weighted_mean_and_stddev(
     weights = np.repeat(1.0 / effective_n, len(category_sites))
 
     for cluster_label in cluster_counts.index:
-        cluster_mask = category_sites[constants.COL_CLUSTER] == cluster_label
+        cluster_mask = category_sites[constants.ObservationColumn.CLUSTER] == cluster_label
         cluster_sites = category_sites[cluster_mask]
         if cluster_label == constants.CLUSTER_UNCLUSTERED_LABEL:
             weighted_log_vs30_sum += np.sum(
-                np.log(cluster_sites[constants.COL_VS30].values)
+                np.log(cluster_sites[constants.ObservationColumn.VS30].values)
             )
         else:
             weighted_log_vs30_sum += np.sum(
-                np.log(cluster_sites[constants.COL_VS30].values)
+                np.log(cluster_sites[constants.ObservationColumn.VS30].values)
             ) / len(cluster_sites)
             weights[cluster_mask] /= len(cluster_sites)
 
@@ -375,7 +375,7 @@ def compute_cluster_weighted_mean_and_stddev(
     log_stddev = np.sqrt(
         np.sum(
             weights
-            * (np.log(category_sites[constants.COL_VS30].values) - log_geometric_mean)
+            * (np.log(category_sites[constants.ObservationColumn.VS30].values) - log_geometric_mean)
             ** 2
         )
     )
@@ -452,7 +452,7 @@ def update_with_clustered_data(
         category_sites = valid_sites[
             valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int
         ]
-        cluster_counts = category_sites[constants.COL_CLUSTER].value_counts()
+        cluster_counts = category_sites[constants.ObservationColumn.CLUSTER].value_counts()
 
         # Effective independent observations: one per cluster, plus each unclustered point.
         effective_n = len(cluster_counts)

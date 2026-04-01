@@ -16,11 +16,9 @@ multi-process (n_proc=cpu_count) modes to ensure parallel processing works corre
 import os
 
 import pytest
-
 from conftest import BENCHMARKS_DIR, compare_output_files, load_test_config
 
-from vs30 import constants, pipeline
-from vs30 import config as config_module
+from vs30 import config, constants, pipeline
 
 SCENARIOS = [
     "small_independent_only",
@@ -42,13 +40,15 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     config_data = load_test_config(scenario)
 
     pipeline.grid_pipeline(
-        grid_config=config_module.GridConfig.from_dict(config_data),
+        grid_config=config.GridConfig.from_dict(config_data),
         output_dir=tmp_path,
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combination_method=constants.CombinationMethod(
+            config_data["combination_method"]
+        ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],

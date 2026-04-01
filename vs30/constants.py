@@ -15,12 +15,12 @@ class CombinationMethod(StrEnum):
 
 
 class FixedModelVersion(StrEnum):
-    """Identifiers for fixed versions of the geology and terrain models."""
+    """Available fixed versions of the Vs30 model."""
 
     FOSTER_2019 = "foster_2019"
     MODIFIED_FOSTER_2019 = "modified_foster_2019"
-    JAEHWI_V1P0 = "jaehwi_v1p0"
     VIKTOR_CPT_CLUSTERING = "viktor_cpt_clustering"
+    JAEHWI_V1P0 = "jaehwi_v1p0"
 
 
 CONFIGS_DIR = Path(__file__).parent / "configs"
@@ -38,19 +38,8 @@ GEOSPATIAL_DIR = Path(__file__).parent / "resources" / "geospatial"
 # Path to the resources directory containing CSV files with categorical model parameters
 RESOURCE_PATH = Path(__file__).parent / "resources"
 
-# Config YAML keys that hold file paths relative to RESOURCE_PATH.
-CSV_PATH_KEYS = [
-    "geology_categorical_csv",
-    "terrain_categorical_csv",
-    "clustered_observations_csv",
-    "independent_observations_csv",
-]
-
-OBSERVATION_CSV_KEYS = {
-    "clustered_observations_csv",
-    "independent_observations_csv",
-}
-
+# Config YAML keys that hold CSV file paths, mapped to their subdirectory
+# under RESOURCE_PATH.
 RESOURCE_SUBDIRS: dict[str, str] = {
     "geology_categorical_csv": "categorical_vs30_mean_and_stddev",
     "terrain_categorical_csv": "categorical_vs30_mean_and_stddev",
@@ -99,10 +88,8 @@ MIN_SIGMA: float = 0.5
 
 # DBSCAN clustering parameters for spatially clustered observations
 # such as Vs30 inferred from dense CPT measurements.
-
 # Minimum number of observations to form a cluster (DBSCAN min_samples parameter)
 MIN_GROUP: int = 5
-
 # Maximum distance (meters) between observations to be in the same cluster
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 EPS: float = 15000.0
@@ -168,7 +155,9 @@ COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 # Combined VS30 output before gap-fill (intermediate output)
 COMBINED_VS30_BEFORE_GAPFILL_FILENAME: str = "combined_vs30_before_gapfill.tif"
 
-# OUTPUT_FILENAMES dictionary is defined after ModelType class below
+# Default correlation length parameters (meters) from the Foster 2019 model.
+DEFAULT_GEOLOGY_PHI = 1407
+DEFAULT_TERRAIN_PHI = 993
 
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
@@ -300,14 +289,18 @@ STANDARD_ID_COLUMN: str = "id"
 # Coordinate Reference System for New Zealand Transverse Mercator 2000
 NZTM_CRS: str = "EPSG:2193"
 
-# OBSERVATION DATA COLUMN NAMES
-# Standard column names for observation DataFrames used throughout the package.
 
-COL_EASTING: str = "easting"
-COL_NORTHING: str = "northing"
-COL_VS30: str = "vs30"
-COL_UNCERTAINTY: str = "uncertainty"
-COL_CLUSTER: str = "cluster"
+class ObservationColumn:
+    """Standard column names for observation DataFrames used throughout the package."""
+
+    EASTING = "easting"
+    NORTHING = "northing"
+    VS30 = "vs30"
+    UNCERTAINTY = "uncertainty"
+    CLUSTER = "cluster"
+
+    REQUIRED = [EASTING, NORTHING, VS30, UNCERTAINTY]
+
 
 # Column names for the DataFrame returned by get_vs30_for_ids,
 # which maps category IDs to their categorical model Vs30 values.
@@ -317,9 +310,7 @@ COL_CATEGORY_VS30_STDV: str = "category_vs30_stdv"
 # Cluster label for unclustered/noise points in DBSCAN output
 CLUSTER_UNCLUSTERED_LABEL: int = -1
 
-# OUTPUT CSV COLUMN NAMES
-# Column names for compute-at-locations output CSV files.
-
+# Column names for `points` command output CSV files.
 COL_GEOLOGY_ID: str = "geology_id"
 COL_GEOLOGY_VS30: str = "geology_vs30"
 COL_GEOLOGY_STDV: str = "geology_stdv"
@@ -336,9 +327,7 @@ COL_COMBINED_STDV: str = "stdv"
 COL_VS30_BEFORE_GAPFILL: str = "vs30_before_gapfill"
 COL_STDV_BEFORE_GAPFILL: str = "stdv_before_gapfill"
 
-# PARALLEL PROCESSING DICTIONARY KEYS
 # Keys used in dictionaries for multiprocessing data transfer.
-
 KEY_LOCATIONS: str = "locations"
 KEY_MODEL_VS30: str = "model_vs30"
 KEY_MODEL_STDV: str = "model_stdv"
@@ -354,25 +343,10 @@ KEY_NOISY: str = "noisy"
 KEY_COV_REDUC: str = "cov_reduc"
 KEY_CORR_ZERO: str = "corr_zero"
 
-# Required columns for observation DataFrames
-REQUIRED_OBSERVATION_COLUMNS: list[str] = [
-    COL_EASTING,
-    COL_NORTHING,
-    COL_VS30,
-    COL_UNCERTAINTY,
-]
-REQUIRED_OBSERVATION_COLUMNS_BASIC: list[str] = [
-    COL_EASTING,
-    COL_NORTHING,
-    COL_VS30,
-]
-
-# MODEL TYPE IDENTIFIERS
-# String identifiers for the two model types used in the Vs30 pipeline.
-
 
 class ModelType(StrEnum):
-    """Valid model types for VS30 calculations."""
+    """For specifying whether output should be generated using the geology model only, the
+    terrain model only, or combination of both models."""
 
     GEOLOGY = "geology"
     TERRAIN = "terrain"
@@ -384,44 +358,31 @@ OUTPUT_FILENAMES: dict[ModelType, str] = {
     ModelType.TERRAIN: TERRAIN_VS30_MEAN_STDDEV_FILENAME,
 }
 
-# RASTER BAND INDICES
-# Band numbers for multi-band VS30 rasters (1-indexed as per rasterio convention).
-
+# Band numbers for multi-band Vs30 rasters (1-indexed as per rasterio convention).
 RASTER_BAND_VS30: int = 1
 RASTER_BAND_STDV: int = 2
 
-# GEOTIFF OPTIONS
-# Standard options for writing GeoTIFF raster files.
-
+# Options for writing GeoTIFF raster files.
 GEOTIFF_DRIVER: str = "GTiff"
 GEOTIFF_COMPRESSION: str = "deflate"
 GEOTIFF_TILED: bool = True
 GEOTIFF_BIGTIFF: str = "yes"
 
-# RASTER BAND DESCRIPTIONS
-# Standard descriptions for raster bands.
-
+# Descriptions of raster bands.
 BAND_DESCRIPTION_ID_INDEX: str = "Model ID Index"
 BAND_DESCRIPTION_VS30: str = "Vs30"
 BAND_DESCRIPTION_STDV: str = "Standard Deviation"
 BAND_DESCRIPTION_VS30_HYBRID: str = "Vs30 (Hybrid)"
 BAND_DESCRIPTION_STDV_HYBRID: str = "Standard Deviation (Hybrid)"
 BAND_DESCRIPTION_VS30_COMBINED: str = "Vs30 (Combined Average)"
-# The combined standard deviation is derived from the mixture of log-normals
-# formula (see utils.combine_models), accounting for both individual model
-# variances and the spread between the weighted log-space Vs30 values.
 BAND_DESCRIPTION_STDV_COMBINED: str = "Standard Deviation (Combined Average)"
 BAND_DESCRIPTION_COAST_DISTANCE: str = "Distance to Coast (m)"
 BAND_DESCRIPTION_SLOPE: str = "Slope"
 
-# SHAPEFILE COLUMN NAMES
 # Column names used in input shapefiles.
-
 SHAPEFILE_GEOLOGY_ID_COLUMN: str = "gid"
 SHAPEFILE_GEOMETRY_COLUMN: str = "geometry"
 
-# SPATIAL PROCESSING CONSTANTS
-# Constants used in spatial coordinate and pixel calculations.
-
 # Offset to convert pixel indices to pixel centers (0.5 = center of pixel)
+# in spatial coordinate and pixel calculations.
 PIXEL_CENTER_OFFSET: float = 0.5

@@ -12,8 +12,7 @@ import typer
 import yaml
 from qcore import cli
 
-from vs30 import constants, pipeline, utils
-from vs30 import config as config_module
+from vs30 import config, constants, pipeline, utils
 
 logger = logging.getLogger(__name__)
 
@@ -84,19 +83,32 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
     with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
         config_data = yaml.safe_load(f)
 
-    for field in ("geology_correlation", "terrain_correlation", "apply_coastal_distance_mod", "apply_alluvium_slope_mod"):
+    for field in (
+        "geology_correlation",
+        "terrain_correlation",
+        "apply_coastal_distance_mod",
+        "apply_alluvium_slope_mod",
+    ):
         if field not in config_data:
             raise typer.BadParameter(
                 f"Config missing required field '{field}'. "
                 "All configs must explicitly specify this parameter."
             )
 
-    for key in constants.CSV_PATH_KEYS:
+    for key in constants.RESOURCE_SUBDIRS:
         if config_data[key]:
-            config_data[key] = constants.RESOURCE_PATH / constants.RESOURCE_SUBDIRS[key] / config_data[key]
+            config_data[key] = (
+                constants.RESOURCE_PATH
+                / constants.RESOURCE_SUBDIRS[key]
+                / config_data[key]
+            )
 
-    config_data["geology_corr_fn"] = resolve_correlation_function(config_data["geology_correlation"])
-    config_data["terrain_corr_fn"] = resolve_correlation_function(config_data["terrain_correlation"])
+    config_data["geology_corr_fn"] = resolve_correlation_function(
+        config_data["geology_correlation"]
+    )
+    config_data["terrain_corr_fn"] = resolve_correlation_function(
+        config_data["terrain_correlation"]
+    )
 
     return config_data
 
@@ -215,21 +227,11 @@ def run_points_pipeline(
 
 @cli.from_docstring(app)
 def points(
-    version: typing.Annotated[
-        constants.FixedModelVersion, typer.Argument()
-    ],
-    locations_csv: typing.Annotated[
-        Path, typer.Argument(exists=True, dir_okay=False)
-    ],
-    output_csv: typing.Annotated[
-        Path, typer.Argument(dir_okay=False)
-    ],
-    lon_column: typing.Annotated[
-        str, typer.Option()
-    ] = constants.LOCATIONS_LON_COLUMN,
-    lat_column: typing.Annotated[
-        str, typer.Option()
-    ] = constants.LOCATIONS_LAT_COLUMN,
+    version: typing.Annotated[constants.FixedModelVersion, typer.Argument()],
+    locations_csv: typing.Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
+    output_csv: typing.Annotated[Path, typer.Argument(dir_okay=False)],
+    lon_column: typing.Annotated[str, typer.Option()] = constants.LOCATIONS_LON_COLUMN,
+    lat_column: typing.Annotated[str, typer.Option()] = constants.LOCATIONS_LAT_COLUMN,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
@@ -264,7 +266,9 @@ def points(
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combination_method=constants.CombinationMethod(
+            config_data["combination_method"]
+        ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
@@ -293,13 +297,13 @@ def points_custom(
     combine_ratio: typing.Annotated[float, typer.Option()] = ...,
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
-    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
+    do_bayesian_update: typing.Annotated[
+        bool, typer.Option("--do-bayesian-update/--no-bayesian-update")
+    ] = ...,
     locations_csv: typing.Annotated[
         Path, typer.Option(exists=True, dir_okay=False)
     ] = ...,
-    output_csv: typing.Annotated[
-        Path, typer.Option(dir_okay=False)
-    ] = ...,
+    output_csv: typing.Annotated[Path, typer.Option(dir_okay=False)] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
         typer.Option(exists=True, dir_okay=False),
@@ -311,12 +315,8 @@ def points_custom(
     model_type: typing.Annotated[
         constants.ModelType, typer.Option()
     ] = constants.ModelType.COMBINED,
-    lon_column: typing.Annotated[
-        str, typer.Option()
-    ] = constants.LOCATIONS_LON_COLUMN,
-    lat_column: typing.Annotated[
-        str, typer.Option()
-    ] = constants.LOCATIONS_LAT_COLUMN,
+    lon_column: typing.Annotated[str, typer.Option()] = constants.LOCATIONS_LON_COLUMN,
+    lat_column: typing.Annotated[str, typer.Option()] = constants.LOCATIONS_LAT_COLUMN,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
@@ -385,15 +385,43 @@ def points_custom(
 
 @cli.from_docstring(app)
 def grid(
-    version: typing.Annotated[
-        constants.FixedModelVersion, typer.Option()
+    version: typing.Annotated[constants.FixedModelVersion, typer.Option()] = ...,
+    grid_xmin: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}."
+        ),
     ] = ...,
-    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}.")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}.")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}.")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}.")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}.")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}.")] = ...,
+    grid_xmax: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}."
+        ),
+    ] = ...,
+    grid_ymin: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}."
+        ),
+    ] = ...,
+    grid_ymax: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}."
+        ),
+    ] = ...,
+    grid_dx: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}."
+        ),
+    ] = ...,
+    grid_dy: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}."
+        ),
+    ] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     n_proc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
@@ -434,17 +462,22 @@ def grid(
     config_data = load_model_config(version)
 
     pipeline.grid_pipeline(
-        grid_config=config_module.GridConfig(
-            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
-            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
-            grid_dx=grid_dx, grid_dy=grid_dy,
+        grid_config=config.GridConfig(
+            grid_xmin=grid_xmin,
+            grid_xmax=grid_xmax,
+            grid_ymin=grid_ymin,
+            grid_ymax=grid_ymax,
+            grid_dx=grid_dx,
+            grid_dy=grid_dy,
         ),
         output_dir=output_dir,
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combination_method=constants.CombinationMethod(
+            config_data["combination_method"]
+        ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
@@ -469,16 +502,53 @@ def grid_custom(
     combination_method: typing.Annotated[
         constants.CombinationMethod, typer.Option()
     ] = ...,
-    combine_ratio: typing.Annotated[float, typer.Option(help="Geology-to-terrain weight ratio. Required when combination_method is ratio.")] = ...,
+    combine_ratio: typing.Annotated[
+        float,
+        typer.Option(
+            help="Geology-to-terrain weight ratio. Required when combination_method is ratio."
+        ),
+    ] = ...,
     noisy: typing.Annotated[bool, typer.Option("--noisy/--no-noisy")] = ...,
     mvn: typing.Annotated[bool, typer.Option("--mvn/--no-mvn")] = ...,
-    do_bayesian_update: typing.Annotated[bool, typer.Option("--do-bayesian-update/--no-bayesian-update")] = ...,
-    grid_xmin: typing.Annotated[int, typer.Option(help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}.")] = ...,
-    grid_xmax: typing.Annotated[int, typer.Option(help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}.")] = ...,
-    grid_ymin: typing.Annotated[int, typer.Option(help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}.")] = ...,
-    grid_ymax: typing.Annotated[int, typer.Option(help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}.")] = ...,
-    grid_dx: typing.Annotated[int, typer.Option(help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}.")] = ...,
-    grid_dy: typing.Annotated[int, typer.Option(help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}.")] = ...,
+    do_bayesian_update: typing.Annotated[
+        bool, typer.Option("--do-bayesian-update/--no-bayesian-update")
+    ] = ...,
+    grid_xmin: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}."
+        ),
+    ] = ...,
+    grid_xmax: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}."
+        ),
+    ] = ...,
+    grid_ymin: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}."
+        ),
+    ] = ...,
+    grid_ymax: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}."
+        ),
+    ] = ...,
+    grid_dx: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}."
+        ),
+    ] = ...,
+    grid_dy: typing.Annotated[
+        int,
+        typer.Option(
+            help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}."
+        ),
+    ] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
@@ -556,10 +626,13 @@ def grid_custom(
         )
 
     pipeline.grid_pipeline(
-        grid_config=config_module.GridConfig(
-            grid_xmin=grid_xmin, grid_xmax=grid_xmax,
-            grid_ymin=grid_ymin, grid_ymax=grid_ymax,
-            grid_dx=grid_dx, grid_dy=grid_dy,
+        grid_config=config.GridConfig(
+            grid_xmin=grid_xmin,
+            grid_xmax=grid_xmax,
+            grid_ymin=grid_ymin,
+            grid_ymax=grid_ymax,
+            grid_dx=grid_dx,
+            grid_dy=grid_dy,
         ),
         output_dir=output_dir,
         model_type=model_type,
