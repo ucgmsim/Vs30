@@ -215,7 +215,7 @@ def main() -> None:
     wotherspoon = load_wotherspoon()
     kaiseretal = load_kaiseretal()
 
-    print(f"\n=== Source counts ===")
+    print("\n=== Source counts ===")
     print(f"  McGann (after downsample): {len(mcgann)}")
     print(f"  Wotherspoon:               {len(wotherspoon)}")
     print(f"  Kaiser/GeoNet:             {len(kaiseretal)}")
@@ -250,7 +250,7 @@ def main() -> None:
     ref_matched_mask = dists_ref_to_new < 1.0
     n_ref_matched = ref_matched_mask.sum()
 
-    print(f"\n=== Spatial matching (1m tolerance) ===")
+    print("\n=== Spatial matching (1m tolerance) ===")
     print(f"  Reconstructed matched in reference: {n_matched} / {len(combined)}")
     print(f"  Reference matched in reconstructed: {n_ref_matched} / {len(ref)}")
     print(f"  Extra in reconstructed:             {len(combined) - n_matched}")
@@ -341,7 +341,7 @@ def main() -> None:
 
     # Breakdown matched by source
     if "source" in combined.columns:
-        print(f"\n=== Match rate by source ===")
+        print("\n=== Match rate by source ===")
         for src in ["mcgann", "wotherspoon", "kaiser"]:
             src_mask = combined["source"] == src
             src_matched = (src_mask & matched_mask).sum()
@@ -354,7 +354,7 @@ def main() -> None:
     if all_spatial:
         print(f"\n=== RESULT: PASS -- {len(combined)} observations, all 671 spatially matched ===")
     else:
-        print(f"\n=== RESULT: PARTIAL MATCH ===")
+        print("\n=== RESULT: PARTIAL MATCH ===")
         print(f"  Count match: {len(combined) == len(ref)}")
         print(f"  All spatially matched: {n_matched == len(combined)}")
 
