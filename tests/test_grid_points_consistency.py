@@ -1,116 +1,187 @@
 """
-Test that grid and points pipelines produce consistent Vs30 values.
+Test that grid and points pipelines produce consistent Vs30 values
+across the full NZ domain for all fixed model versions.
 
-Runs the grid pipeline on a small domain, then runs the points pipeline
-at three pixel center coordinates and checks the results match.
+For each test point, a tiny 3x3 grid (300m x 300m at 100m resolution) is
+generated and run through grid_pipeline.  The center pixel is compared
+against the batched points_pipeline result at the same coordinates.
+
+The test is split into two tiers:
+- Fast tier (foster_2019, jaehwi_v1p0): no coastal distance computation,
+  runs in ~4-5 minutes.
+- Slow tier (modified_foster_2019, viktor_cpt_clustering): coastal distance
+  extends to full NZ domain per point, runs in ~25-30 minutes.
 """
 
 import numpy as np
-import rasterio
-from conftest import load_test_config
+import pandas as pd
+import pytest
 from qcore import coordinates
 
-from vs30 import config, constants, pipeline
+from conftest import FIXTURES_DIR, load_fixed_model_config
+from vs30 import constants, gapfill, pipeline
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+POINTS_CSV = FIXTURES_DIR / "consistency_test_points.csv"
+
+# Tolerances for approximate grid/points agreement.
+# The 3x3 grid approach minimises resampling discrepancy (most observations
+# fall outside the tiny grid and use direct source sampling in both paths).
+VS30_RTOL = 0.03
+STDV_RTOL = 0.30
+
+# Half-width for the 3x3 local grid (150m each side of center -> 300m / 100m = 3 pixels).
+LOCAL_GRID_HALF_WIDTH = 150
+
+# Model versions that do NOT use coastal distance (fast tier).
+FAST_VERSIONS = [
+    constants.FixedModelVersion.FOSTER_2019,
+    constants.FixedModelVersion.JAEHWI_V1P0,
+]
+
+# Model versions that DO use coastal distance (slow tier).
+SLOW_VERSIONS = [
+    constants.FixedModelVersion.MODIFIED_FOSTER_2019,
+    constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING,
+]
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def test_grid_and_points_consistency(tmp_path):
-    """Grid and points pipelines should produce the same Vs30 at pixel centers."""
-    config_data = load_test_config("small_independent_only")
+def load_test_points() -> pd.DataFrame:
+    """Load the pre-computed test points CSV."""
+    df = pd.read_csv(POINTS_CSV)
+    assert {"name", "longitude", "latitude", "category"}.issubset(df.columns)
+    return df
 
-    grid_output_dir = tmp_path / "grid_output"
 
-    # Run grid pipeline
-    pipeline.grid_pipeline(
-        grid_config=config.GridConfig.from_dict(config_data),
-        output_dir=grid_output_dir,
-        geology_categorical_csv=config_data["geology_categorical_csv"],
-        terrain_categorical_csv=config_data["terrain_categorical_csv"],
-        clustered_observations_csv=config_data["clustered_observations_csv"],
-        independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(
-            config_data["combination_method"]
-        ),
-        combine_ratio=config_data["combine_ratio"],
-        noisy=config_data["noisy"],
-        do_bayesian_update=config_data["do_bayesian_update"],
+def run_points_pipeline_for_version(
+    cfg: dict, points_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Run points_pipeline once with all test points for a given model config."""
+    return pipeline.points_pipeline(
+        longitudes=points_df["longitude"].values,
+        latitudes=points_df["latitude"].values,
+        geology_categorical_csv=cfg["geology_categorical_csv"],
+        terrain_categorical_csv=cfg["terrain_categorical_csv"],
+        clustered_observations_csv=cfg.get("clustered_observations_csv"),
+        independent_observations_csv=cfg.get("independent_observations_csv"),
+        combination_method=constants.CombinationMethod(cfg["combination_method"]),
+        combine_ratio=cfg.get("combine_ratio"),
+        noisy=cfg["noisy"],
+        do_bayesian_update=cfg["do_bayesian_update"],
         n_proc=1,
-        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
-        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+        geology_corr_fn=cfg.get("geology_corr_fn"),
+        terrain_corr_fn=cfg.get("terrain_corr_fn"),
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
     )
 
-    # Read the combined raster and pick pixel center coordinates
-    combined_raster = grid_output_dir / constants.COMBINED_VS30_FILENAME
-    with rasterio.open(combined_raster) as src:
-        vs30_grid = src.read(1)
-        stdv_grid = src.read(2)
-        transform = src.transform
 
-    # Test at three pixel locations spread across the grid:
-    # center, upper-left quarter, and lower-right quarter
-    nrows, ncols = vs30_grid.shape
-    test_pixels = [
-        (nrows // 2, ncols // 2),
-        (nrows // 4, ncols // 4),
-        (3 * nrows // 4, 3 * ncols // 4),
-    ]
+def run_grid_pipeline_at_point(
+    cfg: dict, easting: float, northing: float
+) -> tuple[float, float]:
+    """Run grid_pipeline on a 3x3 grid centered on (easting, northing).
 
-    # Convert pixel centers to NZTM then WGS84
-    eastings = []
-    northings = []
-    lons = []
-    lats = []
-    for row, col in test_pixels:
-        e, n = rasterio.transform.xy(transform, row, col)
-        eastings.append(e)
-        northings.append(n)
-        wgs = coordinates.nztm_to_wgs_depth(np.array([[n, e]]))
-        lats.append(wgs[0, 0])
-        lons.append(wgs[0, 1])
-
-    # Run points pipeline at all three locations
-    result = pipeline.points_pipeline(
-        longitudes=np.array(lons),
-        latitudes=np.array(lats),
-        geology_categorical_csv=config_data["geology_categorical_csv"],
-        terrain_categorical_csv=config_data["terrain_categorical_csv"],
-        clustered_observations_csv=config_data["clustered_observations_csv"],
-        independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(
-            config_data["combination_method"]
-        ),
-        combine_ratio=config_data["combine_ratio"],
-        noisy=config_data["noisy"],
-        include_intermediate=True,
-        n_proc=1,
-        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
-        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+    Returns the center pixel (row=1, col=1) Vs30 and stdv.
+    """
+    local_config = gapfill.create_local_grid_config(
+        easting, northing, constants.FULL_NZ_GRID_CONFIG, LOCAL_GRID_HALF_WIDTH
     )
 
-    for i, (row, col) in enumerate(test_pixels):
-        grid_vs30_value = vs30_grid[row, col]
-        grid_stdv_value = stdv_grid[row, col]
-        points_vs30_value = result[constants.ObservationColumn.VS30].iloc[i]
-        points_stdv_value = result[constants.COL_COMBINED_STDV].iloc[i]
-        easting, northing = eastings[i], northings[i]
+    result = pipeline.grid_pipeline(
+        grid_config=local_config,
+        output_dir=None,
+        geology_categorical_csv=cfg["geology_categorical_csv"],
+        terrain_categorical_csv=cfg["terrain_categorical_csv"],
+        clustered_observations_csv=cfg.get("clustered_observations_csv"),
+        independent_observations_csv=cfg.get("independent_observations_csv"),
+        combination_method=constants.CombinationMethod(cfg["combination_method"]),
+        combine_ratio=cfg.get("combine_ratio"),
+        noisy=cfg["noisy"],
+        do_bayesian_update=cfg["do_bayesian_update"],
+        n_proc=1,
+        geology_corr_fn=cfg.get("geology_corr_fn"),
+        terrain_corr_fn=cfg.get("terrain_corr_fn"),
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
+    )
 
-        # Small Vs30 differences are expected because the grid pipeline samples
-        # slope/coast from grid-resampled rasters while the points pipeline
-        # samples directly from source data at each observation location.
-        np.testing.assert_allclose(
-            points_vs30_value,
-            grid_vs30_value,
-            rtol=0.03,
-            err_msg=f"Vs30 mismatch at pixel ({row},{col}) ({easting}, {northing}): "
-            f"grid={grid_vs30_value:.2f}, points={points_vs30_value:.2f}",
-        )
+    grid_vs30 = result["combined_vs30"]
+    grid_stdv = result["combined_stdv"]
 
-        # Stdv has a wider tolerance because MVN posterior variance is sensitive
-        # to small differences in how slope/coast data is sampled at observation
-        # locations (grid-resampled rasters vs source data).
-        np.testing.assert_allclose(
-            points_stdv_value,
-            grid_stdv_value,
-            rtol=0.30,
-            err_msg=f"Stdv mismatch at pixel ({row},{col}) ({easting}, {northing}): "
-            f"grid={grid_stdv_value:.2f}, points={points_stdv_value:.2f}",
-        )
+    # Center pixel of the 3x3 grid
+    return float(grid_vs30[1, 1]), float(grid_stdv[1, 1])
+
+
+def _check_consistency_for_version(version: constants.FixedModelVersion):
+    """Core comparison logic shared by fast and slow tiers."""
+    cfg = load_fixed_model_config(version)
+    points_df = load_test_points()
+
+    # Batch points pipeline call
+    points_result = run_points_pipeline_for_version(cfg, points_df)
+
+    # Convert lon/lat to NZTM for grid pipeline calls
+    lats = points_df["latitude"].values
+    lons = points_df["longitude"].values
+    nztm = coordinates.wgs_depth_to_nztm(np.column_stack([lats, lons]))
+    eastings = nztm[:, 1]
+    northings = nztm[:, 0]
+
+    failures = []
+    for i in range(len(points_df)):
+        name = points_df["name"].iloc[i]
+        e, n = eastings[i], northings[i]
+
+        grid_vs30, grid_stdv = run_grid_pipeline_at_point(cfg, e, n)
+
+        pts_vs30 = points_result[constants.ObservationColumn.VS30].iloc[i]
+        pts_stdv = points_result[constants.COL_COMBINED_STDV].iloc[i]
+
+        # Skip nodata points (both pipelines should agree on nodata)
+        if np.isnan(grid_vs30) and np.isnan(pts_vs30):
+            continue
+
+        # Check Vs30
+        if not np.isclose(pts_vs30, grid_vs30, rtol=VS30_RTOL):
+            failures.append(
+                f"  {name}: Vs30 mismatch — "
+                f"grid={grid_vs30:.2f}, points={pts_vs30:.2f}, "
+                f"rdiff={abs(pts_vs30 - grid_vs30) / grid_vs30:.4f}"
+            )
+
+        # Check Stdv
+        if not np.isclose(pts_stdv, grid_stdv, rtol=STDV_RTOL):
+            failures.append(
+                f"  {name}: Stdv mismatch — "
+                f"grid={grid_stdv:.2f}, points={pts_stdv:.2f}, "
+                f"rdiff={abs(pts_stdv - grid_stdv) / grid_stdv:.4f}"
+            )
+
+    if failures:
+        msg = f"\n{version.value}: {len(failures)} failure(s):\n" + "\n".join(failures)
+        pytest.fail(msg)
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("version", FAST_VERSIONS, ids=lambda v: v.value)
+def test_grid_points_consistency_fast(version):
+    """Grid/points consistency for models without coastal distance (~2-4 min)."""
+    _check_consistency_for_version(version)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("version", SLOW_VERSIONS, ids=lambda v: v.value)
+def test_grid_points_consistency_slow(version):
+    """Grid/points consistency for models with coastal distance (~12-15 min each)."""
+    _check_consistency_for_version(version)
