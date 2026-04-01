@@ -25,7 +25,8 @@ def test_classify_nodata_excludes_water_and_offshore():
         geology_ids=np.array([5]),
         locations=onland_location,
     )
-    assert result[0] == True, "On-land nodata pixel with valid GID should be fillable"
+    # result[0] should evaluate to True
+    assert result[0], "On-land nodata pixel with valid GID should be fillable"
 
     # Water pixel (GID=0) -> not fillable
     result = gapfill.classify_nodata(
@@ -33,7 +34,8 @@ def test_classify_nodata_excludes_water_and_offshore():
         geology_ids=np.array([0]),
         locations=onland_location,
     )
-    assert result[0] == False, "Water pixel (GID=0) should not be fillable"
+    # result[0] should evaluate to False
+    assert not result[0], "Water pixel (GID=0) should not be fillable"
 
     # Valid pixel (not NaN) -> not fillable
     result = gapfill.classify_nodata(
@@ -41,7 +43,8 @@ def test_classify_nodata_excludes_water_and_offshore():
         geology_ids=np.array([5]),
         locations=onland_location,
     )
-    assert result[0] == False, "Valid (non-NaN) pixel should not be fillable"
+    # result[0] should evaluate to False
+    assert not result[0], "Valid (non-NaN) pixel should not be fillable"
 
     # Offshore nodata -> not fillable
     result = gapfill.classify_nodata(
@@ -49,7 +52,8 @@ def test_classify_nodata_excludes_water_and_offshore():
         geology_ids=np.array([5]),
         locations=offshore_location,
     )
-    assert result[0] == False, "Offshore nodata pixel should not be fillable"
+    # result[0] should evaluate to False
+    assert not result[0], "Offshore nodata pixel should not be fillable"
 
 
 def test_fill_nodata_grid_nearest_neighbor():
