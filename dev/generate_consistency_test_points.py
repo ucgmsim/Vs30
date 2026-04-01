@@ -30,13 +30,8 @@ N_RANDOM = 25
 
 
 def _snap_to_pixel_center(easting: float, northing: float) -> tuple[float, float]:
-    """Snap an NZTM coordinate to the nearest FULL_NZ_GRID_CONFIG pixel center.
-
-    Pixel centers sit at grid_xmin + (j + 0.5) * dx. The snap logic in
-    gapfill.create_local_grid_config snaps to grid_xmin + k * dx (grid edges).
-    We use the same convention here so that when we later call
-    create_local_grid_config, the center pixel of the 3x3 grid lands exactly
-    on our snapped coordinate.
+    """Snap to the nearest grid node aligned with FULL_NZ_GRID_CONFIG,
+    matching the snap logic in gapfill.create_local_grid_config.
     """
     nz = constants.FULL_NZ_GRID_CONFIG
     snap_e = nz.grid_xmin + round((easting - nz.grid_xmin) / nz.grid_dx) * nz.grid_dx
@@ -138,6 +133,7 @@ def generate_deliberate_points(
 
     # --- Coastal-sensitive geology (GID 4 alluvium, GID 10 flood plain near coast) ---
     coastal_gids = {4: "alluvium_coastal", 10: "flood_plain_coastal"}
+    coast_boundary = coast_union.boundary
     for gid, description in coastal_gids.items():
         # Find a point with this GID that is within 5 km of coast
         nz = constants.FULL_NZ_GRID_CONFIG
@@ -148,7 +144,6 @@ def generate_deliberate_points(
             pt = shapely.Point(e_r, n_r)
             if not shapely.within(pt, coast_union):
                 continue
-            coast_boundary = coast_union.boundary
             if shapely.distance(pt, coast_boundary) > 5000:
                 continue
             if _geology_id_at(e_r, n_r) == gid:
