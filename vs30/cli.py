@@ -177,6 +177,14 @@ def run_points_pipeline(
         Name of longitude column in input CSV.
     lat_column : str, optional
         Name of latitude column in input CSV.
+    geology_corr_fn : Callable or None, optional
+        Correlation function for the geology model.
+    terrain_corr_fn : Callable or None, optional
+        Correlation function for the terrain model.
+    apply_coastal_distance_mod : bool, optional
+        Whether to apply the coastal distance modifier.
+    apply_alluvium_slope_mod : bool, optional
+        Whether to apply the alluvium slope modifier.
 
     Raises
     ------

@@ -87,6 +87,12 @@ def process_geology_at_points(
         Categorical geology model with Vs30 mean and standard deviation per category.
     observations_df : DataFrame
         Observation data with columns: easting, northing, vs30, uncertainty.
+    corr_fn : Callable
+        Correlation function for spatial adjustment.
+    apply_alluvium_slope_mod : bool
+        Whether to apply the alluvium slope modification.
+    apply_coastal_distance_mod : bool
+        Whether to apply the coastal distance modification.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     progress_bar : tqdm, optional
@@ -213,6 +219,8 @@ def process_terrain_at_points(
         Categorical terrain model with Vs30 mean and standard deviation per category.
     observations_df : DataFrame
         Observation data with columns: easting, northing, vs30, uncertainty.
+    corr_fn : Callable
+        Correlation function for spatial adjustment.
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     progress_bar : tqdm, optional
@@ -570,6 +578,8 @@ def run_parallel_spatial_fit(
         Raster data object with vs30, stdv, and coordinate info
     obs_data : ObservationData
         Observation data for spatial adjustment
+    corr_fn : Callable
+        Correlation function for spatial adjustment
     model_type : constants.ModelType
         Model type (ModelType.GEOLOGY or ModelType.TERRAIN)
     max_dist_m : float
