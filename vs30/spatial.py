@@ -362,6 +362,10 @@ def prepare_observation_data(
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_type : constants.ModelType
         Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modification for GID 4 and GID 10.
     output_dir : Path or None, optional
         Output directory for intermediate rasters (slope, coast distance).
         Required for geology models when slope_array and coast_dist_array

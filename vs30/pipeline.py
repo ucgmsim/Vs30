@@ -442,6 +442,12 @@ def compute_spatial_adjustment_on_grid(
         DataFrame with updated categorical Vs30 values.
     model_type : ModelType
         Model type: either GEOLOGY or TERRAIN.
+    corr_fn : Callable
+        Correlation function for spatial adjustment.
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modification for GID 4 and GID 10.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     n_proc : int, optional
@@ -798,6 +804,12 @@ def compute_model_grid(
         Path to CSV file with clustered observations (e.g., CPT data).
     independent_observations_csv : Path, optional
         Path to CSV file with independent observations (e.g., measured filtered).
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modification for GID 4 and GID 10.
+    corr_fn : Callable, optional
+        Correlation function for spatial adjustment.
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical model values.
     mvn : bool, optional
@@ -1030,6 +1042,14 @@ def grid_pipeline(
         or RATIO.
     combine_ratio : float, optional
         Geology-to-terrain weight ratio. Required when combination_method is RATIO.
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modification for GID 4 and GID 10.
+    geology_corr_fn : Callable, optional
+        Correlation function for geology spatial adjustment.
+    terrain_corr_fn : Callable, optional
+        Correlation function for terrain spatial adjustment.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     mvn : bool, optional
@@ -1232,6 +1252,8 @@ def points_pipeline(
         Array of longitude values (WGS84).
     latitudes : ndarray
         Array of latitude values (WGS84).
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium).
     model_type : ModelType, optional
         Which model(s) to run: GEOLOGY, TERRAIN, or COMBINED (default).
     geology_categorical_csv : Path
@@ -1258,6 +1280,10 @@ def points_pipeline(
         Include intermediate values (geology/terrain separately) in output.
     n_proc : int, optional
         Number of parallel processes. Use -1 for all cores.
+    geology_corr_fn : Callable, optional
+        Correlation function for geology spatial adjustment.
+    terrain_corr_fn : Callable, optional
+        Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool, optional
         Whether to apply coastal distance modification for GID 4 and GID 10.
     gapfill_grid_config : GridConfig, optional
