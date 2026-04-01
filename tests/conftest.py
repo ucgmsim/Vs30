@@ -131,15 +131,13 @@ def load_test_config(scenario: str) -> dict:
     with open(config_file) as f:
         config_data = yaml.safe_load(f)
 
-    for key in constants.CSV_PATH_KEYS:
+    for key, subdir in constants.RESOURCE_SUBDIRS.items():
         if config_data[key]:
-            if key in constants.OBSERVATION_CSV_KEYS:
+            if subdir == "observations":
                 config_data[key] = FIXTURES_DIR / config_data[key]
             else:
                 config_data[key] = (
-                    constants.RESOURCE_PATH
-                    / constants.RESOURCE_SUBDIRS[key]
-                    / config_data[key]
+                    constants.RESOURCE_PATH / subdir / config_data[key]
                 )
 
     return config_data

@@ -139,7 +139,7 @@ def process_geology_at_points(
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[
-            [constants.COL_EASTING, constants.COL_NORTHING]
+            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
         ].values
         obs_geol_ids = category.assign_to_category_geology(obs_locs)
         obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
@@ -167,10 +167,10 @@ def process_geology_at_points(
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
             obs_locations=obs_locs,
-            obs_vs30=observations_df[constants.COL_VS30].values,
+            obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
-            obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
+            obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
@@ -242,7 +242,7 @@ def process_terrain_at_points(
     # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[
-            [constants.COL_EASTING, constants.COL_NORTHING]
+            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
         ].values
         obs_terr_ids = category.assign_to_category_terrain(obs_locs)
         obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, model_df)
@@ -251,10 +251,10 @@ def process_terrain_at_points(
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,
             obs_locations=obs_locs,
-            obs_vs30=observations_df[constants.COL_VS30].values,
+            obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
             obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
             obs_model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
-            obs_uncertainty=observations_df[constants.COL_UNCERTAINTY].values,
+            obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
@@ -401,13 +401,13 @@ def process_locations_chunk(
             config.combination_method,
             config.combine_ratio,
         )
-        result[constants.COL_VS30] = combined_vs30
+        result[constants.ObservationColumn.VS30] = combined_vs30
         result[constants.COL_COMBINED_STDV] = combined_stdv
     elif run_geology:
-        result[constants.COL_VS30] = geol_mvn_vs30
+        result[constants.ObservationColumn.VS30] = geol_mvn_vs30
         result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
     elif run_terrain:
-        result[constants.COL_VS30] = terr_mvn_vs30
+        result[constants.ObservationColumn.VS30] = terr_mvn_vs30
         result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
     return chunk_id, pd.DataFrame(result)
@@ -440,12 +440,12 @@ def process_pixels_chunk(
     # Reconstruct ObservationData from dict (dataclasses can't always be pickled cleanly)
     obs_data = spatial.ObservationData(
         locations=obs_data_dict[constants.KEY_LOCATIONS],
-        vs30=obs_data_dict[constants.COL_VS30],
+        vs30=obs_data_dict[constants.ObservationColumn.VS30],
         model_vs30=obs_data_dict[constants.KEY_MODEL_VS30],
         model_stdv=obs_data_dict[constants.KEY_MODEL_STDV],
         residuals=obs_data_dict[constants.KEY_RESIDUALS],
         omega=obs_data_dict[constants.KEY_OMEGA],
-        uncertainty=obs_data_dict[constants.COL_UNCERTAINTY],
+        uncertainty=obs_data_dict[constants.ObservationColumn.UNCERTAINTY],
     )
 
     updates = []
@@ -454,7 +454,7 @@ def process_pixels_chunk(
         pixel_info = pixel_data_dict[idx]
         pixel = spatial.PixelData(
             location=pixel_info[constants.KEY_LOCATION],
-            vs30=pixel_info[constants.COL_VS30],
+            vs30=pixel_info[constants.ObservationColumn.VS30],
             stdv=pixel_info[constants.KEY_STDV],
             index=pixel_info[constants.KEY_INDEX],
         )
@@ -597,7 +597,7 @@ def run_parallel_spatial_fit(
         if valid_idx < len(grid_locs):
             pixel_data_dict[i] = {
                 constants.KEY_LOCATION: grid_locs[valid_idx],
-                constants.COL_VS30: float(raster_data.vs30.flat[flat_idx]),
+                constants.ObservationColumn.VS30: float(raster_data.vs30.flat[flat_idx]),
                 constants.KEY_STDV: float(raster_data.stdv.flat[flat_idx]),
                 constants.KEY_INDEX: int(flat_idx),
             }
@@ -605,12 +605,12 @@ def run_parallel_spatial_fit(
     # Convert ObservationData to dict for pickling
     obs_data_dict = {
         constants.KEY_LOCATIONS: obs_data.locations,
-        constants.COL_VS30: obs_data.vs30,
+        constants.ObservationColumn.VS30: obs_data.vs30,
         constants.KEY_MODEL_VS30: obs_data.model_vs30,
         constants.KEY_MODEL_STDV: obs_data.model_stdv,
         constants.KEY_RESIDUALS: obs_data.residuals,
         constants.KEY_OMEGA: obs_data.omega,
-        constants.COL_UNCERTAINTY: obs_data.uncertainty,
+        constants.ObservationColumn.UNCERTAINTY: obs_data.uncertainty,
     }
 
     # Config params (pre-compute corr_zero once for all workers)

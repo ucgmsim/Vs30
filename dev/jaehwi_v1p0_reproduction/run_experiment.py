@@ -4,15 +4,15 @@ Each experiment varies the pipeline configuration (categorical CSVs, Bayesian
 update, combination method, coastal modification) and compares the output
 subgrid against Jaehwi's reference V1.0_26Mar.tif.
 """
-import sys
+
 import subprocess
+import sys
 from pathlib import Path
 
 # Add vs30 package to path
 sys.path.insert(0, str(Path("/home/arr65/src/vs30")))
 
-from vs30 import pipeline, constants
-from vs30 import config as config_module
+from vs30 import config, constants, pipeline
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -24,8 +24,14 @@ REFERENCE_SUBGRID = EXPERIMENT_DIR / "reference_subgrid.tif"
 
 CATEGORICAL_DIR = VS30_PKG / "resources" / "categorical_vs30_mean_and_stddev"
 OBSERVATIONS_DIR = VS30_PKG / "resources" / "observations"
-FOSTER_GEOL_POST = CATEGORICAL_DIR / "geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
-FOSTER_TERR_POST = CATEGORICAL_DIR / "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+FOSTER_GEOL_POST = (
+    CATEGORICAL_DIR
+    / "geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+)
+FOSTER_TERR_POST = (
+    CATEGORICAL_DIR
+    / "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+)
 GEOL_PRIOR = CATEGORICAL_DIR / "geology_model_prior_mean_and_standard_deviation.csv"
 TERR_PRIOR = CATEGORICAL_DIR / "terrain_model_prior_mean_and_standard_deviation.csv"
 CURRENT_OBS = OBSERVATIONS_DIR / "jaehwi_v1p0_independent_observations.csv"
@@ -35,10 +41,13 @@ COMPARE_SCRIPT = REPO / "dev" / "compare_rasters.py"
 # ---------------------------------------------------------------------------
 # Subgrid (Wellington region)
 # ---------------------------------------------------------------------------
-SUBGRID = config_module.GridConfig(
-    grid_xmin=1555050, grid_xmax=1610050,
-    grid_ymin=5145050, grid_ymax=5195050,
-    grid_dx=100, grid_dy=100,
+SUBGRID = config.GridConfig(
+    grid_xmin=1555050,
+    grid_xmax=1610050,
+    grid_ymin=5145050,
+    grid_ymax=5195050,
+    grid_dx=100,
+    grid_dy=100,
 )
 
 # ---------------------------------------------------------------------------
@@ -110,9 +119,9 @@ def run_experiment(name, params):
     output_dir = EXPERIMENT_DIR / "experiments" / name
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running experiment: {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for k, v in params.items():
         print(f"  {k}: {v}")
 
@@ -139,8 +148,13 @@ def run_experiment(name, params):
 
     print(f"\nComparing {combined_tif.name} to reference_subgrid.tif...")
     subprocess.run(
-        [sys.executable, str(COMPARE_SCRIPT), "stats",
-         str(REFERENCE_SUBGRID), str(combined_tif)],
+        [
+            sys.executable,
+            str(COMPARE_SCRIPT),
+            "stats",
+            str(REFERENCE_SUBGRID),
+            str(combined_tif),
+        ],
         check=True,
     )
 
@@ -150,11 +164,14 @@ def run_experiment(name, params):
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(
         description="Run Jaehwi v1p0 reproduction experiments",
     )
     parser.add_argument(
-        "experiments", nargs="*", default=list(EXPERIMENTS.keys()),
+        "experiments",
+        nargs="*",
+        default=list(EXPERIMENTS.keys()),
         help="Names of experiments to run (default: all)",
     )
     args = parser.parse_args()

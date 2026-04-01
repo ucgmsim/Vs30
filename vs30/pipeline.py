@@ -14,14 +14,9 @@ import rasterio
 from qcore import coordinates
 from tqdm import tqdm
 
-from vs30 import category, constants, gapfill, parallel, raster, spatial, utils
-from vs30 import config as config_module
+from vs30 import category, config, constants, gapfill, parallel, raster, spatial, utils
 
 logger = logging.getLogger(__name__)
-
-# Default correlation length parameters (meters) from the Foster 2019 model.
-_DEFAULT_GEOLOGY_PHI = 1407
-_DEFAULT_TERRAIN_PHI = 993
 
 
 def _default_correlation_functions(
@@ -45,11 +40,11 @@ def _default_correlation_functions(
     """
     if geology_corr_fn is None:
         geology_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=_DEFAULT_GEOLOGY_PHI
+            utils.exponential_correlation_function, phi=constants.DEFAULT_GEOLOGY_PHI
         )
     if terrain_corr_fn is None:
         terrain_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=_DEFAULT_TERRAIN_PHI
+            utils.exponential_correlation_function, phi=constants.DEFAULT_TERRAIN_PHI
         )
     return geology_corr_fn, terrain_corr_fn
 
@@ -83,7 +78,7 @@ def _collect_observation_csvs(
             [pd.read_csv(csv, comment="#") for csv in csvs],
             ignore_index=True,
         )
-    return pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
+    return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
 
 
 # ============================================================================
@@ -185,7 +180,7 @@ def compute_categorical_vs30_updates(
 
         utils.validate_csv_columns(
             clustered_observations_df,
-            constants.REQUIRED_OBSERVATION_COLUMNS_BASIC,
+            constants.ObservationColumn.REQUIRED,
             "Clustered observations CSV",
         )
 
@@ -193,7 +188,7 @@ def compute_categorical_vs30_updates(
 
         # Assign category IDs
         obs_locs = clustered_observations_df[
-            [constants.COL_EASTING, constants.COL_NORTHING]
+            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
         ].values
         if model_type == constants.ModelType.GEOLOGY:
             model_ids = category.assign_to_category_geology(obs_locs)
@@ -239,7 +234,7 @@ def compute_categorical_vs30_updates(
 
         utils.validate_csv_columns(
             independent_observations_df,
-            constants.REQUIRED_OBSERVATION_COLUMNS,
+            constants.ObservationColumn.REQUIRED,
             "Independent observations CSV",
         )
 
@@ -249,7 +244,7 @@ def compute_categorical_vs30_updates(
 
         # Assign category IDs
         obs_locs = independent_observations_df[
-            [constants.COL_EASTING, constants.COL_NORTHING]
+            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
         ].values
         if model_type == constants.ModelType.GEOLOGY:
             model_ids = category.assign_to_category_geology(obs_locs)
@@ -279,7 +274,7 @@ def compute_categorical_vs30_updates(
 
 
 def create_initial_vs30_arrays(
-    grid_config: config_module.GridConfig,
+    grid_config: config.GridConfig,
     model_type: constants.ModelType,
     model_values_df: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
@@ -763,7 +758,7 @@ def write_id_raster(
 
 def compute_model_grid(
     model_type: constants.ModelType,
-    grid_config: config_module.GridConfig,
+    grid_config: config.GridConfig,
     apply_alluvium_slope_mod: bool,
     categorical_model_csv: Path | None = None,
     clustered_observations_csv: Path | None = None,
@@ -977,7 +972,7 @@ def compute_model_grid(
 
 
 def grid_pipeline(
-    grid_config: config_module.GridConfig,
+    grid_config: config.GridConfig,
     apply_alluvium_slope_mod: bool,
     output_dir: Path | None = None,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
@@ -1216,7 +1211,7 @@ def points_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
-    gapfill_grid_config: config_module.GridConfig = constants.FULL_NZ_GRID_CONFIG,
+    gapfill_grid_config: config.GridConfig = constants.FULL_NZ_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -1297,7 +1292,7 @@ def points_pipeline(
             clustered_observations_csv, independent_observations_csv
         )
     else:
-        observations_df = pd.DataFrame(columns=constants.REQUIRED_OBSERVATION_COLUMNS)
+        observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
@@ -1382,8 +1377,8 @@ def points_pipeline(
         )
 
         # Add coordinate columns at the front
-        result_df.insert(0, constants.COL_EASTING, points[:, 0])
-        result_df.insert(1, constants.COL_NORTHING, points[:, 1])
+        result_df.insert(0, constants.ObservationColumn.EASTING, points[:, 0])
+        result_df.insert(1, constants.ObservationColumn.NORTHING, points[:, 1])
 
         logger.info(f"  Total locations: {len(result_df)}")
 
@@ -1392,8 +1387,8 @@ def points_pipeline(
         # Sequential Processing Path
         # ================================================================
         result = {}
-        result[constants.COL_EASTING] = points[:, 0]
-        result[constants.COL_NORTHING] = points[:, 1]
+        result[constants.ObservationColumn.EASTING] = points[:, 0]
+        result[constants.ObservationColumn.NORTHING] = points[:, 1]
 
         # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
         if run_geology:
@@ -1466,13 +1461,13 @@ def points_pipeline(
                 combination_method,
                 combine_ratio,
             )
-            result[constants.COL_VS30] = combined_vs30
+            result[constants.ObservationColumn.VS30] = combined_vs30
             result[constants.COL_COMBINED_STDV] = combined_stdv
         elif run_geology:
-            result[constants.COL_VS30] = geol_mvn_vs30
+            result[constants.ObservationColumn.VS30] = geol_mvn_vs30
             result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
         elif run_terrain:
-            result[constants.COL_VS30] = terr_mvn_vs30
+            result[constants.ObservationColumn.VS30] = terr_mvn_vs30
             result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
         logger.info(f"  Total locations: {len(points)}")
@@ -1482,7 +1477,7 @@ def points_pipeline(
     # Gap-fill: fill on-land nodata points
     # ================================================================
     if model_type == constants.ModelType.COMBINED:
-        combined_vs30 = result_df[constants.COL_VS30].values
+        combined_vs30 = result_df[constants.ObservationColumn.VS30].values
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
         # Get geology IDs for query points (redundant sample, avoids
@@ -1560,7 +1555,7 @@ def points_pipeline(
                     )
 
                 if not np.isnan(fill_vs30):
-                    result_df.at[idx, constants.COL_VS30] = fill_vs30
+                    result_df.at[idx, constants.ObservationColumn.VS30] = fill_vs30
                     result_df.at[idx, constants.COL_COMBINED_STDV] = fill_stdv
 
     return result_df

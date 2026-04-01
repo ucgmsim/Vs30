@@ -317,14 +317,14 @@ def validate_observations(observations: pd.DataFrame) -> None:
     """
     missing = [
         col
-        for col in constants.REQUIRED_OBSERVATION_COLUMNS
+        for col in constants.ObservationColumn.REQUIRED
         if col not in observations.columns
     ]
     if missing:
         raise ValueError(f"Missing required columns: {missing}")
-    if not np.all(observations[constants.COL_VS30] > 0):
+    if not np.all(observations[constants.ObservationColumn.VS30] > 0):
         raise ValueError("Vs30 must be positive")
-    if not np.all(observations[constants.COL_UNCERTAINTY] > 0):
+    if not np.all(observations[constants.ObservationColumn.UNCERTAINTY] > 0):
         raise ValueError("Uncertainty must be positive")
 
 
@@ -397,7 +397,7 @@ def prepare_observation_data(
         )
 
     # Get observation locations
-    obs_locs = observations[[constants.COL_EASTING, constants.COL_NORTHING]].values
+    obs_locs = observations[[constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]].values
 
     # Interpolate model values at observation locations
     if model_type == constants.ModelType.GEOLOGY:
@@ -426,10 +426,10 @@ def prepare_observation_data(
     # Filter out observations where model values are NaN/NoData
     valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
     obs_locs = obs_locs[valid_obs_mask]
-    vs30_obs = observations[constants.COL_VS30].values[valid_obs_mask]
+    vs30_obs = observations[constants.ObservationColumn.VS30].values[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
     model_stdv = model_stdv[valid_obs_mask]
-    uncertainty = observations[constants.COL_UNCERTAINTY].values[valid_obs_mask]
+    uncertainty = observations[constants.ObservationColumn.UNCERTAINTY].values[valid_obs_mask]
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points

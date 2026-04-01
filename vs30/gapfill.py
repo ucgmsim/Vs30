@@ -18,8 +18,7 @@ import numpy as np
 import shapely
 from scipy.spatial import cKDTree
 
-from vs30 import config as config_module
-from vs30 import constants, raster
+from vs30 import config, constants, raster
 
 logger = logging.getLogger(__name__)
 
@@ -169,9 +168,9 @@ def fill_nodata_grid(
 def create_local_grid_config(
     easting: float,
     northing: float,
-    gapfill_grid_config: config_module.GridConfig,
+    gapfill_grid_config: config.GridConfig,
     half_width: int,
-) -> config_module.GridConfig:
+) -> config.GridConfig:
     """
     Create a local grid config for gap-filling a single point.
 
@@ -209,7 +208,7 @@ def create_local_grid_config(
         + round((northing - gapfill_grid_config.grid_ymin) / dy) * dy
     )
 
-    return config_module.GridConfig(
+    return config.GridConfig(
         grid_xmin=snap_e - half_width,
         grid_xmax=snap_e + half_width,
         grid_ymin=snap_n - half_width,

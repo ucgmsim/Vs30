@@ -7,12 +7,11 @@ at three pixel center coordinates and checks the results match.
 
 import numpy as np
 import rasterio
+from conftest import load_test_config
 from qcore import coordinates
 
-from conftest import load_test_config
+from vs30 import config, constants, pipeline
 
-from vs30 import constants, pipeline
-from vs30 import config as config_module
 
 def test_grid_and_points_consistency(tmp_path):
     """Grid and points pipelines should produce the same Vs30 at pixel centers."""
@@ -22,13 +21,15 @@ def test_grid_and_points_consistency(tmp_path):
 
     # Run grid pipeline
     pipeline.grid_pipeline(
-        grid_config=config_module.GridConfig.from_dict(config_data),
+        grid_config=config.GridConfig.from_dict(config_data),
         output_dir=grid_output_dir,
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combination_method=constants.CombinationMethod(
+            config_data["combination_method"]
+        ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
@@ -74,7 +75,9 @@ def test_grid_and_points_consistency(tmp_path):
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
         independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(config_data["combination_method"]),
+        combination_method=constants.CombinationMethod(
+            config_data["combination_method"]
+        ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
         include_intermediate=True,
@@ -86,7 +89,7 @@ def test_grid_and_points_consistency(tmp_path):
     for i, (row, col) in enumerate(test_pixels):
         grid_vs30_value = vs30_grid[row, col]
         grid_stdv_value = stdv_grid[row, col]
-        points_vs30_value = result[constants.COL_VS30].iloc[i]
+        points_vs30_value = result[constants.ObservationColumn.VS30].iloc[i]
         points_stdv_value = result[constants.COL_COMBINED_STDV].iloc[i]
         easting, northing = eastings[i], northings[i]
 
