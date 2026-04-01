@@ -106,3 +106,8 @@ exclude = ["dev/", "build/", "VsViewer/", "tests/"]
 # Typer uses `= ...` (Ellipsis) for required CLI parameters, which is valid
 # at runtime but not understood by type checkers.
 invalid-parameter-default = "ignore"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
