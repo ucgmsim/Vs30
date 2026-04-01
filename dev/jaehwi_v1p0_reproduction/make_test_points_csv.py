@@ -1,5 +1,4 @@
 """Create a lon/lat CSV of 200 sample points for running through Jaehwi's code."""
-import sys
 from pathlib import Path
 
 import numpy as np

@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import rasterio
 from pyproj import Transformer
 
@@ -216,7 +215,7 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
 
     # Stdv comparison
     stdv_diff = np.abs(our_stdv - ref_stdv)
-    print(f"\n  --- StdDev Comparison ---")
+    print("\n  --- StdDev Comparison ---")
     print(f"  Mean abs diff:    {stdv_diff.mean():.4f}")
     print(f"  Max abs diff:     {stdv_diff.max():.4f}")
 
@@ -225,7 +224,7 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
     n_close = int((abs_diff < 5.0).sum())
     n_moderate = int(((abs_diff >= 5.0) & (abs_diff < 20.0)).sum())
     n_large = int((abs_diff >= 20.0).sum())
-    print(f"\n  --- Error distribution ---")
+    print("\n  --- Error distribution ---")
     print(f"  <1 m/s:    {n_exact:4d} ({100*n_exact/len(ref_vs30):.1f}%)")
     print(f"  <5 m/s:    {n_close:4d} ({100*n_close/len(ref_vs30):.1f}%)")
     print(f"  5-20 m/s:  {n_moderate:4d} ({100*n_moderate/len(ref_vs30):.1f}%)")
@@ -235,7 +234,7 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
     if "geology_mvn_vs30" in result_df.columns:
         geol_diff = np.abs(result_df["geology_mvn_vs30"].values - ref_vs30)
         terr_diff = np.abs(result_df["terrain_mvn_vs30"].values - ref_vs30)
-        print(f"\n  --- Intermediate (mean abs diff to reference) ---")
+        print("\n  --- Intermediate (mean abs diff to reference) ---")
         print(f"  Geology MVN only:  {geol_diff.mean():.2f} m/s")
         print(f"  Terrain MVN only:  {terr_diff.mean():.2f} m/s")
 

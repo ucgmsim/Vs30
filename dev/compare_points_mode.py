@@ -209,7 +209,7 @@ def print_comparison(ours: pd.DataFrame, jaehwi: pd.DataFrame):
     ]
 
     print(f"\n{'='*70}")
-    print(f"  Intermediate value comparison")
+    print("  Intermediate value comparison")
     print(f"{'='*70}")
     print(f"  {'Stage':<30} {'Mean abs diff':>15} {'Max abs diff':>15}")
     print(f"  {'-'*30} {'-'*15} {'-'*15}")
@@ -237,11 +237,11 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
-        print(f"\nRunning Jaehwi's code (points mode, nproc=1)...")
+        print("\nRunning Jaehwi's code (points mode, nproc=1)...")
         jaehwi_df = run_jaehwi_points(points, tmpdir)
         print(f"  Got {len(jaehwi_df)} results")
 
-        print(f"\nRunning our pipeline (points mode)...")
+        print("\nRunning our pipeline (points mode)...")
         our_df = run_our_pipeline(points)
         print(f"  Got {len(our_df)} results")
 

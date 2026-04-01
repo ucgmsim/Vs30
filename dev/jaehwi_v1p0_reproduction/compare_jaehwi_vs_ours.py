@@ -163,9 +163,9 @@ if __name__ == "__main__":
         if j_col in jdf.columns:
             print(f"\n  --- {desc} ({j_col}) ---")
             if f_col in our_foster.columns:
-                compare_columns(f"Jaehwi vs Our Foster", jdf[j_col].values, our_foster[f_col].values)
+                compare_columns("Jaehwi vs Our Foster", jdf[j_col].values, our_foster[f_col].values)
             if b_col in our_bayesian.columns:
-                compare_columns(f"Jaehwi vs Our Bayesian", jdf[j_col].values, our_bayesian[b_col].values)
+                compare_columns("Jaehwi vs Our Bayesian", jdf[j_col].values, our_bayesian[b_col].values)
         else:
             print(f"  Column '{j_col}' not in Jaehwi output — skipping")
 
@@ -179,10 +179,10 @@ if __name__ == "__main__":
         if j_col in jdf.columns:
             print(f"\n  --- {desc} ---")
             if f_col in our_foster.columns:
-                compare_columns(f"Jaehwi vs Our Foster", jdf[j_col].values, our_foster[f_col].values)
+                compare_columns("Jaehwi vs Our Foster", jdf[j_col].values, our_foster[f_col].values)
             if f_col in our_bayesian.columns:
-                compare_columns(f"Jaehwi vs Our Bayesian", jdf[j_col].values, our_bayesian[f_col].values)
-            compare_columns(f"Jaehwi vs Reference", jdf[j_col].values, ref_vs30 if "vs30" in j_col else ref_stdv)
+                compare_columns("Jaehwi vs Our Bayesian", jdf[j_col].values, our_bayesian[f_col].values)
+            compare_columns("Jaehwi vs Reference", jdf[j_col].values, ref_vs30 if "vs30" in j_col else ref_stdv)
 
     # === Part 5: Per-category breakdown ===
     print("\n" + "=" * 90)
