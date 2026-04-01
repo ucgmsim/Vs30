@@ -148,6 +148,15 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
         if np.isnan(grid_vs30) and np.isnan(pts_vs30):
             continue
 
+        # Catch asymmetric NaN (one pipeline returns data, the other doesn't)
+        if np.isnan(grid_vs30) != np.isnan(pts_vs30):
+            failures.append(
+                f"  {name}: NaN disagreement — "
+                f"grid={'nan' if np.isnan(grid_vs30) else f'{grid_vs30:.2f}'}, "
+                f"points={'nan' if np.isnan(pts_vs30) else f'{pts_vs30:.2f}'}"
+            )
+            continue
+
         # Check Vs30
         if not np.isclose(pts_vs30, grid_vs30, rtol=VS30_RTOL):
             failures.append(
@@ -176,7 +185,7 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
 
 @pytest.mark.parametrize("version", FAST_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_fast(version):
-    """Grid/points consistency for models without coastal distance (~2-4 min)."""
+    """Grid/points consistency for models without coastal distance (~4-5 min total)."""
     _check_consistency_for_version(version)
 
 
