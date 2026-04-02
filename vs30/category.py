@@ -219,10 +219,10 @@ def update_with_independent_data(
     )
     updated_categorical_model_df[constants.COL_ENFORCED_MIN_SIGMA] = constants.MIN_SIGMA
     updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = (
-        updated_categorical_model_df[constants.COL_PRIOR_MEAN]
+        updated_categorical_model_df[constants.COL_PRIOR_MEAN].astype(float)
     )
     updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = (
-        updated_categorical_model_df[constants.COL_PRIOR_STDV]
+        updated_categorical_model_df[constants.COL_PRIOR_STDV].astype(float)
     )
     updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = (
         constants.N_PRIOR
