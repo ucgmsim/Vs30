@@ -16,7 +16,7 @@ import logging
 import geopandas as gpd
 import numpy as np
 import shapely
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 from vs30 import config, constants, raster
 
@@ -92,7 +92,7 @@ def fill_nodata_grid(
     Fill nodata gaps in a combined VS30 grid using nearest-neighbor.
 
     Derives pixel center locations from the rasterio profile, identifies
-    fillable pixels via classify_nodata, builds a cKDTree from all valid
+    fillable pixels via classify_nodata, builds a KDTree from all valid
     (non-NaN) pixel coordinates, and copies both vs30 and stdv values from
     the nearest valid donor pixel.
 
@@ -147,8 +147,8 @@ def fill_nodata_grid(
         )
         return vs30.copy(), stdv.copy()
 
-    # Nearest-neighbor fill using cKDTree
-    tree = cKDTree(locations[valid_mask])
+    # Nearest-neighbor fill using KDTree
+    tree = KDTree(locations[valid_mask])
     _, nn_indices = tree.query(locations[fillable_mask])
 
     filled_vs30 = vs30.copy()
