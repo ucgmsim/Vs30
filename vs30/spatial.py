@@ -394,14 +394,20 @@ def prepare_observation_data(
     """
     # Validate inputs for geology models
     has_in_memory_arrays = slope_array is not None and coast_dist_array is not None
-    if model_type == constants.ModelType.GEOLOGY and not has_in_memory_arrays and output_dir is None:
+    if (
+        model_type == constants.ModelType.GEOLOGY
+        and not has_in_memory_arrays
+        and output_dir is None
+    ):
         raise ValueError(
             "For geology models, either provide both slope_array and "
             "coast_dist_array, or provide output_dir for file-based access."
         )
 
     # Get observation locations
-    obs_locs = observations[[constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]].values
+    obs_locs = observations[
+        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
+    ].values
 
     # Interpolate model values at observation locations
     if model_type == constants.ModelType.GEOLOGY:
@@ -433,12 +439,18 @@ def prepare_observation_data(
     vs30_obs = observations[constants.ObservationColumn.VS30].values[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
     model_stdv = model_stdv[valid_obs_mask]
-    uncertainty = observations[constants.ObservationColumn.UNCERTAINTY].values[valid_obs_mask]
+    uncertainty = observations[constants.ObservationColumn.UNCERTAINTY].values[
+        valid_obs_mask
+    ]
 
     # Calculate log residuals
     # For geology, we must apply hybrid modifications to model values at observation points
     if model_type == constants.ModelType.GEOLOGY:
         if has_in_memory_arrays:
+            if slope_array is None or coast_dist_array is None:
+                raise ValueError(
+                    "slope_array and coast_dist_array must not be None when has_in_memory_arrays is True."
+                )
             # Convert observation coordinates to grid pixel indices
             rows, cols = rasterio.transform.rowcol(
                 raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
@@ -473,11 +485,15 @@ def prepare_observation_data(
                 slope_obs[~within_grid] = raster.sample_slope_at_points(
                     outside_grid_points
                 )
-                coast_obs[~within_grid] = (
-                    raster.compute_coastal_distance_at_points(outside_grid_points)
+                coast_obs[~within_grid] = raster.compute_coastal_distance_at_points(
+                    outside_grid_points
                 )
         else:
             # File-based path: read slope and coast distance from rasters
+            if output_dir is None:
+                raise ValueError(
+                    "output_dir must not be None for file-based slope and coastal distance access."
+                )
             slope_path = output_dir / constants.SLOPE_RASTER_FILENAME
             coast_path = output_dir / constants.COAST_DISTANCE_RASTER_FILENAME
 
@@ -825,7 +841,12 @@ def compute_spatial_adjustment_for_pixel(
         Update result, or None if pixel should be skipped.
     """
     # Handle NaN/NoData/invalid pixels
-    if np.isnan(pixel.vs30) or np.isnan(pixel.stdv) or pixel.vs30 <= 0 or pixel.stdv <= 0:
+    if (
+        np.isnan(pixel.vs30)
+        or np.isnan(pixel.stdv)
+        or pixel.vs30 <= 0
+        or pixel.stdv <= 0
+    ):
         return None
 
     # Correlation at zero distance is slightly less than 1.0 due to the
@@ -971,6 +992,7 @@ def find_affected_pixels(
         actual_n_proc = min(n_proc, n_chunks)
         logger.info(f"Using {actual_n_proc} parallel workers")
         from vs30 import parallel
+
         with parallel.spawn_context.Pool(processes=actual_n_proc) as pool:
             results = list(
                 tqdm(

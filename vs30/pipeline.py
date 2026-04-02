@@ -1428,6 +1428,10 @@ def points_pipeline(
 
         # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
         if run_geology:
+            if geol_model_df is None:
+                raise ValueError(
+                    "geol_model_df must not be None when running geology model."
+                )
             with tqdm(
                 total=len(points), desc="Geology: spatial adjustment", unit="point"
             ) as pbar:
@@ -1461,6 +1465,10 @@ def points_pipeline(
 
         # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
         if run_terrain:
+            if terr_model_df is None:
+                raise ValueError(
+                    "terr_model_df must not be None when running terrain model."
+                )
             with tqdm(
                 total=len(points), desc="Terrain: spatial adjustment", unit="point"
             ) as pbar:
@@ -1568,6 +1576,17 @@ def points_pipeline(
                     local_profile = local_result["profile"]
                     local_vs30 = local_result["combined_vs30"]
                     local_stdv = local_result["combined_stdv"]
+
+                    if local_profile is None:
+                        raise ValueError(
+                            "grid_pipeline returned a None profile for local gap-fill grid."
+                        )
+                    if not isinstance(local_vs30, np.ndarray) or not isinstance(
+                        local_stdv, np.ndarray
+                    ):
+                        raise ValueError(
+                            "grid_pipeline returned Non-array combined_vs30/combined_stdv for local gap-fill grid."
+                        )
 
                     row, col = rasterio.transform.rowcol(
                         local_profile["transform"], e, n
