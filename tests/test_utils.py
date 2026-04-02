@@ -8,6 +8,7 @@ Tests cover:
 import pickle
 
 import numpy as np
+import pytest
 
 from vs30 import constants, utils
 from vs30.cli import resolve_correlation_function
@@ -40,7 +41,7 @@ class TestCombineVs30Models:
         # Geometric mean of 200 and 400 is sqrt(200*400) ≈ 282.84
         # Arithmetic mean would be 300
         expected_geometric = np.sqrt(200.0 * 400.0)
-        assert np.isclose(combined_vs30[0], expected_geometric, rtol=0.01)
+        assert combined_vs30[0] == pytest.approx(expected_geometric, rel=0.01)
         assert combined_vs30[0] < 300.0  # Must be less than arithmetic mean
 
     def test_ratio_2_gives_more_weight_to_geology(self):
@@ -67,7 +68,7 @@ class TestCombineVs30Models:
         assert combined_vs30[0] > 200.0  # Above geology
         # More specifically, check against expected value
         expected = np.exp((2 / 3) * np.log(200.0) + (1 / 3) * np.log(400.0))
-        assert np.isclose(combined_vs30[0], expected, rtol=0.01)
+        assert combined_vs30[0] == pytest.approx(expected, rel=0.01)
 
     def test_stdv_weighting_lower_stdv_gets_more_weight(self):
         """Test that stdv weighting gives more weight to model with lower stdv."""
@@ -106,7 +107,7 @@ class TestCombineVs30Models:
 
         # Equal stdv means equal weight → geometric mean
         expected_geometric = np.sqrt(200.0 * 400.0)
-        assert np.isclose(combined_vs30[0], expected_geometric, rtol=0.01)
+        assert combined_vs30[0] == pytest.approx(expected_geometric, rel=0.01)
 
     def test_combined_stdv_formula(self):
         """Test that combined stdv uses mixture of log-normals formula."""
@@ -133,7 +134,7 @@ class TestCombineVs30Models:
             0.5 * ((log_g - log_comb) ** 2 + 0.3**2)
             + 0.5 * ((log_t - log_comb) ** 2 + 0.4**2)
         )
-        assert np.isclose(combined_stdv[0], expected_stdv, rtol=0.01)
+        assert combined_stdv[0] == pytest.approx(expected_stdv, rel=0.01)
 
 
 class TestMaternCorrelationFunction:
@@ -148,7 +149,11 @@ class TestMaternCorrelationFunction:
         distances = np.array([100.0, 500.0, 1000.0, 5000.0])
         range_m = 993.0
         result = utils.matern_correlation_function(
-            distances, range_m=range_m, sill=1.0, nugget=0.0, kappa=0.5,
+            distances,
+            range_m=range_m,
+            sill=1.0,
+            nugget=0.0,
+            kappa=0.5,
         )
         expected = np.exp(-distances / range_m)
         np.testing.assert_allclose(result, expected, rtol=0.05)
