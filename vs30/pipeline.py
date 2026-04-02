@@ -937,6 +937,9 @@ def compute_model_grid(
 
     # --- Step 4: MVN spatial adjustment using observations (conditional) ---
     if mvn:
+        if corr_fn is None:
+            raise ValueError("corr_fn must be provided for spatial adjustment.")
+
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
         observations_df = _collect_observation_csvs(
@@ -1162,6 +1165,9 @@ def grid_pipeline(
             "\n" + "=" * 80 + "\nSTAGE 6: GAP-FILLING COMBINED OUTPUT\n" + "=" * 80
         )
 
+        if profile is None:
+            raise ValueError("profile must not be None when combining model outputs.")
+
         if output_dir is not None and include_intermediate:
             write_vs30_raster(
                 np.where(
@@ -1183,7 +1189,6 @@ def grid_pipeline(
         result["combined_stdv"] = combined_stdv
 
         if output_dir is not None:
-            assert profile is not None
             write_vs30_raster(
                 np.where(
                     np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
@@ -1392,6 +1397,11 @@ def points_pipeline(
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         )
+
+        if geol_model_df is None:
+            raise ValueError("geol_model_df must not be None for parallel processing.")
+        if terr_model_df is None:
+            raise ValueError("terr_model_df must not be None for parallel processing.")
 
         result_df = parallel.run_parallel_locations(
             points=points,

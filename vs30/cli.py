@@ -308,6 +308,12 @@ def points_custom(
     do_bayesian_update: typing.Annotated[
         bool, typer.Option("--do-bayesian-update/--no-bayesian-update")
     ] = ...,
+    apply_alluvium_slope_mod: typing.Annotated[
+        bool, typer.Option("--apply-alluvium-slope-mod/--no-apply-alluvium-slope-mod")
+    ] = ...,
+    apply_coastal_distance_mod: typing.Annotated[
+        bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+    ] = ...,
     locations_csv: typing.Annotated[
         Path, typer.Option(exists=True, dir_okay=False)
     ] = ...,
@@ -352,6 +358,10 @@ def points_custom(
         Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool
         Whether to perform Bayesian update of categorical Vs30 values.
+    apply_alluvium_slope_mod : bool
+        Whether to apply the alluvium slope modifier.
+    apply_coastal_distance_mod : bool
+        Whether to apply the coastal distance modifier.
     locations_csv : Path
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
@@ -388,6 +398,8 @@ def points_custom(
         n_proc=n_proc,
         lon_column=lon_column,
         lat_column=lat_column,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
 
@@ -521,6 +533,12 @@ def grid_custom(
     do_bayesian_update: typing.Annotated[
         bool, typer.Option("--do-bayesian-update/--no-bayesian-update")
     ] = ...,
+    apply_alluvium_slope_mod: typing.Annotated[
+        bool, typer.Option("--apply-alluvium-slope-mod/--no-apply-alluvium-slope-mod")
+    ] = ...,
+    apply_coastal_distance_mod: typing.Annotated[
+        bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+    ] = ...,
     grid_xmin: typing.Annotated[
         int,
         typer.Option(
@@ -599,6 +617,10 @@ def grid_custom(
         Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool
         Whether to perform Bayesian update of categorical Vs30 values.
+    apply_alluvium_slope_mod : bool
+        Whether to apply the alluvium slope modifier.
+    apply_coastal_distance_mod : bool
+        Whether to apply the coastal distance modifier.
     grid_xmin : int
         Grid minimum X coordinate (NZTM, meters).
     grid_xmax : int
@@ -656,6 +678,8 @@ def grid_custom(
         include_intermediate=include_intermediate,
         n_proc=n_proc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
 
