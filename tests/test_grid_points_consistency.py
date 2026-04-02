@@ -16,9 +16,9 @@ The test is split into two tiers:
 import numpy as np
 import pandas as pd
 import pytest
+from conftest import FIXTURES_DIR, load_fixed_model_config
 from qcore import coordinates
 
-from conftest import FIXTURES_DIR, load_fixed_model_config
 from vs30 import constants, gapfill, pipeline
 
 # ---------------------------------------------------------------------------
@@ -60,9 +60,7 @@ def load_test_points() -> pd.DataFrame:
     return df
 
 
-def run_points_pipeline_for_version(
-    cfg: dict, points_df: pd.DataFrame
-) -> pd.DataFrame:
+def run_points_pipeline_for_version(cfg: dict, points_df: pd.DataFrame) -> pd.DataFrame:
     """Run points_pipeline once with all test points for a given model config."""
     return pipeline.points_pipeline(
         longitudes=points_df["longitude"].values,
@@ -158,7 +156,7 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
             continue
 
         # Check Vs30
-        if not np.isclose(pts_vs30, grid_vs30, rtol=VS30_RTOL):
+        if pts_vs30 != pytest.approx(grid_vs30, rel=VS30_RTOL):
             failures.append(
                 f"  {name}: Vs30 mismatch — "
                 f"grid={grid_vs30:.2f}, points={pts_vs30:.2f}, "
@@ -166,7 +164,7 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
             )
 
         # Check Stdv
-        if not np.isclose(pts_stdv, grid_stdv, rtol=STDV_RTOL):
+        if pts_stdv != pytest.approx(grid_stdv, rel=STDV_RTOL):
             failures.append(
                 f"  {name}: Stdv mismatch — "
                 f"grid={grid_stdv:.2f}, points={pts_stdv:.2f}, "

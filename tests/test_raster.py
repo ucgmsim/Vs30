@@ -76,7 +76,7 @@ class TestApplyHybridGeologyModifications:
         # vs30 = 240 + (500-240) * (15000-8000) / (20000-8000)
         # vs30 = 240 + 260 * 7000/12000 = 240 + 151.67 = 391.67
         expected_vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000)
-        assert np.isclose(result_vs30[1, 0], expected_vs30, rtol=0.01)
+        assert result_vs30[1, 0] == pytest.approx(expected_vs30, rel=0.01)
 
     def test_coastal_distance_mod_applies_to_gid10(self, sample_arrays):
         """Test that coastal distance modification applies to geology ID 10."""
@@ -102,7 +102,7 @@ class TestApplyHybridGeologyModifications:
         # vs30 = 197 + (500-197) * (10000-8000) / (20000-8000)
         # vs30 = 197 + 303 * 2000/12000 = 197 + 50.5 = 247.5
         expected_vs30 = 197 + (500 - 197) * (10000 - 8000) / (20000 - 8000)
-        assert np.isclose(result_vs30[2, 1], expected_vs30, rtol=0.01)
+        assert result_vs30[2, 1] == pytest.approx(expected_vs30, rel=0.01)
 
     def test_coastal_distance_mod_clamps_at_minimum(self, sample_arrays):
         """Test that coastal distance modification clamps vs30 at minimum value."""
