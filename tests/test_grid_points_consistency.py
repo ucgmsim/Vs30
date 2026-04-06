@@ -27,11 +27,12 @@ from vs30 import constants, gapfill, pipeline
 
 POINTS_CSV = FIXTURES_DIR / "consistency_test_points.csv"
 
-# Tolerances for approximate grid/points agreement.
-# The 3x3 grid approach minimises resampling discrepancy (most observations
-# fall outside the tiny grid and use direct source sampling in both paths).
-VS30_RTOL = 0.03
-STDV_RTOL = 0.30
+# Stdv needs a wider tolerance because the posterior variance depends on the covariance structure of
+# the observations: the points pipeline samples slope/coastal distance directly from source data at
+# each point's exact coordinates, while the grid pipeline uses resampled pixel values. Small
+# differences in those inputs propagate nonlinearly into the MVN posterior variance, producing
+# stdv discrepancies up to ~9.4% even when Vs30 agrees to within 1e-7.
+STDV_RTOL = 0.10
 
 # Half-width for the 3x3 local grid (150m each side of center -> 300m / 100m = 3 pixels).
 LOCAL_GRID_HALF_WIDTH = 150
@@ -156,7 +157,7 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
             continue
 
         # Check Vs30
-        if pts_vs30 != pytest.approx(grid_vs30, rel=VS30_RTOL):
+        if pts_vs30 != pytest.approx(grid_vs30):
             failures.append(
                 f"  {name}: Vs30 mismatch — "
                 f"grid={grid_vs30:.2f}, points={pts_vs30:.2f}, "
