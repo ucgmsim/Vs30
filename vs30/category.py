@@ -420,13 +420,13 @@ def update_with_clustered_data(
             }
         )
 
-    # Initialize posterior columns with suffix
+    # Initialize posterior columns with suffix (cast to float to allow float assignments)
     posterior_df[constants.COL_POSTERIOR_MEAN_CLUSTERED] = posterior_df[
         constants.COL_PRIOR_MEAN
-    ]
+    ].astype(float)
     posterior_df[constants.COL_POSTERIOR_STDV_CLUSTERED] = posterior_df[
         constants.COL_PRIOR_STDV
-    ]
+    ].astype(float)
 
     # Filter out sites with ID_NODATA
     valid_sites = sites_df[
