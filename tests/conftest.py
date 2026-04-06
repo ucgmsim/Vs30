@@ -16,6 +16,23 @@ from pandas.testing import assert_frame_equal
 
 from vs30 import constants
 
+
+def pytest_addoption(parser):
+    """Register the --runslow command-line option."""
+    parser.addoption(
+        "--runslow", action="store_true", default=False, help="run slow tests"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked @pytest.mark.slow unless --runslow is given."""
+    if config.getoption("--runslow"):
+        return
+    skip_slow = pytest.mark.skip(reason="use --runslow to run")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)
+
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
 BENCHMARKS_DIR: Path = TESTS_DIR / "benchmarks"
