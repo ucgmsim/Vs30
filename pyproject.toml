@@ -109,5 +109,5 @@ invalid-parameter-default = "ignore"
 
 [tool.pytest.ini_options]
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: marks tests as slow (skipped by default, use --runslow to run)",
 ]
