@@ -598,6 +598,9 @@ def run_parallel_spatial_fit(
     list[spatial.SpatialAdjustmentResult]
         Updates for all affected pixels
     """
+    if len(affected_flat_indices) == 0:
+        return []
+
     # Prepare pixel data as a dict (for pickling)
     grid_locs = raster_data.get_coordinates()
     pixel_data_dict = {}
