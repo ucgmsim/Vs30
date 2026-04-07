@@ -168,11 +168,14 @@ block that includes gap-fill. The shared block:
 The number of fillable points is expected to be very small (0-5 in
 typical use), so running a small local grid per fillable point is cheap.
 
-### Gap-fill is unconditional
+### Gap-fill is controlled by config flag
 
-Gap-filling is always applied. There is no config flag to disable it.
-The `include_intermediate` flag controls whether the pre-fill output is
-preserved (as `combined_vs30_before_gapfill.tif` in grid mode, or as
+Gap-filling is controlled by the `fill_gaps` boolean in the model YAML
+config. When `fill_gaps: true`, the gap-fill post-processing stage runs.
+When `fill_gaps: false`, it is skipped entirely. Currently only
+`jaehwi_v1p0` sets `fill_gaps: true`. The `include_intermediate` flag
+controls whether the pre-fill output is preserved (as
+`combined_vs30_before_gapfill.tif` in grid mode, or as
 `vs30_before_gapfill`/`stdv_before_gapfill` columns in points mode).
 
 ### What does NOT get gap-filled
