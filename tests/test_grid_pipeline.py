@@ -15,8 +15,10 @@ multi-process (n_proc=cpu_count) modes to ensure parallel processing works corre
 
 import os
 
+import pandas as pd
 import pytest
-from conftest import BENCHMARKS_DIR, compare_output_files, load_test_config
+from conftest import BENCHMARKS_DIR, assert_arrays_match_raster_benchmark, load_test_config
+from pandas.testing import assert_frame_equal
 
 from vs30 import config, constants, pipeline
 
@@ -26,10 +28,13 @@ SCENARIOS = [
     "small_clustered_only",
 ]
 
-KEY_OUTPUT_FILES = [
-    "combined_vs30.tif",
-    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif",
-    "terrain_vs30_spatially_adjusted_with_uncertainty.tif",
+RASTER_BENCHMARKS = {
+    constants.COMBINED_VS30_FILENAME: ("combined_vs30", "combined_stdv"),
+    constants.GEOLOGY_VS30_MEAN_STDDEV_FILENAME: ("geology_vs30", "geology_stdv"),
+    constants.TERRAIN_VS30_MEAN_STDDEV_FILENAME: ("terrain_vs30", "terrain_stdv"),
+}
+
+CSV_BENCHMARKS = [
     "posterior_geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
     "posterior_terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv",
 ]
@@ -39,7 +44,7 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
     """Run the grid pipeline for a test scenario and compare outputs to benchmarks."""
     config_data = load_test_config(scenario)
 
-    pipeline.grid_pipeline(
+    result = pipeline.grid_pipeline(
         grid_config=config.GridConfig.from_dict(config_data),
         output_dir=tmp_path,
         geology_categorical_csv=config_data["geology_categorical_csv"],
@@ -56,8 +61,20 @@ def run_pipeline_scenario(tmp_path, scenario: str, n_proc: int) -> None:
         n_proc=n_proc,
         apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+        fill_gaps=config_data.get("fill_gaps", False),
     )
-    compare_output_files(tmp_path, BENCHMARKS_DIR / scenario, KEY_OUTPUT_FILES)
+
+    benchmark_dir = BENCHMARKS_DIR / scenario
+
+    for tif_name, (vs30_key, stdv_key) in RASTER_BENCHMARKS.items():
+        assert_arrays_match_raster_benchmark(
+            result[vs30_key], result[stdv_key], benchmark_dir / tif_name
+        )
+
+    for csv_name in CSV_BENCHMARKS:
+        actual_df = pd.read_csv(tmp_path / csv_name)
+        expected_df = pd.read_csv(benchmark_dir / csv_name)
+        assert_frame_equal(actual_df, expected_df)
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

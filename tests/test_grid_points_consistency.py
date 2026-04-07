@@ -79,6 +79,7 @@ def run_points_pipeline_for_version(cfg: dict, points_df: pd.DataFrame) -> pd.Da
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
+        fill_gaps=cfg.get("fill_gaps", False),
     )
 
 
@@ -109,6 +110,7 @@ def run_grid_pipeline_at_point(
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
+        fill_gaps=cfg.get("fill_gaps", False),
     )
 
     grid_vs30 = result["combined_vs30"]

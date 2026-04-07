@@ -136,6 +136,7 @@ def run_points_pipeline(
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
     apply_alluvium_slope_mod: bool = False,
+    fill_gaps: bool = False,
 ) -> None:
     """
     Shared implementation for points and points_custom commands.
@@ -186,6 +187,8 @@ def run_points_pipeline(
         Whether to apply the coastal distance modifier.
     apply_alluvium_slope_mod : bool, optional
         Whether to apply the alluvium slope modifier.
+    fill_gaps : bool, optional
+        Whether to fill on-land nodata gaps using nearest-neighbor interpolation.
 
     Raises
     ------
@@ -224,6 +227,7 @@ def run_points_pipeline(
         terrain_corr_fn=terrain_corr_fn,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        fill_gaps=fill_gaps,
     )
 
     original_cols = [c for c in df.columns if c not in result_df.columns]
@@ -289,6 +293,7 @@ def points(
         terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
         apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        fill_gaps=config_data["fill_gaps"],
     )
 
 
@@ -314,6 +319,9 @@ def points_custom(
     ] = ...,
     apply_coastal_distance_mod: typing.Annotated[
         bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+    ] = ...,
+    fill_gaps: typing.Annotated[
+        bool, typer.Option("--fill-gaps/--no-fill-gaps")
     ] = ...,
     locations_csv: typing.Annotated[
         Path, typer.Option(exists=True, dir_okay=False)
@@ -363,6 +371,8 @@ def points_custom(
         Whether to apply the alluvium slope modifier.
     apply_coastal_distance_mod : bool
         Whether to apply the coastal distance modifier.
+    fill_gaps : bool
+        Whether to fill on-land nodata gaps using nearest-neighbor interpolation.
     locations_csv : Path
         CSV file with latitude/longitude columns (WGS84).
     output_csv : Path
@@ -401,6 +411,7 @@ def points_custom(
         lat_column=lat_column,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
+        fill_gaps=fill_gaps,
     )
 
 
@@ -509,6 +520,7 @@ def grid(
         terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
         apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        fill_gaps=config_data["fill_gaps"],
     )
 
 
@@ -539,6 +551,9 @@ def grid_custom(
     ] = ...,
     apply_coastal_distance_mod: typing.Annotated[
         bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+    ] = ...,
+    fill_gaps: typing.Annotated[
+        bool, typer.Option("--fill-gaps/--no-fill-gaps")
     ] = ...,
     grid_xmin: typing.Annotated[
         int,
@@ -622,6 +637,8 @@ def grid_custom(
         Whether to apply the alluvium slope modifier.
     apply_coastal_distance_mod : bool
         Whether to apply the coastal distance modifier.
+    fill_gaps : bool
+        Whether to fill on-land nodata gaps using nearest-neighbor interpolation.
     grid_xmin : int
         Grid minimum X coordinate (NZTM, meters).
     grid_xmax : int
@@ -681,6 +698,7 @@ def grid_custom(
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
+        fill_gaps=fill_gaps,
     )
 
 
