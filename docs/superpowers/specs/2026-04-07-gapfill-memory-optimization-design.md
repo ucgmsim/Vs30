@@ -15,10 +15,11 @@ The dominant memory consumers are:
 | Shapely points for coastline test | several GB |
 | vs30 + stdv float64 copies | ~2.6 GB |
 
-In practice, only a small fraction of pixels are nodata gaps that need filling
-(typically small clusters at coastline edges). The current implementation
-allocates memory proportional to the total grid size rather than the number of
-gaps.
+Approximately 25% of the grid (~40M pixels) is ocean nodata surrounding New
+Zealand. Only a small fraction of nodata pixels are on-land gaps that actually
+need filling (typically small clusters at coastline edges). The current
+implementation allocates memory proportional to the total grid size rather than
+the number of fillable gaps.
 
 ## Design
 
@@ -28,35 +29,48 @@ of `fill_nodata_grid` and `classify_nodata` is unchanged.
 
 ### Algorithm
 
+The key insight is to **classify before dilating** — determine which nodata
+pixels are actually fillable (on-land gaps) before expanding the search
+neighborhood. This prevents the ~40M ocean nodata pixels from inflating the
+dilation region.
+
 1. **Identify nodata pixels in index space.** Find row/col positions where
    `vs30` is NaN. This is a cheap boolean operation on the existing array — no
    coordinate computation needed.
 
-2. **Dilate the nodata mask.** Use `scipy.ndimage.binary_dilation` to expand the
-   nodata mask by a buffer of `GAPFILL_LOCAL_GRID_SIZE_M / dx` pixels (50 pixels
-   at 100m resolution = 5 km). The dilated region defines the "neighborhood" —
-   the set of pixels that need coordinates.
+2. **Exclude water pixels in index space.** Filter out nodata pixels where
+   `geology_ids == 0` (water). This is a cheap array comparison that eliminates
+   most ocean pixels without needing coordinates.
 
-3. **Compute float32 coordinates only within the dilated region.** Build a
-   `(N_dilated, 2)` locations array in float32 instead of a `(N_total, 2)` array
-   in float64. Float32 precision at NZTM magnitudes (~6.25M meters) gives
-   worst-case error of ~0.7m — negligible on a 100m grid for nearest-neighbor
-   lookup.
+3. **Compute coordinates for non-water nodata candidates only.** The remaining
+   non-water nodata pixels are a small set (on-land gaps plus some offshore
+   pixels where geology data exists but VS30 doesn't). Compute float32
+   coordinates only for these pixels.
 
-4. **Classify nodata pixels.** Extract the corresponding `combined_vs30`,
-   `geology_ids`, and `locations` for pixels within the dilated region, then
-   pass these subsets to `classify_nodata`. It performs the same water (GID=0)
-   and coastline checks as before, but on a much smaller input. This reduces
-   the number of shapely points created for the point-in-polygon test.
+4. **Run coastline check on candidates.** Pass the non-water nodata candidates
+   to the coastline point-in-polygon test to identify the truly fillable
+   on-land pixels. This produces the fillable mask — a small set of pixels.
 
-5. **Build KDTree from valid pixels in the neighborhood.** The tree contains
-   only valid (non-NaN) pixels within the dilated region, not the entire grid.
+5. **Dilate the fillable mask.** Use `scipy.ndimage.binary_dilation` to expand
+   only the fillable mask (not the full nodata mask) by a buffer of
+   `GAPFILL_LOCAL_GRID_SIZE_M / dx` pixels (50 pixels at 100m resolution =
+   5 km). The dilated region defines the neighborhood for finding valid donor
+   pixels.
 
-6. **Query and fill.** Find nearest valid donors for fillable pixels. Index back
+6. **Compute float32 coordinates for valid pixels in the neighborhood.** Build
+   a `(N_neighborhood, 2)` locations array in float32 for valid (non-NaN)
+   pixels within the dilated region. Float32 precision at NZTM magnitudes
+   (~6.25M meters) gives worst-case error of ~0.7m — negligible on a 100m grid
+   for nearest-neighbor lookup.
+
+7. **Build KDTree from valid pixels in the neighborhood.** The tree contains
+   only valid pixels within the dilated region, not the entire grid.
+
+8. **Query and fill.** Find nearest valid donors for fillable pixels. Index back
    into the original float64 vs30/stdv arrays to copy donor values, preserving
    full upstream precision.
 
-7. **Expand-and-retry fallback.** If any fillable pixel has no valid donor within
+9. **Expand-and-retry fallback.** If any fillable pixel has no valid donor within
    the initial buffer, expand the dilation by
    `GAPFILL_LOCAL_GRID_EXPANSION_M / dx` pixels and retry for those pixels only.
    Cap at `GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M / dx` pixels. This reuses the
