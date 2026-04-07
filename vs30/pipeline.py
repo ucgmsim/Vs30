@@ -78,7 +78,7 @@ def _collect_observation_csvs(
             [pd.read_csv(csv, comment="#") for csv in csvs],
             ignore_index=True,
         )
-    return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
+    return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
 
 
 # ============================================================================
@@ -1006,6 +1006,7 @@ def grid_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    fill_gaps: bool = False,
 ) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -1066,6 +1067,9 @@ def grid_pipeline(
         Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
+    fill_gaps : bool
+        Whether to fill on-land nodata gaps in the combined output using
+        nearest-neighbor interpolation.
 
     Returns
     -------
@@ -1160,31 +1164,32 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        # Stage 6: Gap-fill on-land nodata pixels in combined output
-        logger.info(
-            "\n" + "=" * 80 + "\nSTAGE 6: GAP-FILLING COMBINED OUTPUT\n" + "=" * 80
-        )
-
         if profile is None:
             raise ValueError("profile must not be None when combining model outputs.")
 
-        if output_dir is not None and include_intermediate:
-            write_vs30_raster(
-                np.where(
-                    np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
-                ),
-                np.where(
-                    np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
-                ),
-                profile,
-                output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
-                constants.BAND_DESCRIPTION_VS30_COMBINED,
-                constants.BAND_DESCRIPTION_STDV_COMBINED,
+        if fill_gaps:
+            # Stage 6: Gap-fill on-land nodata pixels in combined output
+            logger.info(
+                "\n" + "=" * 80 + "\nSTAGE 6: GAP-FILLING COMBINED OUTPUT\n" + "=" * 80
             )
 
-        combined_vs30, combined_stdv = gapfill.fill_nodata_grid(
-            combined_vs30, combined_stdv, geol_ids, profile
-        )
+            if output_dir is not None and include_intermediate:
+                write_vs30_raster(
+                    np.where(
+                        np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
+                    ),
+                    np.where(
+                        np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
+                    ),
+                    profile,
+                    output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
+                    constants.BAND_DESCRIPTION_VS30_COMBINED,
+                    constants.BAND_DESCRIPTION_STDV_COMBINED,
+                )
+
+            combined_vs30, combined_stdv = gapfill.fill_nodata_grid(
+                combined_vs30, combined_stdv, geol_ids, profile
+            )
         result["combined_vs30"] = combined_vs30
         result["combined_stdv"] = combined_stdv
 
@@ -1236,6 +1241,7 @@ def points_pipeline(
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    fill_gaps: bool = False,
     gapfill_grid_config: config.GridConfig = constants.FULL_NZ_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
@@ -1291,6 +1297,9 @@ def points_pipeline(
         Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool, optional
         Whether to apply coastal distance modification for GID 4 and GID 10.
+    fill_gaps : bool
+        Whether to fill on-land nodata gaps in the combined output using
+        nearest-neighbor interpolation via local grid pipeline.
     gapfill_grid_config : GridConfig, optional
         Grid alignment used when generating local grids for gap-fill in
         points mode. Defaults to the standard NZ domain at 100m spacing.
@@ -1323,7 +1332,7 @@ def points_pipeline(
             clustered_observations_csv, independent_observations_csv
         )
     else:
-        observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
+        observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
 
     logger.info(f"Loaded {len(observations_df)} observations for spatial adjustment")
 
@@ -1520,7 +1529,7 @@ def points_pipeline(
     # ================================================================
     # Gap-fill: fill on-land nodata points
     # ================================================================
-    if model_type == constants.ModelType.COMBINED:
+    if fill_gaps and model_type == constants.ModelType.COMBINED:
         combined_vs30 = result_df[constants.ObservationColumn.VS30].values
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
