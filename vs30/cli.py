@@ -88,6 +88,7 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
         "terrain_correlation",
         "apply_coastal_distance_mod",
         "apply_alluvium_slope_mod",
+        "fill_gaps",
     ):
         if field not in config_data:
             raise typer.BadParameter(
