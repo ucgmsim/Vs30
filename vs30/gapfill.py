@@ -16,11 +16,32 @@ import logging
 import geopandas as gpd
 import numpy as np
 import shapely
+from scipy.ndimage import maximum_filter
 from scipy.spatial import KDTree
 
 from vs30 import config, constants, raster
 
 logger = logging.getLogger(__name__)
+
+
+def _pixel_coords_float32(
+    rows: np.ndarray,
+    cols: np.ndarray,
+    transform,
+) -> np.ndarray:
+    """
+    Compute float32 NZTM pixel center coordinates from row/col indices.
+
+    Computes in float64 from the affine transform, then downcasts to float32.
+    Float32 precision at NZTM magnitudes (~6.25M meters) gives worst-case
+    error of ~0.7m — negligible on a 100m grid for nearest-neighbor lookup.
+    """
+    eastings = transform.c + transform.a * (cols + 0.5)
+    northings = transform.f + transform.e * (rows + 0.5)
+    return np.column_stack([
+        eastings.astype(np.float32),
+        northings.astype(np.float32),
+    ])
 
 
 def classify_nodata(
