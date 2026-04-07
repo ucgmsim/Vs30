@@ -21,6 +21,7 @@ combine_ratio: 1.0
 
 apply_alluvium_slope_mod: true
 apply_coastal_distance_mod: true
+fill_gaps: false
 
 geology_correlation:
   model: exponential
