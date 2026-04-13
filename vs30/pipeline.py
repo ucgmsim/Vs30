@@ -1125,6 +1125,7 @@ def grid_pipeline(
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
+        result["geology_ids"] = geol_ids
 
     # 2. Run Terrain Pipeline
     if run_terrain:
@@ -1585,6 +1586,7 @@ def points_pipeline(
                     local_profile = local_result["profile"]
                     local_vs30 = local_result["combined_vs30"]
                     local_stdv = local_result["combined_stdv"]
+                    local_geol_ids = local_result["geology_ids"]
 
                     if local_profile is None:
                         raise ValueError(
@@ -1597,6 +1599,11 @@ def points_pipeline(
                             "grid_pipeline returned Non-array combined_vs30/combined_stdv for local gap-fill grid."
                         )
 
+                    # Fill nodata gaps in the local grid using nearest-neighbor
+                    local_vs30, local_stdv = gapfill.fill_nodata_grid(
+                        local_vs30, local_stdv, local_geol_ids, local_profile
+                    )
+
                     row, col = rasterio.transform.rowcol(
                         local_profile["transform"], e, n
                     )
@@ -1606,6 +1613,7 @@ def points_pipeline(
                     if not np.isnan(fill_vs30):
                         break
 
+                    # No valid donors in the local grid — expand
                     half_width += constants.GAPFILL_LOCAL_GRID_EXPANSION_M
                     logger.info(
                         f"  Gap-fill: expanding local grid to "
