@@ -198,3 +198,44 @@ def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
     )
 
     return config_data
+
+
+def assert_arrays_match_raster_benchmark(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    benchmark_path: Path,
+) -> None:
+    """
+    Compare in-memory vs30 and stdv arrays against a two-band benchmark raster.
+
+    Parameters
+    ----------
+    vs30_array : np.ndarray
+        Combined Vs30 result array (matches band 1 of benchmark).
+    stdv_array : np.ndarray
+        Combined standard deviation array (matches band 2 of benchmark).
+    benchmark_path : Path
+        Path to the benchmark .tif file.
+    """
+    with rasterio.open(benchmark_path) as benchmark:
+        nodata = benchmark.nodata
+        for band_idx, actual_data in enumerate([vs30_array, stdv_array], start=1):
+            expected_data = benchmark.read(band_idx)
+            if nodata is not None:
+                actual_valid = actual_data != nodata
+                expected_valid = expected_data != nodata
+                assert np.array_equal(actual_valid, expected_valid), (
+                    f"Band {band_idx}: Valid data masks differ"
+                )
+                valid_actual = actual_data[actual_valid]
+                valid_expected = expected_data[expected_valid]
+            else:
+                valid_actual = actual_data.ravel()
+                valid_expected = expected_data.ravel()
+
+            if np.any(valid_actual):
+                assert valid_actual == pytest.approx(
+                    valid_expected,
+                    rel=TEST_RTOL,
+                    abs=TEST_ATOL,
+                ), f"Band {band_idx}: Data values differ beyond tolerance"
