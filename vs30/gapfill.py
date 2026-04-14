@@ -134,10 +134,8 @@ def fill_nodata_grid(
     tuple[ndarray, ndarray]
         Gap-filled copies of (vs30, stdv).
     """
-    nrows, ncols = vs30.shape
 
-    nodata_2d = np.isnan(vs30)
-    candidate_2d = nodata_2d & (geology_ids != 0)
+    candidate_2d = np.isnan(vs30) & (geology_ids != 0)
     transform = profile["transform"]
     candidate_rows, candidate_cols = np.where(candidate_2d)
     candidate_locations = pixel_coords_float32(
@@ -150,7 +148,7 @@ def fill_nodata_grid(
     # Map fillable indices back to 2D grid positions
     fillable_rows = candidate_rows[fillable_of_candidates]
     fillable_cols = candidate_cols[fillable_of_candidates]
-    fillable_2d = np.zeros((nrows, ncols), dtype=bool)
+    fillable_2d = np.zeros(vs30.shape, dtype=bool)
     fillable_2d[fillable_rows, fillable_cols] = True
     fillable_locations = candidate_locations[fillable_of_candidates]
 
@@ -171,7 +169,7 @@ def fill_nodata_grid(
         neighborhood_2d = maximum_filter(fillable_2d, size=struct_size)
 
         # Find valid (non-NaN) pixels within the neighborhood
-        valid_in_neighborhood = ~nodata_2d & neighborhood_2d
+        valid_in_neighborhood = ~np.isnan(vs30) & neighborhood_2d
         if not np.any(valid_in_neighborhood):
             logger.info(
                 f"  Gap-fill: no valid donors within {buffer_pixels}-pixel "
@@ -180,7 +178,8 @@ def fill_nodata_grid(
             buffer_pixels += expansion_pixels
             continue
 
-        # Compute float32 coordinates for valid donor pixels
+        # Compute coordinates for valid donor pixels. Using float32 as it  
+        # provides sufficient accuracy and reduces memory usage.
         valid_rows, valid_cols = np.where(valid_in_neighborhood)
         valid_locations = pixel_coords_float32(
             valid_rows, valid_cols, transform
@@ -240,17 +239,15 @@ def create_local_grid_config(
     GridConfig
         Local grid config aligned to the reference grid.
     """
-    dx = gapfill_grid_config.grid_dx
-    dy = gapfill_grid_config.grid_dy
 
     # Snap to nearest pixel center
     snap_e = (
         gapfill_grid_config.grid_xmin
-        + round((easting - gapfill_grid_config.grid_xmin) / dx) * dx
+        + round((easting - gapfill_grid_config.grid_xmin) / gapfill_grid_config.grid_dx) * gapfill_grid_config.grid_dx
     )
     snap_n = (
         gapfill_grid_config.grid_ymin
-        + round((northing - gapfill_grid_config.grid_ymin) / dy) * dy
+        + round((northing - gapfill_grid_config.grid_ymin) / gapfill_grid_config.grid_dy) * gapfill_grid_config.grid_dy
     )
 
     return config.GridConfig(
@@ -258,6 +255,6 @@ def create_local_grid_config(
         grid_xmax=snap_e + half_width,
         grid_ymin=snap_n - half_width,
         grid_ymax=snap_n + half_width,
-        grid_dx=dx,
-        grid_dy=dy,
+        grid_dx=gapfill_grid_config.grid_dx,
+        grid_dy=gapfill_grid_config.grid_dy,
     )
