@@ -24,7 +24,7 @@ from vs30 import config, constants, raster
 logger = logging.getLogger(__name__)
 
 
-def _pixel_coords_float32(
+def pixel_coords_float32(
     rows: np.ndarray,
     cols: np.ndarray,
     transform,
@@ -42,6 +42,30 @@ def _pixel_coords_float32(
         eastings.astype(np.float32),
         northings.astype(np.float32),
     ])
+
+
+def points_inside_coastline(locations: np.ndarray) -> np.ndarray:
+    """
+    Return a boolean mask indicating which NZTM points lie inside the NZ coastline.
+
+    Parameters
+    ----------
+    locations : ndarray
+        (N, 2) array of [easting, northing] NZTM coordinates.
+
+    Returns
+    -------
+    ndarray
+        Boolean mask of length N, True where the point is inside the coastline polygon.
+    """
+    if len(locations) == 0:
+        return np.zeros(0, dtype=bool)
+
+    raster.ensure_shapefile_extracted(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast")
+    coast_gdf = gpd.read_file(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH)
+    # Merge all coastline features into one geometry for vectorized point-in-polygon test
+    coast_union = coast_gdf.geometry.union_all()
+    return shapely.within(shapely.points(locations), coast_union)
 
 
 def classify_nodata(
@@ -70,34 +94,16 @@ def classify_nodata(
     ndarray
         Boolean mask where True = eligible for filling.
     """
-    empty_mask = np.zeros(len(combined_vs30), dtype=bool)
-
-    nodata_mask = np.isnan(combined_vs30)
-    if not np.any(nodata_mask):
-        return empty_mask
-
-    # Exclude water pixels (GID=0)
-    candidate_mask = nodata_mask & (geology_ids != 0)
-    if not np.any(candidate_mask):
-        return empty_mask
-
-    # Load coastline and test point-in-polygon for candidates only
-    coastline_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
-    raster.ensure_shapefile_extracted(coastline_path, "coast")
-    coast_gdf = gpd.read_file(coastline_path)
-    coast_union = coast_gdf.geometry.union_all()
-
+    candidate_mask = np.isnan(combined_vs30) & (geology_ids != 0)
     candidate_indices = np.where(candidate_mask)[0]
-    candidate_points = shapely.points(locations[candidate_indices])
-    inside = shapely.within(candidate_points, coast_union)
-
     fillable_mask = np.zeros(len(combined_vs30), dtype=bool)
-    fillable_mask[candidate_indices] = inside
+    fillable_mask[candidate_indices] = points_inside_coastline(
+        locations[candidate_indices]
+    )
 
-    n_fillable = np.count_nonzero(fillable_mask)
-    if n_fillable > 0:
+    if np.count_nonzero(fillable_mask) > 0:
         logger.info(
-            f"  Gap-fill: {n_fillable} on-land nodata pixel(s) identified for filling"
+            f"  Gap-fill: {np.count_nonzero(fillable_mask)} on-land nodata pixel(s) identified for filling"
         )
 
     return fillable_mask
@@ -110,19 +116,14 @@ def fill_nodata_grid(
     profile: dict,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Fill nodata gaps in a combined VS30 grid using nearest-neighbor.
-
-    Derives pixel center locations from the rasterio profile, identifies
-    fillable pixels via classify_nodata, builds a KDTree from all valid
-    (non-NaN) pixel coordinates, and copies both vs30 and stdv values from
-    the nearest valid donor pixel.
+    Fill nodata gaps in a Vs30 grid using nearest-neighbor.
 
     Parameters
     ----------
     vs30 : ndarray
-        2D array of combined VS30 values (NaN for nodata).
+        2D array of Vs30 values (NaN for nodata).
     stdv : ndarray
-        2D array of combined standard deviation values (NaN for nodata).
+        2D array of standard deviation values (NaN for nodata).
     geology_ids : ndarray
         2D array of geology category IDs.
     profile : dict
@@ -135,33 +136,16 @@ def fill_nodata_grid(
     """
     nrows, ncols = vs30.shape
 
-    # Fast path: no nodata pixels
     nodata_2d = np.isnan(vs30)
-    if not np.any(nodata_2d):
-        return vs30.copy(), stdv.copy()
-
-    # --- Classification: identify fillable on-land gaps ---
-    # Exclude water (GID=0) in index space — no coordinates needed
     candidate_2d = nodata_2d & (geology_ids != 0)
-    if not np.any(candidate_2d):
-        return vs30.copy(), stdv.copy()
-
-    # Compute float32 coordinates for non-water nodata candidates only
     transform = profile["transform"]
     candidate_rows, candidate_cols = np.where(candidate_2d)
-    candidate_locations = _pixel_coords_float32(
+    candidate_locations = pixel_coords_float32(
         candidate_rows, candidate_cols, transform
     )
-
-    # Coastline check via classify_nodata on the small candidate set
-    candidate_vs30 = np.full(len(candidate_rows), np.nan)
-    candidate_gids = geology_ids[candidate_rows, candidate_cols]
-    fillable_of_candidates = classify_nodata(
-        candidate_vs30, candidate_gids, candidate_locations
-    )
-
+    fillable_of_candidates = points_inside_coastline(candidate_locations)
     if not np.any(fillable_of_candidates):
-        return vs30.copy(), stdv.copy()
+        return vs30, stdv
 
     # Map fillable indices back to 2D grid positions
     fillable_rows = candidate_rows[fillable_of_candidates]
@@ -169,10 +153,8 @@ def fill_nodata_grid(
     fillable_2d = np.zeros((nrows, ncols), dtype=bool)
     fillable_2d[fillable_rows, fillable_cols] = True
     fillable_locations = candidate_locations[fillable_of_candidates]
-    n_fillable = len(fillable_rows)
 
-    # --- Nearest-neighbor fill with expanding buffer ---
-    # Reuse the same constants as the points pipeline's gap-fill expansion
+    # Nearest-neighbor fill with expanding buffer
     dx = abs(transform.a)
     buffer_pixels = round(constants.GAPFILL_LOCAL_GRID_SIZE_M / dx)
     expansion_pixels = round(constants.GAPFILL_LOCAL_GRID_EXPANSION_M / dx)
@@ -200,7 +182,7 @@ def fill_nodata_grid(
 
         # Compute float32 coordinates for valid donor pixels
         valid_rows, valid_cols = np.where(valid_in_neighborhood)
-        valid_locations = _pixel_coords_float32(
+        valid_locations = pixel_coords_float32(
             valid_rows, valid_cols, transform
         )
 
@@ -208,14 +190,14 @@ def fill_nodata_grid(
         tree = KDTree(valid_locations)
         _, nn_indices = tree.query(fillable_locations)
 
-        # Copy values from the original float64 arrays to preserve precision
+        # Copy fill values from the original arrays
         donor_rows = valid_rows[nn_indices]
         donor_cols = valid_cols[nn_indices]
         filled_vs30[fillable_rows, fillable_cols] = vs30[donor_rows, donor_cols]
         filled_stdv[fillable_rows, fillable_cols] = stdv[donor_rows, donor_cols]
 
         logger.info(
-            f"  Gap-fill: filled {n_fillable} pixel(s) with nearest-neighbor values"
+            f"  Gap-fill: filled {len(fillable_rows)} pixel(s) with nearest-neighbor values"
         )
         return filled_vs30, filled_stdv
 
@@ -223,7 +205,7 @@ def fill_nodata_grid(
     logger.warning(
         f"  Gap-fill: no valid donors found within maximum buffer of "
         f"{max_buffer_pixels} pixels ({max_buffer_pixels * dx:.0f}m). "
-        f"{n_fillable} pixel(s) remain unfilled."
+        f"{len(fillable_rows)} pixel(s) remain unfilled."
     )
     return filled_vs30, filled_stdv
 

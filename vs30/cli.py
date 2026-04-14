@@ -16,7 +16,6 @@ from vs30 import config, constants, pipeline, utils
 
 logger = logging.getLogger(__name__)
 
-# Create Typer app for CLI
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
 

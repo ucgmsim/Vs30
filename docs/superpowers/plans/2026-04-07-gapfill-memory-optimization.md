@@ -31,7 +31,7 @@ Expected: All 3 tests pass (`test_classify_nodata_excludes_water_and_offshore`, 
 
 ---
 
-### Task 2: Add `_pixel_coords_float32` helper and `maximum_filter` import
+### Task 2: Add `pixel_coords_float32` helper and `maximum_filter` import
 
 **Files:**
 - Modify: `vs30/gapfill.py:1-12` (imports) and add new function after line 12
@@ -52,12 +52,12 @@ from scipy.spatial import KDTree
 from vs30 import config, constants, raster
 ```
 
-- [ ] **Step 2: Add the `_pixel_coords_float32` helper function**
+- [ ] **Step 2: Add the `pixel_coords_float32` helper function**
 
 Add this function immediately after the imports (before `classify_nodata`), at line 15:
 
 ```python
-def _pixel_coords_float32(
+def pixel_coords_float32(
     rows: np.ndarray,
     cols: np.ndarray,
     transform,
@@ -93,7 +93,7 @@ Expected: All 3 tests pass (the helper is not yet called).
 
 ```bash
 git add vs30/gapfill.py
-git commit -m "refactor(gapfill): add _pixel_coords_float32 helper and maximum_filter import
+git commit -m "refactor(gapfill): add pixel_coords_float32 helper and maximum_filter import
 
 Preparation for memory-optimized fill_nodata_grid. The helper computes
 pixel center coordinates in float32, and maximum_filter will be used for
@@ -132,7 +132,7 @@ Replace the body of `fill_nodata_grid` (from `nrows, ncols = vs30.shape` through
     # Compute float32 coordinates for non-water nodata candidates only
     transform = profile["transform"]
     candidate_rows, candidate_cols = np.where(candidate_2d)
-    candidate_locations = _pixel_coords_float32(
+    candidate_locations = pixel_coords_float32(
         candidate_rows, candidate_cols, transform
     )
 
@@ -183,7 +183,7 @@ Replace the body of `fill_nodata_grid` (from `nrows, ncols = vs30.shape` through
 
         # Compute float32 coordinates for valid donor pixels
         valid_rows, valid_cols = np.where(valid_in_neighborhood)
-        valid_locations = _pixel_coords_float32(
+        valid_locations = pixel_coords_float32(
             valid_rows, valid_cols, transform
         )
 
