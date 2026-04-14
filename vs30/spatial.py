@@ -488,6 +488,16 @@ def prepare_observation_data(
                 coast_obs[~within_grid] = raster.compute_coastal_distance_at_points(
                     outside_grid_points
                 )
+
+            # Legacy parity: the legacy interpolate_raster replaces tif-NODATA
+            # slope samples with ID_NODATA=255 for observations, which slips
+            # past the _hyb_calc (slope == 0) | (slope == -9999) check, causing
+            # log10(255) ≈ 2.41 to feed np.interp and return the MAX Vs30 for
+            # the gid. The equivalent grid-pixel NODATA handling uses 1e-9
+            # and returns the MIN Vs30. Reproduce the legacy obs behaviour.
+            slope_obs = np.where(
+                slope_obs < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, slope_obs
+            )
         else:
             # File-based path: read slope and coast distance from rasters
             if output_dir is None:
@@ -524,6 +534,11 @@ def prepare_observation_data(
                 slope_obs = np.array([v[0] for v in src.sample(obs_locs)])
             with rasterio.open(coast_path) as src:
                 coast_obs = np.array([v[0] for v in src.sample(obs_locs)])
+
+            # Legacy parity: see comment in the in-memory branch above.
+            slope_obs = np.where(
+                slope_obs < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, slope_obs
+            )
 
         # Apply modifications to model_vs30 and model_stdv at points
         model_vs30, model_stdv = raster.apply_hybrid_geology_modifications(
