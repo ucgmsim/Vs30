@@ -214,6 +214,14 @@ HYBRID_SIGMA_REDUCTION_FACTORS: dict[int, float] = {
 # Minimum slope value used to prevent log10(0) when calculating hybrid Vs30
 MIN_SLOPE_FOR_LOG: float = 1.0e-9
 
+# Sentinel slope value used when sampling slope at observation locations at
+# NODATA pixels. The legacy model's interpolate_raster converts tif-NODATA to
+# ID_NODATA=255, and the downstream hybrid calculation does not catch 255 in
+# its NODATA check, so log10(255) ≈ 2.41 is used in the slope interpolation.
+# Preserved here so the refactored code reproduces the legacy behaviour at
+# observations while still using MIN_SLOPE_FOR_LOG for grid pixels.
+LEGACY_OBS_SLOPE_NODATA_SENTINEL: float = 255.0
+
 # No data value in the provided categorical rasters
 RASTER_ID_NODATA_VALUE: int = 255
 
