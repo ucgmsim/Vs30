@@ -42,11 +42,17 @@ def matern_correlation_function(
     min_dist: float = constants.MIN_DIST_ENFORCED,
 ) -> np.ndarray:
     """
-    Calculate Matérn correlation with nugget from distances.
+    Calculate Matérn correlation from distances.
 
     Uses the gstat parameterization where the range parameter is used
     directly as the scale (NOT multiplied by sqrt(2*kappa)). This matches
     R's gstat::vgm() which was used to fit the original model parameters.
+
+    The output matches ``variogramLine(model, covariance=TRUE)/psill``
+    from R gstat: rho(h) = (2^(1-κ)/Γ(κ)) * (h/a)^κ * K_κ(h/a) for h>0,
+    with rho(0)=1 enforced via the minimum-distance clamp. The nugget is
+    absorbed into per-point standard deviations elsewhere, so it does not
+    scale the correlation function itself (see Worden et al. Eq. 7).
 
     Parameters
     ----------
@@ -55,9 +61,10 @@ def matern_correlation_function(
     range_m : float
         Matérn range (scale) parameter in meters (gstat convention).
     sill : float
-        Partial sill (variance contribution from spatial correlation).
+        Partial sill. Unused in the correlation function but retained for
+        configuration-parameter compatibility with gstat variogram fits.
     nugget : float
-        Nugget variance (micro-scale variation / measurement noise).
+        Nugget variance. Unused in the correlation function (see note above).
     kappa : float
         Matérn smoothness parameter.
     min_dist : float, optional
@@ -66,15 +73,15 @@ def matern_correlation_function(
     Returns
     -------
     ndarray
-        Correlation values. Same shape as distances.
-        Near zero distance, returns approximately sill/(sill+nugget).
+        Correlation values in [0, 1]. Same shape as distances.
+        Near zero distance, returns approximately 1.
     """
+    del sill, nugget  # retained for config compatibility only
     d = np.maximum(min_dist, distances)
     scaled = d / range_m
     rho = (2 ** (1 - kappa) / gamma(kappa)) * (scaled ** kappa) * kv(kappa, scaled)
     # Clamp NaN from numerical edge cases (kv can overflow for very small d)
-    rho = np.where(np.isfinite(rho), rho, 1.0)
-    return rho * sill / (sill + nugget)
+    return np.where(np.isfinite(rho), rho, 1.0)
 
 
 def combine_vs30_models(

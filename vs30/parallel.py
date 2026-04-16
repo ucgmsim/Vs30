@@ -2,6 +2,7 @@
 
 import contextlib
 import multiprocessing as mp
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -650,10 +651,14 @@ def run_parallel_spatial_fit(
 
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
+    label = str(model_type).capitalize()
+    if os.environ.get("VS30_MVN_DIAG") == "1":
+        base = os.environ.get("VS30_MVN_DIAG_BASE", "/tmp/vs30_mvn_diag")
+        os.makedirs(base, exist_ok=True)
+        os.environ["VS30_MVN_DIAG_PATH"] = f"{base}/{label.lower()}.csv"
     with single_threaded_blas():
         with spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
             results = []
-            label = str(model_type).capitalize()
             with tqdm(
                 total=len(affected_flat_indices),
                 desc=f"{label}: spatial adjustment",

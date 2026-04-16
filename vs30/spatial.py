@@ -1,6 +1,8 @@
 """Multivariate Normal (MVN) distribution-based spatial adjustment of Vs30 using nearby observations."""
 
 import logging
+import os
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,14 @@ from tqdm import tqdm
 from vs30 import category, constants, raster
 
 logger = logging.getLogger(__name__)
+
+# Diagnostic instrumentation (env-var gated, no overhead when disabled)
+_DIAG_ENABLED = os.environ.get("VS30_MVN_DIAG") == "1"
+_DIAG_PATH = os.environ.get("VS30_MVN_DIAG_PATH", "/tmp/vs30_mvn_diag.csv")
+_DIAG_EVERY = int(os.environ.get("VS30_MVN_DIAG_EVERY", "50"))
+_DIAG_MAX = int(os.environ.get("VS30_MVN_DIAG_MAX", "500"))
+_DIAG_COUNTER = 0
+_DIAG_SAMPLED = 0
 
 
 @dataclass
@@ -855,6 +865,11 @@ def compute_spatial_adjustment_for_pixel(
     SpatialAdjustmentResult or None
         Update result, or None if pixel should be skipped.
     """
+    global _DIAG_COUNTER, _DIAG_SAMPLED
+    _diag_active = _DIAG_ENABLED and _DIAG_SAMPLED < _DIAG_MAX
+    if _diag_active:
+        t0 = time.perf_counter()
+
     # Handle NaN/NoData/invalid pixels
     if (
         np.isnan(pixel.vs30)
@@ -864,9 +879,9 @@ def compute_spatial_adjustment_for_pixel(
     ):
         return None
 
-    # Correlation at zero distance is slightly less than 1.0 due to the
-    # enforced minimum distance (nugget effect). This shrinks the prior
-    # variance to match the legacy implementation's behavior.
+    # Correlation at zero distance is ≈1 (minus a tiny epsilon from the
+    # enforced minimum distance). Matches the legacy R code, which evaluates
+    # the correlation at distances >= 0.1 m and sets corr(0) = 1 explicitly.
     if corr_zero is None:
         corr_zero = corr_fn(np.array([0.0]))[0]
     initial_var = (pixel.stdv**2) * corr_zero
@@ -878,6 +893,8 @@ def compute_spatial_adjustment_for_pixel(
         max_dist_m=max_dist_m,
         max_points=max_points,
     )
+    if _diag_active:
+        t1 = time.perf_counter()
 
     if len(selected_obs.locations) == 0:
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
@@ -896,9 +913,13 @@ def compute_spatial_adjustment_for_pixel(
         noisy=noisy,
         cov_reduc=cov_reduc,
     )
+    if _diag_active:
+        t2 = time.perf_counter()
 
     try:
         inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
+        if _diag_active:
+            t3 = time.perf_counter()
 
         pred_update = np.dot(
             np.dot(cov_matrix[0, 1:], inv_cov),
@@ -908,6 +929,19 @@ def compute_spatial_adjustment_for_pixel(
         var = cov_matrix[0, 0] - np.dot(
             np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
         )
+
+        if _diag_active:
+            t4 = time.perf_counter()
+            _DIAG_COUNTER += 1
+            if _DIAG_COUNTER % _DIAG_EVERY == 0:
+                _DIAG_SAMPLED += 1
+                with open(_DIAG_PATH, "a") as f:
+                    f.write(
+                        f"{os.getpid()},{pixel.index},{len(selected_obs.locations)},"
+                        f"{cov_matrix.shape[0]},"
+                        f"{(t1-t0)*1e6:.1f},{(t2-t1)*1e6:.1f},"
+                        f"{(t3-t2)*1e6:.1f},{(t4-t0)*1e6:.1f}\n"
+                    )
 
         return SpatialAdjustmentResult(
             updated_vs30=float(pixel.vs30 * np.exp(pred_update)),

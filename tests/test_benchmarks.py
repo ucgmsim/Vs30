@@ -31,6 +31,18 @@ FOSTER_2019_GRID = config.GridConfig(
 
 STANDARD_NZ_GRID = dataclasses.replace(constants.FULL_NZ_GRID_CONFIG, grid_dx=400, grid_dy=400)
 
+# Shared grid used for the modified_foster_2019, jaehwi_v1p0, and viktor_cpt_clustered
+# benchmarks. This matches Jaehwi's fork grid (+50m offset from the standard NZ grid)
+# so that 400m pixel centres land cleanly on every 4th 100m source pixel centre.
+BENCHMARK_NZ_GRID = config.GridConfig(
+    grid_xmin=1060100,
+    grid_xmax=2120100,
+    grid_ymin=4730100,
+    grid_ymax=6250100,
+    grid_dx=400,
+    grid_dy=400,
+)
+
 
 def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, n_proc: int) -> None:
     """Run the grid pipeline for a fixed model version and compare against the benchmark raster."""
@@ -76,22 +88,34 @@ def test_foster_2019_multiprocess():
 @pytest.mark.slow
 def test_modified_foster_2019_single_process():
     """modified_foster_2019 full-domain pipeline matches benchmark (n_proc=1)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, STANDARD_NZ_GRID, n_proc=1)
+    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, n_proc=1)
 
 
 @pytest.mark.slow
 def test_modified_foster_2019_multiprocess():
     """modified_foster_2019 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, STANDARD_NZ_GRID, n_proc=os.cpu_count())
+    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())
 
 
 @pytest.mark.slow
 def test_jaehwi_v1p0_single_process():
     """jaehwi_v1p0 full-domain pipeline matches benchmark (n_proc=1)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, STANDARD_NZ_GRID, n_proc=1)
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, n_proc=1)
 
 
 @pytest.mark.slow
 def test_jaehwi_v1p0_multiprocess():
     """jaehwi_v1p0 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, STANDARD_NZ_GRID, n_proc=os.cpu_count())
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())
+
+
+@pytest.mark.slow
+def test_viktor_cpt_clustering_single_process():
+    """viktor_cpt_clustering full-domain pipeline matches benchmark (n_proc=1)."""
+    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, n_proc=1)
+
+
+@pytest.mark.slow
+def test_viktor_cpt_clustering_multiprocess():
+    """viktor_cpt_clustering full-domain pipeline matches benchmark (all CPUs)."""
+    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())

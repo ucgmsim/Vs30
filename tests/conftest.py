@@ -127,6 +127,12 @@ def assert_arrays_match_raster_benchmark(
     benchmark_path : Path
         Path to the benchmark .tif file.
     """
+    dump_dir = Path("/tmp/vs30_test_dumps")
+    dump_dir.mkdir(parents=True, exist_ok=True)
+    stem = benchmark_path.stem
+    np.save(dump_dir / f"{stem}_actual_vs30.npy", vs30_array)
+    np.save(dump_dir / f"{stem}_actual_stdv.npy", stdv_array)
+
     with rasterio.open(benchmark_path) as benchmark:
         nodata = benchmark.nodata
         for band_idx, actual_data in enumerate([vs30_array, stdv_array], start=1):

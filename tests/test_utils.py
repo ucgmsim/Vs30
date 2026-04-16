@@ -158,6 +158,55 @@ class TestMaternCorrelationFunction:
         expected = np.exp(-distances / range_m)
         np.testing.assert_allclose(result, expected, rtol=0.05)
 
+    def test_matches_r_gstat_variogram_line(self):
+        """Matérn correlation must match R gstat variogramLine output.
+
+        Reference values generated with R 4.5.2 and gstat using:
+            vgm(psill=0.15, model="Mat", range=20e3, nugget=0.05, kappa=0.9)
+        Then divided by psill to obtain the correlation values used in the
+        Worden et al. MVN formulation (see vs30/utils.py docstring).
+        """
+        distances = np.array(
+            [0.1, 1.0, 10.0, 100.0, 1000.0, 10000.0, 20000.0, 50000.0, 100000.0]
+        )
+        r_gstat_reference = np.array(
+            [
+                1.0,
+                1.0,
+                0.9999974,
+                0.9998576,
+                0.9933186,
+                0.8000460,
+                0.5647182,
+                0.1637082,
+                0.01697042,
+            ]
+        )
+        result = utils.matern_correlation_function(
+            distances,
+            range_m=20000.0,
+            sill=0.15,
+            nugget=0.05,
+            kappa=0.9,
+        )
+        np.testing.assert_allclose(result, r_gstat_reference, atol=1e-6)
+
+    def test_zero_distance_gives_unit_correlation(self):
+        """At zero distance, correlation must be ≈1 regardless of nugget.
+
+        R gstat treats the nugget as contributing to per-point variance, not
+        to the correlation function itself (Worden et al. Eq. 7). The
+        correlation-at-zero must therefore be 1, not sill/(sill+nugget).
+        """
+        result = utils.matern_correlation_function(
+            np.array([0.0]),
+            range_m=20000.0,
+            sill=0.15,
+            nugget=0.05,
+            kappa=0.9,
+        )
+        assert result[0] == pytest.approx(1.0, abs=1e-6)
+
 
 class TestResolveCorrelationFunction:
     """Resolved correlation callables must be picklable for multiprocessing."""
