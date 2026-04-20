@@ -57,7 +57,8 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # Observation is higher (280), prior is 250, update should increase
         assert result is not None  # Type guard: narrows Optional return type
-        assert result.updated_vs30 > pixel.vs30
+        updated_vs30, updated_stdv, n_obs = result
+        assert updated_vs30 > pixel.vs30
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
         """Test that standard deviation decreases when observation is added."""
@@ -72,7 +73,8 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # Adding observation should reduce uncertainty
         assert result is not None  # Type guard: narrows Optional return type
-        assert result.updated_stdv < pixel.stdv
+        updated_vs30, updated_stdv, n_obs = result
+        assert updated_stdv < pixel.stdv
 
     def test_no_observations_returns_unchanged_vs30(self, pixel):
         """Test that no nearby observations returns unchanged vs30."""
@@ -95,8 +97,9 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # VS30 should be unchanged when no nearby observations
         assert result is not None  # Type guard: narrows Optional return type
-        assert result.updated_vs30 == pixel.vs30
-        assert result.n_observations_used == 0
+        updated_vs30, updated_stdv, n_obs = result
+        assert updated_vs30 == pixel.vs30
+        assert n_obs == 0
 
 
 class TestComputeMvnAtPoints:

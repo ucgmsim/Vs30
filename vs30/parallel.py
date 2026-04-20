@@ -424,7 +424,7 @@ def process_locations_chunk(
 
 def process_pixels_chunk(
     args: tuple,
-) -> tuple[int, list[spatial.SpatialAdjustmentResult]]:  # pragma: no cover
+) -> tuple[int, list[tuple[int, float, float]]]:  # pragma: no cover
     """
     Worker function: compute spatial adjustments for a chunk of affected pixels.
 
@@ -442,7 +442,7 @@ def process_pixels_chunk(
     Returns
     -------
     tuple
-        (chunk_id, list of spatial.SpatialAdjustmentResult)
+        (chunk_id, list of (flat_index, updated_vs30, updated_stdv) tuples)
     """
     pixel_indices, chunk_id, pixel_data_dict, obs_data_dict, config_params = args
 
@@ -468,7 +468,7 @@ def process_pixels_chunk(
             index=pixel_info[constants.KEY_INDEX],
         )
 
-        update = spatial.compute_spatial_adjustment_for_pixel(
+        result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
             config_params["corr_fn"],
@@ -479,8 +479,9 @@ def process_pixels_chunk(
             corr_zero=config_params.get(constants.KEY_CORR_ZERO),
         )
 
-        if update is not None:
-            updates.append(update)
+        if result is not None:
+            vs30, stdv, _ = result
+            updates.append((pixel_info[constants.KEY_INDEX], vs30, stdv))
 
     return chunk_id, updates
 
@@ -564,7 +565,7 @@ def run_parallel_spatial_fit(
     noisy: bool,
     cov_reduc: float,
     n_proc: int,
-) -> list[spatial.SpatialAdjustmentResult]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute spatial adjustments for affected pixels in parallel.
 
@@ -596,11 +597,11 @@ def run_parallel_spatial_fit(
 
     Returns
     -------
-    list[spatial.SpatialAdjustmentResult]
-        Updates for all affected pixels
+    tuple of ndarray
+        (updated_vs30, updated_stdv) arrays with spatial adjustments applied.
     """
     if len(affected_flat_indices) == 0:
-        return []
+        return raster_data.vs30.copy(), raster_data.stdv.copy()
 
     # Prepare pixel data as a dict (for pickling)
     grid_locs = raster_data.get_coordinates()
@@ -670,5 +671,12 @@ def run_parallel_spatial_fit(
                     results.append((chunk_id, chunk_updates))
                     pbar.update(len(chunks[chunk_id]))
 
-    # Merge: concatenate update lists (order does not matter; each update carries its pixel_index)
-    return [update for _, chunk_updates in results for update in chunk_updates]
+    # Apply results to output arrays
+    updated_vs30 = raster_data.vs30.copy()
+    updated_stdv = raster_data.stdv.copy()
+    for _, chunk_updates in results:
+        for flat_idx, vs30, stdv in chunk_updates:
+            updated_vs30.flat[flat_idx] = vs30
+            updated_stdv.flat[flat_idx] = stdv
+
+    return updated_vs30, updated_stdv

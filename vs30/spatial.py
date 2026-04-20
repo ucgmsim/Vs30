@@ -105,28 +105,6 @@ class PixelData:
     index: int
 
 
-@dataclass
-class SpatialAdjustmentResult:
-    """
-    Result of an MVN update for a single pixel.
-
-    Attributes
-    ----------
-    updated_vs30 : float
-        Updated Vs30 value after spatial adjustment.
-    updated_stdv : float
-        Updated standard deviation after spatial adjustment.
-    n_observations_used : int
-        Number of observations used in the MVN conditioning.
-    pixel_index : int
-        Flat index of this pixel in the raster.
-    """
-
-    updated_vs30: float
-    updated_stdv: float
-    n_observations_used: int
-    pixel_index: int
-
 
 def _compute_valid_mask(
     vs30: np.ndarray, stdv: np.ndarray, nodata: float | None
@@ -715,7 +693,8 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
 
 def build_covariance_matrix(
     pixel: PixelData,
-    selected_observations: ObservationData,
+    obs_data: ObservationData,
+    obs_indices: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
@@ -727,8 +706,10 @@ def build_covariance_matrix(
     ----------
     pixel : PixelData
         Pixel data for the pixel being updated.
-    selected_observations : ObservationData
-        Selected observations for this pixel.
+    obs_data : ObservationData
+        Full observation data.
+    obs_indices : ndarray
+        Integer indices into obs_data for the selected observations.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations (ndarray).
     noisy : bool, optional
@@ -744,9 +725,9 @@ def build_covariance_matrix(
     """
 
     # Step 1: Compute Euclidean distance matrix
-    all_points = np.vstack([pixel.location, selected_observations.locations]).astype(
-        np.float64
-    )
+    all_points = np.vstack(
+        [pixel.location, obs_data.locations[obs_indices]]
+    ).astype(np.float64)
     distance_matrix = scipy.spatial.distance.cdist(
         all_points, all_points, metric="euclidean"
     )
@@ -755,12 +736,12 @@ def build_covariance_matrix(
     corr = corr_fn(distance_matrix)
 
     # Step 3: Scale by standard deviations
-    stdvs = np.insert(selected_observations.model_stdv, 0, pixel.stdv)
+    stdvs = np.insert(obs_data.model_stdv[obs_indices], 0, pixel.stdv)
     cov = corr * np.outer(stdvs, stdvs)
 
     # Step 4: Apply noise weighting (if enabled)
     if noisy:
-        omega = np.insert(selected_observations.omega, 0, 1.0)
+        omega = np.insert(obs_data.omega[obs_indices], 0, 1.0)
         omega_matrix = np.outer(omega, omega)
         np.fill_diagonal(omega_matrix, 1.0)
         cov *= omega_matrix
@@ -768,7 +749,7 @@ def build_covariance_matrix(
     # Step 5: Apply covariance reduction (if enabled)
     if cov_reduc > 0:
         log_vs30s = np.insert(
-            np.log(selected_observations.model_vs30), 0, np.log(pixel.vs30)
+            np.log(obs_data.model_vs30[obs_indices]), 0, np.log(pixel.vs30)
         )
         log_dist_matrix = np.abs(log_vs30s[:, np.newaxis] - log_vs30s)
         cov *= np.exp(-cov_reduc * log_dist_matrix)
@@ -781,7 +762,7 @@ def select_observations_for_pixel(
     obs_data: ObservationData,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
-) -> ObservationData:
+) -> np.ndarray:
     """
     Select observations for a pixel using distance filtering.
 
@@ -801,40 +782,32 @@ def select_observations_for_pixel(
 
     Returns
     -------
-    ObservationData
-        Selected observations (subset of obs_data).
+    ndarray
+        Integer indices into obs_data for the selected observations.
+        Empty array if no observations are within range.
     """
-    # Calculate distances from pixel to all observations
-    distances = np.sqrt(np.sum((obs_data.locations - pixel.location) ** 2, axis=1))
+    # Euclidean distance from pixel to each observation.
+    # einsum("ij,ij->i", diff, diff) computes the row-wise dot product,
+    # i.e. sum of squared differences per row — equivalent to
+    # np.sum(diff**2, axis=1) but avoids creating intermediate arrays.
+    diff = obs_data.locations - pixel.location
+    distances = np.sqrt(np.einsum("ij,ij->i", diff, diff))
 
     # Select observations using distance-based filtering
     max_points_i = min(max_points, len(distances)) - 1
     if max_points_i < 0:
-        return ObservationData.empty()
+        return np.array([], dtype=np.intp)
 
     min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
         [0, max_points_i]
     ]
     if min_dist > max_dist_m:
         # Not close enough to any observed locations
-        return ObservationData.empty()
+        return np.array([], dtype=np.intp)
 
     # Include all observations within cutoff distance (may exceed max_points for accuracy)
     loc_mask = distances <= min(max_dist_m, cutoff_dist)
-    filtered_indices = np.where(loc_mask)[0]
-
-    # Create subset of ObservationData
-    selected_obs = ObservationData(
-        locations=obs_data.locations[filtered_indices],
-        vs30=obs_data.vs30[filtered_indices],
-        model_vs30=obs_data.model_vs30[filtered_indices],
-        model_stdv=obs_data.model_stdv[filtered_indices],
-        residuals=obs_data.residuals[filtered_indices],
-        omega=obs_data.omega[filtered_indices],
-        uncertainty=obs_data.uncertainty[filtered_indices],
-    )
-
-    return selected_obs
+    return np.where(loc_mask)[0]
 
 
 def compute_spatial_adjustment_for_pixel(
@@ -846,7 +819,7 @@ def compute_spatial_adjustment_for_pixel(
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
     corr_zero: float | None = None,
-) -> SpatialAdjustmentResult | None:
+) -> tuple[float, float, int] | None:
     """
     Compute MVN update for a single pixel.
 
@@ -872,8 +845,9 @@ def compute_spatial_adjustment_for_pixel(
 
     Returns
     -------
-    SpatialAdjustmentResult or None
-        Update result, or None if pixel should be skipped.
+    tuple of (float, float, int) or None
+        (updated_vs30, updated_stdv, n_observations_used), or None if the
+        pixel should be skipped (NaN/invalid input).
     """
     global _DIAG_COUNTER, _DIAG_SAMPLED
     _diag_active = _DIAG_ENABLED and _DIAG_SAMPLED < _DIAG_MAX
@@ -897,7 +871,7 @@ def compute_spatial_adjustment_for_pixel(
     initial_var = (pixel.stdv**2) * corr_zero
 
     # Select observations for this pixel
-    selected_obs = select_observations_for_pixel(
+    obs_indices = select_observations_for_pixel(
         pixel,
         obs_data,
         max_dist_m=max_dist_m,
@@ -906,19 +880,16 @@ def compute_spatial_adjustment_for_pixel(
     if _diag_active:
         t1 = time.perf_counter()
 
-    if len(selected_obs.locations) == 0:
+    n_obs = len(obs_indices)
+    if n_obs == 0:
         # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
-        return SpatialAdjustmentResult(
-            updated_vs30=pixel.vs30,
-            updated_stdv=np.sqrt(initial_var),
-            n_observations_used=0,
-            pixel_index=pixel.index,
-        )
+        return (pixel.vs30, float(np.sqrt(initial_var)), 0)
 
     # Build covariance matrix
     cov_matrix = build_covariance_matrix(
         pixel,
-        selected_obs,
+        obs_data,
+        obs_indices,
         corr_fn,
         noisy=noisy,
         cov_reduc=cov_reduc,
@@ -933,7 +904,7 @@ def compute_spatial_adjustment_for_pixel(
 
         pred_update = np.dot(
             np.dot(cov_matrix[0, 1:], inv_cov),
-            selected_obs.residuals,
+            obs_data.residuals[obs_indices],
         )
 
         var = cov_matrix[0, 0] - np.dot(
@@ -947,29 +918,23 @@ def compute_spatial_adjustment_for_pixel(
                 _DIAG_SAMPLED += 1
                 with open(_DIAG_PATH, "a") as f:
                     f.write(
-                        f"{os.getpid()},{pixel.index},{len(selected_obs.locations)},"
+                        f"{os.getpid()},{pixel.index},{n_obs},"
                         f"{cov_matrix.shape[0]},"
                         f"{(t1-t0)*1e6:.1f},{(t2-t1)*1e6:.1f},"
                         f"{(t3-t2)*1e6:.1f},{(t4-t0)*1e6:.1f}\n"
                     )
 
-        return SpatialAdjustmentResult(
-            updated_vs30=float(pixel.vs30 * np.exp(pred_update)),
-            updated_stdv=float(np.sqrt(max(0, var))),
-            n_observations_used=len(selected_obs.locations),
-            pixel_index=pixel.index,
+        return (
+            float(pixel.vs30 * np.exp(pred_update)),
+            float(np.sqrt(max(0, var))),
+            n_obs,
         )
     except np.linalg.LinAlgError:
         # Singular covariance matrix — keep prior values with default variance shrinkage
         logger.debug(
             f"Singular covariance matrix at pixel {pixel.index}, keeping prior values"
         )
-        return SpatialAdjustmentResult(
-            updated_vs30=pixel.vs30,
-            updated_stdv=np.sqrt(initial_var),
-            n_observations_used=0,
-            pixel_index=pixel.index,
-        )
+        return (pixel.vs30, float(np.sqrt(initial_var)), 0)
 
 
 def find_affected_pixels(
@@ -1127,9 +1092,9 @@ def compute_spatial_adjustments(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
-) -> list[SpatialAdjustmentResult]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
-    Compute MVN updates for all affected pixels.
+    Compute MVN updates for all affected pixels and return updated arrays.
 
     Parameters
     ----------
@@ -1154,8 +1119,8 @@ def compute_spatial_adjustments(
 
     Returns
     -------
-    list
-        List of SpatialAdjustmentResult objects.
+    tuple of ndarray
+        (updated_vs30, updated_stdv) arrays with spatial adjustments applied.
     """
     # Get affected pixel indices
     affected_flat_indices = np.where(bbox_result.mask)[0]
@@ -1171,13 +1136,17 @@ def compute_spatial_adjustments(
     affected_vs30 = raster_data.vs30.flat[affected_flat_indices]
     affected_stdv = raster_data.stdv.flat[affected_flat_indices]
 
+    # Pre-allocate output arrays (copies of input)
+    updated_vs30 = raster_data.vs30.copy()
+    updated_stdv = raster_data.stdv.copy()
+
     # Process in chunks for memory efficiency
     chunk_size = calculate_chunk_size(
         len(obs_data.locations), max_spatial_boolean_array_memory_gb
     )
     n_chunks = int(np.ceil(len(affected_flat_indices) / chunk_size))
 
-    all_updates = []
+    n_updated = 0
 
     logger.info(
         f"Processing {n_chunks} chunks of up to {chunk_size:,} pixels each "
@@ -1210,7 +1179,7 @@ def compute_spatial_adjustments(
                     index=flat_idx,
                 )
 
-                update_result = compute_spatial_adjustment_for_pixel(
+                result = compute_spatial_adjustment_for_pixel(
                     pixel,
                     obs_data,
                     corr_fn,
@@ -1221,43 +1190,15 @@ def compute_spatial_adjustments(
                     corr_zero=corr_zero,
                 )
 
-                if update_result is not None:
-                    all_updates.append(update_result)
+                if result is not None:
+                    vs30, stdv, _ = result
+                    updated_vs30.flat[flat_idx] = vs30
+                    updated_stdv.flat[flat_idx] = stdv
+                    n_updated += 1
 
                 pbar.update(1)
 
-    logger.info(f"Completed processing all chunks: {len(all_updates):,} pixels updated")
-
-    return all_updates
-
-
-def apply_updates(
-    raster_data: RasterData,
-    updates: list[SpatialAdjustmentResult],
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Apply spatial adjustment updates to raster arrays without writing to disk.
-
-    Parameters
-    ----------
-    raster_data : RasterData
-        Raster data object.
-    updates : list
-        List of SpatialAdjustmentResult objects.
-
-    Returns
-    -------
-    tuple of ndarray
-        (updated_vs30, updated_stdv) arrays with updates applied.
-    """
-    # Initialize output arrays with original values
-    updated_vs30 = raster_data.vs30.copy()
-    updated_stdv = raster_data.stdv.copy()
-
-    # Apply updates
-    for update in updates:
-        updated_vs30.flat[update.pixel_index] = update.updated_vs30
-        updated_stdv.flat[update.pixel_index] = update.updated_stdv
+    logger.info(f"Completed processing all chunks: {n_updated:,} pixels updated")
 
     return updated_vs30, updated_stdv
 
@@ -1391,8 +1332,8 @@ def compute_spatial_adjustment_at_points(
         )
 
         if result is not None:
-            mvn_vs30[i] = result.updated_vs30
-            mvn_stdv[i] = result.updated_stdv
+            mvn_vs30[i] = result[0]
+            mvn_stdv[i] = result[1]
 
         if progress_bar is not None:
             progress_bar.update(1)

@@ -556,7 +556,7 @@ def compute_spatial_adjustment_on_grid(
     if n_proc_resolved > 1:
         logger.info(f"Using {n_proc_resolved} parallel workers")
         affected_flat_indices = np.where(bbox_result.mask)[0]
-        updates = parallel.run_parallel_spatial_fit(
+        adjusted_vs30, adjusted_stdv = parallel.run_parallel_spatial_fit(
             affected_flat_indices=affected_flat_indices,
             raster_data=raster_data,
             obs_data=obs_data,
@@ -569,7 +569,7 @@ def compute_spatial_adjustment_on_grid(
             n_proc=n_proc_resolved,
         )
     else:
-        updates = spatial.compute_spatial_adjustments(
+        adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
             raster_data,
             obs_data,
             bbox_result,
@@ -583,14 +583,6 @@ def compute_spatial_adjustment_on_grid(
     t_spatial_elapsed = time.perf_counter() - t_spatial_start
     print(f"  compute_spatial_adjustments: {t_spatial_elapsed:.1f}s")
     logger.info(f"Spatial adjustments completed in {t_spatial_elapsed:.1f}s")
-
-    # 7. Apply Updates (in memory)
-    logger.info("Applying updates...")
-    t_apply_start = time.perf_counter()
-    adjusted_vs30, adjusted_stdv = spatial.apply_updates(raster_data, updates)
-    t_apply_elapsed = time.perf_counter() - t_apply_start
-    print(f"  apply_updates: {t_apply_elapsed:.1f}s")
-    logger.info(f"Updates applied in {t_apply_elapsed:.1f}s")
 
     return adjusted_vs30, adjusted_stdv
 
