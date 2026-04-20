@@ -46,10 +46,12 @@ This code was refactored from a legacy codebase available at:
 /home/arr65/src/pre-refactor-Vs30-for-comparison
 ```
 
-To run the legacy code, use a separate environment:
+To run the legacy code, use the `oldvs30_venv` environment's Python directly:
 ```bash
-mamba activate oldvs30_venv && python <script>
+/home/arr65/miniforge-pypy3/envs/oldvs30_venv/bin/python3 <script>
 ```
+
+Note: `mamba activate oldvs30_venv` does not work reliably in non-interactive shells (the Bash tool). Always use the full path to the environment's Python binary instead.
 
 Helper wrapper scripts in the legacy directory can run the legacy code with the same settings as defined in the refactored code's `config.yaml` file, useful for comparison testing.
 

@@ -506,17 +506,34 @@ def compute_spatial_adjustment_on_grid(
         slope_array=slope_array,
         coast_dist_array=coast_dist_array,
     )
-    logger.info(f"Prepared {len(obs_data.locations)} valid observations")
+    n_obs = len(obs_data.locations)
+    logger.info(f"Prepared {n_obs} valid observations")
 
-    if len(obs_data.locations) == 0:
+    if n_obs == 0:
         logger.warning(
             "No valid observations found within model bounds. "
             "Returning input arrays unchanged."
         )
         return vs30_array.copy(), stdv_array.copy()
 
+    # With many observations, pixels frequently hit the MAX_POINTS cap,
+    # producing large covariance matrices. In this regime, letting BLAS
+    # parallelise each matrix inverse (n_proc=1) is much faster than
+    # Python-level multiprocessing with single-threaded BLAS.
+    if (
+        n_proc_resolved > 1
+        and n_obs > constants.MULTIPROCESS_OBSERVATION_THRESHOLD
+    ):
+        logger.info(
+            f"Falling back to single-process mode: {n_obs} observations "
+            f"exceeds threshold ({constants.MULTIPROCESS_OBSERVATION_THRESHOLD}). "
+            f"BLAS will parallelise matrix inversions across all cores."
+        )
+        n_proc_resolved = 1
+
     # 5. Find Affected Pixels
     logger.info("Finding pixels affected by observations...")
+    t_bbox_start = time.perf_counter()
     bbox_result = spatial.find_affected_pixels(
         raster_data,
         obs_data,
@@ -525,10 +542,17 @@ def compute_spatial_adjustment_on_grid(
         max_dist_m=constants.MAX_DIST_M,
         n_proc=n_proc_resolved,
     )
-    logger.info(f"Found {bbox_result.n_affected_pixels:,} affected pixels")
+    t_bbox_elapsed = time.perf_counter() - t_bbox_start
+    print(f"  find_affected_pixels: {t_bbox_elapsed:.1f}s "
+          f"({bbox_result.n_affected_pixels:,} affected pixels)")
+    logger.info(
+        f"Found {bbox_result.n_affected_pixels:,} affected pixels "
+        f"in {t_bbox_elapsed:.1f}s"
+    )
 
     # 6. Compute Spatial Adjustments
     logger.info("Computing spatial updates...")
+    t_spatial_start = time.perf_counter()
     if n_proc_resolved > 1:
         logger.info(f"Using {n_proc_resolved} parallel workers")
         affected_flat_indices = np.where(bbox_result.mask)[0]
@@ -556,10 +580,17 @@ def compute_spatial_adjustment_on_grid(
             noisy=noisy,
             cov_reduc=constants.COV_REDUC,
         )
+    t_spatial_elapsed = time.perf_counter() - t_spatial_start
+    print(f"  compute_spatial_adjustments: {t_spatial_elapsed:.1f}s")
+    logger.info(f"Spatial adjustments completed in {t_spatial_elapsed:.1f}s")
 
     # 7. Apply Updates (in memory)
     logger.info("Applying updates...")
+    t_apply_start = time.perf_counter()
     adjusted_vs30, adjusted_stdv = spatial.apply_updates(raster_data, updates)
+    t_apply_elapsed = time.perf_counter() - t_apply_start
+    print(f"  apply_updates: {t_apply_elapsed:.1f}s")
+    logger.info(f"Updates applied in {t_apply_elapsed:.1f}s")
 
     return adjusted_vs30, adjusted_stdv
 

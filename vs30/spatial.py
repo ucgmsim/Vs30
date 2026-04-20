@@ -588,6 +588,7 @@ def grid_points_in_bbox(
     obs_northings_min: np.ndarray,
     obs_northings_max: np.ndarray,
     start_grid_idx: int = 0,
+    build_obs_indices: bool = True,
 ) -> tuple[np.ndarray, list[np.ndarray]]:
     """
     Find grid points within bounding boxes of observations using fully vectorized NumPy.
@@ -610,6 +611,10 @@ def grid_points_in_bbox(
     start_grid_idx : int, optional
         Starting index of grid_locs in the full grid (for offsetting indices).
         Default is 0.
+    build_obs_indices : bool, optional
+        Whether to build per-observation grid index lists. Only needed for
+        parallel processing; the single-process path only uses the mask.
+        Default is True.
 
     Returns
     -------
@@ -619,6 +624,7 @@ def grid_points_in_bbox(
     obs_to_grid_indices : list of ndarray
         List of length n_obs. Each element is an array of grid point indices
         (in the full grid) that are within that observation's bounding box.
+        Empty list when build_obs_indices is False.
     """
     # Extract coordinates
     grid_eastings = grid_locs[:, 0]  # (n_grid,)
@@ -636,6 +642,9 @@ def grid_points_in_bbox(
 
     # Collapse to single mask: which grid points are affected by any observation
     chunk_mask = np.any(in_bbox, axis=0)
+
+    if not build_obs_indices:
+        return chunk_mask, []
 
     # For each observation, get the grid point indices within its bounding box
     # in_bbox shape: (n_obs, n_grid_chunk)
@@ -677,7 +686,7 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
     Parameters
     ----------
     args : tuple
-        (chunk_idx, grid_locs_chunk, start_idx, obs_bounds)
+        (chunk_idx, grid_locs_chunk, start_idx, obs_bounds, build_obs_indices)
         where obs_bounds is (obs_eastings_min, obs_eastings_max,
                             obs_northings_min, obs_northings_max)
 
@@ -686,7 +695,7 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
     tuple
         (chunk_idx, chunk_mask, obs_to_grid_indices)
     """
-    chunk_idx, grid_locs_chunk, start_idx, obs_bounds = args
+    chunk_idx, grid_locs_chunk, start_idx, obs_bounds, build_obs_indices = args
     obs_eastings_min, obs_eastings_max, obs_northings_min, obs_northings_max = (
         obs_bounds
     )
@@ -698,6 +707,7 @@ def process_bbox_chunk(args: tuple) -> tuple[int, np.ndarray, list[np.ndarray]]:
         obs_northings_min=obs_northings_min,
         obs_northings_max=obs_northings_max,
         start_grid_idx=start_idx,
+        build_obs_indices=build_obs_indices,
     )
 
     return chunk_idx, chunk_mask, obs_to_grid_indices
@@ -1020,9 +1030,15 @@ def find_affected_pixels(
         obs_northings_max,
     )
 
+    # obs_to_grid_indices is only needed for parallel workers
+    build_obs_indices = n_proc > 1
+
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
-    obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(n_obs)]
+    if build_obs_indices:
+        obs_to_grid_indices = [np.array([], dtype=np.int64) for _ in range(n_obs)]
+    else:
+        obs_to_grid_indices = []
 
     logger.info(f"Processing {n_chunks} chunks of {chunk_size:,} pixels each")
 
@@ -1034,7 +1050,7 @@ def find_affected_pixels(
         start_idx = chunk_idx * chunk_size
         end_idx = min((chunk_idx + 1) * chunk_size, len(grid_locs))
         grid_locs_chunk = grid_locs[start_idx:end_idx]
-        chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds))
+        chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds, build_obs_indices))
 
     if n_proc > 1 and n_chunks > 1:
         # Parallel processing
@@ -1076,12 +1092,13 @@ def find_affected_pixels(
     for chunk_idx, chunk_mask, chunk_obs_to_grid in results:
         start_idx = chunk_idx * chunk_size
         valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
-        for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
-            if len(grid_indices) > 0:
-                full_raster_indices = raster_data.valid_flat_indices[grid_indices]
-                obs_to_grid_indices[obs_idx] = np.concatenate(
-                    [obs_to_grid_indices[obs_idx], full_raster_indices]
-                )
+        if build_obs_indices:
+            for obs_idx, grid_indices in enumerate(chunk_obs_to_grid):
+                if len(grid_indices) > 0:
+                    full_raster_indices = raster_data.valid_flat_indices[grid_indices]
+                    obs_to_grid_indices[obs_idx] = np.concatenate(
+                        [obs_to_grid_indices[obs_idx], full_raster_indices]
+                    )
 
     # Create full-size mask
     grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
