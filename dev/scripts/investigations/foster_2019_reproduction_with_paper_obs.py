@@ -41,7 +41,7 @@ from scipy.spatial import cKDTree
 
 from vs30 import constants, pipeline
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 from conftest import load_fixed_model_config  # noqa: E402
 
 SUPPLEMENT_PATH = Path(

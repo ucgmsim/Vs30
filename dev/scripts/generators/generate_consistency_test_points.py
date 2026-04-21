@@ -5,7 +5,7 @@ Produces tests/fixtures/consistency_test_points.csv containing ~40 on-land
 points used by test_grid_points_consistency.py. Run manually whenever the
 point set needs updating:
 
-    python dev/generate_consistency_test_points.py
+    python dev/scripts/generators/generate_consistency_test_points.py
 
 Deliberate points target specific geology categories, coastal zones, cities,
 observation-sparse areas, and geology boundaries. Random points fill the
@@ -22,7 +22,7 @@ from qcore import coordinates
 
 from vs30 import category, constants, raster
 
-FIXTURES_DIR = Path(__file__).resolve().parent.parent / "tests" / "fixtures"
+FIXTURES_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
 OUTPUT_CSV = FIXTURES_DIR / "consistency_test_points.csv"
 
 # Number of random points to generate (after land filtering)

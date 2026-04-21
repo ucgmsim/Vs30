@@ -13,7 +13,7 @@ and hybrid slope modification reproduce the paper at float precision.
 
 Run once to produce the CSV checked into the repo:
 
-    python dev/generate_foster_2019_approx_points_benchmark.py
+    python dev/scripts/generators/generate_foster_2019_approx_points_benchmark.py
 
 After regeneration the original 25 MB raster can be removed.
 """
@@ -29,7 +29,7 @@ from scipy.spatial import cKDTree
 from vs30 import constants
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 BENCHMARK_RASTER = REPO_ROOT / "tests/benchmarks/foster_2019_approx.tif"
 OUTPUT_CSV = REPO_ROOT / "tests/benchmarks/foster_2019_approx_points.csv"
 

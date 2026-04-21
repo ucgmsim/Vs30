@@ -9,7 +9,7 @@ import numpy as np
 import rasterio
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from vs30 import raster, constants, config
 
 BENCHMARK_NZ_GRID = config.GridConfig(

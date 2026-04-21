@@ -89,7 +89,7 @@ Then **gap-fill** the benchmark (the Jaehwi fork does not fill nodata gaps,
 but the refactored pipeline does):
 
 ```bash
-python dev/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.tif
+python dev/scripts/generators/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.tif
 ```
 
 **Key flags:**

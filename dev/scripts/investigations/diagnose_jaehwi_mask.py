@@ -12,8 +12,8 @@ from pathlib import Path
 import numpy as np
 import rasterio
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 
 from vs30 import config, constants, pipeline
 from conftest import load_fixed_model_config

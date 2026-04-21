@@ -96,5 +96,5 @@ data. We keep the 412-row CSV as the production file because it has
 cleaner provenance (full precision throughout, no reconstructed rows)
 and does not include the supplement's 4 accidental duplicates. The
 393-row reconstruction lives in
-`dev/foster_2019_reproduction_with_paper_obs.py` purely as a diagnostic
+`dev/scripts/investigations/foster_2019_reproduction_with_paper_obs.py` purely as a diagnostic
 and is not used by production code or tests.

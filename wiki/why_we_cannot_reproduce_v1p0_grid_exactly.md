@@ -109,7 +109,7 @@ independently, so results do not depend on processing order.
 ### Test A: Points mode agrees between codebases
 
 We ran both codebases on **200 random points** across New Zealand
-(script: `dev/compare_points_mode.py`):
+(script: `dev/scripts/comparison/compare_points_mode.py`):
 
 | Metric | Value |
 |--------|-------|
@@ -161,4 +161,4 @@ shortcuts make the legacy output **non-reproducible** (processor-count dependent
 while our output is fully deterministic and reproducible.
 
 A runnable demonstration of each artifact is available in
-`dev/demonstrate_grid_artifacts.py`.
+`dev/scripts/investigations/demonstrate_grid_artifacts.py`.

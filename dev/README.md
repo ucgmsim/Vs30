@@ -1,18 +1,24 @@
 # Developer Resources
 
-This directory contains raw data files, processing scripts, and validation tools
-used during development and maintenance of the vs30 package. These are for
-maintainers and developers only — typical users should not need to run anything
-here.
+This directory contains raw data files, processing scripts, and validation
+tools used during development and maintenance of the vs30 package. These
+are for maintainers and developers only — typical users should not need to
+run anything here.
 
 ## Structure
 
-- `observations/` — Raw observation data and scripts that produce the prepared
-  CSVs used by the pipeline.
-  - `jaehwi_v1p0/` — Data and script for the Jaehwi v1.0 model observations.
-  - `foster_2019_approx/` — Script that generates the foster_2019_approx model
-    observations (approximate reproduction of Foster et al. 2019; requires the
-    legacy codebase environment for raw-source regeneration).
-- `compare_rasters.py` — Compares any two GeoTIFFs:
-  - `stats` prints pixel-level comparison statistics over the overlapping region.
-  - `diff` saves signed, absolute, and log-space difference GeoTIFFs.
+- `scripts/` — Development and maintenance scripts.
+  - `generators/` — Produce committed fixtures, benchmarks, or CSVs.
+    Re-run when inputs change.
+  - `comparison/` — Reusable tools for comparing rasters or points-mode
+    output between codebases.
+  - `investigations/` — Historical diagnostics kept for future reference.
+    May reference legacy codebases or stale paths; treat as read-only.
+- `observations/` — Raw observation data and scripts that produce the
+  prepared CSVs used by the pipeline.
+  - `foster_2019_approx/` — Script for the foster_2019_approx observations.
+  - `modified_foster_2019/` — Script for the modified_foster_2019 observations.
+- `jaehwi_v1p0_reproduction/` — Self-contained investigation bundle
+  (scripts + reference data) from reproducing Jaehwi's v1.0 output.
+- `docs/` — Maintainer-only design notes and investigations. User-facing
+  scientific context lives in the repo's `wiki/` directory instead.

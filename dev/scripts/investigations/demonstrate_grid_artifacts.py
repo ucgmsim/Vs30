@@ -7,7 +7,7 @@ Each test isolates one source of numerical difference between Jaehwi's grid
 mode and points mode. These are implementation artifacts, not scientific
 differences — the underlying model is the same.
 
-Run with: python dev/demonstrate_grid_artifacts.py
+Run with: python dev/scripts/investigations/demonstrate_grid_artifacts.py
 """
 
 import numpy as np
