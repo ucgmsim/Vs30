@@ -5,18 +5,21 @@ Three model versions (modified_foster_2019, jaehwi_v1p0, viktor_cpt_clustering)
 run the full grid pipeline at 5000 m resolution and compare the in-memory
 result against a stored benchmark raster in under 30 seconds per test.
 
-foster_2019_approx is benchmarked differently: its benchmark raster is the
-paper's published 100 m map, and a full-domain refactored run at 100 m takes
-~6 hours. Instead, ``test_foster_2019_approx_points_benchmark`` samples the
-pipeline at a deterministic set of prior-dominated points (more than
-MAX_DIST_M from any observation) and compares against the benchmark raster
-at the same coordinates. Prior-dominated points are chosen because the MVN
-step has no effect there, so the categorical posterior and hybrid slope
-modification reproduce the paper at float precision. A small minority of
-pixels have larger discrepancies due to categorical/hybrid edge cases
-unrelated to the MVN; the test uses median + percentile assertions to catch
-drift while tolerating those known outliers. See
-``dev/foster_2019_benchmark_status.md`` for background.
+foster_2019_approx is benchmarked differently: a full-domain refactored run
+at the paper's 100 m resolution takes ~6 hours, so
+``test_foster_2019_approx_points_benchmark`` instead compares pipeline
+output at 30 fixed prior-dominated points (more than MAX_DIST_M from any
+observation) against reference values sampled from the paper's published
+map. The points and reference values are baked into
+``foster_2019_approx_points.csv``; see
+``dev/generate_foster_2019_approx_points_benchmark.py`` for regeneration.
+Prior-dominated points are used because the MVN step has no effect there,
+so the categorical posterior and hybrid slope modification reproduce the
+paper at float precision. A small minority of pixels have larger
+discrepancies due to categorical/hybrid edge cases unrelated to MVN; the
+test uses median + percentile assertions to catch drift while tolerating
+those known outliers. See ``dev/foster_2019_benchmark_status.md`` for
+background.
 """
 
 import os
@@ -25,10 +28,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-import rasterio
 from conftest import assert_arrays_match_raster_benchmark, load_fixed_model_config
 from pyproj import Transformer
-from scipy.spatial import cKDTree
 
 from vs30 import config, constants, pipeline
 
@@ -44,44 +45,11 @@ BENCHMARK_NZ_GRID = config.GridConfig(
     grid_dy=5000,
 )
 
-# foster_2019_approx points benchmark — see module docstring.
-FOSTER_2019_APPROX_BENCHMARK_PATH = BENCHMARKS_DIR / "foster_2019_approx.tif"
-FOSTER_2019_APPROX_POINTS_SEED = 42
-FOSTER_2019_APPROX_N_POINTS = 30
+FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV = (
+    BENCHMARKS_DIR / "foster_2019_approx_points.csv"
+)
 
 _NZTM_TO_WGS = Transformer.from_crs(2193, 4326, always_xy=True)
-
-
-def _select_foster_2019_approx_prior_points() -> np.ndarray:
-    """Deterministically select prior-dominated NZTM pixel centres from the benchmark.
-
-    Returns ``FOSTER_2019_APPROX_N_POINTS`` (easting, northing) pairs
-    sampled from foster_2019_approx.tif's valid pixels that are more than
-    ``MAX_DIST_M`` from any observation in the foster_2019_approx obs CSV.
-    The selection is deterministic from ``FOSTER_2019_APPROX_POINTS_SEED``
-    and the benchmark + obs files on disk.
-    """
-    cfg = load_fixed_model_config(constants.FixedModelVersion.FOSTER_2019_APPROX)
-    obs_df = pd.read_csv(cfg["independent_observations_csv"], comment="#")
-    obs_xy = obs_df[["easting", "northing"]].to_numpy()
-
-    rng = np.random.default_rng(FOSTER_2019_APPROX_POINTS_SEED)
-    with rasterio.open(FOSTER_2019_APPROX_BENCHMARK_PATH) as src:
-        band = src.read(1)
-        valid = ~np.isnan(band)
-        if src.nodata is not None:
-            valid &= band != src.nodata
-        rows, cols = np.where(valid)
-        idx = rng.choice(len(rows), size=min(200_000, len(rows)), replace=False)
-        xs, ys = rasterio.transform.xy(
-            src.transform, rows[idx], cols[idx], offset="center"
-        )
-    candidate_xy = np.column_stack([xs, ys])
-
-    dists = cKDTree(obs_xy).query(candidate_xy, k=1)[0]
-    prior_xy = candidate_xy[dists > constants.MAX_DIST_M]
-    rng.shuffle(prior_xy)
-    return prior_xy[:FOSTER_2019_APPROX_N_POINTS]
 
 
 def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, n_proc: int) -> None:
@@ -133,8 +101,10 @@ def test_foster_2019_approx_points_benchmark(n_proc):
     up there immediately.
     """
     cfg = load_fixed_model_config(constants.FixedModelVersion.FOSTER_2019_APPROX)
-    pixel_xy = _select_foster_2019_approx_prior_points()
-    lons, lats = _NZTM_TO_WGS.transform(pixel_xy[:, 0], pixel_xy[:, 1])
+    bench_df = pd.read_csv(FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV)
+    lons, lats = _NZTM_TO_WGS.transform(
+        bench_df["easting"].to_numpy(), bench_df["northing"].to_numpy()
+    )
 
     result = pipeline.points_pipeline(
         longitudes=np.asarray(lons),
@@ -155,10 +125,8 @@ def test_foster_2019_approx_points_benchmark(n_proc):
         fill_gaps=cfg.get("fill_gaps", False),
     )
 
-    with rasterio.open(FOSTER_2019_APPROX_BENCHMARK_PATH) as src:
-        samples = np.array(list(src.sample(pixel_xy, indexes=[1, 2])))
-    bench_vs30 = samples[:, 0]
-    bench_stdv = samples[:, 1]
+    bench_vs30 = bench_df["benchmark_vs30"].to_numpy()
+    bench_stdv = bench_df["benchmark_stdv"].to_numpy()
 
     actual_vs30 = result[constants.ObservationColumn.VS30].to_numpy()
     actual_stdv = result[constants.COL_COMBINED_STDV].to_numpy()
