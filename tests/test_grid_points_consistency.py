@@ -7,10 +7,11 @@ generated and run through grid_pipeline.  The center pixel is compared
 against the batched points_pipeline result at the same coordinates.
 
 The test is split into two tiers:
-- Fast tier (foster_2019, jaehwi_v1p0): no coastal distance computation,
-  runs in ~4-5 minutes.
-- Slow tier (modified_foster_2019, viktor_cpt_clustering): coastal distance
-  extends to full NZ domain per point, runs in ~25-30 minutes.
+- Fast tier: smoke test over 3 representative cities for the two
+  model versions without coastal distance (foster_2019_approx, jaehwi_v1p0).
+  Runs in ~45 s and is enabled by default.
+- Slow tier (--runslow): full 38-point coverage for all 4 model versions.
+  Runs in ~35-45 minutes.
 """
 
 import numpy as np
@@ -37,17 +38,26 @@ STDV_RTOL = 0.10
 # Half-width for the 3x3 local grid (150m each side of center -> 300m / 100m = 3 pixels).
 LOCAL_GRID_HALF_WIDTH = 150
 
-# Model versions that do NOT use coastal distance (fast tier).
+# Model versions that do NOT use coastal distance — cheap enough to run
+# in the fast tier on a small point subset.
 FAST_VERSIONS = [
-    constants.FixedModelVersion.FOSTER_2019,
+    constants.FixedModelVersion.FOSTER_2019_APPROX,
     constants.FixedModelVersion.JAEHWI_V1P0,
 ]
 
-# Model versions that DO use coastal distance (slow tier).
-SLOW_VERSIONS = [
+# All model versions, used by the slow tier.
+ALL_VERSIONS = [
+    constants.FixedModelVersion.FOSTER_2019_APPROX,
+    constants.FixedModelVersion.JAEHWI_V1P0,
     constants.FixedModelVersion.MODIFIED_FOSTER_2019,
     constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING,
 ]
+
+# Fast-tier point subset: 3 geologically distinct cities covering the north
+# (volcanic Auckland), central (complex Wellington), and south (alluvial
+# Christchurch). Enough to smoke-test the grid/points pipelines without
+# incurring the full 38-point cost.
+FAST_POINT_NAMES = ["auckland", "wellington", "christchurch"]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -120,10 +130,19 @@ def run_grid_pipeline_at_point(
     return float(grid_vs30[1, 1]), float(grid_stdv[1, 1])
 
 
-def _check_consistency_for_version(version: constants.FixedModelVersion):
-    """Core comparison logic shared by fast and slow tiers."""
+def _check_consistency_for_version(
+    version: constants.FixedModelVersion,
+    point_filter: list[str] | None = None,
+):
+    """Core comparison logic shared by fast and slow tiers.
+
+    If ``point_filter`` is provided, only points whose ``name`` is in the
+    list are tested — used by the fast tier to keep runtime low.
+    """
     cfg = load_fixed_model_config(version)
     points_df = load_test_points()
+    if point_filter is not None:
+        points_df = points_df[points_df["name"].isin(point_filter)].reset_index(drop=True)
 
     # Batch points pipeline call
     points_result = run_points_pipeline_for_version(cfg, points_df)
@@ -186,12 +205,12 @@ def _check_consistency_for_version(version: constants.FixedModelVersion):
 
 @pytest.mark.parametrize("version", FAST_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_fast(version):
-    """Grid/points consistency for models without coastal distance (~4-5 min total)."""
-    _check_consistency_for_version(version)
+    """Grid/points consistency smoke test: 3 cities, 2 simple models (~45 s total)."""
+    _check_consistency_for_version(version, point_filter=FAST_POINT_NAMES)
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("version", SLOW_VERSIONS, ids=lambda v: v.value)
+@pytest.mark.parametrize("version", ALL_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_slow(version):
-    """Grid/points consistency for models with coastal distance (~12-15 min each)."""
+    """Full grid/points consistency: all 38 points for all 4 model versions."""
     _check_consistency_for_version(version)

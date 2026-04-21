@@ -70,13 +70,13 @@ The package provides a `vs30` CLI entry point via Typer. Main commands:
 
 ```bash
 # Run the full pipeline using a fixed model version (most common) - generates raster grids
-vs30 grid output_dir foster_2019
+vs30 grid output_dir foster_2019_approx
 
 # Run the grid pipeline with all parameters specified explicitly
 vs30 grid-custom output_dir --grid-xmin 1060050 --grid-xmax 2120050 ...
 
 # Compute Vs30 at specific lat/lon locations using a fixed model version
-vs30 points sites.csv results.csv foster_2019
+vs30 points sites.csv results.csv foster_2019_approx
 
 # Compute Vs30 at locations with all parameters specified explicitly
 vs30 points-custom sites.csv results.csv --geology-csv my_geology.csv ...
@@ -88,10 +88,10 @@ The `points` command computes Vs30 at specific latitude/longitude points without
 
 ```bash
 # Basic usage with a fixed model version
-vs30 points sites.csv results.csv foster_2019
+vs30 points sites.csv results.csv foster_2019_approx
 
 # With custom column names
-vs30 points sites.csv results.csv foster_2019 \
+vs30 points sites.csv results.csv foster_2019_approx \
     --lon-column lon \
     --lat-column lat
 

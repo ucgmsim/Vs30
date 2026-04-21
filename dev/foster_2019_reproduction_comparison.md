@@ -80,7 +80,7 @@ vs30 grid-custom \
     --grid-xmin 1000000 --grid-xmax 2126400 \
     --grid-ymin 4700000 --grid-ymax 6338400 \
     --grid-dx 100 --grid-dy 100 \
-    --config foster_2019 \
+    --config foster_2019_approx \
     --include-intermediate \
     /home/arr65/data/vs30/grid_models/foster_2019_reproduced
 ```

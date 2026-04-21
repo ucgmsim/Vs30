@@ -6,7 +6,7 @@ first commit 2021-02-04). The original R code
 ([fostergeotech/Vs30_NZ](https://github.com/fostergeotech/Vs30_NZ)) is correct.
 All three bugs are fixed in the refactored codebase.
 
-| Bug | Description | Affected code path | Affects foster_2019 or viktor_cpt_clustering? |
+| Bug | Description | Affected code path | Affects foster_2019_approx or viktor_cpt_clustering? |
 |-----|-------------|-------------------|----------------------------------------------|
 | 1 | Missing mean-shift term in Bayesian variance update | `posterior()` | No — neither version calls this path |
 | 2 | Off-by-one category indexing in Bayesian update loop | `posterior()` | No — same reason |

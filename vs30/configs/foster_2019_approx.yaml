@@ -1,5 +1,8 @@
-# Original Foster (2019) Vs30 Model Configuration
-# Reproduces the published model from Foster et al. (2019, Earthquake Spectra).
+# Approximate reproduction of the Foster (2019) Vs30 model.
+# Aims to reproduce the published model from Foster et al. (2019, Earthquake
+# Spectra) as closely as the refactored Python pipeline allows. Small
+# numerical differences remain, mostly in the MVN-conditioning step near
+# observations; see dev/foster_2019_benchmark_status.md.
 
 # --- Categorical model files ---
 # Same posteriors as modified_foster_2019 (computed by the original R code).
@@ -8,7 +11,7 @@ terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_stand
 
 # --- Observation files ---
 # Original excludes ALL Kaiser Q3 stations.
-independent_observations_csv: foster_2019_measured_vs30_independent_observations.csv
+independent_observations_csv: foster_2019_approx_measured_vs30_independent_observations.csv
 clustered_observations_csv:
 
 # --- Pipeline settings ---

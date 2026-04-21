@@ -17,7 +17,7 @@ class CombinationMethod(StrEnum):
 class FixedModelVersion(StrEnum):
     """Available fixed versions of the Vs30 model."""
 
-    FOSTER_2019 = "foster_2019"
+    FOSTER_2019_APPROX = "foster_2019_approx"
     MODIFIED_FOSTER_2019 = "modified_foster_2019"
     VIKTOR_CPT_CLUSTERING = "viktor_cpt_clustering"
     JAEHWI_V1P0 = "jaehwi_v1p0"
@@ -26,7 +26,7 @@ class FixedModelVersion(StrEnum):
 CONFIGS_DIR = Path(__file__).parent / "configs"
 
 MODEL_VERSION_TO_CONFIG = {
-    FixedModelVersion.FOSTER_2019: CONFIGS_DIR / "foster_2019.yaml",
+    FixedModelVersion.FOSTER_2019_APPROX: CONFIGS_DIR / "foster_2019_approx.yaml",
     FixedModelVersion.MODIFIED_FOSTER_2019: CONFIGS_DIR / "modified_foster_2019.yaml",
     FixedModelVersion.JAEHWI_V1P0: CONFIGS_DIR / "jaehwi_v1p0.yaml",
     FixedModelVersion.VIKTOR_CPT_CLUSTERING: CONFIGS_DIR / "viktor_cpt_clustering.yaml",

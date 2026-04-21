@@ -27,10 +27,10 @@ The package provides a `vs30` command-line interface with the following commands
 Run the complete Vs30 mapping workflow using a predefined model version:
 
 ```bash
-vs30 grid output_directory foster_2019
+vs30 grid output_directory foster_2019_approx
 ```
 
-Available model versions: `foster_2019`, `jaehwi_v1p0`
+Available model versions: `foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`
 
 Options:
 - `--n-proc`: Number of parallel processes (-1 for all cores)
@@ -42,7 +42,7 @@ Options:
 Calculate Vs30 at specific lat/lon points using a predefined model version:
 
 ```bash
-vs30 points locations.csv results.csv foster_2019
+vs30 points locations.csv results.csv foster_2019_approx
 ```
 
 Options:
@@ -61,7 +61,7 @@ vs30 update-priors model.csv output_dir --model-type geology
 
 ## Configuration
 
-The package uses predefined model configurations (`foster_2019`, `jaehwi_v1p0`) that include all necessary parameters and file paths. For custom configurations, see the advanced commands (`grid-custom`, `points-custom`).
+The package uses predefined model configurations (`foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`) that include all necessary parameters and file paths. For custom configurations, see the advanced commands (`grid-custom`, `points-custom`).
 
 ## How It Works
 
