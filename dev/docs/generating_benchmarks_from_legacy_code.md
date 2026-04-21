@@ -109,4 +109,4 @@ so no coordinate adjustment is needed.
 Not yet documented. The foster_2019_approx model uses a Matern correlation
 function and different observation filtering, so generating its benchmark from
 legacy code requires a different approach. See
-`dev/differences_between_foster_2019_approx_and_modified_foster_2019.md`.
+`wiki/differences_between_foster_2019_approx_and_modified_foster_2019.md`.
