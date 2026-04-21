@@ -31,6 +31,24 @@ def pytest_collection_modifyitems(config, items):
         if "slow" in item.keywords:
             item.add_marker(skip_slow)
 
+
+@pytest.fixture(scope="session", autouse=True)
+def require_extracted_shapefiles():
+    """Fail fast if shapefiles.tar.xz has not been extracted by setup.py."""
+    required = [
+        constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH,
+        constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH,
+    ]
+    missing = [p for p in required if not p.exists()]
+    if missing:
+        pretty = "\n  ".join(str(p) for p in missing)
+        pytest.exit(
+            f"Required shapefile(s) not extracted:\n  {pretty}\n"
+            f"Run `pip install -e .` in the active environment to extract "
+            f"{constants.SHAPEFILES_ARCHIVE_FILENAME}.",
+            returncode=1,
+        )
+
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
 
