@@ -47,7 +47,7 @@ def run_config(name, longitudes, latitudes, **params):
     print(f"\n  Running {name}...")
     return pipeline.points_pipeline(
         longitudes=longitudes, latitudes=latitudes,
-        noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
+        noisy=True, mvn=True, include_intermediate=True, nproc=-1,
         **params,
     )
 

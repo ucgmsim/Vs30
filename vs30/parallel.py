@@ -21,13 +21,13 @@ def single_threaded_blas():
         yield
 
 
-def resolve_n_proc(n_proc: int | None) -> int:
+def resolve_nproc(nproc: int | None) -> int:
     """
     Convert user input to actual process count.
 
     Parameters
     ----------
-    n_proc : int or None
+    nproc : int or None
         User-specified number of processes.
         None or 1 = single-threaded
         -1 = use all available CPU cores
@@ -41,15 +41,15 @@ def resolve_n_proc(n_proc: int | None) -> int:
     Raises
     ------
     ValueError
-        If n_proc is 0 or less than -1
+        If nproc is 0 or less than -1
     """
-    if n_proc is None or n_proc == 1:
+    if nproc is None or nproc == 1:
         return 1
-    if n_proc == -1:
+    if nproc == -1:
         return mp.cpu_count()
-    if n_proc < -1 or n_proc == 0:
-        raise ValueError(f"n_proc must be -1, 1, or > 1, got {n_proc}")
-    return min(n_proc, mp.cpu_count())
+    if nproc < -1 or nproc == 0:
+        raise ValueError(f"nproc must be -1, 1, or > 1, got {nproc}")
+    return min(nproc, mp.cpu_count())
 
 
 # Use spawn context to avoid GDAL fork issues.
@@ -499,7 +499,7 @@ def run_parallel_locations(
     geol_model_df: pd.DataFrame,
     terr_model_df: pd.DataFrame,
     config: LocationsChunkConfig,
-    n_proc: int,
+    nproc: int,
 ) -> pd.DataFrame:
     """
     Process locations in parallel.
@@ -519,7 +519,7 @@ def run_parallel_locations(
         Terrain categorical model
     config : LocationsChunkConfig
         Configuration parameters for processing
-    n_proc : int
+    nproc : int
         Number of processes to use (must be > 1)
 
     Returns
@@ -528,7 +528,7 @@ def run_parallel_locations(
         Results with vs30, stdv, and intermediate columns (if requested)
     """
     # Split into many small chunks for smooth progress bar updates.
-    # pool.imap distributes chunks to n_proc workers automatically.
+    # pool.imap distributes chunks to nproc workers automatically.
     n_chunks = min(len(points), constants.N_PROGRESS_CHUNKS)
     split_indices = np.array_split(range(len(points)), n_chunks)
     chunk_args = [
@@ -547,7 +547,7 @@ def run_parallel_locations(
     # Process in parallel using spawn context (avoids GDAL fork issues)
     # Use single_threaded_blas to prevent BLAS oversubscription
     with single_threaded_blas():
-        with spawn_context.Pool(processes=n_proc) as pool:
+        with spawn_context.Pool(processes=nproc) as pool:
             results = []
             with tqdm(total=len(points), unit="point") as pbar:
                 for chunk_id, result_df in pool.imap(
@@ -571,7 +571,7 @@ def run_parallel_spatial_fit(
     max_points: int,
     noisy: bool,
     cov_reduc: float,
-    n_proc: int,
+    nproc: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute spatial adjustments for affected pixels in parallel.
@@ -599,7 +599,7 @@ def run_parallel_spatial_fit(
         Whether to apply noise weighting
     cov_reduc : float
         Covariance reduction factor
-    n_proc : int
+    nproc : int
         Number of processes to use (must be > 1)
 
     Returns
@@ -648,7 +648,7 @@ def run_parallel_spatial_fit(
     }
 
     # Split into many small chunks for smooth progress bar updates.
-    # pool.imap distributes chunks to n_proc workers automatically.
+    # pool.imap distributes chunks to nproc workers automatically.
     n_chunks = min(len(affected_flat_indices), constants.N_PROGRESS_CHUNKS)
     chunks = np.array_split(np.arange(len(affected_flat_indices)), n_chunks)
     chunk_args = [
@@ -665,7 +665,7 @@ def run_parallel_spatial_fit(
         os.makedirs(base, exist_ok=True)
         os.environ["VS30_MVN_DIAG_PATH"] = f"{base}/{label.lower()}.csv"
     with single_threaded_blas():
-        with spawn_context.Pool(processes=min(n_proc, len(chunk_args))) as pool:
+        with spawn_context.Pool(processes=min(nproc, len(chunk_args))) as pool:
             results = []
             with tqdm(
                 total=len(affected_flat_indices),

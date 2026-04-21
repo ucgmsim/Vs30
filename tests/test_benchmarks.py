@@ -52,7 +52,7 @@ FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV = (
 _NZTM_TO_WGS = Transformer.from_crs(2193, 4326, always_xy=True)
 
 
-def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, n_proc: int) -> None:
+def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, nproc: int) -> None:
     """Run the grid pipeline for a fixed model version and compare against the benchmark raster."""
     cfg = load_fixed_model_config(version)
 
@@ -72,7 +72,7 @@ def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig,
         fill_gaps=cfg["fill_gaps"],
         geology_corr_fn=cfg["geology_corr_fn"],
         terrain_corr_fn=cfg["terrain_corr_fn"],
-        n_proc=n_proc,
+        nproc=nproc,
     )
 
     benchmark = BENCHMARKS_DIR / f"{version}.tif"
@@ -81,8 +81,8 @@ def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig,
     )
 
 
-@pytest.mark.parametrize("n_proc", [1, -1], ids=["single_process", "multiprocess"])
-def test_foster_2019_approx_points_benchmark(n_proc):
+@pytest.mark.parametrize("nproc", [1, -1], ids=["single_process", "multiprocess"])
+def test_foster_2019_approx_points_benchmark(nproc):
     """Prior-dominated points from foster_2019_approx.tif match points_pipeline output.
 
     Tests that the categorical posterior + hybrid slope modification
@@ -117,7 +117,7 @@ def test_foster_2019_approx_points_benchmark(n_proc):
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        n_proc=n_proc,
+        nproc=nproc,
         geology_corr_fn=cfg.get("geology_corr_fn"),
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
@@ -150,30 +150,30 @@ def test_foster_2019_approx_points_benchmark(n_proc):
 
 
 def test_modified_foster_2019_single_process():
-    """modified_foster_2019 full-domain pipeline matches benchmark (n_proc=1)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, n_proc=1)
+    """modified_foster_2019 full-domain pipeline matches benchmark (nproc=1)."""
+    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, nproc=1)
 
 
 def test_modified_foster_2019_multiprocess():
     """modified_foster_2019 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())
+    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, nproc=os.cpu_count())
 
 
 def test_jaehwi_v1p0_single_process():
-    """jaehwi_v1p0 full-domain pipeline matches benchmark (n_proc=1)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, n_proc=1)
+    """jaehwi_v1p0 full-domain pipeline matches benchmark (nproc=1)."""
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, nproc=1)
 
 
 def test_jaehwi_v1p0_multiprocess():
     """jaehwi_v1p0 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, nproc=os.cpu_count())
 
 
 def test_viktor_cpt_clustering_single_process():
-    """viktor_cpt_clustering full-domain pipeline matches benchmark (n_proc=1)."""
-    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, n_proc=1)
+    """viktor_cpt_clustering full-domain pipeline matches benchmark (nproc=1)."""
+    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, nproc=1)
 
 
 def test_viktor_cpt_clustering_multiprocess():
     """viktor_cpt_clustering full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, n_proc=os.cpu_count())
+    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, nproc=os.cpu_count())

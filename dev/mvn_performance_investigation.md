@@ -9,7 +9,7 @@
 
 The refactored code takes ~276s to produce the full combined grid for
 `viktor_cpt_clustering`, compared to ~106s for the legacy code. Both run with
-`n_proc=1` and multi-threaded BLAS. This document records the measured
+`nproc=1` and multi-threaded BLAS. This document records the measured
 breakdown and identifies the sources of the ~2.6x slowdown.
 
 ## Pipeline-level timing (refactored, 276s total)
@@ -120,22 +120,22 @@ overhead, `scipy.cdist` vs `np.einsum`, object creation per pixel, etc.).
 
 | Run | Scope | Time |
 |-----|-------|------|
-| Legacy n_proc=1, movement opt ON | full pipeline | 106s |
-| Legacy n_proc=1, movement opt OFF | full pipeline | 224s |
-| Refactored n_proc=1 (BLAS multi-threaded) | full pipeline | 276s |
-| Refactored n_proc=6 (BLAS single-threaded) | geology only | ~51 min |
-| Refactored n_proc=6 (BLAS single-threaded) | terrain only | ~45 min |
+| Legacy nproc=1, movement opt ON | full pipeline | 106s |
+| Legacy nproc=1, movement opt OFF | full pipeline | 224s |
+| Refactored nproc=1 (BLAS multi-threaded) | full pipeline | 276s |
+| Refactored nproc=6 (BLAS single-threaded) | geology only | ~51 min |
+| Refactored nproc=6 (BLAS single-threaded) | terrain only | ~45 min |
 
 ## Changes already made
 
-1. **Adaptive n_proc fallback** (`pipeline.py`, `constants.py`): When
+1. **Adaptive nproc fallback** (`pipeline.py`, `constants.py`): When
    observations exceed `MULTIPROCESS_OBSERVATION_THRESHOLD` (1000), the
-   pipeline falls back to `n_proc=1` so BLAS can parallelise matrix inversions.
-   This avoids the ~50 minute runtime with `n_proc=6`.
+   pipeline falls back to `nproc=1` so BLAS can parallelise matrix inversions.
+   This avoids the ~50 minute runtime with `nproc=6`.
 
-2. **Skip `obs_to_grid_indices` when n_proc=1** (`spatial.py`): The
+2. **Skip `obs_to_grid_indices` when nproc=1** (`spatial.py`): The
    per-observation grid index lists are only needed for parallel workers.
-   Skipping them when `n_proc=1` removes dead work, though the measured
+   Skipping them when `nproc=1` removes dead work, though the measured
    speedup was within noise (~275s vs ~276s), indicating the loop was not the
    expensive part of `find_affected_pixels`.
 
@@ -150,7 +150,7 @@ settings (27% of pixels differ, 2.83% mean difference). See
 `dev/why_we_cannot_reproduce_v1p0_grid_exactly.md` for full details.
 
 The refactored code computes every pixel independently, making results fully
-deterministic and reproducible regardless of `n_proc`.
+deterministic and reproducible regardless of `nproc`.
 
 Any future optimisation to skip redundant distance computations must preserve
 this property — i.e. the decision to skip must depend only on the pixel's
@@ -162,7 +162,7 @@ location relative to observations, not on which pixel was processed previously.
   distance matrix approach or `np.einsum`.
 - Replace per-pixel object creation with direct array operations.
 - Profile whether `find_affected_pixels` can be eliminated entirely for the
-  n_proc=1 path by doing observation selection inline (as legacy does).
+  nproc=1 path by doing observation selection inline (as legacy does).
 - Investigate a deterministic skip optimisation: pre-compute which pixels are
   far from all observations (using the bbox mask) and skip them without
   depending on processing order.

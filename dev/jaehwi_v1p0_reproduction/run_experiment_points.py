@@ -193,7 +193,7 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
         noisy=True,
         mvn=True,
         include_intermediate=True,
-        n_proc=-1,
+        nproc=-1,
         **params,
     )
 

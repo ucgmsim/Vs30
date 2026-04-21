@@ -53,7 +53,7 @@ if __name__ == "__main__":
         noisy=True,
         mvn=True,
         include_intermediate=True,
-        n_proc=-1,
+        nproc=-1,
         geology_categorical_csv=GEOL_PRIOR,
         terrain_categorical_csv=TERR_PRIOR,
         do_bayesian_update=True,

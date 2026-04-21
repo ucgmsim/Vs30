@@ -128,7 +128,7 @@ def run_experiment(name, params):
     pipeline.compute_grid(
         grid_config=SUBGRID,
         output_dir=output_dir,
-        n_proc=-1,
+        nproc=-1,
         include_intermediate=True,
         noisy=True,
         mvn=True,

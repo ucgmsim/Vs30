@@ -45,7 +45,7 @@ def run_pipeline():
         fill_gaps=cfg["fill_gaps"],
         geology_corr_fn=cfg["geology_corr_fn"],
         terrain_corr_fn=cfg["terrain_corr_fn"],
-        n_proc=1,
+        nproc=1,
     )
     np.save(CACHE_V, result["combined_vs30"])
     np.save(CACHE_S, result["combined_stdv"])

@@ -128,7 +128,7 @@ def run_points_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
-    n_proc: int = 1,
+    nproc: int = 1,
     lon_column: str = constants.LOCATIONS_LON_COLUMN,
     lat_column: str = constants.LOCATIONS_LAT_COLUMN,
     geology_corr_fn: Callable | None = None,
@@ -172,7 +172,7 @@ def run_points_pipeline(
         Whether to perform Bayesian update of categorical Vs30 values.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     lon_column : str, optional
         Name of longitude column in input CSV.
@@ -221,7 +221,7 @@ def run_points_pipeline(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        n_proc=n_proc,
+        nproc=nproc,
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
@@ -247,7 +247,7 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 at locations using a fixed model version's config.
@@ -266,7 +266,7 @@ def points(
         Name of latitude column in input CSV.
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     """
     config_data = load_model_config(version)
@@ -285,7 +285,7 @@ def points(
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
-        n_proc=n_proc,
+        nproc=nproc,
         lon_column=lon_column,
         lat_column=lat_column,
         geology_corr_fn=config_data["geology_corr_fn"],
@@ -342,7 +342,7 @@ def points_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations with explicit parameters.
@@ -388,7 +388,7 @@ def points_custom(
         Name of latitude column in input CSV.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     """
     run_points_pipeline(
@@ -405,7 +405,7 @@ def points_custom(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        n_proc=n_proc,
+        nproc=nproc,
         lon_column=lon_column,
         lat_column=lat_column,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
@@ -454,7 +454,7 @@ def grid(
         ),
     ] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
@@ -483,7 +483,7 @@ def grid(
         Grid Y spacing (meters).
     output_dir : Path
         Directory to save all pipeline outputs.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     include_intermediate : bool
         Include intermediate rasters in output.
@@ -513,7 +513,7 @@ def grid(
         noisy=config_data["noisy"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
-        n_proc=n_proc,
+        nproc=nproc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         geology_corr_fn=config_data["geology_corr_fn"],
         terrain_corr_fn=config_data["terrain_corr_fn"],
@@ -605,7 +605,7 @@ def grid_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    n_proc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
@@ -660,7 +660,7 @@ def grid_custom(
         Which model(s) to run: geology, terrain, or combined (default).
     include_intermediate : bool
         Include intermediate rasters in output.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
@@ -693,7 +693,7 @@ def grid_custom(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        n_proc=n_proc,
+        nproc=nproc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,

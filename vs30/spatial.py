@@ -943,7 +943,7 @@ def find_affected_pixels(
     max_spatial_boolean_array_memory_gb: float,
     model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
-    n_proc: int = 1,
+    nproc: int = 1,
 ) -> BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
@@ -961,7 +961,7 @@ def find_affected_pixels(
         progress bar labelling.
     max_dist_m : float, optional
         Maximum distance for considering observations.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. 1 for sequential (default),
         >1 for parallel processing.
 
@@ -996,7 +996,7 @@ def find_affected_pixels(
     )
 
     # obs_to_grid_indices is only needed for parallel workers
-    build_obs_indices = n_proc > 1
+    build_obs_indices = nproc > 1
 
     # Initialize mask and obs_to_grid_indices
     valid_points_in_bbox_mask = np.zeros(len(grid_locs), dtype=bool)
@@ -1017,13 +1017,13 @@ def find_affected_pixels(
         grid_locs_chunk = grid_locs[start_idx:end_idx]
         chunk_args.append((chunk_idx, grid_locs_chunk, start_idx, obs_bounds, build_obs_indices))
 
-    if n_proc > 1 and n_chunks > 1:
+    if nproc > 1 and n_chunks > 1:
         # Parallel processing
-        actual_n_proc = min(n_proc, n_chunks)
-        logger.info(f"Using {actual_n_proc} parallel workers")
+        actual_nproc = min(nproc, n_chunks)
+        logger.info(f"Using {actual_nproc} parallel workers")
         from vs30 import parallel
 
-        with parallel.spawn_context.Pool(processes=actual_n_proc) as pool:
+        with parallel.spawn_context.Pool(processes=actual_nproc) as pool:
             results = list(
                 tqdm(
                     pool.imap(process_bbox_chunk, chunk_args),

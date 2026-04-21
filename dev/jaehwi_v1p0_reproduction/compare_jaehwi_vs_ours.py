@@ -64,7 +64,7 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             apply_coastal_distance_mod=False,
             apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
-            noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
+            noisy=True, mvn=True, include_intermediate=True, nproc=-1,
         )
     elif mode == "bayesian":
         return pipeline.points_pipeline(
@@ -77,7 +77,7 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             apply_coastal_distance_mod=False,
             apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
-            noisy=True, mvn=True, include_intermediate=True, n_proc=-1,
+            noisy=True, mvn=True, include_intermediate=True, nproc=-1,
         )
 
 

@@ -139,7 +139,7 @@ def run_our_pipeline(points_nztm: np.ndarray) -> pd.DataFrame:
         noisy=True,
         mvn=True,
         include_intermediate=True,
-        n_proc=-1,
+        nproc=-1,
     )
     return result_df
 

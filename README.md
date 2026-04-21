@@ -33,7 +33,7 @@ vs30 grid output_directory foster_2019_approx
 Available model versions: `foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`
 
 Options:
-- `--n-proc`: Number of parallel processes (-1 for all cores)
+- `--nproc`: Number of parallel processes (-1 for all cores)
 - `--noisy/--no-noisy`: Apply noise weighting in spatial adjustment (default: True)
 - `--max-spatial-boolean-array-memory-gb`: Memory limit for spatial arrays (default: 1.0)
 
@@ -49,7 +49,7 @@ Options:
 - `--lon-column`: Name of longitude column (default: "longitude") 
 - `--lat-column`: Name of latitude column (default: "latitude")
 - `--include-intermediate/--final-only`: Include individual model outputs (default: include)
-- `--n-proc`: Number of parallel processes
+- `--nproc`: Number of parallel processes
 
 ### Update Categorical Model Values
 

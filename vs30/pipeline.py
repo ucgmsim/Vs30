@@ -91,7 +91,7 @@ def compute_categorical_vs30_updates(
     model_type: constants.ModelType,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    n_proc: int = 1,
+    nproc: int = 1,
 ) -> pd.DataFrame:
     """
     Compute Bayesian updates to categorical model values and return as DataFrame.
@@ -126,7 +126,7 @@ def compute_categorical_vs30_updates(
         Path to CSV file with independent observations
         (e.g., modified_foster_2019_measured_vs30_independent_observations.csv).
         These will be processed without clustering.
-    n_proc : int, optional
+    nproc : int, optional
         Number of processes for DBSCAN clustering. Use -1 for all available cores.
 
     Returns
@@ -219,7 +219,7 @@ def compute_categorical_vs30_updates(
         # Perform clustering
         logger.info("Performing spatial clustering...")
         clustered_observations_df = category.perform_clustering(
-            clustered_observations_df, n_proc
+            clustered_observations_df, nproc
         )
 
     # Load independent observations if provided
@@ -412,7 +412,7 @@ def compute_spatial_adjustment_on_grid(
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
-    n_proc: int = 1,
+    nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
@@ -450,7 +450,7 @@ def compute_spatial_adjustment_on_grid(
         Whether to apply coastal distance modification for GID 4 and GID 10.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
@@ -464,7 +464,7 @@ def compute_spatial_adjustment_on_grid(
     tuple[np.ndarray, np.ndarray]
         (adjusted_vs30, adjusted_stdv) arrays.
     """
-    n_proc_resolved = parallel.resolve_n_proc(n_proc)
+    nproc_resolved = parallel.resolve_nproc(nproc)
 
     logger.info(f"Starting spatial adjustment for {model_type} model")
 
@@ -518,10 +518,10 @@ def compute_spatial_adjustment_on_grid(
 
     # With many observations, pixels frequently hit the MAX_POINTS cap,
     # producing large covariance matrices. In this regime, letting BLAS
-    # parallelise each matrix inverse (n_proc=1) is much faster than
+    # parallelise each matrix inverse (nproc=1) is much faster than
     # Python-level multiprocessing with single-threaded BLAS.
     if (
-        n_proc_resolved > 1
+        nproc_resolved > 1
         and n_obs > constants.MULTIPROCESS_OBSERVATION_THRESHOLD
     ):
         logger.info(
@@ -529,7 +529,7 @@ def compute_spatial_adjustment_on_grid(
             f"exceeds threshold ({constants.MULTIPROCESS_OBSERVATION_THRESHOLD}). "
             f"BLAS will parallelise matrix inversions across all cores."
         )
-        n_proc_resolved = 1
+        nproc_resolved = 1
 
     # 5. Find Affected Pixels
     logger.info("Finding pixels affected by observations...")
@@ -540,7 +540,7 @@ def compute_spatial_adjustment_on_grid(
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
-        n_proc=n_proc_resolved,
+        nproc=nproc_resolved,
     )
     t_bbox_elapsed = time.perf_counter() - t_bbox_start
     print(f"  find_affected_pixels: {t_bbox_elapsed:.1f}s "
@@ -553,8 +553,8 @@ def compute_spatial_adjustment_on_grid(
     # 6. Compute Spatial Adjustments
     logger.info("Computing spatial updates...")
     t_spatial_start = time.perf_counter()
-    if n_proc_resolved > 1:
-        logger.info(f"Using {n_proc_resolved} parallel workers")
+    if nproc_resolved > 1:
+        logger.info(f"Using {nproc_resolved} parallel workers")
         affected_flat_indices = np.where(bbox_result.mask)[0]
         adjusted_vs30, adjusted_stdv = parallel.run_parallel_spatial_fit(
             affected_flat_indices=affected_flat_indices,
@@ -566,7 +566,7 @@ def compute_spatial_adjustment_on_grid(
             max_points=constants.MAX_POINTS,
             noisy=noisy,
             cov_reduc=constants.COV_REDUC,
-            n_proc=n_proc_resolved,
+            nproc=nproc_resolved,
         )
     else:
         adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
@@ -795,7 +795,7 @@ def compute_model_grid(
     do_bayesian_update: bool = True,
     mvn: bool = True,
     noisy: bool = True,
-    n_proc: int = 1,
+    nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
@@ -835,7 +835,7 @@ def compute_model_grid(
         Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
@@ -876,7 +876,7 @@ def compute_model_grid(
             model_type=model_type,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
-            n_proc=n_proc,
+            nproc=nproc,
         )
 
         if output_dir is not None and include_intermediate:
@@ -985,7 +985,7 @@ def compute_model_grid(
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             noisy=noisy,
-            n_proc=n_proc,
+            nproc=nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             slope_array=slope_array,
             coast_dist_array=coast_dist_array,
@@ -1024,7 +1024,7 @@ def grid_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = True,
     include_intermediate: bool = False,
-    n_proc: int = 1,
+    nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
@@ -1080,7 +1080,7 @@ def grid_pipeline(
     include_intermediate : bool, optional
         Whether to write intermediate files (ID rasters, initial VS30, slope,
         coast distance, hybrid geology). Default False.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
@@ -1138,7 +1138,7 @@ def grid_pipeline(
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
-            n_proc=n_proc,
+            nproc=nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
@@ -1162,7 +1162,7 @@ def grid_pipeline(
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
-            n_proc=n_proc,
+            nproc=nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
@@ -1261,7 +1261,7 @@ def points_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
-    n_proc: int = 1,
+    nproc: int = 1,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
@@ -1313,7 +1313,7 @@ def points_pipeline(
         using observations before computing Vs30. Default False.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    n_proc : int, optional
+    nproc : int, optional
         Number of parallel processes. Use -1 for all cores.
     geology_corr_fn : Callable, optional
         Correlation function for geology spatial adjustment.
@@ -1387,7 +1387,7 @@ def points_pipeline(
                 model_type=constants.ModelType.GEOLOGY,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                n_proc=n_proc,
+                nproc=nproc,
             )
         else:
             geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
@@ -1406,18 +1406,18 @@ def points_pipeline(
                 model_type=constants.ModelType.TERRAIN,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                n_proc=n_proc,
+                nproc=nproc,
             )
         else:
             terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
 
-    n_proc_resolved = parallel.resolve_n_proc(n_proc)
+    nproc_resolved = parallel.resolve_nproc(nproc)
 
     # ================================================================
     # Parallel Processing Path
     # ================================================================
-    if n_proc_resolved > 1:
-        logger.info(f"\nProcessing with {n_proc_resolved} parallel workers...")
+    if nproc_resolved > 1:
+        logger.info(f"\nProcessing with {nproc_resolved} parallel workers...")
 
         loc_config = parallel.LocationsChunkConfig(
             include_intermediate=include_intermediate,
@@ -1442,7 +1442,7 @@ def points_pipeline(
             geol_model_df=geol_model_df,
             terr_model_df=terr_model_df,
             config=loc_config,
-            n_proc=n_proc_resolved,
+            nproc=nproc_resolved,
         )
 
         # Add coordinate columns at the front
@@ -1599,7 +1599,7 @@ def points_pipeline(
                         mvn=mvn,
                         do_bayesian_update=do_bayesian_update,
                         include_intermediate=False,
-                        n_proc=1,
+                        nproc=1,
                         geology_corr_fn=geology_corr_fn,
                         terrain_corr_fn=terrain_corr_fn,
                         apply_coastal_distance_mod=apply_coastal_distance_mod,

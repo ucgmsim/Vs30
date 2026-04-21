@@ -180,7 +180,7 @@ def run_points_pipeline(cfg: dict, pixel_xy: np.ndarray, obs_csv: Path) -> pd.Da
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        n_proc=1,
+        nproc=1,
         geology_corr_fn=cfg.get("geology_corr_fn"),
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],

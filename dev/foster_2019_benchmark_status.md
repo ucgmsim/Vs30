@@ -6,7 +6,7 @@ The foster_2019_approx benchmark is covered by
 `test_foster_2019_approx_points_benchmark` in `tests/test_benchmarks.py`, which
 samples the pipeline at 30 deterministic prior-dominated points and
 compares against the stored 100 m benchmark raster at the same
-coordinates. Both `n_proc=1` and `n_proc=-1` (all cores) are exercised
+coordinates. Both `nproc=1` and `nproc=-1` (all cores) are exercised
 via parametrisation. Combined runtime: ~14 s in the default tier.
 
 The earlier full-grid tests (`test_foster_2019_approx_single_process`,
@@ -42,7 +42,7 @@ instead.
 1. Deterministically samples 30 pixel centres from foster_2019_approx.tif whose
    nearest observation is more than `MAX_DIST_M` (10 km) away.
 2. Runs `pipeline.points_pipeline` at those NZTM coordinates (both
-   `n_proc=1` and `n_proc=-1` via parametrisation).
+   `nproc=1` and `nproc=-1` via parametrisation).
 3. Reads the benchmark raster at the same coordinates using
    `rasterio.sample`.
 4. Asserts tight bounds on the median relative difference (Vs30 < 1e-4,

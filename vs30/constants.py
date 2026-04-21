@@ -68,7 +68,7 @@ MAX_DIST_M: int = 10000
 MAX_POINTS: int = 500
 
 # When the number of valid observations exceeds this threshold, the MVN spatial
-# adjustment falls back to single-process mode (n_proc=1) to allow BLAS to
+# adjustment falls back to single-process mode (nproc=1) to allow BLAS to
 # parallelise large matrix inversions across all cores. With many observations,
 # pixels frequently hit the MAX_POINTS cap, producing large covariance matrices
 # where BLAS-level parallelism is far more efficient than Python-level
