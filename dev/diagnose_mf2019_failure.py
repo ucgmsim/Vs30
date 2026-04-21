@@ -12,7 +12,7 @@ import numpy as np
 import rasterio
 
 DUMP_DIR = Path("/tmp/vs30_test_dumps")
-BENCHMARK = Path("/home/arr65/src/Vs30/tests/benchmarks/model_versions/modified_foster_2019.tif")
+BENCHMARK = Path("/home/arr65/src/Vs30/tests/benchmarks/modified_foster_2019.tif")
 RTOL = 1e-3
 
 act_vs30 = np.load(DUMP_DIR / "modified_foster_2019_actual_vs30.npy")

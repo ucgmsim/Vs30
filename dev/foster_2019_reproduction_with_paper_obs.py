@@ -48,7 +48,7 @@ SUPPLEMENT_PATH = Path(
     "/home/arr65/data/vs30/grid_models/downloaded/foster_2019/15_eeri_35_4_suppl_2_es1_online.txt"
 )
 BENCHMARK_PATH = Path(
-    "/home/arr65/src/Vs30/tests/benchmarks/model_versions/foster_2019_approx.tif"
+    "/home/arr65/src/Vs30/tests/benchmarks/foster_2019_approx.tif"
 )
 
 N_PER_COHORT = 30

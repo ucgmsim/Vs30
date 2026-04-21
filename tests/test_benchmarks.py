@@ -33,7 +33,7 @@ from pyproj import Transformer
 
 from vs30 import config, constants, pipeline
 
-BENCHMARKS_DIR = Path(__file__).parent / "benchmarks" / "model_versions"
+BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
 
 # Shared grid for modified_foster_2019, jaehwi_v1p0, and viktor_cpt_clustering.
 BENCHMARK_NZ_GRID = config.GridConfig(

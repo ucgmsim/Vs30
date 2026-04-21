@@ -2,7 +2,7 @@
 Fill nodata gaps in a benchmark VS30 raster using the gapfill module.
 
 Usage:
-    python dev/gapfill_benchmark.py tests/benchmarks/model_versions/jaehwi_v1p0.tif
+    python dev/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.tif
 
 Reads the 2-band benchmark raster (band 1 = vs30, band 2 = stdv), applies
 the same gap-fill logic as the pipeline (nearest-neighbor fill for on-land

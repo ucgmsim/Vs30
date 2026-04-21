@@ -22,7 +22,7 @@ STANDARD_NZ_GRID = dataclasses.replace(
     constants.FULL_NZ_GRID_CONFIG, grid_dx=400, grid_dy=400
 )
 
-BENCH = Path("tests/benchmarks/model_versions/jaehwi_v1p0.tif")
+BENCH = Path("tests/benchmarks/jaehwi_v1p0.tif")
 CACHE_V = Path("dev/_jaehwi_vs30.npy")
 CACHE_S = Path("dev/_jaehwi_stdv.npy")
 

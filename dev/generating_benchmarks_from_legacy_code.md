@@ -1,7 +1,7 @@
 # Generating Benchmark Rasters from Legacy Code
 
 How to produce each refactored model version's benchmark `.tif` using the
-legacy codebases. These benchmarks live in `tests/benchmarks/model_versions/`
+legacy codebases. These benchmarks live in `tests/benchmarks/`
 and are compared against the refactored pipeline output by `test_benchmarks.py`.
 
 ## Environment
@@ -42,7 +42,7 @@ $LEGACY_PY run_vs30calc.py \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/model_versions/modified_foster_2019.tif`.
+Copy `combined_mvn.tif` to `tests/benchmarks/modified_foster_2019.tif`.
 
 **Key flags:**
 - `--source original` selects the original (non-CPT) observation dataset.
@@ -63,7 +63,7 @@ $LEGACY_PY run_vs30calc.py \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/model_versions/viktor_cpt_clustering.tif`.
+Copy `combined_mvn.tif` to `tests/benchmarks/viktor_cpt_clustering.tif`.
 
 **Key flags:**
 - `--source cpt` selects the CPT-derived observation dataset.
@@ -83,13 +83,13 @@ $LEGACY_PY run_vs30calc_V1.py \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/model_versions/jaehwi_v1p0.tif`.
+Copy `combined_mvn.tif` to `tests/benchmarks/jaehwi_v1p0.tif`.
 
 Then **gap-fill** the benchmark (the Jaehwi fork does not fill nodata gaps,
 but the refactored pipeline does):
 
 ```bash
-python dev/gapfill_benchmark.py tests/benchmarks/model_versions/jaehwi_v1p0.tif
+python dev/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.tif
 ```
 
 **Key flags:**

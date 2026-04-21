@@ -30,8 +30,8 @@ from vs30 import constants
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BENCHMARK_RASTER = REPO_ROOT / "tests/benchmarks/model_versions/foster_2019_approx.tif"
-OUTPUT_CSV = REPO_ROOT / "tests/benchmarks/model_versions/foster_2019_approx_points.csv"
+BENCHMARK_RASTER = REPO_ROOT / "tests/benchmarks/foster_2019_approx.tif"
+OUTPUT_CSV = REPO_ROOT / "tests/benchmarks/foster_2019_approx_points.csv"
 
 SEED = 42
 N_POINTS = 30

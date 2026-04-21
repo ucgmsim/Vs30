@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tests"))
 from conftest import load_fixed_model_config  # noqa: E402
 
 
-BENCHMARK_PATH = Path("/home/arr65/src/Vs30/tests/benchmarks/model_versions/foster_2019_approx.tif")
+BENCHMARK_PATH = Path("/home/arr65/src/Vs30/tests/benchmarks/foster_2019_approx.tif")
 N_PER_COHORT = 30
 NEAR_OBS_M = 500.0  # upper bound for cohort B
 SEED = 42
