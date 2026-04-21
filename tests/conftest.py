@@ -33,41 +33,8 @@ def pytest_collection_modifyitems(config, items):
 
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
-BENCHMARKS_DIR: Path = TESTS_DIR / "benchmarks"
 
 TEST_RTOL: float = 1e-3
-
-def load_test_config(scenario: str) -> dict:
-    """
-    Load a test configuration YAML and resolve CSV paths.
-
-    Observation CSVs are resolved relative to FIXTURES_DIR. Categorical model
-    CSVs are resolved relative to the package resource directory.
-
-    Parameters
-    ----------
-    scenario : str
-        Name of the test scenario (used to find the YAML config file).
-
-    Returns
-    -------
-    dict
-        Loaded config with all CSV paths resolved to absolute Paths.
-    """
-    config_file = FIXTURES_DIR / f"test_config_{scenario}.yaml"
-    with open(config_file) as f:
-        config_data = yaml.safe_load(f)
-
-    for key, subdir in constants.RESOURCE_SUBDIRS.items():
-        if config_data[key]:
-            if subdir == "observations":
-                config_data[key] = FIXTURES_DIR / config_data[key]
-            else:
-                config_data[key] = (
-                    constants.RESOURCE_PATH / subdir / config_data[key]
-                )
-
-    return config_data
 
 
 def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
