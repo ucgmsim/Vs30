@@ -4,6 +4,8 @@
 vs30/resources/geospatial/coast
 vs30/resources/geospatial/qmap
 vs30map
+.claude/
+.vscode/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
