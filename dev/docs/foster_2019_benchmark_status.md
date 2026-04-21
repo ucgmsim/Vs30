@@ -9,11 +9,10 @@ compares against the stored 100 m benchmark raster at the same
 coordinates. Both `nproc=1` and `nproc=-1` (all cores) are exercised
 via parametrisation. Combined runtime: ~14 s in the default tier.
 
-The earlier full-grid tests (`test_foster_2019_approx_single_process`,
-`test_foster_2019_approx_multiprocess`) are removed — they could not be run at
-the benchmark's native 100 m resolution (~6 h per test) and failed
-immediately at 5 km due to a shape mismatch. See
-"History" below for context.
+A full-grid benchmark at the paper's native 100 m resolution (~185 M
+pixels) would take ~6 h per test, which is not viable for pytest. The
+points-based approach avoids that cost while still exercising the
+categorical + hybrid pipeline against the published raster.
 
 The other three model-version benchmarks were regenerated at 5000 m:
 
@@ -26,14 +25,6 @@ The other three model-version benchmarks were regenerated at 5000 m:
 `foster_2019_approx.tif` was not regenerated — it is still the 100 m version
 from commit `2dc0dda` (2026-04-14). The points-based test does not need it
 to match the other three in resolution because it samples at pixel centres.
-
-## Why a 100 m Run Takes ~6 Hours
-
-The grid is ~185 million pixels. With observations spread across the full
-domain, most pixels are "affected" and need MVN conditioning, which is the
-dominant cost of the pipeline. Running at that resolution for every
-pytest invocation is not viable, so the points-based benchmark was chosen
-instead.
 
 ## How the Points Benchmark Works
 
@@ -55,62 +46,6 @@ posterior, the hybrid slope modification, and the combination step —
 all of which reproduce the paper at float precision in the common case.
 The 80th-percentile bounds tolerate a small tail of known outlier
 pixels (categorical/hybrid edge cases, unrelated to MVN).
-
-## History
-
-### The deselected full-grid tests (now removed, 2026-04-21)
-
-Prior to the points benchmark, `test_foster_2019_approx_single_process` and
-`test_foster_2019_approx_multiprocess` tried to run the full grid pipeline at
-5000 m and compare against the 100 m benchmark. This failed immediately
-due to a shape mismatch:
-
-```
-AssertionError: Band 1: Valid data masks differ
-    actual shape=(328, 225)     # 5000 m output
-    expected shape=(16384, 11264)  # 100 m benchmark
-```
-
-`assert_arrays_match_raster_benchmark` calls `np.array_equal` on two
-different-shape arrays and fails. The test was not "hanging" or "broken
-mid-pipeline" — it ran the grid pipeline to completion in ~9 s and then
-the comparison step failed. To run at matching 100 m resolution would
-take ~6 h per test, which is prohibitive.
-
-Three options were considered before landing on the points benchmark:
-
-1. **Regenerate `foster_2019_approx.tif` at 5000 m from the original R code**
-   (Kevin Foster's R code:
-   `/home/arr65/src/Kevin_Foster_R_code_vs30_model/Vs30_NZ`). The R
-   workflow is not documented in
-   `dev/docs/generating_benchmarks_from_legacy_code.md` (the foster_2019_approx
-   section is explicitly a stub), and some input data files appear to
-   have been lost.
-2. **Leave the test disabled.** Coverage overlap with the other three
-   model-version benchmarks is significant (shared categorical CSVs)
-   but not total.
-3. **Small-subregion 100 m benchmark.** Would need a new benchmark
-   raster and a new test.
-
-The points benchmark is effectively option 3 taken to its logical
-extreme — 30 individual pixel-sized "subregions" — and reuses the
-existing 100 m benchmark raster directly.
-
-### Obs-set investigation (2026-04-21, see below)
-
-An investigation confirmed that the ~1.6 % cohort-B (near-obs) rel diff
-is intrinsic to the refactored MVN numerical implementation, not the
-observation data. That is why the points benchmark uses cohort A
-(prior-dominated) only: cohort B cannot be reproduced at tight
-tolerance regardless of obs set.
-
-Remaining supporting coverage:
-
-- `test_grid_points_consistency_fast[foster_2019_approx]` — 3×3 local grids at
-  Auckland / Wellington / Christchurch, exercises the full pipeline
-  plumbing including Matérn correlation.
-- `test_utils.TestMaternCorrelationFunction::*` — Matérn correlation
-  function validated against R's `gstat` output.
 
 ## Investigation: Is the divergence caused by the observation set? (2026-04-21)
 
