@@ -107,13 +107,18 @@ Input CSV must have longitude and latitude columns (WGS84). Output includes geol
 
 ## Running Tests
 
-```bash
-# Run regression tests (parameterized by processor count)
-pytest tests/test_regression.py
+The suite has two tiers:
 
-# Run a specific test
-pytest tests/test_regression.py::test_vs30calc_regression -v
+```bash
+# Default — unit tests, benchmark tests, 3-city grid/points smoke. ~3 min.
+pytest tests/
+
+# Default + full 38-point grid/points consistency across all 4 model versions. ~43 min.
+pytest tests/ --runslow
 ```
+
+Tests decorated with `@pytest.mark.slow` are skipped unless `--runslow` is
+passed (see `conftest.py::pytest_collection_modifyitems`).
 
 ## Architecture
 

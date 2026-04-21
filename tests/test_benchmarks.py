@@ -94,8 +94,7 @@ def test_foster_2019_approx_points_benchmark(nproc):
     hard rtol because a small minority of prior-dominated pixels have
     larger discrepancies from the paper (up to ~19 % in the worst case)
     due to categorical/hybrid edge-case differences between the legacy
-    R pipeline and the refactored Python one — see
-    ``dev/docs/foster_2019_reproduction_comparison.md``. Those outliers are
+    R pipeline and the refactored Python one. Those outliers are
     independent of MVN conditioning and known to exist. The median must
     stay tight because any drift in the common-case codepath would show
     up there immediately.

@@ -54,8 +54,7 @@ beyond `MAX_DIST_M`, so those pixels depend only on the categorical
 posterior, the hybrid slope modification, and the combination step —
 all of which reproduce the paper at float precision in the common case.
 The 80th-percentile bounds tolerate a small tail of known outlier
-pixels documented in `dev/foster_2019_reproduction_comparison.md`
-(categorical/hybrid edge cases, unrelated to MVN).
+pixels (categorical/hybrid edge cases, unrelated to MVN).
 
 ## History
 
@@ -84,10 +83,9 @@ Three options were considered before landing on the points benchmark:
    (Kevin Foster's R code:
    `/home/arr65/src/Kevin_Foster_R_code_vs30_model/Vs30_NZ`). The R
    workflow is not documented in
-   `dev/generating_benchmarks_from_legacy_code.md` (the foster_2019_approx
+   `dev/docs/generating_benchmarks_from_legacy_code.md` (the foster_2019_approx
    section is explicitly a stub), and some input data files appear to
-   have been lost — see
-   `dev/foster_2019_reproduction_comparison.md`.
+   have been lost.
 2. **Leave the test disabled.** Coverage overlap with the other three
    model-version benchmarks is significant (shared categorical CSVs)
    but not total.
