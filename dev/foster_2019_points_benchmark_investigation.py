@@ -16,7 +16,7 @@ one observation. Tests MVN conditioning and observation handling.
 The refactored code has 412 observations (derived from modified_foster_2019
 filtering) while the paper had 393 — so divergence is expected in cohort B
 even if the rest of the pipeline is faithful. See
-dev/foster_2019_benchmark_status.md and dev/foster_2019_reproduction_comparison.md.
+dev/docs/foster_2019_benchmark_status.md and dev/docs/foster_2019_reproduction_comparison.md.
 """
 
 from pathlib import Path

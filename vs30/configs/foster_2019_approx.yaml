@@ -2,7 +2,7 @@
 # Aims to reproduce the published model from Foster et al. (2019, Earthquake
 # Spectra) as closely as the refactored Python pipeline allows. Small
 # numerical differences remain, mostly in the MVN-conditioning step near
-# observations; see dev/foster_2019_benchmark_status.md.
+# observations; see dev/docs/foster_2019_benchmark_status.md.
 
 # --- Categorical model files ---
 # Same posteriors as modified_foster_2019 (computed by the original R code).

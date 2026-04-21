@@ -18,7 +18,7 @@ so the categorical posterior and hybrid slope modification reproduce the
 paper at float precision. A small minority of pixels have larger
 discrepancies due to categorical/hybrid edge cases unrelated to MVN; the
 test uses median + percentile assertions to catch drift while tolerating
-those known outliers. See ``dev/foster_2019_benchmark_status.md`` for
+those known outliers. See ``dev/docs/foster_2019_benchmark_status.md`` for
 background.
 """
 
@@ -95,7 +95,7 @@ def test_foster_2019_approx_points_benchmark(nproc):
     larger discrepancies from the paper (up to ~19 % in the worst case)
     due to categorical/hybrid edge-case differences between the legacy
     R pipeline and the refactored Python one — see
-    ``dev/foster_2019_reproduction_comparison.md``. Those outliers are
+    ``dev/docs/foster_2019_reproduction_comparison.md``. Those outliers are
     independent of MVN conditioning and known to exist. The median must
     stay tight because any drift in the common-case codepath would show
     up there immediately.
