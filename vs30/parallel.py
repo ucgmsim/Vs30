@@ -154,6 +154,13 @@ def process_geology_at_points(
         # Apply hybrid modifications to observation model values so residuals
         # are computed consistently with the grid pipeline (spatial.py:405-436)
         obs_slope = raster.sample_slope_at_points(obs_locs)
+        # Legacy parity: NODATA slope samples at observations are replaced with
+        # the 255 sentinel so log10(255) ≈ 2.41 feeds the np.interp and returns
+        # the MAX Vs30 for the gid — matches the grid pipeline behaviour in
+        # spatial.prepare_observation_data (spatial.py:480-488).
+        obs_slope = np.where(
+            obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
+        )
         obs_coast_dist = (
             raster.compute_coastal_distance_at_points(obs_locs)
             if apply_coastal_distance_mod
