@@ -45,9 +45,9 @@ MODELS = {
     },
 }
 
-VMIN, VMAX = 100.0, 1000.0
 CMAP = "turbo"
 MAX_DIM = 2000
+PERCENTILE_CLIP = (1.0, 99.0)
 
 
 def load_vs30(path: Path) -> tuple[np.ma.MaskedArray, tuple]:
@@ -66,11 +66,17 @@ def load_vs30(path: Path) -> tuple[np.ma.MaskedArray, tuple]:
     return np.ma.array(data, mask=mask), (bounds.left, bounds.right, bounds.bottom, bounds.top)
 
 
+def per_map_norm(data: np.ma.MaskedArray) -> mcolors.LogNorm:
+    """Per-map log-norm clipped to central percentiles so each panel uses its own dynamic range."""
+    valid = data.compressed()
+    vmin, vmax = np.percentile(valid, PERCENTILE_CLIP)
+    return mcolors.LogNorm(vmin=vmin, vmax=vmax)
+
+
 def render_single(name: str, info: dict) -> Path:
     data, extent = load_vs30(info["path"])
     fig, ax = plt.subplots(figsize=(5.5, 7.5), dpi=130)
-    norm = mcolors.LogNorm(vmin=VMIN, vmax=VMAX)
-    im = ax.imshow(data, cmap=CMAP, norm=norm, extent=extent, origin="upper")
+    im = ax.imshow(data, cmap=CMAP, norm=per_map_norm(data), extent=extent, origin="upper")
     ax.set_title(info["title"], fontsize=10)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -85,19 +91,19 @@ def render_single(name: str, info: dict) -> Path:
 
 
 def render_composite() -> Path:
-    fig, axes = plt.subplots(2, 2, figsize=(11, 13), dpi=130)
-    norm = mcolors.LogNorm(vmin=VMIN, vmax=VMAX)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 13), dpi=130)
     for ax, (name, info) in zip(axes.flat, MODELS.items()):
         data, extent = load_vs30(info["path"])
-        im = ax.imshow(data, cmap=CMAP, norm=norm, extent=extent, origin="upper")
+        im = ax.imshow(
+            data, cmap=CMAP, norm=per_map_norm(data), extent=extent, origin="upper"
+        )
         ax.set_title(info["title"], fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
         ax.set_aspect("equal")
-    fig.subplots_adjust(right=0.88, wspace=0.05, hspace=0.15)
-    cbar_ax = fig.add_axes([0.90, 0.15, 0.02, 0.7])
-    cbar = fig.colorbar(im, cax=cbar_ax)
-    cbar.set_label("Vs30 (m/s)", fontsize=10)
+        cbar = fig.colorbar(im, ax=ax, shrink=0.75, pad=0.02)
+        cbar.set_label("Vs30 (m/s)", fontsize=9)
+    fig.tight_layout()
     out_path = OUTPUT_DIR / "model_comparison.png"
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
