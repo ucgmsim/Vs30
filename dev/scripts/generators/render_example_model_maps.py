@@ -63,6 +63,7 @@ REF_CMAP = "turbo"
 DIFF_CMAP = "RdBu_r"
 REF_PERCENTILE_CLIP = (1.0, 99.0)
 DIFF_SYMMETRIC_LIMIT = 1.0  # ln-units; ≈ factor 2.72 each way
+DIFF_AUTOSCALE_PERCENTILE = (1.0, 99.0)
 
 
 def _masked_from_array(data: np.ndarray, nodata: float | None) -> np.ma.MaskedArray:
@@ -198,20 +199,34 @@ def render_reference(ref: np.ma.MaskedArray, ref_extent: tuple) -> Path:
     return out_path
 
 
+def autoscale_limit(diff: np.ma.MaskedArray) -> float:
+    """Symmetric ln-units limit set by the larger of |p1| and p99 of the diff."""
+    valid = diff.compressed()
+    lo, hi = np.percentile(valid, DIFF_AUTOSCALE_PERCENTILE)
+    return float(max(abs(lo), abs(hi)))
+
+
 def render_single_diff(
-    name: str, diff: np.ma.MaskedArray, ref_extent: tuple
+    name: str,
+    diff: np.ma.MaskedArray,
+    ref_extent: tuple,
+    limit: float,
+    suffix: str,
+    subtitle: str,
 ) -> Path:
     fig, ax = plt.subplots(figsize=(6.5, 8.5), dpi=130)
-    norm = mcolors.Normalize(vmin=-DIFF_SYMMETRIC_LIMIT, vmax=DIFF_SYMMETRIC_LIMIT)
+    norm = mcolors.Normalize(vmin=-limit, vmax=limit)
     im = ax.imshow(diff, cmap=DIFF_CMAP, norm=norm, extent=ref_extent, origin="upper")
-    ax.set_title(f"{MODELS[name]['title']}  vs  {REFERENCE['label']}", fontsize=10)
+    ax.set_title(
+        f"{MODELS[name]['title']}  vs  {REFERENCE['label']}\n{subtitle}", fontsize=10
+    )
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_aspect("equal")
     cbar = fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02)
     cbar.set_label("ln(model / reference)", fontsize=9)
     fig.tight_layout()
-    out_path = OUTPUT_DIR / f"{name}_diff.png"
+    out_path = OUTPUT_DIR / f"{name}_diff{suffix}.png"
     fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
     return out_path
@@ -249,8 +264,25 @@ def main() -> None:
     print(f"Wrote {ref_png.relative_to(REPO_ROOT)}")
 
     for name, diff in diffs.items():
-        single = render_single_diff(name, diff, ref_extent)
-        print(f"Wrote {single.relative_to(REPO_ROOT)}")
+        shared = render_single_diff(
+            name,
+            diff,
+            ref_extent,
+            limit=DIFF_SYMMETRIC_LIMIT,
+            suffix="",
+            subtitle=f"shared scale: ±{DIFF_SYMMETRIC_LIMIT:.1f} ln-units",
+        )
+        print(f"Wrote {shared.relative_to(REPO_ROOT)}")
+        lim = autoscale_limit(diff)
+        auto = render_single_diff(
+            name,
+            diff,
+            ref_extent,
+            limit=lim,
+            suffix="_autoscale",
+            subtitle=f"auto scale: ±{lim:.2f} ln-units (1–99th percentile)",
+        )
+        print(f"Wrote {auto.relative_to(REPO_ROOT)}")
 
     composite = render_composite(ref, ref_extent, diffs)
     print(f"Wrote {composite.relative_to(REPO_ROOT)}")

@@ -48,12 +48,22 @@ lower Vs30 (softer ground). Zero (white) means agreement.
 | `jaehwi_v1p0` | 671 independent (McGann 276 + Wotherspoon 36 + Kaiser 359) | Live Bayesian update from raw priors | Reproduces Jaehwi's v1.0 output. GID 4 alluvium slope modification is off. |
 | `viktor_cpt_clustering` | ~35 700 CPT-derived (DBSCAN-clustered) | Live Bayesian update from raw priors | CPT-derived Vs30 across Canterbury and central NZ pulls those regions toward lower values — visible as the widespread blue in the diff panel. |
 
-Higher-resolution maps:
-[reference foster_2019](images/reference_foster_2019.png),
-[foster_2019_approx diff](images/foster_2019_approx_diff.png),
-[modified_foster_2019 diff](images/modified_foster_2019_diff.png),
-[jaehwi_v1p0 diff](images/jaehwi_v1p0_diff.png),
-[viktor_cpt_clustering diff](images/viktor_cpt_clustering_diff.png).
+Higher-resolution maps. Each model links to two single-panel diff
+variants: the **shared-scale** version uses the same ±1.0 ln-units
+colourbar as the composite above (so models remain directly comparable),
+and the **autoscaled** version rescales to each panel's 1st–99th
+percentile so small within-model features (e.g. MVN residuals near
+observation sites) become visible.
+
+- Reference: [foster_2019 (published)](images/reference_foster_2019.png)
+- foster_2019_approx: [shared scale](images/foster_2019_approx_diff.png) ·
+  [autoscaled](images/foster_2019_approx_diff_autoscale.png)
+- modified_foster_2019: [shared scale](images/modified_foster_2019_diff.png) ·
+  [autoscaled](images/modified_foster_2019_diff_autoscale.png)
+- jaehwi_v1p0: [shared scale](images/jaehwi_v1p0_diff.png) ·
+  [autoscaled](images/jaehwi_v1p0_diff_autoscale.png)
+- viktor_cpt_clustering: [shared scale](images/viktor_cpt_clustering_diff.png) ·
+  [autoscaled](images/viktor_cpt_clustering_diff_autoscale.png)
 
 ## Reference Pages
 
