@@ -33,18 +33,27 @@ is applied.
 
 ![Model comparison](images/model_comparison.png)
 
+The left panel is the **reference**: the Vs30 map from Foster et al. (2019)
+as downloaded from the supplementary data. The four right panels show each
+model as a log-ratio difference map relative to that reference,
+`ln(model / reference)`, following the seismic-hazard convention for
+model comparisons. Red pixels are where a model predicts higher Vs30
+(stiffer ground) than Foster 2019; blue pixels are where it predicts
+lower Vs30 (softer ground). Zero (white) means agreement.
+
 | Version | Observations | Update | Notes |
 |---------|--------------|--------|-------|
-| `foster_2019_approx` | 412 independent (Foster-derived, no Kaiser Q3) | Uses pre-computed Foster posteriors | Faithful reproduction of the published Foster (2019) paper map. Matérn correlation for geology. |
-| `modified_foster_2019` | 412 independent (same as above) | Uses pre-computed Foster posteriors | Same base observations as `foster_2019_approx`, but the refactored pipeline's exponential correlation instead of Matérn. |
+| `foster_2019_approx` | 412 independent (Foster-derived, no Kaiser Q3) | Uses pre-computed Foster posteriors | Refactored-pipeline attempt at reproducing the published Foster (2019) map. Matérn correlation for geology. The diff panel is near-zero almost everywhere — small residuals come from numerical precision in the MVN step. |
+| `modified_foster_2019` | 412 independent (same as above) | Uses pre-computed Foster posteriors | Same observations as `foster_2019_approx`, but exponential correlation instead of Matérn, plus coastal-distance hybrid adjustments. |
 | `jaehwi_v1p0` | 671 independent (McGann 276 + Wotherspoon 36 + Kaiser 359) | Live Bayesian update from raw priors | Reproduces Jaehwi's v1.0 output. GID 4 alluvium slope modification is off. |
-| `viktor_cpt_clustering` | ~35 700 CPT-derived (DBSCAN-clustered) | Live Bayesian update from raw priors | CPT-derived Vs30 across Canterbury and central NZ pulls those regions toward lower values — visible as the more uniform map above. |
+| `viktor_cpt_clustering` | ~35 700 CPT-derived (DBSCAN-clustered) | Live Bayesian update from raw priors | CPT-derived Vs30 across Canterbury and central NZ pulls those regions toward lower values — visible as the widespread blue in the diff panel. |
 
 Higher-resolution maps:
-[foster_2019_approx](images/foster_2019_approx.png),
-[modified_foster_2019](images/modified_foster_2019.png),
-[jaehwi_v1p0](images/jaehwi_v1p0.png),
-[viktor_cpt_clustering](images/viktor_cpt_clustering.png).
+[reference foster_2019](images/reference_foster_2019.png),
+[foster_2019_approx diff](images/foster_2019_approx_diff.png),
+[modified_foster_2019 diff](images/modified_foster_2019_diff.png),
+[jaehwi_v1p0 diff](images/jaehwi_v1p0_diff.png),
+[viktor_cpt_clustering diff](images/viktor_cpt_clustering_diff.png).
 
 ## Reference Pages
 
