@@ -129,11 +129,14 @@ def render_composite(
     diffs: dict[str, np.ma.MaskedArray],
 ) -> Path:
     fig = plt.figure(figsize=(15, 11), dpi=130)
-    gs = fig.add_gridspec(
-        2, 3, width_ratios=[1.15, 1, 1], wspace=0.05, hspace=0.15
-    )
+    # Outer layout separates the reference column from the 2x2 diff block so
+    # the reference colourbar + "Vs30 (m/s)" label has horizontal room and
+    # isn't clipped by the diff panels. Inner gridspec keeps the four diff
+    # panels visually tight.
+    outer = fig.add_gridspec(1, 2, width_ratios=[1.2, 2.0], wspace=0.2)
+    inner = outer[0, 1].subgridspec(2, 2, wspace=0.05, hspace=0.15)
 
-    ax_ref = fig.add_subplot(gs[:, 0])
+    ax_ref = fig.add_subplot(outer[0, 0])
     ref_norm = reference_norm(ref)
     im_ref = ax_ref.imshow(
         ref, cmap=REF_CMAP, norm=ref_norm, extent=ref_extent, origin="upper"
@@ -142,7 +145,10 @@ def render_composite(
     ax_ref.set_xticks([])
     ax_ref.set_yticks([])
     ax_ref.set_aspect("equal")
-    cbar_ref = fig.colorbar(im_ref, ax=ax_ref, shrink=0.85, pad=0.02)
+    # Shrink matches the colourbar to the image's displayed height: the ref
+    # axis slot is ~2x taller than its equal-aspect image (slot height ≈
+    # 8.5", image height ≈ 4.7" at the current figsize).
+    cbar_ref = fig.colorbar(im_ref, ax=ax_ref, shrink=0.55, pad=0.03)
     cbar_ref.set_label("Vs30 (m/s)", fontsize=9)
 
     diff_norm = mcolors.Normalize(
@@ -151,7 +157,7 @@ def render_composite(
     diff_axes = []
     for idx, (name, diff) in enumerate(diffs.items()):
         row, col = divmod(idx, 2)
-        ax = fig.add_subplot(gs[row, 1 + col])
+        ax = fig.add_subplot(inner[row, col])
         im = ax.imshow(
             diff, cmap=DIFF_CMAP, norm=diff_norm, extent=ref_extent, origin="upper"
         )
@@ -161,11 +167,14 @@ def render_composite(
         ax.set_aspect("equal")
         diff_axes.append((ax, im))
 
+    # Each diff image fills its square slot vertically (data aspect > slot
+    # aspect), so shrink=1.0 makes the shared colourbar match the panel
+    # heights exactly.
     cbar_diff = fig.colorbar(
         diff_axes[0][1],
         ax=[ax for ax, _ in diff_axes],
         orientation="vertical",
-        shrink=0.85,
+        shrink=1.0,
         pad=0.02,
     )
     cbar_diff.set_label("ln(model / reference)", fontsize=9)
