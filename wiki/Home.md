@@ -1,35 +1,61 @@
 # Vs30
 
-**Vs30** is the time-averaged shear-wave velocity in the top 30 metres of
-ground. It is a key input for seismic site-response analysis: sites with
-low Vs30 (soft sediment) amplify earthquake ground motion, while
-high-Vs30 sites (rock) do not. National seismic hazard maps, building
-codes, and ground-motion prediction equations all depend on knowing Vs30.
+The time-averaged shear-wave velocity in the top 30 metres of
+ground (Vs30) is an important quantity for understanding seismic
+hazard, as it indicates how the ground will behave in an earthquake.
 
-This package produces Vs30 maps and point estimates for New Zealand by
-combining three layers of information:
+Vs30 can be measured at specific sites with geotechnical investigations, 
+such as the seismic cone penetration test (sCPT). However, These 
+measurements are slow and expensive, so it is not feasible to measure 
+Vs30 at the large number of sites required to accurately sample large regions. 
+As Vs30 across large regions is needed to understand seismic hazard, models 
+have been developed to infer Vs30 from geological and topological maps, 
+as well as geotechnical investigations that do not probe the shear wave velocity, 
+such as cone penetration tests (CPTs) and Standard Penetration Tests (SPTs).
 
-1. **Categorical priors** from QMAP geology and IwahashiPike terrain,
-   each category calibrated to a log-normal Vs30 distribution.
-2. **Bayesian posterior update** of those priors using measured Vs30
-   observations (surface-wave surveys, CPT-derived inferences,
-   seismometer station metadata).
-3. **MVN spatial conditioning** that pulls pixels within ~10 km of an
-   observation toward the observed value, using an exponential (or
-   Matérn) spatial correlation.
+This package queries modelled Vs30 at specified locations using any of
+the models described below.
 
-Output is a two-band GeoTIFF on the NZTM2000 grid (band 1 = Vs30 mean,
-band 2 = log-space standard deviation).
+## Quick Start
 
-- **Codebase:** https://github.com/ucgmsim/Vs30
-- **Scientific reference:** Foster et al. (2019), *Earthquake Spectra*.
+Query Vs30 at a list of sites from a CSV with `lon`/`lat` columns:
+
+```bash
+vs30 points modified_foster_2019 sites.csv results.csv
+```
+
+See the [Usage page](Usage.md) for grid maps, model version selection,
+and parameter overrides.
 
 ## Supported Models
 
-Four model versions ship with the package. They differ in the
-observations they use, whether the Bayesian update runs live from priors
-or reuses pre-computed posteriors, and which spatial correlation kernel
-is applied.
+### `foster_2019_approx`
+
+A near-identical reproduction of the Vs30 map from Foster et al. (2019).
+Minor implementation differences between this pipeline and the original
+prevent an exact match, but typical differences are only a few percent,
+so for practical purposes this model can be considered representative
+of the published Foster et al. (2019) map (see comparison figure below).
+
+### `modified_foster_2019`
+
+The model developed by Foster et al. (2019), with several modifications:
+
+- alluvium and floodplain Vs30 adjusted by distance from the coast
+- exponential spatial correlation in place of Matérn
+- some lower-quality Vs30 observations retained rather than excluded
+
+### `jaehwi_v1p0`
+
+The model developed by Foster et al. (2019) but with the inclusion of
+additional Vs30 measurements from the New Zealand National Seismic
+Hazard Model (NSHM).
+
+### `viktor_cpt_clustering`
+
+Further developments of `modified_foster_2019` by Viktor Polak to include
+~35,700 CPT-derived Vs30 estimates, clustered with DBSCAN to avoid
+over-representing densely surveyed regions.
 
 ![Model comparison](images/model_comparison.png)
 
@@ -41,14 +67,8 @@ model comparisons. Red pixels are where a model predicts higher Vs30
 (stiffer ground) than Foster 2019; blue pixels are where it predicts
 lower Vs30 (softer ground). Zero (white) means agreement.
 
-| Version | Observations | Update | Notes |
-|---------|--------------|--------|-------|
-| `foster_2019_approx` | 412 independent (Foster-derived, no Kaiser Q3) | Uses pre-computed Foster posteriors | Refactored-pipeline attempt at reproducing the published Foster (2019) map. Matérn correlation for geology. The diff panel is near-zero almost everywhere — small residuals come from numerical precision in the MVN step. |
-| `modified_foster_2019` | 412 independent (same as above) | Uses pre-computed Foster posteriors | Same observations as `foster_2019_approx`, but exponential correlation instead of Matérn, plus coastal-distance hybrid adjustments. |
-| `jaehwi_v1p0` | 671 independent (McGann 276 + Wotherspoon 36 + Kaiser 359) | Live Bayesian update from raw priors | Reproduces Jaehwi's v1.0 output. GID 4 alluvium slope modification is off. |
-| `viktor_cpt_clustering` | ~35 700 CPT-derived (DBSCAN-clustered) | Live Bayesian update from raw priors | CPT-derived Vs30 across Canterbury and central NZ pulls those regions toward lower values — visible as the widespread blue in the diff panel. |
-
-Higher-resolution maps. Each model links to two single-panel diff
+#### Higher-resolution maps. #### 
+Each model links to two single-panel diff
 variants: the **shared-scale** version uses the same ±1.0 ln-units
 colourbar as the composite above (so models remain directly comparable),
 and the **autoscaled** version rescales to each panel's 1st–99th
