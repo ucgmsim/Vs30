@@ -20,48 +20,34 @@ pip install -e .
 
 ## CLI Commands
 
-The package provides a `vs30` command-line interface with the following commands:
-
-### Generate VS30 Grid Maps
-
-Run the complete Vs30 mapping workflow using a predefined model version:
-
-```bash
-vs30 grid output_directory foster_2019_approx
-```
-
-Available model versions: `foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`
-
-Options:
-- `--nproc`: Number of parallel processes (-1 for all cores)
-- `--noisy/--no-noisy`: Apply noise weighting in spatial adjustment (default: True)
-- `--max-spatial-boolean-array-memory-gb`: Memory limit for spatial arrays (default: 1.0)
+The package provides a `vs30` command-line interface with two main commands:
 
 ### Compute VS30 at Specific Locations
 
-Calculate Vs30 at specific lat/lon points using a predefined model version:
+Calculate Vs30 at lat/lon points listed in a CSV using a predefined model version:
 
 ```bash
-vs30 points locations.csv results.csv foster_2019_approx
+vs30 points foster_2019_approx locations.csv results.csv
 ```
 
-Options:
-- `--lon-column`: Name of longitude column (default: "longitude") 
-- `--lat-column`: Name of latitude column (default: "latitude")
-- `--include-intermediate/--final-only`: Include individual model outputs (default: include)
-- `--nproc`: Number of parallel processes
+### Generate VS30 Grid Maps
 
-### Update Categorical Model Values
-
-Update categorical model values using Bayesian updates:
+Run the complete Vs30 mapping workflow on a regular grid (writes GeoTIFFs):
 
 ```bash
-vs30 update-priors model.csv output_dir --model-type geology
+vs30 grid \
+    --version foster_2019_approx \
+    --grid-xmin 1060050 --grid-xmax 2120050 \
+    --grid-ymin 4730050 --grid-ymax 6250050 \
+    --grid-dx 100 --grid-dy 100 \
+    --output-dir ./vs30_out
 ```
 
-## Configuration
+Available model versions: `foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`.
 
-The package uses predefined model configurations (`foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`) that include all necessary parameters and file paths. For custom configurations, see the advanced commands (`grid-custom`, `points-custom`).
+Each command also has a `-custom` variant (`points-custom`, `grid-custom`) that exposes every scientific parameter individually for ablation experiments. Run `vs30 <command> --help` for the full option list.
+
+See the [Usage page](wiki/Usage.md) for input formats, parameter overrides, and grid sizing guidance.
 
 ## How It Works
 

@@ -18,7 +18,7 @@ the models described below.
 
 ## Quick Start
 
-Query Vs30 at a list of sites from a CSV with `lon`/`lat` columns:
+Query Vs30 at a list of sites from a CSV with `longitude`/`latitude` columns:
 
 ```bash
 vs30 points modified_foster_2019 sites.csv results.csv

@@ -19,10 +19,10 @@ The install step unpacks bundled shapefiles from `vs30/resources/geospatial/shap
 
 ## Point Queries
 
-Prepare an input CSV with WGS84 longitude and latitude columns (defaults: `lon`, `lat`). For example, `sites.csv`:
+Prepare an input CSV with WGS84 longitude and latitude columns (defaults: `longitude`, `latitude`; override with `--lon-column` / `--lat-column`). For example, `sites.csv`:
 
 ```csv
-site_id,lon,lat
+site_id,longitude,latitude
 wellington,174.7762,-41.2865
 christchurch,172.6362,-43.5321
 ```
@@ -58,6 +58,8 @@ vs30 grid \
 ```
 
 Coordinates are NZTM2000 (EPSG:2193), in metres. Reduce the domain or coarsen the spacing (`--grid-dx 400 --grid-dy 400`) for faster test runs — a 400 m national grid finishes in ~20 minutes on a typical workstation.
+
+If the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-boolean-array-memory-gb` (default: 1.0). It caps the size of the per-chunk boolean arrays used to find observations near each pixel — smaller values trade a small amount of speed for a lower peak memory footprint.
 
 ## Model Versions
 
