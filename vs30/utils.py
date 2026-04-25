@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from scipy.special import gamma, kv
+import scipy.special
 
 from vs30 import constants
 
@@ -79,7 +79,11 @@ def matern_correlation_function(
     del sill, nugget  # retained for config compatibility only
     d = np.maximum(min_dist, distances)
     scaled = d / range_m
-    rho = (2 ** (1 - kappa) / gamma(kappa)) * (scaled ** kappa) * kv(kappa, scaled)
+    rho = (
+        (2 ** (1 - kappa) / scipy.special.gamma(kappa))
+        * (scaled ** kappa)
+        * scipy.special.kv(kappa, scaled)
+    )
     # Clamp NaN from numerical edge cases (kv can overflow for very small d)
     return np.where(np.isfinite(rho), rho, 1.0)
 

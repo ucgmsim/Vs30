@@ -88,6 +88,11 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
         "apply_coastal_distance_mod",
         "apply_alluvium_slope_mod",
         "fill_gaps",
+        "mvn",
+        "noisy",
+        "do_bayesian_update",
+        "combination_method",
+        "combine_ratio",
     ):
         if field not in config_data:
             raise typer.BadParameter(
@@ -113,7 +118,6 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
     return config_data
 
 
-# CLI helper shared by `points` and `points_custom` to handle CSV I/O and column merging.
 def run_points_pipeline(
     locations_csv: Path,
     output_csv: Path,
@@ -283,6 +287,7 @@ def points(
         ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
+        mvn=config_data["mvn"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
         nproc=nproc,
@@ -511,6 +516,7 @@ def grid(
         ),
         combine_ratio=config_data["combine_ratio"],
         noisy=config_data["noisy"],
+        mvn=config_data["mvn"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
         nproc=nproc,

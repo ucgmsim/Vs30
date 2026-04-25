@@ -10,9 +10,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 import rasterio
-import yaml
 
-from vs30 import constants, cli 
+from vs30 import cli, constants
 
 
 def pytest_addoption(parser):
@@ -59,9 +58,8 @@ def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
     """
     Load and resolve a fixed model version's YAML config for testing.
 
-    Mirrors cli.load_model_config but without the typer dependency.
-    Resolves CSV paths relative to the resources directory and builds
-    correlation function callables.
+    Thin wrapper around ``cli.load_model_config`` so tests pick up any
+    validation changes there.
 
     Parameters
     ----------
@@ -73,26 +71,7 @@ def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
     dict
         Resolved config dict ready to pass to pipeline functions.
     """
-    
-
-    config_path = constants.MODEL_VERSION_TO_CONFIG[version]
-    with open(config_path) as f:
-        config_data = yaml.safe_load(f)
-
-    # Resolve CSV paths
-    for key, subdir in constants.RESOURCE_SUBDIRS.items():
-        if config_data.get(key):
-            config_data[key] = constants.RESOURCE_PATH / subdir / config_data[key]
-
-    # Build correlation functions
-    config_data["geology_corr_fn"] = cli.resolve_correlation_function(
-        config_data["geology_correlation"]
-    )
-    config_data["terrain_corr_fn"] = cli.resolve_correlation_function(
-        config_data["terrain_correlation"]
-    )
-
-    return config_data
+    return cli.load_model_config(version)
 
 
 def assert_arrays_match_raster_benchmark(
@@ -112,12 +91,6 @@ def assert_arrays_match_raster_benchmark(
     benchmark_path : Path
         Path to the benchmark .tif file.
     """
-    dump_dir = Path("/tmp/vs30_test_dumps")
-    dump_dir.mkdir(parents=True, exist_ok=True)
-    stem = benchmark_path.stem
-    np.save(dump_dir / f"{stem}_actual_vs30.npy", vs30_array)
-    np.save(dump_dir / f"{stem}_actual_stdv.npy", stdv_array)
-
     with rasterio.open(benchmark_path) as benchmark:
         nodata = benchmark.nodata
         for band_idx, actual_data in enumerate([vs30_array, stdv_array], start=1):

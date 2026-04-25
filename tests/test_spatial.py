@@ -15,7 +15,7 @@ import pytest
 from vs30 import spatial, utils
 
 # Create a standard geology correlation callable for tests
-_geology_corr_fn = functools.partial(utils.exponential_correlation_function, phi=1407)
+geology_corr_fn = functools.partial(utils.exponential_correlation_function, phi=1407)
 
 
 class TestComputeSpatialAdjustmentForPixel:
@@ -49,7 +49,7 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            corr_fn=_geology_corr_fn,
+            corr_fn=geology_corr_fn,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
@@ -65,7 +65,7 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
-            corr_fn=_geology_corr_fn,
+            corr_fn=geology_corr_fn,
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
@@ -91,7 +91,7 @@ class TestComputeSpatialAdjustmentForPixel:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             far_observation,
-            corr_fn=_geology_corr_fn,
+            corr_fn=geology_corr_fn,
             max_dist_m=5000,
         )
 
@@ -127,7 +127,7 @@ class TestComputeMvnAtPoints:
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
             obs_uncertainty=obs_uncertainty,
-            corr_fn=_geology_corr_fn,
+            corr_fn=geology_corr_fn,
         )
 
         # Should return prior vs30 unchanged
@@ -156,7 +156,7 @@ class TestComputeMvnAtPoints:
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
             obs_uncertainty=obs_uncertainty,
-            corr_fn=_geology_corr_fn,
+            corr_fn=geology_corr_fn,
             max_dist_m=5000,
         )
 

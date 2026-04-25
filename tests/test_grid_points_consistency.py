@@ -130,7 +130,7 @@ def run_grid_pipeline_at_point(
     return float(grid_vs30[1, 1]), float(grid_stdv[1, 1])
 
 
-def _check_consistency_for_version(
+def check_consistency_for_version(
     version: constants.FixedModelVersion,
     point_filter: list[str] | None = None,
 ):
@@ -206,11 +206,11 @@ def _check_consistency_for_version(
 @pytest.mark.parametrize("version", FAST_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_fast(version):
     """Grid/points consistency smoke test: 3 cities, 2 simple models (~45 s total)."""
-    _check_consistency_for_version(version, point_filter=FAST_POINT_NAMES)
+    check_consistency_for_version(version, point_filter=FAST_POINT_NAMES)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("version", ALL_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_slow(version):
     """Full grid/points consistency: all 38 points for all 4 model versions."""
-    _check_consistency_for_version(version)
+    check_consistency_for_version(version)

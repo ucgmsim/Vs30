@@ -170,21 +170,21 @@ DEFAULT_TERRAIN_PHI = 993
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
 
-HYBRID_MOD6_DIST_MIN: float = 8000.0
-HYBRID_MOD6_DIST_MAX: float = 20000.0
-HYBRID_MOD6_VS30_MIN: float = 240.0
-HYBRID_MOD6_VS30_MAX: float = 500.0
+HYBRID_GID4_DIST_MIN: float = 8000.0
+HYBRID_GID4_DIST_MAX: float = 20000.0
+HYBRID_GID4_VS30_MIN: float = 240.0
+HYBRID_GID4_VS30_MAX: float = 500.0
 
-HYBRID_MOD13_DIST_MIN: float = 8000.0
-HYBRID_MOD13_DIST_MAX: float = 20000.0
-HYBRID_MOD13_VS30_MIN: float = 197.0
-HYBRID_MOD13_VS30_MAX: float = 500.0
+HYBRID_GID10_DIST_MIN: float = 8000.0
+HYBRID_GID10_DIST_MAX: float = 20000.0
+HYBRID_GID10_VS30_MIN: float = 197.0
+HYBRID_GID10_VS30_MAX: float = 500.0
 
 
 @dataclass
-class HybridVs30Param:
+class HybridGeologyParams:
     """
-    Parameters for slope-based Vs30 interpolation per geology group.
+    Per-geology-group parameters for hybrid Vs30 modifications.
 
     Attributes
     ----------
@@ -194,30 +194,31 @@ class HybridVs30Param:
         Log10(slope) limits for interpolation [min, max].
     vs30_values : list[float]
         Vs30 values (m/s) at the slope limits [at_min_slope, at_max_slope].
+    sigma_reduction : float
+        Multiplicative reduction factor applied to the prior standard
+        deviation for this group.
     """
 
     gid: int
     slope_limits: list[float]
     vs30_values: list[float]
+    sigma_reduction: float
 
 
-# Hybrid slope-based Vs30 interpolation parameters
-# Each entry contains: geology group ID, log10(slope) limits, Vs30 values
-HYBRID_VS30_PARAMS: list[HybridVs30Param] = [
-    HybridVs30Param(gid=2, slope_limits=[-1.85, -1.22], vs30_values=[242, 418]),
-    HybridVs30Param(gid=3, slope_limits=[-2.70, -1.35], vs30_values=[171, 228]),
-    HybridVs30Param(gid=4, slope_limits=[-3.44, -0.88], vs30_values=[252, 275]),
-    HybridVs30Param(gid=6, slope_limits=[-3.56, -0.93], vs30_values=[183, 239]),
+HYBRID_GEOLOGY_PARAMS: list[HybridGeologyParams] = [
+    HybridGeologyParams(
+        gid=2, slope_limits=[-1.85, -1.22], vs30_values=[242, 418], sigma_reduction=0.4888
+    ),
+    HybridGeologyParams(
+        gid=3, slope_limits=[-2.70, -1.35], vs30_values=[171, 228], sigma_reduction=0.7103
+    ),
+    HybridGeologyParams(
+        gid=4, slope_limits=[-3.44, -0.88], vs30_values=[252, 275], sigma_reduction=0.9988
+    ),
+    HybridGeologyParams(
+        gid=6, slope_limits=[-3.56, -0.93], vs30_values=[183, 239], sigma_reduction=0.9348
+    ),
 ]
-
-# Hybrid standard deviation reduction factors for specific geology groups
-# Maps geology group ID to sigma reduction factor
-HYBRID_SIGMA_REDUCTION_FACTORS: dict[int, float] = {
-    2: 0.4888,
-    3: 0.7103,
-    4: 0.9988,
-    6: 0.9348,
-}
 
 # Minimum slope value used to prevent log10(0) when calculating hybrid Vs30
 MIN_SLOPE_FOR_LOG: float = 1.0e-9
@@ -343,23 +344,6 @@ COL_COMBINED_STDV: str = "stdv"
 COL_VS30_BEFORE_GAPFILL: str = "vs30_before_gapfill"
 COL_STDV_BEFORE_GAPFILL: str = "stdv_before_gapfill"
 
-# Keys used in dictionaries for multiprocessing data transfer.
-KEY_LOCATIONS: str = "locations"
-KEY_MODEL_VS30: str = "model_vs30"
-KEY_MODEL_STDV: str = "model_stdv"
-KEY_RESIDUALS: str = "residuals"
-KEY_OMEGA: str = "omega"
-KEY_LOCATION: str = "location"
-KEY_STDV: str = "stdv"
-KEY_INDEX: str = "index"
-KEY_MODEL_TYPE: str = "model_type"
-KEY_MAX_DIST_M: str = "max_dist_m"
-KEY_MAX_POINTS: str = "max_points"
-KEY_NOISY: str = "noisy"
-KEY_COV_REDUC: str = "cov_reduc"
-KEY_CORR_ZERO: str = "corr_zero"
-
-
 class ModelType(StrEnum):
     """For specifying whether output should be generated using the geology model only, the
     terrain model only, or combination of both models."""
@@ -374,15 +358,9 @@ OUTPUT_FILENAMES: dict[ModelType, str] = {
     ModelType.TERRAIN: TERRAIN_VS30_MEAN_STDDEV_FILENAME,
 }
 
-# Band numbers for multi-band Vs30 rasters (1-indexed as per rasterio convention).
-RASTER_BAND_VS30: int = 1
-RASTER_BAND_STDV: int = 2
-
 # Options for writing GeoTIFF raster files.
 GEOTIFF_DRIVER: str = "GTiff"
 GEOTIFF_COMPRESSION: str = "deflate"
-GEOTIFF_TILED: bool = True
-GEOTIFF_BIGTIFF: str = "yes"
 
 # Descriptions of raster bands.
 BAND_DESCRIPTION_ID_INDEX: str = "Model ID Index"

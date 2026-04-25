@@ -15,6 +15,7 @@ independent_observations_csv:
 
 # --- Pipeline settings ---
 do_bayesian_update: true
+mvn: true
 noisy: true
 combination_method: ratio
 combine_ratio: 1.0

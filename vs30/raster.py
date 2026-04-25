@@ -124,12 +124,10 @@ def create_category_id_array(
     if model_type not in constants.ModelType:
         raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
 
-    # Common setup: calculate grid dimensions and transform
     nx = round((xmax - xmin) / dx)
     ny = round((ymax - ymin) / dy)
     dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
 
-    # Common output raster profile
     profile = {
         "driver": constants.GEOTIFF_DRIVER,
         "width": nx,
@@ -143,14 +141,12 @@ def create_category_id_array(
     }
 
     if model_type == constants.ModelType.TERRAIN:
-        # Resample terrain raster to target grid
         terrain_raster_path = (
             constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
         )
         if not terrain_raster_path.exists():
             raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
 
-        # Reproject into a numpy destination array
         id_array = np.full((ny, nx), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
         with rasterio.open(terrain_raster_path) as src:
             rasterio.warp.reproject(
@@ -164,12 +160,10 @@ def create_category_id_array(
             )
 
     else:  # geology
-        # Ensure qmap.shp is extracted from shapefiles.tar.xz if needed
         ensure_shapefile_extracted(
             constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
         )
 
-        # Rasterize geology shapefile to target grid
         geology_shapefile_path = (
             constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
         )
@@ -178,7 +172,6 @@ def create_category_id_array(
                 f"Geology shapefile not found: {geology_shapefile_path}"
             )
 
-        # Read shapefile
         gdf = gpd.read_file(geology_shapefile_path)
         if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
             raise ValueError(
@@ -186,19 +179,15 @@ def create_category_id_array(
                 f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
             )
 
-        # Ensure shapefile is in NZTM CRS (EPSG:2193)
         if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
             gdf = gdf.to_crs(constants.NZTM_CRS)
 
-        # Create shapes iterator for rasterization
         shapes = (
             (geom, value)
             for geom, value in zip(
                 gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]
             )
         )
-
-        # Rasterize to array
         id_array = rasterio.features.rasterize(
             shapes=shapes,
             out_shape=(ny, nx),
@@ -209,72 +198,6 @@ def create_category_id_array(
         )
 
     return id_array, profile
-
-
-def create_category_id_raster(
-    model_type: constants.ModelType,
-    output_dir: Path,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
-    dx: float,
-    dy: float,
-) -> Path:
-    """
-    Create category ID raster for terrain or geology.
-
-    For terrain: Resamples IwahashiPike.tif to target grid.
-    For geology: Rasterizes qmap.shp shapefile to target grid.
-
-    Parameters
-    ----------
-    model_type : constants.ModelType
-        Either ModelType.TERRAIN or ModelType.GEOLOGY.
-    output_dir : Path
-        Directory where output raster will be saved.
-    xmin : float
-        Grid minimum easting (m, NZTM2000).
-    xmax : float
-        Grid maximum easting (m, NZTM2000).
-    ymin : float
-        Grid minimum northing (m, NZTM2000).
-    ymax : float
-        Grid maximum northing (m, NZTM2000).
-    dx : float
-        Grid cell width (m).
-    dy : float
-        Grid cell height (m).
-
-    Returns
-    -------
-    Path
-        Path to created ID raster file.
-
-    Raises
-    ------
-    ValueError
-        If model_type is not a valid ModelType.
-    FileNotFoundError
-        If input files don't exist.
-    """
-    id_array, profile = create_category_id_array(
-        model_type, xmin, xmax, ymin, ymax, dx, dy
-    )
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_filename = (
-        constants.TERRAIN_ID_FILENAME
-        if model_type == constants.ModelType.TERRAIN
-        else constants.GEOLOGY_ID_FILENAME
-    )
-    output_path = output_dir / output_filename
-
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(id_array, 1)
-        dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
-
-    return output_path
 
 
 def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
@@ -379,7 +302,7 @@ def create_vs30_arrays_from_ids(
             f"DataFrame is missing required column: {constants.STANDARD_ID_COLUMN}"
         )
 
-    # Map original column names through stripped lookup
+    # Map stripped column names back to the originals so we can index the DataFrame.
     id_col_orig = stripped_columns[constants.STANDARD_ID_COLUMN]
     mean_col_orig = stripped_columns[mean_col]
     std_col_orig = stripped_columns[std_col]
@@ -394,11 +317,9 @@ def create_vs30_arrays_from_ids(
         )
     )
 
-    # Create output arrays
     vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
     stdv_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
 
-    # Map pixel IDs to VS30 values
     unique_ids = np.unique(id_array)
     valid_ids = unique_ids[
         (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
@@ -472,13 +393,13 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
         g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
     )
 
-    # GDAL requires a file path, so use a temporary file
+    # GDAL requires a file path, so use a temporary file.
     fd, tmp_path = tempfile.mkstemp(suffix=".tif")
     os.close(fd)
 
     try:
-        # Rasterize land polygons using GDAL (legacy approach)
-        # Use UInt16 data type as in legacy code (sufficient for distance range)
+        # UInt16 matches the legacy R pipeline and is sufficient for the
+        # distance range used here.
         ds = gdal.Rasterize(
             tmp_path,
             str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
@@ -491,16 +412,14 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
             outputType=gdal.GetDataTypeByName("UInt16"),
         )
 
-        # Compute proximity distances using GDAL (legacy approach)
-        # DISTUNITS=GEO ensures distances in georeferenced units (meters)
+        # DISTUNITS=GEO returns distances in georeferenced units (meters).
+        # ComputeProximity modifies the raster in-place.
         band = ds.GetRasterBand(1)
         band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
-        # Note: ComputeProximity modifies the raster in-place
         ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
         band = None
         ds = None
 
-        # If grid was extended, crop back to template bounds
         if grid_was_extended:
             with rasterio.open(tmp_path) as src:
                 extended_data = src.read(1)
@@ -516,51 +435,9 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
             with rasterio.open(tmp_path) as src:
                 distance_meters = src.read(1).astype(np.float32)
     finally:
-        # Clean up the temporary file
         Path(tmp_path).unlink(missing_ok=True)
 
     return distance_meters
-
-
-def create_coast_distance_raster(
-    output_path: Path, template_profile: dict
-) -> tuple[np.ndarray, dict]:
-    """
-    Create a raster of distance to the nearest coast (in meters).
-
-    Uses GDAL to rasterize coast shapefile and compute proximity distances,
-    following the legacy implementation for numerical consistency.
-    Computes on full NZ land extent to ensure accurate distances for all
-    observation locations, even those outside the configured study domain.
-
-    Parameters
-    ----------
-    output_path : Path
-        Path where the output coast distance raster will be saved.
-    template_profile : dict
-        Rasterio profile of the reference raster (to match resolution and bounds).
-
-    Returns
-    -------
-    tuple[np.ndarray, dict]
-        A tuple containing:
-        - The distance array (float32).
-        - The updated profile used for saving.
-    """
-    logger.info("Creating coast distance raster...")
-
-    distance_meters = compute_coast_distance_array(template_profile)
-
-    profile = template_profile.copy()
-    profile.update(
-        {"dtype": "float32", "count": 1, "nodata": None, "compress": "deflate"}
-    )
-
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(distance_meters, 1)
-        dst.descriptions = (constants.BAND_DESCRIPTION_COAST_DISTANCE,)
-
-    return distance_meters, profile
 
 
 def compute_slope_array(template_profile: dict) -> np.ndarray:
@@ -591,7 +468,6 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    # Reproject the slope raster onto the specified grid
     destination = np.zeros((template_profile["height"], template_profile["width"]))
     with rasterio.open(slope_raster_path) as src:
         rasterio.warp.reproject(
@@ -605,48 +481,6 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
         )
 
     return destination
-
-
-def create_slope_raster(
-    output_path: Path, template_profile: dict
-) -> tuple[np.ndarray, dict]:
-    """
-    Create a slope raster matching the target grid.
-
-    Resamples the source slope raster to the target properties.
-
-    Parameters
-    ----------
-    output_path : Path
-        Path where the output slope raster will be saved.
-    template_profile : dict
-        Rasterio profile of the reference raster.
-
-    Returns
-    -------
-    tuple[np.ndarray, dict]
-        A tuple containing:
-        - The slope array (float32).
-        - The updated profile used for saving.
-    """
-    logger.info("Creating slope raster...")
-
-    destination = compute_slope_array(template_profile)
-
-    profile = template_profile.copy()
-    profile.update(
-        {
-            "dtype": "float32",
-            "count": 1,
-            "nodata": constants.NODATA_VALUE,
-            "compress": "deflate",
-        }
-    )
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(destination, 1)
-        dst.descriptions = (constants.BAND_DESCRIPTION_SLOPE,)
-
-    return destination, profile
 
 
 def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
@@ -756,14 +590,14 @@ def apply_hybrid_geology_modifications(
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
     hybrid: bool = True,
-    hybrid_mod6_dist_min: float = constants.HYBRID_MOD6_DIST_MIN,
-    hybrid_mod6_dist_max: float = constants.HYBRID_MOD6_DIST_MAX,
-    hybrid_mod6_vs30_min: float = constants.HYBRID_MOD6_VS30_MIN,
-    hybrid_mod6_vs30_max: float = constants.HYBRID_MOD6_VS30_MAX,
-    hybrid_mod13_dist_min: float = constants.HYBRID_MOD13_DIST_MIN,
-    hybrid_mod13_dist_max: float = constants.HYBRID_MOD13_DIST_MAX,
-    hybrid_mod13_vs30_min: float = constants.HYBRID_MOD13_VS30_MIN,
-    hybrid_mod13_vs30_max: float = constants.HYBRID_MOD13_VS30_MAX,
+    hybrid_gid4_dist_min: float = constants.HYBRID_GID4_DIST_MIN,
+    hybrid_gid4_dist_max: float = constants.HYBRID_GID4_DIST_MAX,
+    hybrid_gid4_vs30_min: float = constants.HYBRID_GID4_VS30_MIN,
+    hybrid_gid4_vs30_max: float = constants.HYBRID_GID4_VS30_MAX,
+    hybrid_gid10_dist_min: float = constants.HYBRID_GID10_DIST_MIN,
+    hybrid_gid10_dist_max: float = constants.HYBRID_GID10_DIST_MAX,
+    hybrid_gid10_vs30_min: float = constants.HYBRID_GID10_VS30_MIN,
+    hybrid_gid10_vs30_max: float = constants.HYBRID_GID10_VS30_MAX,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply hybrid model modifications to VS30 and standard deviation arrays.
@@ -792,21 +626,21 @@ def apply_hybrid_geology_modifications(
         and GID 10 (floodplain).
     hybrid : bool, optional
         Whether to apply general hybrid slope-based modifications. Default True.
-    hybrid_mod6_dist_min : float
+    hybrid_gid4_dist_min : float
         Min distance threshold for GID 4 coastal distance mod.
-    hybrid_mod6_dist_max : float
+    hybrid_gid4_dist_max : float
         Max distance threshold for GID 4 coastal distance mod.
-    hybrid_mod6_vs30_min : float
+    hybrid_gid4_vs30_min : float
         Min Vs30 for GID 4 coastal distance mod.
-    hybrid_mod6_vs30_max : float
+    hybrid_gid4_vs30_max : float
         Max Vs30 for GID 4 coastal distance mod.
-    hybrid_mod13_dist_min : float
+    hybrid_gid10_dist_min : float
         Min distance threshold for GID 10 coastal distance mod.
-    hybrid_mod13_dist_max : float
+    hybrid_gid10_dist_max : float
         Max distance threshold for GID 10 coastal distance mod.
-    hybrid_mod13_vs30_min : float
+    hybrid_gid10_vs30_min : float
         Min Vs30 for GID 10 coastal distance mod.
-    hybrid_mod13_vs30_max : float
+    hybrid_gid10_vs30_max : float
         Max Vs30 for GID 10 coastal distance mod.
 
     Returns
@@ -819,17 +653,8 @@ def apply_hybrid_geology_modifications(
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
 
-    # 1. Update Standard Deviation for specific groups
     if hybrid:
-        # group IDs have reduction factors from constants
-        for gid, factor in constants.HYBRID_SIGMA_REDUCTION_FACTORS.items():
-            # Find pixels with this ID
-            mask = id_array == gid
-            stdv_array[mask] *= factor
-
-    # 2. Hybrid slope-based VS30 calculation
-    if hybrid:
-        # Prevent log10(0) or log10(-NODATA) by capping at constants.MIN_SLOPE_FOR_LOG
+        # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
         safe_log_slope = np.log10(
             np.where(
                 (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
@@ -838,13 +663,14 @@ def apply_hybrid_geology_modifications(
             )
         )
 
-        for spec in constants.HYBRID_VS30_PARAMS:
-            # Skip GID 4 slope interpolation when apply_alluvium_slope_mod is False
-            # (GID 4 may instead get coastal distance modification below)
+        for spec in constants.HYBRID_GEOLOGY_PARAMS:
+            mask = id_array == spec.gid
+            stdv_array[mask] *= spec.sigma_reduction
+
+            # GID 4 (alluvium) gets coastal-distance handling below when the
+            # slope mod is off, so skip slope interpolation here.
             if spec.gid == 4 and not apply_alluvium_slope_mod:
                 continue
-
-            mask = id_array == spec.gid
 
             if np.any(mask):
                 vs30_limits_log10 = np.log10(np.array(spec.vs30_values))
@@ -853,17 +679,16 @@ def apply_hybrid_geology_modifications(
                 )
                 vs30_array[mask] = 10**interpolated_val
 
-    # 3. Coastal distance modification for alluvium (GID 4) and floodplain (GID 10)
     if apply_coastal_distance_mod:
         apply_coastal_distance_modification(
             vs30_array,
             id_array,
             coast_dist_array,
             gid=4,
-            dist_min=hybrid_mod6_dist_min,
-            dist_max=hybrid_mod6_dist_max,
-            vs30_min=hybrid_mod6_vs30_min,
-            vs30_max=hybrid_mod6_vs30_max,
+            dist_min=hybrid_gid4_dist_min,
+            dist_max=hybrid_gid4_dist_max,
+            vs30_min=hybrid_gid4_vs30_min,
+            vs30_max=hybrid_gid4_vs30_max,
         )
 
         apply_coastal_distance_modification(
@@ -871,10 +696,10 @@ def apply_hybrid_geology_modifications(
             id_array,
             coast_dist_array,
             gid=10,
-            dist_min=hybrid_mod13_dist_min,
-            dist_max=hybrid_mod13_dist_max,
-            vs30_min=hybrid_mod13_vs30_min,
-            vs30_max=hybrid_mod13_vs30_max,
+            dist_min=hybrid_gid10_dist_min,
+            dist_max=hybrid_gid10_dist_max,
+            vs30_min=hybrid_gid10_vs30_min,
+            vs30_max=hybrid_gid10_vs30_max,
         )
 
     return vs30_array, stdv_array

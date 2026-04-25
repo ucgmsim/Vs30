@@ -66,10 +66,10 @@ class TestApplyHybridGeologyModifications:
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
             hybrid=False,
-            hybrid_mod6_dist_min=8000.0,
-            hybrid_mod6_dist_max=20000.0,
-            hybrid_mod6_vs30_min=240.0,
-            hybrid_mod6_vs30_max=500.0,
+            hybrid_gid4_dist_min=8000.0,
+            hybrid_gid4_dist_max=20000.0,
+            hybrid_gid4_vs30_min=240.0,
+            hybrid_gid4_vs30_max=500.0,
         )
 
         # GID 4 pixel at (1,0) has coast_dist=15000
@@ -92,10 +92,10 @@ class TestApplyHybridGeologyModifications:
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
             hybrid=False,
-            hybrid_mod13_dist_min=8000.0,
-            hybrid_mod13_dist_max=20000.0,
-            hybrid_mod13_vs30_min=197.0,
-            hybrid_mod13_vs30_max=500.0,
+            hybrid_gid10_dist_min=8000.0,
+            hybrid_gid10_dist_max=20000.0,
+            hybrid_gid10_vs30_min=197.0,
+            hybrid_gid10_vs30_max=500.0,
         )
 
         # GID 10 pixel at (2,1) has coast_dist=10000
@@ -120,10 +120,10 @@ class TestApplyHybridGeologyModifications:
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
             hybrid=False,
-            hybrid_mod6_dist_min=8000.0,
-            hybrid_mod6_dist_max=20000.0,
-            hybrid_mod6_vs30_min=240.0,
-            hybrid_mod6_vs30_max=500.0,
+            hybrid_gid4_dist_min=8000.0,
+            hybrid_gid4_dist_max=20000.0,
+            hybrid_gid4_vs30_min=240.0,
+            hybrid_gid4_vs30_max=500.0,
         )
 
         # Should clamp at minimum (240)
@@ -145,10 +145,10 @@ class TestApplyHybridGeologyModifications:
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
             hybrid=False,
-            hybrid_mod6_dist_min=8000.0,
-            hybrid_mod6_dist_max=20000.0,
-            hybrid_mod6_vs30_min=240.0,
-            hybrid_mod6_vs30_max=500.0,
+            hybrid_gid4_dist_min=8000.0,
+            hybrid_gid4_dist_max=20000.0,
+            hybrid_gid4_vs30_min=240.0,
+            hybrid_gid4_vs30_max=500.0,
         )
 
         # Should clamp at maximum (500)

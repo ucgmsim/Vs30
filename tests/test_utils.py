@@ -10,8 +10,7 @@ import pickle
 import numpy as np
 import pytest
 
-from vs30 import constants, utils
-from vs30.cli import resolve_correlation_function
+from vs30 import cli, constants, utils
 
 
 class TestCombineVs30Models:
@@ -213,7 +212,7 @@ class TestResolveCorrelationFunction:
 
     def test_exponential_is_picklable(self):
         config = {"model": "exponential", "phi": 1407}
-        fn = resolve_correlation_function(config)
+        fn = cli.resolve_correlation_function(config)
         fn2 = pickle.loads(pickle.dumps(fn))
         distances = np.array([100.0, 1000.0])
         np.testing.assert_array_equal(fn(distances), fn2(distances))
@@ -226,7 +225,7 @@ class TestResolveCorrelationFunction:
             "nugget": 0.05,
             "kappa": 0.9,
         }
-        fn = resolve_correlation_function(config)
+        fn = cli.resolve_correlation_function(config)
         fn2 = pickle.loads(pickle.dumps(fn))
         distances = np.array([100.0, 5000.0])
         np.testing.assert_array_equal(fn(distances), fn2(distances))

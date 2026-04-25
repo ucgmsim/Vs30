@@ -14,12 +14,56 @@ import rasterio
 from qcore import coordinates
 from tqdm import tqdm
 
-from vs30 import category, config, constants, gapfill, parallel, raster, spatial, utils
+from vs30 import (
+    category,
+    config,
+    constants,
+    gapfill,
+    multiprocess,
+    parallel,
+    raster,
+    spatial,
+    utils,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _default_correlation_functions(
+def read_observations_csv(path: Path) -> pd.DataFrame:
+    """
+    Read an observations CSV with the conventions used across the package.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the observations CSV.
+
+    Returns
+    -------
+    pd.DataFrame
+        Loaded observations.
+    """
+    return pd.read_csv(path, comment="#", skipinitialspace=True)
+
+
+def read_categorical_csv(path: Path) -> pd.DataFrame:
+    """
+    Read a categorical model CSV with the conventions used across the package.
+
+    Parameters
+    ----------
+    path : Path
+        Path to the categorical model CSV.
+
+    Returns
+    -------
+    pd.DataFrame
+        Loaded categorical model.
+    """
+    return pd.read_csv(path, comment="#", skipinitialspace=True)
+
+
+def default_correlation_functions(
     geology_corr_fn: Callable | None,
     terrain_corr_fn: Callable | None,
 ) -> tuple[Callable, Callable]:
@@ -49,7 +93,42 @@ def _default_correlation_functions(
     return geology_corr_fn, terrain_corr_fn
 
 
-def _collect_observation_csvs(
+def load_and_assign_observations(
+    csv_path: Path, model_type: constants.ModelType, label: str
+) -> pd.DataFrame:
+    """
+    Load an observations CSV, validate it, and assign category IDs.
+
+    Parameters
+    ----------
+    csv_path : Path
+        Path to the observations CSV.
+    model_type : constants.ModelType
+        Model type for category assignment.
+    label : str
+        Human-readable label used in log messages and validation errors
+        (e.g. ``"clustered"`` or ``"independent"``).
+
+    Returns
+    -------
+    pd.DataFrame
+        Observations with an added ``STANDARD_ID_COLUMN`` of category IDs.
+    """
+    logger.info(f"Loading {label} observations from: {csv_path}")
+    df = read_observations_csv(csv_path)
+    utils.validate_csv_columns(
+        df, constants.ObservationColumn.REQUIRED, f"{label.capitalize()} observations CSV"
+    )
+    logger.info(f"Loaded {len(df)} {label} observations")
+
+    obs_locs = df[
+        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
+    ].values
+    df[constants.STANDARD_ID_COLUMN] = category.assign_to_category(obs_locs, model_type)
+    return df
+
+
+def collect_observation_csvs(
     clustered_observations_csv: Path | None,
     independent_observations_csv: Path | None,
 ) -> pd.DataFrame:
@@ -71,11 +150,11 @@ def _collect_observation_csvs(
     csvs = [
         csv
         for csv in [clustered_observations_csv, independent_observations_csv]
-        if csv is not None and csv.exists()
+        if csv is not None
     ]
     if csvs:
         return pd.concat(
-            [pd.read_csv(csv, comment="#") for csv in csvs],
+            [read_observations_csv(csv) for csv in csvs],
             ignore_index=True,
         )
     return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
@@ -152,7 +231,7 @@ def compute_categorical_vs30_updates(
     logger.info(f"Model type: {model_type}")
     logger.info(f"Loading categorical model from: {categorical_model_csv}")
 
-    categorical_model_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
+    categorical_model_df = read_categorical_csv(categorical_model_csv)
 
     # Drop rows with placeholder values for excluded categories (e.g., water)
     categorical_model_df = categorical_model_df[
@@ -165,101 +244,29 @@ def compute_categorical_vs30_updates(
         "Categorical model CSV",
     )
 
-    # Current prior (will be updated as we process observations)
     current_prior_df = categorical_model_df.copy()
 
-    # Load clustered observations if provided
     clustered_observations_df = None
     if clustered_observations_csv is not None:
-        logger.info(
-            f"Loading clustered observations from: {clustered_observations_csv}"
+        clustered_observations_df = load_and_assign_observations(
+            clustered_observations_csv, model_type, "clustered"
         )
-        clustered_observations_df = pd.read_csv(
-            clustered_observations_csv, skipinitialspace=True, comment="#"
-        )
-
-        utils.validate_csv_columns(
-            clustered_observations_df,
-            constants.ObservationColumn.REQUIRED,
-            "Clustered observations CSV",
-        )
-
-        logger.info(f"Loaded {len(clustered_observations_df)} clustered observations")
-
-        # Assign category IDs
-        obs_locs = clustered_observations_df[
-            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-        ].values
-        if model_type == constants.ModelType.GEOLOGY:
-            model_ids = category.assign_to_category_geology(obs_locs)
-        else:  # terrain
-            model_ids = category.assign_to_category_terrain(obs_locs)
-
-        clustered_observations_df[constants.STANDARD_ID_COLUMN] = model_ids
-
-        # Log assignment statistics
-        unique_assigned_ids = clustered_observations_df[
-            constants.STANDARD_ID_COLUMN
-        ].unique()
-        n_valid = np.count_nonzero(
-            clustered_observations_df[constants.STANDARD_ID_COLUMN]
-            != constants.RASTER_ID_NODATA_VALUE
-        )
-        logger.info(
-            f"Assigned category IDs: {n_valid} valid observations "
-            f"(out of {len(clustered_observations_df)} total)"
-        )
-        logger.info(
-            f"Unique category IDs in observations: {sorted(unique_assigned_ids[unique_assigned_ids != constants.RASTER_ID_NODATA_VALUE])[:20]}"
-        )
-        logger.info(
-            f"Category IDs in prior model: {sorted(current_prior_df[constants.STANDARD_ID_COLUMN].unique())}"
-        )
-
-        # Perform clustering
         logger.info("Performing spatial clustering...")
         clustered_observations_df = category.perform_clustering(
             clustered_observations_df, nproc
         )
 
-    # Load independent observations if provided
     independent_observations_df = None
     if independent_observations_csv is not None:
-        logger.info(
-            f"Loading independent observations from: {independent_observations_csv}"
-        )
-        independent_observations_df = pd.read_csv(
-            independent_observations_csv, skipinitialspace=True, comment="#"
+        independent_observations_df = load_and_assign_observations(
+            independent_observations_csv, model_type, "independent"
         )
 
-        utils.validate_csv_columns(
-            independent_observations_df,
-            constants.ObservationColumn.REQUIRED,
-            "Independent observations CSV",
-        )
-
-        logger.info(
-            f"Loaded {len(independent_observations_df)} independent observations"
-        )
-
-        # Assign category IDs
-        obs_locs = independent_observations_df[
-            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-        ].values
-        if model_type == constants.ModelType.GEOLOGY:
-            model_ids = category.assign_to_category_geology(obs_locs)
-        else:  # terrain
-            model_ids = category.assign_to_category_terrain(obs_locs)
-
-        independent_observations_df[constants.STANDARD_ID_COLUMN] = model_ids
-
-    # Perform Bayesian update(s)
     logger.info("Applying Bayesian updates...")
     if clustered_observations_df is not None:
         current_prior_df = category.update_with_clustered_data(
             current_prior_df, clustered_observations_df
         )
-
     if independent_observations_df is not None:
         current_prior_df = category.update_with_independent_data(
             current_prior_df, independent_observations_df
@@ -464,11 +471,10 @@ def compute_spatial_adjustment_on_grid(
     tuple[np.ndarray, np.ndarray]
         (adjusted_vs30, adjusted_stdv) arrays.
     """
-    nproc_resolved = parallel.resolve_nproc(nproc)
+    nproc_resolved = multiprocess.resolve_nproc(nproc)
 
     logger.info(f"Starting spatial adjustment for {model_type} model")
 
-    # 1. Construct RasterData from arrays
     raster_data = spatial.RasterData.from_arrays(
         vs30=vs30_array,
         stdv=stdv_array,
@@ -477,12 +483,9 @@ def compute_spatial_adjustment_on_grid(
         nodata=constants.NODATA_VALUE,
     )
     spatial.validate_raster_data(raster_data)
-
-    # 2. Validate observations
     spatial.validate_observations(observations_df)
 
-    # 3. Build updated model table from DataFrame
-    # Model IDs are 1-indexed; convert to 0-indexed array indices
+    # Model IDs are 1-indexed; convert to 0-indexed array indices.
     mean_col, std_col = raster.select_vs30_columns_by_priority(
         list(model_values_df.columns)
     )
@@ -493,7 +496,6 @@ def compute_spatial_adjustment_on_grid(
     updated_model_table[ids[valid], 0] = model_values_df[mean_col].values[valid]
     updated_model_table[ids[valid], 1] = model_values_df[std_col].values[valid]
 
-    # 4. Prepare Observation Data for Spatial Adjustment
     logger.info("Preparing observation data for spatial adjustment...")
     obs_data = spatial.prepare_observation_data(
         observations_df,
@@ -531,7 +533,6 @@ def compute_spatial_adjustment_on_grid(
         )
         nproc_resolved = 1
 
-    # 5. Find Affected Pixels
     logger.info("Finding pixels affected by observations...")
     t_bbox_start = time.perf_counter()
     bbox_result = spatial.find_affected_pixels(
@@ -543,14 +544,11 @@ def compute_spatial_adjustment_on_grid(
         nproc=nproc_resolved,
     )
     t_bbox_elapsed = time.perf_counter() - t_bbox_start
-    print(f"  find_affected_pixels: {t_bbox_elapsed:.1f}s "
-          f"({bbox_result.n_affected_pixels:,} affected pixels)")
     logger.info(
         f"Found {bbox_result.n_affected_pixels:,} affected pixels "
         f"in {t_bbox_elapsed:.1f}s"
     )
 
-    # 6. Compute Spatial Adjustments
     logger.info("Computing spatial updates...")
     t_spatial_start = time.perf_counter()
     if nproc_resolved > 1:
@@ -574,14 +572,12 @@ def compute_spatial_adjustment_on_grid(
             obs_data,
             bbox_result,
             corr_fn,
-            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             max_dist_m=constants.MAX_DIST_M,
             max_points=constants.MAX_POINTS,
             noisy=noisy,
             cov_reduc=constants.COV_REDUC,
         )
     t_spatial_elapsed = time.perf_counter() - t_spatial_start
-    print(f"  compute_spatial_adjustments: {t_spatial_elapsed:.1f}s")
     logger.info(f"Spatial adjustments completed in {t_spatial_elapsed:.1f}s")
 
     return adjusted_vs30, adjusted_stdv
@@ -630,27 +626,14 @@ def combine_model_arrays(
     tuple[np.ndarray, np.ndarray]
         (combined_vs30, combined_stdv) arrays.
     """
-    if (
-        combination_method is constants.CombinationMethod.RATIO
-        and combine_ratio is None
-    ):
-        raise ValueError(
-            "combination_method is set to 'ratio' but combine_ratio is not provided"
-        )
+    geol_vs30 = geol_vs30.astype(np.float32, copy=True)
+    geol_stdv = geol_stdv.astype(np.float32, copy=True)
+    terr_vs30 = terr_vs30.astype(np.float32, copy=True)
+    terr_stdv = terr_stdv.astype(np.float32, copy=True)
+    for arr in (geol_vs30, geol_stdv, terr_vs30, terr_stdv):
+        arr[arr == nodata] = np.nan
 
-    # Work on copies to avoid modifying inputs
-    geol_vs30 = np.array(geol_vs30, dtype=np.float32, copy=True)
-    geol_stdv = np.array(geol_stdv, dtype=np.float32, copy=True)
-    terr_vs30 = np.array(terr_vs30, dtype=np.float32, copy=True)
-    terr_stdv = np.array(terr_stdv, dtype=np.float32, copy=True)
-
-    # Replace nodata with NaN for calculation
-    geol_vs30[geol_vs30 == nodata] = np.nan
-    geol_stdv[geol_stdv == nodata] = np.nan
-    terr_vs30[terr_vs30 == nodata] = np.nan
-    terr_stdv[terr_stdv == nodata] = np.nan
-
-    combined_vs30, combined_stdv = utils.combine_vs30_models(
+    return utils.combine_vs30_models(
         geol_vs30=geol_vs30,
         geol_stdv=geol_stdv,
         terr_vs30=terr_vs30,
@@ -659,125 +642,60 @@ def combine_model_arrays(
         combine_ratio=combine_ratio,
     )
 
-    return combined_vs30, combined_stdv
-
 
 # ============================================================================
 # Raster file writing helper
 # ============================================================================
 
 
-def write_vs30_raster(
-    vs30_array: np.ndarray,
-    stdv_array: np.ndarray,
-    profile: dict,
+def write_raster(
     output_path: Path,
-    band1_description: str = constants.BAND_DESCRIPTION_VS30,
-    band2_description: str = constants.BAND_DESCRIPTION_STDV,
-    nodata: float = constants.NODATA_VALUE,
+    profile: dict,
+    bands: list[np.ndarray],
+    band_descriptions: tuple[str, ...],
+    *,
+    dtype: str = "float32",
+    nodata: float | None = constants.NODATA_VALUE,
 ) -> None:
     """
-    Write a 2-band VS30 raster (mean + standard deviation) to a GeoTIFF file.
+    Write a multi-band raster to a GeoTIFF file.
 
     Parameters
     ----------
-    vs30_array : np.ndarray
-        VS30 mean values (2D array).
-    stdv_array : np.ndarray
-        VS30 standard deviation values (2D array).
-    profile : dict
-        Rasterio profile with CRS, transform, dimensions.
     output_path : Path
         Output file path.
-    band1_description : str, optional
-        Description for band 1. Default from constants.
-    band2_description : str, optional
-        Description for band 2. Default from constants.
-    nodata : float, optional
-        No-data value. Default from constants.
+    profile : dict
+        Rasterio profile with CRS, transform, dimensions. Caller-supplied
+        values for dtype/count/nodata/compress are overridden.
+    bands : list[np.ndarray]
+        2D arrays to write, one per band.
+    band_descriptions : tuple[str, ...]
+        Per-band description strings; must match ``len(bands)``.
+    dtype : str, optional
+        Output dtype (e.g. ``"float32"`` or ``"uint8"``). Default ``"float32"``.
+    nodata : float or None, optional
+        No-data value. Pass ``None`` to omit nodata metadata.
+        Default ``constants.NODATA_VALUE``.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     write_profile = profile.copy()
     write_profile.update(
         {
-            "dtype": "float32",
-            "count": 2,
+            "dtype": dtype,
+            "count": len(bands),
             "nodata": nodata,
-            "compress": "deflate",
+            "compress": constants.GEOTIFF_COMPRESSION,
         }
     )
 
     with rasterio.open(output_path, "w", **write_profile) as dst:
-        dst.write(vs30_array.astype(np.float32), 1)
-        dst.write(stdv_array.astype(np.float32), 2)
-        dst.descriptions = (band1_description, band2_description)
+        for i, band in enumerate(bands, start=1):
+            data = band if band.dtype.name == dtype else band.astype(dtype)
+            dst.write(data, i)
+        dst.descriptions = band_descriptions
 
     logger.info(f"Wrote raster: {output_path}")
-
-
-def write_single_band_raster(
-    array: np.ndarray,
-    profile: dict,
-    output_path: Path,
-    band_description: str,
-    nodata: float | None = None,
-) -> None:
-    """
-    Write a single-band raster to a GeoTIFF file.
-
-    Parameters
-    ----------
-    array : np.ndarray
-        2D array to write.
-    profile : dict
-        Rasterio profile with CRS, transform, dimensions.
-    output_path : Path
-        Output file path.
-    band_description : str
-        Description for the band.
-    nodata : float or None, optional
-        No-data value. If None, no nodata value is set.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    write_profile = profile.copy()
-    write_profile.update(
-        {
-            "dtype": "float32",
-            "count": 1,
-            "nodata": nodata,
-            "compress": "deflate",
-        }
-    )
-
-    with rasterio.open(output_path, "w", **write_profile) as dst:
-        dst.write(array.astype(np.float32), 1)
-        dst.descriptions = (band_description,)
-
-
-def write_id_raster(
-    id_array: np.ndarray,
-    profile: dict,
-    output_path: Path,
-) -> None:
-    """
-    Write a category ID raster to a GeoTIFF file.
-
-    Parameters
-    ----------
-    id_array : np.ndarray
-        Category ID array (uint8).
-    profile : dict
-        Rasterio profile with CRS, transform, dimensions.
-    output_path : Path
-        Output file path.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(id_array, 1)
-        dst.descriptions = (constants.BAND_DESCRIPTION_ID_INDEX,)
 
 
 # ============================================================================
@@ -868,7 +786,6 @@ def compute_model_grid(
 
     logger.info(f"Starting full pipeline for {model_type}")
 
-    # --- Step 1: Bayesian update of categorical model values (conditional) ---
     if do_bayesian_update:
         logger.info("\n=== STEP 1: Updating Categorical Models ===")
         posterior_df = compute_categorical_vs30_updates(
@@ -888,9 +805,8 @@ def compute_model_grid(
         logger.info(
             "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
         )
-        posterior_df = pd.read_csv(categorical_model_csv, skipinitialspace=True)
+        posterior_df = read_categorical_csv(categorical_model_csv)
 
-    # --- Step 2: Create initial VS30 arrays from categorical model ---
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
     vs30_array, stdv_array, id_array, profile = create_initial_vs30_arrays(
         grid_config, model_type, posterior_df
@@ -902,18 +818,27 @@ def compute_model_grid(
             if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_ID_FILENAME
         )
-        write_id_raster(id_array, profile, output_dir / id_filename)
+        write_raster(
+            output_dir / id_filename,
+            profile,
+            [id_array],
+            (constants.BAND_DESCRIPTION_ID_INDEX,),
+            dtype="uint8",
+            nodata=constants.RASTER_ID_NODATA_VALUE,
+        )
 
         initial_filename = (
             constants.GEOLOGY_INITIAL_VS30_FILENAME
             if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_INITIAL_VS30_FILENAME
         )
-        write_vs30_raster(
-            vs30_array, stdv_array, profile, output_dir / initial_filename
+        write_raster(
+            output_dir / initial_filename,
+            profile,
+            [vs30_array, stdv_array],
+            (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
-    # --- Step 3: Apply hybrid modifications (geology only) ---
     current_vs30 = vs30_array
     current_stdv = stdv_array
     slope_array = None
@@ -934,38 +859,37 @@ def compute_model_grid(
         )
 
         if output_dir is not None and include_intermediate:
-            write_single_band_raster(
-                slope_array,
-                profile,
+            write_raster(
                 output_dir / constants.SLOPE_RASTER_FILENAME,
-                constants.BAND_DESCRIPTION_SLOPE,
-                nodata=constants.NODATA_VALUE,
-            )
-            write_single_band_raster(
-                coast_dist_array,
                 profile,
+                [slope_array],
+                (constants.BAND_DESCRIPTION_SLOPE,),
+            )
+            write_raster(
                 output_dir / constants.COAST_DISTANCE_RASTER_FILENAME,
-                constants.BAND_DESCRIPTION_COAST_DISTANCE,
+                profile,
+                [coast_dist_array],
+                (constants.BAND_DESCRIPTION_COAST_DISTANCE,),
                 nodata=None,
             )
-            write_vs30_raster(
-                current_vs30,
-                current_stdv,
-                profile,
+            write_raster(
                 output_dir
                 / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME,
-                constants.BAND_DESCRIPTION_VS30_HYBRID,
-                constants.BAND_DESCRIPTION_STDV_HYBRID,
+                profile,
+                [current_vs30, current_stdv],
+                (
+                    constants.BAND_DESCRIPTION_VS30_HYBRID,
+                    constants.BAND_DESCRIPTION_STDV_HYBRID,
+                ),
             )
 
-    # --- Step 4: MVN spatial adjustment using observations (conditional) ---
     if mvn:
         if corr_fn is None:
             raise ValueError("corr_fn must be provided for spatial adjustment.")
 
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
-        observations_df = _collect_observation_csvs(
+        observations_df = collect_observation_csvs(
             clustered_observations_csv, independent_observations_csv
         )
         if len(observations_df) == 0:
@@ -995,8 +919,11 @@ def compute_model_grid(
 
     if output_dir is not None:
         output_filename = constants.OUTPUT_FILENAMES[model_type]
-        write_vs30_raster(
-            current_vs30, current_stdv, profile, output_dir / output_filename
+        write_raster(
+            output_dir / output_filename,
+            profile,
+            [current_vs30, current_stdv],
+            (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
     logger.info(f"\nFull pipeline for {model_type} completed successfully")
@@ -1106,7 +1033,7 @@ def grid_pipeline(
     """
     start_time = time.time()
 
-    geology_corr_fn, terrain_corr_fn = _default_correlation_functions(
+    geology_corr_fn, terrain_corr_fn = default_correlation_functions(
         geology_corr_fn, terrain_corr_fn
     )
 
@@ -1126,7 +1053,6 @@ def grid_pipeline(
     result: dict[str, np.ndarray | dict | None] = {}
     profile: dict | None = None
 
-    # 1. Run Geology Pipeline
     if run_geology:
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
         geol_vs30, geol_stdv, geol_ids, profile = compute_model_grid(
@@ -1150,7 +1076,6 @@ def grid_pipeline(
         result["geology_stdv"] = geol_stdv
         result["geology_ids"] = geol_ids
 
-    # 2. Run Terrain Pipeline
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
         terr_vs30, terr_stdv, _, profile = compute_model_grid(
@@ -1173,7 +1098,6 @@ def grid_pipeline(
         result["terrain_vs30"] = terr_vs30
         result["terrain_stdv"] = terr_stdv
 
-    # 3. Combine geology and terrain models using weighted average
     if run_geology and run_terrain:
         logger.info(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
@@ -1188,8 +1112,7 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        if profile is None:
-            raise ValueError("profile must not be None when combining model outputs.")
+        assert profile is not None  # invariant: set by compute_model_grid above
 
         if fill_gaps:
             # Stage 6: Gap-fill on-land nodata pixels in combined output
@@ -1198,17 +1121,17 @@ def grid_pipeline(
             )
 
             if output_dir is not None and include_intermediate:
-                write_vs30_raster(
-                    np.where(
-                        np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
-                    ),
-                    np.where(
-                        np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
-                    ),
-                    profile,
+                write_raster(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
-                    constants.BAND_DESCRIPTION_VS30_COMBINED,
-                    constants.BAND_DESCRIPTION_STDV_COMBINED,
+                    profile,
+                    [
+                        np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
+                        np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                    ],
+                    (
+                        constants.BAND_DESCRIPTION_VS30_COMBINED,
+                        constants.BAND_DESCRIPTION_STDV_COMBINED,
+                    ),
                 )
 
             combined_vs30, combined_stdv = gapfill.fill_nodata_grid(
@@ -1218,17 +1141,17 @@ def grid_pipeline(
         result["combined_stdv"] = combined_stdv
 
         if output_dir is not None:
-            write_vs30_raster(
-                np.where(
-                    np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
-                ),
-                np.where(
-                    np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
-                ),
-                profile,
+            write_raster(
                 output_dir / constants.COMBINED_VS30_FILENAME,
-                constants.BAND_DESCRIPTION_VS30_COMBINED,
-                constants.BAND_DESCRIPTION_STDV_COMBINED,
+                profile,
+                [
+                    np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
+                    np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                ],
+                (
+                    constants.BAND_DESCRIPTION_VS30_COMBINED,
+                    constants.BAND_DESCRIPTION_STDV_COMBINED,
+                ),
             )
 
     result["profile"] = profile
@@ -1244,6 +1167,74 @@ def grid_pipeline(
 # ============================================================================
 # Point-based pipeline
 # ============================================================================
+
+
+def fill_one_point_via_local_grid(
+    easting: float,
+    northing: float,
+    gapfill_grid_config: config.GridConfig,
+    grid_pipeline_kwargs: dict,
+) -> tuple[float, float]:
+    """
+    Fill a single nodata point by running ``grid_pipeline`` on a local grid.
+
+    Expands the local grid up to ``GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M`` if no
+    valid donor is found at the initial half-width.
+
+    Parameters
+    ----------
+    easting : float
+        Query point easting (NZTM).
+    northing : float
+        Query point northing (NZTM).
+    gapfill_grid_config : config.GridConfig
+        Reference grid config defining the pixel alignment for local grids.
+    grid_pipeline_kwargs : dict
+        Keyword arguments forwarded to ``grid_pipeline`` (everything except
+        ``grid_config`` and ``output_dir``).
+
+    Returns
+    -------
+    tuple[float, float]
+        ``(fill_vs30, fill_stdv)``. Both are NaN if no donor was found.
+    """
+    half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
+    while half_width <= constants.GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M:
+        local_config = gapfill.create_local_grid_config(
+            easting, northing, gapfill_grid_config, half_width
+        )
+        local_result = grid_pipeline(
+            grid_config=local_config,
+            output_dir=None,
+            **grid_pipeline_kwargs,
+        )
+
+        local_vs30, local_stdv = gapfill.fill_nodata_grid(
+            local_result["combined_vs30"],
+            local_result["combined_stdv"],
+            local_result["geology_ids"],
+            local_result["profile"],
+        )
+        row, col = rasterio.transform.rowcol(
+            local_result["profile"]["transform"], easting, northing
+        )
+        fill_vs30 = local_vs30[row, col]
+        fill_stdv = local_stdv[row, col]
+
+        if not np.isnan(fill_vs30):
+            return float(fill_vs30), float(fill_stdv)
+
+        half_width += constants.GAPFILL_LOCAL_GRID_EXPANSION_M
+        logger.info(
+            f"  Gap-fill: expanding local grid to "
+            f"{half_width * 2}m for point ({easting:.0f}, {northing:.0f})"
+        )
+
+    logger.warning(
+        f"  Gap-fill: no valid donor found for point "
+        f"({easting:.0f}, {northing:.0f}), leaving as nodata"
+    )
+    return float("nan"), float("nan")
 
 
 def points_pipeline(
@@ -1338,11 +1329,10 @@ def points_pipeline(
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
         terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
     """
-    geology_corr_fn, terrain_corr_fn = _default_correlation_functions(
+    geology_corr_fn, terrain_corr_fn = default_correlation_functions(
         geology_corr_fn, terrain_corr_fn
     )
 
-    # Convert WGS84 to NZTM
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([latitudes, longitudes])
     )
@@ -1350,9 +1340,8 @@ def points_pipeline(
 
     logger.info(f"Processing {len(points)} locations")
 
-    # Load and combine all available observation files for spatial adjustment
     if mvn:
-        observations_df = _collect_observation_csvs(
+        observations_df = collect_observation_csvs(
             clustered_observations_csv, independent_observations_csv
         )
     else:
@@ -1390,7 +1379,7 @@ def points_pipeline(
                 nproc=nproc,
             )
         else:
-            geol_model_df = pd.read_csv(geology_categorical_csv, skipinitialspace=True)
+            geol_model_df = read_categorical_csv(geology_categorical_csv)
 
     if run_terrain:
         if terrain_categorical_csv is None:
@@ -1409,9 +1398,9 @@ def points_pipeline(
                 nproc=nproc,
             )
         else:
-            terr_model_df = pd.read_csv(terrain_categorical_csv, skipinitialspace=True)
+            terr_model_df = read_categorical_csv(terrain_categorical_csv)
 
-    nproc_resolved = parallel.resolve_nproc(nproc)
+    nproc_resolved = multiprocess.resolve_nproc(nproc)
 
     # ================================================================
     # Parallel Processing Path
@@ -1430,11 +1419,6 @@ def points_pipeline(
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         )
-
-        if geol_model_df is None:
-            raise ValueError("geol_model_df must not be None for parallel processing.")
-        if terr_model_df is None:
-            raise ValueError("terr_model_df must not be None for parallel processing.")
 
         result_df = parallel.run_parallel_locations(
             points=points,
@@ -1461,10 +1445,7 @@ def points_pipeline(
 
         # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
         if run_geology:
-            if geol_model_df is None:
-                raise ValueError(
-                    "geol_model_df must not be None when running geology model."
-                )
+            assert geol_model_df is not None  # invariant: required when run_geology
             with tqdm(
                 total=len(points), desc="Geology: spatial adjustment", unit="point"
             ) as pbar:
@@ -1498,10 +1479,7 @@ def points_pipeline(
 
         # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
         if run_terrain:
-            if terr_model_df is None:
-                raise ValueError(
-                    "terr_model_df must not be None when running terrain model."
-                )
+            assert terr_model_df is not None  # invariant: required when run_terrain
             with tqdm(
                 total=len(points), desc="Terrain: spatial adjustment", unit="point"
             ) as pbar:
@@ -1557,10 +1535,11 @@ def points_pipeline(
         combined_vs30 = result_df[constants.ObservationColumn.VS30].values
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
-        # Get geology IDs for query points (redundant sample, avoids
-        # threading IDs through both parallel and sequential paths)
-        geology_ids = category.assign_to_category_geology(points)
-
+        # Resample geology IDs at query points rather than threading them
+        # through both parallel and sequential paths.
+        geology_ids = category.assign_to_category(
+            points, constants.ModelType.GEOLOGY
+        )
         fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, points)
 
         if np.any(fillable_mask):
@@ -1574,81 +1553,30 @@ def points_pipeline(
                 f"via local grid pipeline"
             )
 
+            grid_pipeline_kwargs = {
+                "model_type": constants.ModelType.COMBINED,
+                "geology_categorical_csv": geology_categorical_csv,
+                "terrain_categorical_csv": terrain_categorical_csv,
+                "clustered_observations_csv": clustered_observations_csv,
+                "independent_observations_csv": independent_observations_csv,
+                "combination_method": combination_method,
+                "combine_ratio": combine_ratio,
+                "noisy": noisy,
+                "mvn": mvn,
+                "do_bayesian_update": do_bayesian_update,
+                "include_intermediate": False,
+                "nproc": 1,
+                "geology_corr_fn": geology_corr_fn,
+                "terrain_corr_fn": terrain_corr_fn,
+                "apply_coastal_distance_mod": apply_coastal_distance_mod,
+                "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
+            }
+
             for idx in fillable_indices:
-                e, n = points[idx]
-                half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
-                fill_vs30 = np.nan
-                fill_stdv = np.nan
-
-                while half_width <= constants.GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M:
-                    local_config = gapfill.create_local_grid_config(
-                        e, n, gapfill_grid_config, half_width
-                    )
-
-                    local_result = grid_pipeline(
-                        grid_config=local_config,
-                        output_dir=None,
-                        model_type=constants.ModelType.COMBINED,
-                        geology_categorical_csv=geology_categorical_csv,
-                        terrain_categorical_csv=terrain_categorical_csv,
-                        clustered_observations_csv=clustered_observations_csv,
-                        independent_observations_csv=independent_observations_csv,
-                        combination_method=combination_method,
-                        combine_ratio=combine_ratio,
-                        noisy=noisy,
-                        mvn=mvn,
-                        do_bayesian_update=do_bayesian_update,
-                        include_intermediate=False,
-                        nproc=1,
-                        geology_corr_fn=geology_corr_fn,
-                        terrain_corr_fn=terrain_corr_fn,
-                        apply_coastal_distance_mod=apply_coastal_distance_mod,
-                        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-                    )
-
-                    local_profile = local_result["profile"]
-                    local_vs30 = local_result["combined_vs30"]
-                    local_stdv = local_result["combined_stdv"]
-                    local_geol_ids = local_result["geology_ids"]
-
-                    if local_profile is None:
-                        raise ValueError(
-                            "grid_pipeline returned a None profile for local gap-fill grid."
-                        )
-                    if not isinstance(local_vs30, np.ndarray) or not isinstance(
-                        local_stdv, np.ndarray
-                    ):
-                        raise ValueError(
-                            "grid_pipeline returned Non-array combined_vs30/combined_stdv for local gap-fill grid."
-                        )
-
-                    # Fill nodata gaps in the local grid using nearest-neighbor
-                    local_vs30, local_stdv = gapfill.fill_nodata_grid(
-                        local_vs30, local_stdv, local_geol_ids, local_profile
-                    )
-
-                    row, col = rasterio.transform.rowcol(
-                        local_profile["transform"], e, n
-                    )
-                    fill_vs30 = local_vs30[row, col]
-                    fill_stdv = local_stdv[row, col]
-
-                    if not np.isnan(fill_vs30):
-                        break
-
-                    # No valid donors in the local grid — expand
-                    half_width += constants.GAPFILL_LOCAL_GRID_EXPANSION_M
-                    logger.info(
-                        f"  Gap-fill: expanding local grid to "
-                        f"{half_width * 2}m for point ({e:.0f}, {n:.0f})"
-                    )
-                else:
-                    logger.warning(
-                        f"  Gap-fill: no valid donor found for point "
-                        f"({e:.0f}, {n:.0f}) after expanding to "
-                        f"{half_width * 2}m, leaving as nodata"
-                    )
-
+                easting, northing = points[idx]
+                fill_vs30, fill_stdv = fill_one_point_via_local_grid(
+                    easting, northing, gapfill_grid_config, grid_pipeline_kwargs
+                )
                 if not np.isnan(fill_vs30):
                     result_df.at[idx, constants.ObservationColumn.VS30] = fill_vs30
                     result_df.at[idx, constants.COL_COMBINED_STDV] = fill_stdv

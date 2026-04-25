@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from conftest import assert_arrays_match_raster_benchmark, load_fixed_model_config
-from pyproj import Transformer
+import pyproj
 
 from vs30 import config, constants, pipeline
 
@@ -49,7 +49,7 @@ FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV = (
     BENCHMARKS_DIR / "foster_2019_approx_points.csv"
 )
 
-_NZTM_TO_WGS = Transformer.from_crs(2193, 4326, always_xy=True)
+NZTM_TO_WGS = pyproj.Transformer.from_crs(2193, 4326, always_xy=True)
 
 
 def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, nproc: int) -> None:
@@ -101,7 +101,7 @@ def test_foster_2019_approx_points_benchmark(nproc):
     """
     cfg = load_fixed_model_config(constants.FixedModelVersion.FOSTER_2019_APPROX)
     bench_df = pd.read_csv(FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV)
-    lons, lats = _NZTM_TO_WGS.transform(
+    lons, lats = NZTM_TO_WGS.transform(
         bench_df["easting"].to_numpy(), bench_df["northing"].to_numpy()
     )
 

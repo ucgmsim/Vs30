@@ -140,9 +140,9 @@ class TestUpdateWithIndependentData:
         """Create sample categorical model DataFrame."""
         return pd.DataFrame(
             {
-                "id": [1, 2, 3],
-                "mean_vs30_km_per_s": [200.0, 300.0, 400.0],
-                "standard_deviation_vs30_km_per_s": [0.5, 0.4, 0.3],
+                constants.STANDARD_ID_COLUMN: [1, 2, 3],
+                constants.COL_MEAN: [200.0, 300.0, 400.0],
+                constants.COL_STDV: [0.5, 0.4, 0.3],
             }
         )
 
@@ -151,9 +151,9 @@ class TestUpdateWithIndependentData:
         """Create sample observations DataFrame."""
         return pd.DataFrame(
             {
-                "id": [1, 1, 2],
-                "vs30": [210.0, 195.0, 320.0],
-                "uncertainty": [0.2, 0.2, 0.15],
+                constants.STANDARD_ID_COLUMN: [1, 1, 2],
+                constants.ObservationColumn.VS30: [210.0, 195.0, 320.0],
+                constants.ObservationColumn.UNCERTAINTY: [0.2, 0.2, 0.15],
             }
         )
 
@@ -164,24 +164,17 @@ class TestUpdateWithIndependentData:
             sample_observations,
         )
 
-        # Check output has expected columns
-        assert "posterior_mean_vs30_km_per_s_independent_observations" in result.columns
-        assert (
-            "posterior_standard_deviation_vs30_km_per_s_independent_observations"
-            in result.columns
-        )
-        assert "posterior_num_observations_independent_observations" in result.columns
+        assert constants.COL_POSTERIOR_MEAN_INDEPENDENT in result.columns
+        assert constants.COL_POSTERIOR_STDV_INDEPENDENT in result.columns
+        assert constants.COL_POSTERIOR_NOBS_INDEPENDENT in result.columns
 
-        # Category 1 should be updated (has 2 observations)
-        # N_PRIOR=3 from constants, so 3 + 2 = 5
-        cat1 = result[result["id"] == 1].iloc[0]
-        assert (
-            cat1["posterior_num_observations_independent_observations"] == 5
-        )  # 3 prior + 2 obs
+        # Category 1 has 2 observations on top of N_PRIOR=3, so n=5.
+        cat1 = result[result[constants.STANDARD_ID_COLUMN] == 1].iloc[0]
+        assert cat1[constants.COL_POSTERIOR_NOBS_INDEPENDENT] == constants.N_PRIOR + 2
 
-        # Category 3 should remain unchanged (no observations)
-        cat3 = result[result["id"] == 3].iloc[0]
-        assert cat3["posterior_mean_vs30_km_per_s_independent_observations"] == 400.0
+        # Category 3 has no observations, so it keeps its prior.
+        cat3 = result[result[constants.STANDARD_ID_COLUMN] == 3].iloc[0]
+        assert cat3[constants.COL_POSTERIOR_MEAN_INDEPENDENT] == 400.0
 
     def test_min_sigma_enforced(self, sample_categorical_model, sample_observations):
         """Test that minimum sigma is enforced using MIN_SIGMA constant."""
@@ -190,9 +183,7 @@ class TestUpdateWithIndependentData:
             sample_observations,
         )
 
-        # All posteriors should have stddev >= MIN_SIGMA
-        # Note: posteriors can go below MIN_SIGMA, but prior is floored at MIN_SIGMA
-        assert result["enforced_min_sigma"].iloc[0] == constants.MIN_SIGMA
+        assert result[constants.COL_ENFORCED_MIN_SIGMA].iloc[0] == constants.MIN_SIGMA
 
 
 class TestCategoryEdgeCases:
@@ -200,37 +191,29 @@ class TestCategoryEdgeCases:
 
     def test_update_with_no_matching_observations(self):
         """Test Bayesian update when no observations match a category."""
-        # Create categorical model with some categories
         categorical_model_df = pd.DataFrame(
             {
-                "id": [1, 2, 3],
-                "mean_vs30_km_per_s": [300.0, 400.0, 500.0],
-                "standard_deviation_vs30_km_per_s": [30.0, 40.0, 50.0],
+                constants.STANDARD_ID_COLUMN: [1, 2, 3],
+                constants.COL_MEAN: [300.0, 400.0, 500.0],
+                constants.COL_STDV: [30.0, 40.0, 50.0],
             }
         )
 
-        # Observations that don't match any category (use STANDARD_ID_COLUMN = 'id')
+        # ID 99 is not in the categorical model.
         observations_df = pd.DataFrame(
             {
-                "vs30": [350.0],
-                "uncertainty": [25.0],
-                "id": [99],  # Non-existent category - uses 'id' column
-                "easting": [1500000.0],
-                "northing": [5100000.0],
+                constants.ObservationColumn.VS30: [350.0],
+                constants.ObservationColumn.UNCERTAINTY: [25.0],
+                constants.STANDARD_ID_COLUMN: [99],
+                constants.ObservationColumn.EASTING: [1500000.0],
+                constants.ObservationColumn.NORTHING: [5100000.0],
             }
         )
 
-        # Should not raise, categories without observations keep prior
         result_df = category.update_with_independent_data(
             categorical_model_df,
             observations_df,
         )
 
-        # Result should have posterior columns
-        assert (
-            "posterior_mean_vs30_km_per_s_independent_observations" in result_df.columns
-        )
-        assert (
-            "posterior_standard_deviation_vs30_km_per_s_independent_observations"
-            in result_df.columns
-        )
+        assert constants.COL_POSTERIOR_MEAN_INDEPENDENT in result_df.columns
+        assert constants.COL_POSTERIOR_STDV_INDEPENDENT in result_df.columns

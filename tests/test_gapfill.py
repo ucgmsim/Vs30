@@ -7,7 +7,7 @@ fill_nodata_grid copies the nearest valid neighbor's values.
 """
 
 import numpy as np
-from rasterio.transform import Affine
+import rasterio
 
 from vs30 import constants, gapfill
 
@@ -19,40 +19,32 @@ def test_classify_nodata_excludes_water_and_offshore():
     # Far offshore: known ocean location east of NZ
     offshore_location = np.array([[2200000.0, 5400000.0]])
 
-    # On-land nodata with valid GID -> fillable
     result = gapfill.classify_nodata(
         combined_vs30=np.array([np.nan]),
         geology_ids=np.array([5]),
         locations=onland_location,
     )
-    # result[0] should evaluate to True
     assert result[0], "On-land nodata pixel with valid GID should be fillable"
 
-    # Water pixel (GID=0) -> not fillable
     result = gapfill.classify_nodata(
         combined_vs30=np.array([np.nan]),
         geology_ids=np.array([0]),
         locations=onland_location,
     )
-    # result[0] should evaluate to False
     assert not result[0], "Water pixel (GID=0) should not be fillable"
 
-    # Valid pixel (not NaN) -> not fillable
     result = gapfill.classify_nodata(
         combined_vs30=np.array([300.0]),
         geology_ids=np.array([5]),
         locations=onland_location,
     )
-    # result[0] should evaluate to False
     assert not result[0], "Valid (non-NaN) pixel should not be fillable"
 
-    # Offshore nodata -> not fillable
     result = gapfill.classify_nodata(
         combined_vs30=np.array([np.nan]),
         geology_ids=np.array([5]),
         locations=offshore_location,
     )
-    # result[0] should evaluate to False
     assert not result[0], "Offshore nodata pixel should not be fillable"
 
 
@@ -70,7 +62,7 @@ def test_fill_nodata_grid_nearest_neighbor():
     # For col 1: origin_x + 1.5 * 100 = 1749050 -> origin_x = 1748900
     # For row 1: origin_y + 1.5 * (-100) = 5427050 -> origin_y = 5427200
     pixel_size = 100
-    transform = Affine(pixel_size, 0, 1748900, 0, -pixel_size, 5427200)
+    transform = rasterio.transform.Affine(pixel_size, 0, 1748900, 0, -pixel_size, 5427200)
     profile = {"transform": transform}
 
     vs30 = np.array(

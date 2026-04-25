@@ -16,6 +16,7 @@ clustered_observations_csv:
 
 # --- Pipeline settings ---
 do_bayesian_update: false
+mvn: true
 noisy: true
 combination_method: ratio
 combine_ratio: 1.0

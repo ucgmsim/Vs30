@@ -1,63 +1,13 @@
 """Multiprocessing support for parallel spatial adjustment."""
 
-import contextlib
-import multiprocessing as mp
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-import threadpoolctl
 from tqdm import tqdm
 
-from vs30 import category, constants, raster, spatial, utils
-
-
-@contextlib.contextmanager
-def single_threaded_blas():
-    """Restrict BLAS to single-threaded operation to prevent oversubscription during multiprocessing."""
-    with threadpoolctl.threadpool_limits(limits=1, user_api="blas"):
-        yield
-
-
-def resolve_nproc(nproc: int | None) -> int:
-    """
-    Convert user input to actual process count.
-
-    Parameters
-    ----------
-    nproc : int or None
-        User-specified number of processes.
-        None or 1 = single-threaded
-        -1 = use all available CPU cores
-        > 1 = use that many processes
-
-    Returns
-    -------
-    int
-        Actual number of processes to use (always >= 1)
-
-    Raises
-    ------
-    ValueError
-        If nproc is 0 or less than -1
-    """
-    if nproc is None or nproc == 1:
-        return 1
-    if nproc == -1:
-        return mp.cpu_count()
-    if nproc < -1 or nproc == 0:
-        raise ValueError(f"nproc must be -1, 1, or > 1, got {nproc}")
-    return min(nproc, mp.cpu_count())
-
-
-# Use spawn context to avoid GDAL fork issues.
-# GDAL is not fork-safe; using spawn starts fresh processes without inheriting
-# the parent's GDAL state, which prevents deadlocks.
-# This is the single source of truth for the spawn context used across the
-# package (parallel.py and spatial.py both need it).
-spawn_context = mp.get_context("spawn")
+from vs30 import category, constants, multiprocess, raster, spatial, utils
 
 
 def process_geology_at_points(
@@ -116,15 +66,12 @@ def process_geology_at_points(
     geol_mvn_stdv : ndarray
         Final geology standard deviation after spatial adjustment.
     """
-    # Assign geology category IDs to points
     geol_ids = category.assign_to_category_geology(points)
 
-    # Get initial Vs30 values from categorical model
     geol_vs30_df = category.get_vs30_for_ids(geol_ids, model_df)
     geol_vs30 = geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
     geol_stdv = geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
-    # Get slope and coastal distance at query points
     slope_at_points = raster.sample_slope_at_points(points)
     coast_dist_at_points = (
         raster.compute_coastal_distance_at_points(points)
@@ -132,7 +79,6 @@ def process_geology_at_points(
         else np.zeros(len(points))
     )
 
-    # Apply hybrid modifications (slope and coastal distance)
     geol_vs30_hybrid, geol_stdv_hybrid = raster.apply_hybrid_geology_modifications(
         geol_vs30,
         geol_stdv,
@@ -143,7 +89,6 @@ def process_geology_at_points(
         apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
-    # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[
             [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
@@ -152,12 +97,12 @@ def process_geology_at_points(
         obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
 
         # Apply hybrid modifications to observation model values so residuals
-        # are computed consistently with the grid pipeline (spatial.py:405-436)
+        # match the grid pipeline; see spatial.prepare_observation_data.
         obs_slope = raster.sample_slope_at_points(obs_locs)
         # Legacy parity: NODATA slope samples at observations are replaced with
-        # the 255 sentinel so log10(255) ≈ 2.41 feeds the np.interp and returns
-        # the MAX Vs30 for the gid — matches the grid pipeline behaviour in
-        # spatial.prepare_observation_data (spatial.py:480-488).
+        # the 255 sentinel so log10(255) ≈ 2.41 feeds np.interp and returns the
+        # MAX Vs30 for the gid; the equivalent grid-pixel handling uses 1e-9
+        # and returns the MIN Vs30. See constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL.
         obs_slope = np.where(
             obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
         )
@@ -247,15 +192,12 @@ def process_terrain_at_points(
     terr_mvn_stdv : ndarray
         Final terrain standard deviation after spatial adjustment.
     """
-    # Assign terrain category IDs to points
     terr_ids = category.assign_to_category_terrain(points)
 
-    # Get initial Vs30 values from categorical model
     terr_vs30_df = category.get_vs30_for_ids(terr_ids, model_df)
     terr_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
     terr_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
-    # Apply spatial adjustment if observations are available
     if len(observations_df) > 0:
         obs_locs = observations_df[
             [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
@@ -359,7 +301,6 @@ def process_locations_chunk(
         constants.ModelType.COMBINED,
     )
 
-    # Process geology model
     if run_geology:
         (
             geol_ids,
@@ -388,7 +329,6 @@ def process_locations_chunk(
             result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
             result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
-    # Process terrain model
     if run_terrain:
         (
             terr_ids,
@@ -407,7 +347,6 @@ def process_locations_chunk(
             result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
             result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
-    # Combine models or use single model result
     if run_geology and run_terrain:
         combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_mvn_vs30,
@@ -444,51 +383,41 @@ def process_pixels_chunk(
     Parameters
     ----------
     args : tuple
-        (pixel_indices, chunk_id, pixel_data_dict, obs_data_dict, config_params)
+        (pixels, chunk_id, obs_data, corr_fn, max_dist_m, max_points,
+        noisy, cov_reduc, corr_zero)
 
     Returns
     -------
     tuple
         (chunk_id, list of (flat_index, updated_vs30, updated_stdv) tuples)
     """
-    pixel_indices, chunk_id, pixel_data_dict, obs_data_dict, config_params = args
-
-    # Reconstruct ObservationData from dict (dataclasses can't always be pickled cleanly)
-    obs_data = spatial.ObservationData(
-        locations=obs_data_dict[constants.KEY_LOCATIONS],
-        vs30=obs_data_dict[constants.ObservationColumn.VS30],
-        model_vs30=obs_data_dict[constants.KEY_MODEL_VS30],
-        model_stdv=obs_data_dict[constants.KEY_MODEL_STDV],
-        residuals=obs_data_dict[constants.KEY_RESIDUALS],
-        omega=obs_data_dict[constants.KEY_OMEGA],
-        uncertainty=obs_data_dict[constants.ObservationColumn.UNCERTAINTY],
-    )
+    (
+        pixels,
+        chunk_id,
+        obs_data,
+        corr_fn,
+        max_dist_m,
+        max_points,
+        noisy,
+        cov_reduc,
+        corr_zero,
+    ) = args
 
     updates = []
-    for idx in pixel_indices:
-        # Get pixel data from the prepared dict
-        pixel_info = pixel_data_dict[idx]
-        pixel = spatial.PixelData(
-            location=pixel_info[constants.KEY_LOCATION],
-            vs30=pixel_info[constants.ObservationColumn.VS30],
-            stdv=pixel_info[constants.KEY_STDV],
-            index=pixel_info[constants.KEY_INDEX],
-        )
-
+    for pixel in pixels:
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             obs_data,
-            config_params["corr_fn"],
-            max_dist_m=config_params[constants.KEY_MAX_DIST_M],
-            max_points=config_params[constants.KEY_MAX_POINTS],
-            noisy=config_params[constants.KEY_NOISY],
-            cov_reduc=config_params[constants.KEY_COV_REDUC],
-            corr_zero=config_params.get(constants.KEY_CORR_ZERO),
+            corr_fn,
+            max_dist_m=max_dist_m,
+            max_points=max_points,
+            noisy=noisy,
+            cov_reduc=cov_reduc,
+            corr_zero=corr_zero,
         )
-
         if result is not None:
             vs30, stdv, _ = result
-            updates.append((pixel_info[constants.KEY_INDEX], vs30, stdv))
+            updates.append((pixel.index, vs30, stdv))
 
     return chunk_id, updates
 
@@ -496,8 +425,8 @@ def process_pixels_chunk(
 def run_parallel_locations(
     points: np.ndarray,
     observations_df: pd.DataFrame,
-    geol_model_df: pd.DataFrame,
-    terr_model_df: pd.DataFrame,
+    geol_model_df: pd.DataFrame | None,
+    terr_model_df: pd.DataFrame | None,
     config: LocationsChunkConfig,
     nproc: int,
 ) -> pd.DataFrame:
@@ -505,7 +434,8 @@ def run_parallel_locations(
     Process locations in parallel.
 
     Divides the points array into chunks and processes each chunk
-    in a separate process using the full VS30 pipeline.
+    in a separate process using the full VS30 pipeline. Pass None for
+    the model that is not used by ``config.model_type``.
 
     Parameters
     ----------
@@ -513,10 +443,10 @@ def run_parallel_locations(
         Array of shape (N, 2) with NZTM (easting, northing) coordinates.
     observations_df : DataFrame
         Observation data for spatial adjustment (must have easting, northing, vs30, uncertainty)
-    geol_model_df : DataFrame
-        Geology categorical model
-    terr_model_df : DataFrame
-        Terrain categorical model
+    geol_model_df : DataFrame or None
+        Geology categorical model. Required when running geology; otherwise None.
+    terr_model_df : DataFrame or None
+        Terrain categorical model. Required when running terrain; otherwise None.
     config : LocationsChunkConfig
         Configuration parameters for processing
     nproc : int
@@ -544,10 +474,8 @@ def run_parallel_locations(
         if len(idx) > 0
     ]
 
-    # Process in parallel using spawn context (avoids GDAL fork issues)
-    # Use single_threaded_blas to prevent BLAS oversubscription
-    with single_threaded_blas():
-        with spawn_context.Pool(processes=nproc) as pool:
+    with multiprocess.single_threaded_blas():
+        with multiprocess.spawn_context.Pool(processes=nproc) as pool:
             results = []
             with tqdm(total=len(points), unit="point") as pbar:
                 for chunk_id, result_df in pool.imap(
@@ -556,7 +484,6 @@ def run_parallel_locations(
                     results.append((chunk_id, result_df))
                     pbar.update(len(result_df))
 
-    # Merge: concatenate in order
     results.sort(key=lambda x: x[0])
     return pd.concat([r[1] for r in results], ignore_index=True)
 
@@ -610,65 +537,55 @@ def run_parallel_spatial_fit(
     if len(affected_flat_indices) == 0:
         return raster_data.vs30.copy(), raster_data.stdv.copy()
 
-    # Prepare pixel data as a dict (for pickling)
     grid_locs = raster_data.get_coordinates()
-    pixel_data_dict = {}
-    for i, flat_idx in enumerate(affected_flat_indices):
-        # Map flat index to valid index for coordinates
+
+    # Build a flat-index → valid-index map. searchsorted returns an insertion
+    # point, so we additionally check equality to confirm the flat_idx really
+    # is in valid_flat_indices and skip otherwise.
+    pixels = []
+    for flat_idx in affected_flat_indices:
         valid_idx = np.searchsorted(raster_data.valid_flat_indices, flat_idx)
-        if valid_idx < len(grid_locs):
-            pixel_data_dict[i] = {
-                constants.KEY_LOCATION: grid_locs[valid_idx],
-                constants.ObservationColumn.VS30: float(raster_data.vs30.flat[flat_idx]),
-                constants.KEY_STDV: float(raster_data.stdv.flat[flat_idx]),
-                constants.KEY_INDEX: int(flat_idx),
-            }
+        if (
+            valid_idx < len(raster_data.valid_flat_indices)
+            and raster_data.valid_flat_indices[valid_idx] == flat_idx
+        ):
+            pixels.append(
+                spatial.PixelData(
+                    location=grid_locs[valid_idx],
+                    vs30=float(raster_data.vs30.flat[flat_idx]),
+                    stdv=float(raster_data.stdv.flat[flat_idx]),
+                    index=int(flat_idx),
+                )
+            )
 
-    # Convert ObservationData to dict for pickling
-    obs_data_dict = {
-        constants.KEY_LOCATIONS: obs_data.locations,
-        constants.ObservationColumn.VS30: obs_data.vs30,
-        constants.KEY_MODEL_VS30: obs_data.model_vs30,
-        constants.KEY_MODEL_STDV: obs_data.model_stdv,
-        constants.KEY_RESIDUALS: obs_data.residuals,
-        constants.KEY_OMEGA: obs_data.omega,
-        constants.ObservationColumn.UNCERTAINTY: obs_data.uncertainty,
-    }
-
-    # Config params (pre-compute corr_zero once for all workers)
     corr_zero = corr_fn(np.array([0.0]))[0]
-    config_params = {
-        constants.KEY_MODEL_TYPE: model_type,
-        "corr_fn": corr_fn,
-        constants.KEY_MAX_DIST_M: max_dist_m,
-        constants.KEY_MAX_POINTS: max_points,
-        constants.KEY_NOISY: noisy,
-        constants.KEY_COV_REDUC: cov_reduc,
-        constants.KEY_CORR_ZERO: corr_zero,
-    }
 
     # Split into many small chunks for smooth progress bar updates.
     # pool.imap distributes chunks to nproc workers automatically.
-    n_chunks = min(len(affected_flat_indices), constants.N_PROGRESS_CHUNKS)
-    chunks = np.array_split(np.arange(len(affected_flat_indices)), n_chunks)
+    n_chunks = min(len(pixels), constants.N_PROGRESS_CHUNKS)
+    chunks = np.array_split(np.arange(len(pixels)), n_chunks)
     chunk_args = [
-        (list(chunk), i, pixel_data_dict, obs_data_dict, config_params)
-        for i, chunk in enumerate(chunks)
+        (
+            [pixels[i] for i in chunk],
+            chunk_id,
+            obs_data,
+            corr_fn,
+            max_dist_m,
+            max_points,
+            noisy,
+            cov_reduc,
+            corr_zero,
+        )
+        for chunk_id, chunk in enumerate(chunks)
         if len(chunk) > 0
     ]
 
-    # Process in parallel using spawn context (avoids GDAL fork issues)
-    # Use single_threaded_blas to prevent BLAS oversubscription
     label = str(model_type).capitalize()
-    if os.environ.get("VS30_MVN_DIAG") == "1":
-        base = os.environ.get("VS30_MVN_DIAG_BASE", "/tmp/vs30_mvn_diag")
-        os.makedirs(base, exist_ok=True)
-        os.environ["VS30_MVN_DIAG_PATH"] = f"{base}/{label.lower()}.csv"
-    with single_threaded_blas():
-        with spawn_context.Pool(processes=min(nproc, len(chunk_args))) as pool:
+    with multiprocess.single_threaded_blas():
+        with multiprocess.spawn_context.Pool(processes=min(nproc, len(chunk_args))) as pool:
             results = []
             with tqdm(
-                total=len(affected_flat_indices),
+                total=len(pixels),
                 desc=f"{label}: spatial adjustment",
                 unit="pixel",
             ) as pbar:
@@ -678,7 +595,6 @@ def run_parallel_spatial_fit(
                     results.append((chunk_id, chunk_updates))
                     pbar.update(len(chunks[chunk_id]))
 
-    # Apply results to output arrays
     updated_vs30 = raster_data.vs30.copy()
     updated_stdv = raster_data.stdv.copy()
     for _, chunk_updates in results:

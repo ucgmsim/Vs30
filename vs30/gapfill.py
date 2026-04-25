@@ -15,9 +15,9 @@ import logging
 
 import geopandas as gpd
 import numpy as np
+import scipy.ndimage
+import scipy.spatial
 import shapely
-from scipy.ndimage import maximum_filter
-from scipy.spatial import KDTree
 
 from vs30 import config, constants, raster
 
@@ -145,14 +145,12 @@ def fill_nodata_grid(
     if not np.any(fillable_of_candidates):
         return vs30, stdv
 
-    # Map fillable indices back to 2D grid positions
     fillable_rows = candidate_rows[fillable_of_candidates]
     fillable_cols = candidate_cols[fillable_of_candidates]
     fillable_2d = np.zeros(vs30.shape, dtype=bool)
     fillable_2d[fillable_rows, fillable_cols] = True
     fillable_locations = candidate_locations[fillable_of_candidates]
 
-    # Nearest-neighbor fill with expanding buffer
     dx = abs(transform.a)
     buffer_pixels = round(constants.GAPFILL_LOCAL_GRID_SIZE_M / dx)
     expansion_pixels = round(constants.GAPFILL_LOCAL_GRID_EXPANSION_M / dx)
@@ -166,9 +164,8 @@ def fill_nodata_grid(
         # the donor search neighborhood. maximum_filter with a square kernel
         # is separable and runs in O(N) regardless of kernel size.
         struct_size = 2 * buffer_pixels + 1
-        neighborhood_2d = maximum_filter(fillable_2d, size=struct_size)
+        neighborhood_2d = scipy.ndimage.maximum_filter(fillable_2d, size=struct_size)
 
-        # Find valid (non-NaN) pixels within the neighborhood
         valid_in_neighborhood = ~np.isnan(vs30) & neighborhood_2d
         if not np.any(valid_in_neighborhood):
             logger.info(
@@ -178,18 +175,14 @@ def fill_nodata_grid(
             buffer_pixels += expansion_pixels
             continue
 
-        # Compute coordinates for valid donor pixels. Using float32 as it  
-        # provides sufficient accuracy and reduces memory usage.
         valid_rows, valid_cols = np.where(valid_in_neighborhood)
         valid_locations = pixel_coords_float32(
             valid_rows, valid_cols, transform
         )
 
-        # Build KDTree from neighborhood donors and query for fillable pixels
-        tree = KDTree(valid_locations)
+        tree = scipy.spatial.KDTree(valid_locations)
         _, nn_indices = tree.query(fillable_locations)
 
-        # Copy fill values from the original arrays
         donor_rows = valid_rows[nn_indices]
         donor_cols = valid_cols[nn_indices]
         filled_vs30[fillable_rows, fillable_cols] = vs30[donor_rows, donor_cols]
