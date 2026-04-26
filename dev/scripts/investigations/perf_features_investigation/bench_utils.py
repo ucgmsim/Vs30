@@ -1,12 +1,16 @@
 """Helpers for the perf-features-investigation benchmarking harness."""
 
 import contextlib
+import datetime as _dt
+import functools
+import resource
+import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from vs30 import config, constants, pipeline, spatial
+from vs30 import config, constants, parallel, pipeline, raster, spatial, utils
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -161,3 +165,145 @@ def bypass_observation_threshold():
         yield
     finally:
         constants.MULTIPROCESS_OBSERVATION_THRESHOLD = original
+
+
+DEFAULT_CORR_FN = functools.partial(
+    utils.exponential_correlation_function, phi=constants.DEFAULT_TERRAIN_PHI
+)
+
+
+def prepare_terrain_obs_data(
+    obs_df: pd.DataFrame, raster_data: spatial.RasterData
+) -> spatial.ObservationData:
+    """Build ObservationData for the terrain model from an observation DataFrame.
+
+    Wraps ``spatial.prepare_observation_data`` for the TERRAIN branch (no
+    slope/coast arrays). Reads the bundled posterior terrain CSV used by
+    the modified_foster_2019 model so the categorical lookups exercise
+    realistic Vs30 / stdv values.
+
+    Parameters
+    ----------
+    obs_df
+        Observation DataFrame (with easting, northing, vs30, uncertainty columns).
+    raster_data
+        Raster used for category assignment of observations.
+
+    Returns
+    -------
+    spatial.ObservationData
+        Prepared observation data for the TERRAIN model.
+    """
+    posterior_csv = (
+        constants.RESOURCE_PATH
+        / constants.RESOURCE_SUBDIRS["terrain_categorical_csv"]
+        / "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
+    )
+    model_df = pipeline.read_categorical_csv(posterior_csv)
+    mean_col, std_col = raster.select_vs30_columns_by_priority(list(model_df.columns))
+    max_id = int(model_df[constants.STANDARD_ID_COLUMN].max())
+    updated_model_table = np.full((max_id, 2), np.nan)
+    ids = model_df[constants.STANDARD_ID_COLUMN].values.astype(int) - 1
+    valid = (ids >= 0) & (ids < max_id)
+    updated_model_table[ids[valid], 0] = model_df[mean_col].values[valid]
+    updated_model_table[ids[valid], 1] = model_df[std_col].values[valid]
+
+    return spatial.prepare_observation_data(
+        observations=obs_df,
+        raster_data=raster_data,
+        updated_model_table=updated_model_table,
+        model_type=constants.ModelType.TERRAIN,
+        apply_alluvium_slope_mod=False,
+        apply_coastal_distance_mod=False,
+        noisy=True,
+    )
+
+
+def _peak_rss_mb() -> float:
+    """Peak resident-set size of the current process in MB.
+
+    Linux ``ru_maxrss`` is in kibibytes, so divide by 1024 for MB.
+    """
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+
+def time_one_run(
+    raster_data: spatial.RasterData,
+    obs_data: spatial.ObservationData,
+    nproc: int,
+    ffap: bool,
+    rep: int,
+    corr_fn=DEFAULT_CORR_FN,
+    max_dist_m: int = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    cov_reduc: float = constants.COV_REDUC,
+    noisy: bool = True,
+    max_spatial_boolean_array_memory_gb: float = 1.0,
+) -> dict:
+    """Measure one (N_obs, N_grid, nproc, ffap, rep) cell.
+
+    Returns a dict suitable for a CSV row.
+    """
+    # ---- Bounding-box phase -----------------------------------------------
+    if ffap:
+        t0 = time.perf_counter()
+        bbox = spatial.find_affected_pixels(
+            raster_data,
+            obs_data,
+            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+            model_type=constants.ModelType.TERRAIN,
+            max_dist_m=max_dist_m,
+            nproc=nproc,
+        )
+        t_bbox = time.perf_counter() - t0
+    else:
+        bbox = make_full_bbox_result(raster_data, n_obs=len(obs_data.locations))
+        t_bbox = 0.0
+
+    # ---- Spatial-adjustment phase -----------------------------------------
+    # nproc=1 => let BLAS use all cores (do NOT wrap in single_threaded_blas).
+    # nproc>1 => parallel.run_parallel_spatial_fit handles single_threaded_blas
+    #            internally; we only bypass the production observation-threshold
+    #            guard so the multiproc path is actually exercised when N_obs > 1000.
+    t0 = time.perf_counter()
+    if nproc == 1:
+        spatial.compute_spatial_adjustments(
+            raster_data,
+            obs_data,
+            bbox,
+            corr_fn,
+            max_dist_m=max_dist_m,
+            max_points=max_points,
+            noisy=noisy,
+            cov_reduc=cov_reduc,
+        )
+    else:
+        with bypass_observation_threshold():
+            affected_flat_indices = np.where(bbox.mask)[0]
+            parallel.run_parallel_spatial_fit(
+                affected_flat_indices=affected_flat_indices,
+                raster_data=raster_data,
+                obs_data=obs_data,
+                corr_fn=corr_fn,
+                model_type=constants.ModelType.TERRAIN,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+                noisy=noisy,
+                cov_reduc=cov_reduc,
+                nproc=nproc,
+            )
+    t_spatial = time.perf_counter() - t0
+
+    return {
+        "N_obs": len(obs_data.locations),
+        "N_grid_actual": int(raster_data.valid_flat_indices.size),
+        "N_affected": int(bbox.n_affected_pixels),
+        "nproc": nproc,
+        "ffap": ffap,
+        "rep": rep,
+        "t_bbox_s": t_bbox,
+        "t_spatial_s": t_spatial,
+        "t_total_s": t_bbox + t_spatial,
+        "peak_rss_mb": _peak_rss_mb(),
+        "timestamp_iso": _dt.datetime.now().isoformat(timespec="seconds"),
+    }

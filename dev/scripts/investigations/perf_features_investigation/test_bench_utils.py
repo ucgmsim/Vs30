@@ -74,3 +74,33 @@ def test_bypass_observation_threshold_restores_on_exception() -> None:
         with bench_utils.bypass_observation_threshold():
             raise RuntimeError("boom")
     assert constants.MULTIPROCESS_OBSERVATION_THRESHOLD == original
+
+
+def test_time_one_run_returns_expected_keys() -> None:
+    raster_data, _ = bench_utils.make_raster_data(n_target=1000)
+    obs_df = bench_utils.subsample_observations(50, seed=42)
+    obs_data = bench_utils.prepare_terrain_obs_data(obs_df, raster_data)
+    row = bench_utils.time_one_run(
+        raster_data=raster_data,
+        obs_data=obs_data,
+        nproc=1,
+        ffap=True,
+        rep=0,
+    )
+    expected_keys = {
+        "N_obs",
+        "N_grid_actual",
+        "N_affected",
+        "nproc",
+        "ffap",
+        "rep",
+        "t_bbox_s",
+        "t_spatial_s",
+        "t_total_s",
+        "peak_rss_mb",
+        "timestamp_iso",
+    }
+    assert expected_keys.issubset(row.keys())
+    assert row["t_total_s"] >= row["t_bbox_s"]
+    assert row["t_spatial_s"] > 0
+    assert row["t_bbox_s"] >= 0
