@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from vs30 import constants
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 import bench_utils
@@ -57,3 +59,18 @@ def test_make_full_bbox_result_marks_all_valid_pixels() -> None:
     # Every valid pixel should be marked affected.
     assert bool(np.all(bbox.mask[raster_data.valid_flat_indices]))
     assert bbox.n_affected_pixels == raster_data.valid_flat_indices.size
+
+
+def test_bypass_observation_threshold_restores_original() -> None:
+    original = constants.MULTIPROCESS_OBSERVATION_THRESHOLD
+    with bench_utils.bypass_observation_threshold():
+        assert constants.MULTIPROCESS_OBSERVATION_THRESHOLD == 10**12
+    assert constants.MULTIPROCESS_OBSERVATION_THRESHOLD == original
+
+
+def test_bypass_observation_threshold_restores_on_exception() -> None:
+    original = constants.MULTIPROCESS_OBSERVATION_THRESHOLD
+    with pytest.raises(RuntimeError):
+        with bench_utils.bypass_observation_threshold():
+            raise RuntimeError("boom")
+    assert constants.MULTIPROCESS_OBSERVATION_THRESHOLD == original

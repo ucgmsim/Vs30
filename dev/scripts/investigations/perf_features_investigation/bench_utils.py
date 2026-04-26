@@ -1,5 +1,6 @@
 """Helpers for the perf-features-investigation benchmarking harness."""
 
+import contextlib
 from pathlib import Path
 
 import numpy as np
@@ -142,3 +143,21 @@ def make_full_bbox_result(
         obs_to_grid_indices=obs_to_grid_indices,
         n_affected_pixels=int(mask.sum()),
     )
+
+
+@contextlib.contextmanager
+def bypass_observation_threshold():
+    """Disable the n_obs > 1000 fallback for one measurement.
+
+    The production guard at ``pipeline.compute_spatial_adjustment_on_grid``
+    forces ``nproc=1`` whenever the observation count exceeds
+    ``MULTIPROCESS_OBSERVATION_THRESHOLD``. To measure the multiproc path
+    in that regime we temporarily raise the threshold to a value larger
+    than any conceivable observation count, then restore it.
+    """
+    original = constants.MULTIPROCESS_OBSERVATION_THRESHOLD
+    constants.MULTIPROCESS_OBSERVATION_THRESHOLD = 10**12
+    try:
+        yield
+    finally:
+        constants.MULTIPROCESS_OBSERVATION_THRESHOLD = original
