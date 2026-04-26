@@ -219,6 +219,116 @@ def prepare_terrain_obs_data(
     )
 
 
+def _compute_one(
+    raster_data: spatial.RasterData,
+    obs_data: spatial.ObservationData,
+    nproc: int,
+    ffap: bool,
+    corr_fn=DEFAULT_CORR_FN,
+    max_dist_m: int = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+    cov_reduc: float = constants.COV_REDUC,
+    noisy: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Run one variant and return the (vs30, stdv) arrays."""
+    if ffap:
+        bbox = spatial.find_affected_pixels(
+            raster_data,
+            obs_data,
+            max_spatial_boolean_array_memory_gb=1.0,
+            model_type=constants.ModelType.TERRAIN,
+            max_dist_m=max_dist_m,
+            nproc=nproc,
+        )
+    else:
+        bbox = make_full_bbox_result(raster_data, n_obs=len(obs_data.locations))
+    if nproc == 1:
+        return spatial.compute_spatial_adjustments(
+            raster_data,
+            obs_data,
+            bbox,
+            corr_fn,
+            max_dist_m=max_dist_m,
+            max_points=max_points,
+            noisy=noisy,
+            cov_reduc=cov_reduc,
+        )
+    with bypass_observation_threshold():
+        affected_flat_indices = np.where(bbox.mask)[0]
+        return parallel.run_parallel_spatial_fit(
+            affected_flat_indices=affected_flat_indices,
+            raster_data=raster_data,
+            obs_data=obs_data,
+            corr_fn=corr_fn,
+            model_type=constants.ModelType.TERRAIN,
+            max_dist_m=max_dist_m,
+            max_points=max_points,
+            noisy=noisy,
+            cov_reduc=cov_reduc,
+            nproc=nproc,
+        )
+
+
+def run_numerical_equivalence_check(
+    n_obs: int = 200,
+    n_target: int = 1_000,
+    nproc_options: tuple[int, ...] = (1, 8),
+    atol: float = 1e-9,
+    rtol: float = 1e-7,
+) -> None:
+    """Confirm that nproc does not change output for each ffap setting.
+
+    For each value of ffap, compares every nproc variant against the nproc=1
+    baseline for that same ffap.  ffap=True and ffap=False are intentionally
+    compared within their own groups: the two settings process different pixel
+    sets (find_affected_pixels filters to a smaller neighbourhood), so
+    array-level equality across ffap groups is not expected.
+
+    Run before the sweep so we know any timing differences reflect the
+    feature's effect, not a logic divergence between nproc variants.
+
+    Parameters
+    ----------
+    n_obs
+        Number of observations for the small case.
+    n_target
+        Approximate number of valid pixels for the small case.
+    nproc_options
+        Process counts to test; nproc=1 is always included as the baseline.
+    atol, rtol
+        Tolerances passed to ``numpy.testing.assert_allclose``.
+
+    Raises
+    ------
+    AssertionError
+        If any (nproc>1, ffap) variant differs from (nproc=1, ffap).
+    """
+    raster_data, _ = make_raster_data(n_target=n_target)
+    obs_df = subsample_observations(n_obs, seed=42)
+    obs_data = prepare_terrain_obs_data(obs_df, raster_data)
+
+    for ffap in (True, False):
+        ref_vs30, ref_stdv = _compute_one(raster_data, obs_data, nproc=1, ffap=ffap)
+        for nproc in nproc_options:
+            if nproc == 1:
+                continue
+            vs30, stdv = _compute_one(raster_data, obs_data, nproc=nproc, ffap=ffap)
+            np.testing.assert_allclose(
+                vs30,
+                ref_vs30,
+                atol=atol,
+                rtol=rtol,
+                err_msg=f"vs30 mismatch at nproc={nproc}, ffap={ffap}",
+            )
+            np.testing.assert_allclose(
+                stdv,
+                ref_stdv,
+                atol=atol,
+                rtol=rtol,
+                err_msg=f"stdv mismatch at nproc={nproc}, ffap={ffap}",
+            )
+
+
 def _peak_rss_mb() -> float:
     """Peak resident-set size of the current process in MB.
 

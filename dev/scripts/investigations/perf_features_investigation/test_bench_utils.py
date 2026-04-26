@@ -104,3 +104,12 @@ def test_time_one_run_returns_expected_keys() -> None:
     assert row["t_total_s"] >= row["t_bbox_s"]
     assert row["t_spatial_s"] > 0
     assert row["t_bbox_s"] >= 0
+
+
+def test_numerical_equivalence_check_passes_on_small_case() -> None:
+    """All four (nproc × ffap) combinations should produce identical output."""
+    bench_utils.run_numerical_equivalence_check(
+        n_obs=200,
+        n_target=1000,
+        nproc_options=(1, 2),  # use 2 instead of 8 to keep test fast
+    )
