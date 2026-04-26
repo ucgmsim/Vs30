@@ -5,6 +5,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from vs30 import config, constants, pipeline, spatial
+
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 VIKTOR_OBS_PATH = (
     REPO_ROOT / "vs30/resources/observations/viktor_inferred_vs30_from_cpt.csv"
@@ -33,25 +36,20 @@ def subsample_observations(n: int, seed: int = 42) -> pd.DataFrame:
     """
     df = pd.read_csv(VIKTOR_OBS_PATH, comment="#", skipinitialspace=True)
     if n > len(df):
-        raise ValueError(
-            f"n ({n}) exceeds available observations ({len(df)})"
-        )
+        raise ValueError(f"n ({n}) exceeds available observations ({len(df)})")
     rng = np.random.default_rng(seed)
     idx = rng.choice(len(df), size=n, replace=False)
     return df.iloc[idx].reset_index(drop=True)
-
-
-from vs30 import config, constants, pipeline, spatial
 
 
 # (dx, dy, x_extent_m, y_extent_m) — chosen empirically to hit
 # the targets within ~2× tolerance. Actual N_valid is logged at runtime so
 # analysis can use the true value instead of the target.
 _GRID_PRESETS: dict[int, tuple[int, int, int, int]] = {
-    1_000:    (2000, 2000,  90_000,  90_000),
-    10_000:   (1000, 1000, 150_000, 150_000),
-    100_000:  ( 500,  500, 250_000, 250_000),
-    1_000_000:( 200,  200, 350_000, 350_000),
+    1_000: (2000, 2000, 90_000, 90_000),
+    10_000: (1000, 1000, 150_000, 150_000),
+    100_000: (500, 500, 250_000, 250_000),
+    1_000_000: (200, 200, 350_000, 350_000),
 }
 
 # Centre of the subdomain — chosen near central NZ so the box always lands
