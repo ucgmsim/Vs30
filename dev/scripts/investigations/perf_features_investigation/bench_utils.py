@@ -110,3 +110,35 @@ def make_raster_data(n_target: int):
         nodata=constants.NODATA_VALUE,
     )
     return raster_data, profile
+
+
+def make_full_bbox_result(
+    raster_data: spatial.RasterData, n_obs: int
+) -> spatial.BoundingBoxResult:
+    """Build a BoundingBoxResult that marks every valid pixel as affected.
+
+    Used to disable the ``find_affected_pixels`` pre-filter for the OFF
+    condition. Each observation's index list is set to the full valid-pixel
+    set so the parallel path (which uses obs_to_grid_indices) still works.
+
+    Parameters
+    ----------
+    raster_data
+        Raster whose valid pixels become the affected set.
+    n_obs
+        Number of observations — needed to size obs_to_grid_indices.
+
+    Returns
+    -------
+    spatial.BoundingBoxResult
+        Mask covers every valid pixel; per-observation index lists each
+        contain the full valid_flat_indices array.
+    """
+    mask = np.zeros(raster_data.vs30.size, dtype=bool)
+    mask[raster_data.valid_flat_indices] = True
+    obs_to_grid_indices = [raster_data.valid_flat_indices.copy() for _ in range(n_obs)]
+    return spatial.BoundingBoxResult(
+        mask=mask,
+        obs_to_grid_indices=obs_to_grid_indices,
+        n_affected_pixels=int(mask.sum()),
+    )
