@@ -50,6 +50,13 @@ N_REPS = 3
 # is finite and very long cells contribute little additional information.
 PER_CELL_TIME_BUDGET_S = 1800.0
 
+# Phase 1 trim policy. The smoke run showed nproc=8 is 50x slower than
+# nproc=1 even at modest sizes, so the largest nproc>1 cells would dominate
+# wall time without changing the qualitative finding. We skip them and
+# document the omission in the findings doc.
+_NPROC_PARALLEL_MAX_N_OBS = 10_000
+_NPROC_PARALLEL_MAX_N_GRID = 100_000
+
 
 def _append_row(row: dict) -> None:
     new_file = not OUT_CSV.exists()
@@ -97,6 +104,21 @@ def _run_cell(raster_data, obs_data, n_obs, n_grid_target, nproc, ffap, n_reps) 
             return
 
 
+def _skip_reason(n_obs: int, n_grid: int, nproc: int) -> str | None:
+    """Return a skip reason if this cell falls outside the trimmed matrix.
+
+    Returns ``None`` if the cell should be run.
+    """
+    if nproc > 1 and (
+        n_obs > _NPROC_PARALLEL_MAX_N_OBS or n_grid > _NPROC_PARALLEL_MAX_N_GRID
+    ):
+        return (
+            "smoke-test extrapolation predicts >24h wall time for this cell "
+            "at nproc=8; clear loss vs nproc=1"
+        )
+    return None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -131,6 +153,13 @@ def main() -> None:
             obs_data = bench_utils.prepare_terrain_obs_data(obs_df, raster_data)
             for nproc in NPROC_VALUES:
                 for ffap in FFAP_VALUES:
+                    skip = _skip_reason(n_obs, n_grid, nproc)
+                    if skip is not None:
+                        logger.info(
+                            f"  [SKIP] N_obs={n_obs:>6} N_grid_target={n_grid:>9,} "
+                            f"nproc={nproc} ffap={int(ffap)} — {skip}"
+                        )
+                        continue
                     _run_cell(raster_data, obs_data, n_obs, n_grid, nproc, ffap, n_reps)
 
     logger.info(f"Sweep complete - results at {OUT_CSV}")
