@@ -31,3 +31,19 @@ def test_subsample_observations_required_columns() -> None:
 def test_subsample_observations_too_many_raises() -> None:
     with pytest.raises(ValueError, match="exceeds available"):
         bench_utils.subsample_observations(10**9, seed=42)
+
+
+def test_make_raster_data_returns_valid_raster_data() -> None:
+    raster_data, profile = bench_utils.make_raster_data(n_target=1000)
+    # Real RasterData with a non-empty valid mask
+    assert raster_data.valid_flat_indices.size > 0
+    # Profile carries transform and crs
+    assert "transform" in profile
+    assert profile["transform"] is not None
+
+
+def test_make_raster_data_n_target_scales() -> None:
+    # Larger n_target should produce more valid pixels
+    rd_small, _ = bench_utils.make_raster_data(n_target=1000)
+    rd_large, _ = bench_utils.make_raster_data(n_target=100_000)
+    assert rd_large.valid_flat_indices.size > rd_small.valid_flat_indices.size

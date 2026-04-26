@@ -39,3 +39,76 @@ def subsample_observations(n: int, seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     idx = rng.choice(len(df), size=n, replace=False)
     return df.iloc[idx].reset_index(drop=True)
+
+
+from vs30 import config, constants, pipeline, spatial
+
+
+# (dx, dy, x_extent_m, y_extent_m) — chosen empirically to hit
+# the targets within ~2× tolerance. Actual N_valid is logged at runtime so
+# analysis can use the true value instead of the target.
+_GRID_PRESETS: dict[int, tuple[int, int, int, int]] = {
+    1_000:    (2000, 2000,  90_000,  90_000),
+    10_000:   (1000, 1000, 150_000, 150_000),
+    100_000:  ( 500,  500, 250_000, 250_000),
+    1_000_000:( 200,  200, 350_000, 350_000),
+}
+
+# Centre of the subdomain — chosen near central NZ so the box always lands
+# on land. NZTM (easting, northing).
+_DOMAIN_CENTRE = (1_580_000, 5_180_000)
+
+
+def make_raster_data(n_target: int):
+    """Build a real RasterData of approximately ``n_target`` valid pixels.
+
+    Uses the production ``pipeline.create_initial_vs30_arrays`` with
+    ``model_type=TERRAIN`` to populate a sub-region of NZ. The exact
+    valid-pixel count varies with the underlying terrain raster; callers
+    should log ``raster_data.valid_flat_indices.size`` rather than rely on
+    ``n_target`` exactly.
+
+    Parameters
+    ----------
+    n_target
+        Approximate number of valid pixels to return.
+
+    Returns
+    -------
+    raster_data : spatial.RasterData
+        Real raster data backed by the IwahashiPike terrain raster.
+    profile : dict
+        Rasterio profile (transform, crs, nodata).
+    """
+    if n_target not in _GRID_PRESETS:
+        raise ValueError(
+            f"n_target must be one of {sorted(_GRID_PRESETS)}, got {n_target}"
+        )
+    dx, dy, x_extent, y_extent = _GRID_PRESETS[n_target]
+    cx, cy = _DOMAIN_CENTRE
+    grid_config = config.GridConfig(
+        grid_xmin=cx - x_extent // 2,
+        grid_xmax=cx + x_extent // 2,
+        grid_ymin=cy - y_extent // 2,
+        grid_ymax=cy + y_extent // 2,
+        grid_dx=dx,
+        grid_dy=dy,
+    )
+    vs30_array, stdv_array, _, profile = pipeline.create_initial_vs30_arrays(
+        grid_config,
+        constants.ModelType.TERRAIN,
+        # Read the canonical terrain prior CSV, which is bundled.
+        pipeline.read_categorical_csv(
+            constants.RESOURCE_PATH
+            / constants.RESOURCE_SUBDIRS["terrain_categorical_csv"]
+            / "terrain_model_prior_mean_and_standard_deviation.csv"
+        ),
+    )
+    raster_data = spatial.RasterData.from_arrays(
+        vs30=vs30_array,
+        stdv=stdv_array,
+        transform=profile["transform"],
+        crs=profile.get("crs", constants.NZTM_CRS),
+        nodata=constants.NODATA_VALUE,
+    )
+    return raster_data, profile
