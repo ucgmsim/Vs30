@@ -43,9 +43,11 @@ CSV_FIELDS = [
 
 # Only the cells the Phase 1 sweep didn't reach. nproc=1 only — nproc=8 at
 # these sizes was already known to be far slower from cells we did run.
-# Note: the 5000 tier was completed by an earlier fill-in attempt before
-# an unrelated OOM (since fixed); not re-run here.
-N_OBS_VALUES = [10000, 35709]
+# Note: the 5000 and 10000 tiers were completed by earlier fill-in
+# attempts; only the 35706 tier remains. The viktor_cpt CSV has 35706
+# rows after the comment-line filter (the design-doc figure of 35709 was
+# a wc-l count that included comment lines).
+N_OBS_VALUES = [35706]
 N_GRID_VALUES = [1_000, 10_000, 100_000, 1_000_000]
 N_REPS = 3
 
