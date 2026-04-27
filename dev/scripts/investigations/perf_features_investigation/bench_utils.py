@@ -123,28 +123,36 @@ def make_full_bbox_result(
     """Build a BoundingBoxResult that marks every valid pixel as affected.
 
     Used to disable the ``find_affected_pixels`` pre-filter for the OFF
-    condition. Each observation's index list is set to the full valid-pixel
-    set so the parallel path (which uses obs_to_grid_indices) still works.
+    condition.
+
+    The ``obs_to_grid_indices`` field is left empty: a search across the
+    package shows that downstream code (``compute_spatial_adjustments`` and
+    ``run_parallel_spatial_fit``) only reads ``mask`` / ``affected_flat_indices``;
+    the per-observation lists are constructed in production but never
+    consumed. Populating them here used to allocate ``n_obs`` copies of
+    ``valid_flat_indices`` (e.g. 5000 obs × 1.2M pixels × 8 B ≈ 48 GB) and
+    OOM-killed the harness during the high-N_obs / large-N_grid sweep.
 
     Parameters
     ----------
     raster_data
         Raster whose valid pixels become the affected set.
     n_obs
-        Number of observations — needed to size obs_to_grid_indices.
+        Number of observations. Retained for signature stability with
+        callers and tests; no longer used internally.
 
     Returns
     -------
     spatial.BoundingBoxResult
-        Mask covers every valid pixel; per-observation index lists each
-        contain the full valid_flat_indices array.
+        Mask covers every valid pixel; ``obs_to_grid_indices`` is an empty
+        list (intentional — see note above).
     """
+    del n_obs  # see docstring; kept in signature for API stability
     mask = np.zeros(raster_data.vs30.size, dtype=bool)
     mask[raster_data.valid_flat_indices] = True
-    obs_to_grid_indices = [raster_data.valid_flat_indices.copy() for _ in range(n_obs)]
     return spatial.BoundingBoxResult(
         mask=mask,
-        obs_to_grid_indices=obs_to_grid_indices,
+        obs_to_grid_indices=[],
         n_affected_pixels=int(mask.sum()),
     )
 
