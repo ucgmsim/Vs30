@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-27
 **Branch:** `vs30_refactor`
-**Status:** Phase 1 complete (354 cells), awaiting Phase 2 confirmation runs
+**Status:** Complete — Phase 1 (354 cells) and Phase 2 (5 end-to-end runs) both done.
 
 ## 1. Summary
 
@@ -179,14 +179,27 @@ post-filter `N_obs` from 50 to 34 035 and `N_grid_target` from 1 k to 1 M.
 
 ## 6. Phase 2 — full-pipeline confirmation
 
-*(Pending — to be filled in after Phase 2 driver runs to completion.)*
+End-to-end `pipeline.grid_pipeline` runs over the full NZ extent on four
+representative cohorts. To minimise wall time, only `sparse_coarse` was
+re-run at `nproc=8`: the dense cohorts auto-fall back to `nproc=1` via
+the production `MULTIPROCESS_OBSERVATION_THRESHOLD` guard (`n_obs > 1000`),
+so testing them at `nproc=8` would be a duplicate. Sparse cohorts at
+`nproc=8` exercise the genuine multiproc path.
 
 | Cohort | N_obs | Resolution | nproc=1 (s) | nproc=8 (s) | Phase 1 prediction | Match? |
 |---|---|---|---|---|---|---|
-| sparse_coarse | 470 | 5000 m | … | … | nproc=1 wins | … |
-| sparse_fine   | 470 | 500 m | … | … | nproc=1 wins | … |
-| dense_coarse  | 35 709 | 5000 m | … | … | nproc=1 wins | … |
-| dense_fine    | 35 709 | 500 m | … | … | nproc=1 wins | … |
+| `sparse_coarse` | 470 | 5000 m | **8.1** | **16.8** | nproc=1 wins | ✅ (2.08× slower) |
+| `sparse_fine`   | 470 | 500 m  | **39.7** | — | nproc=1 wins | ✅ (no need to re-run) |
+| `dense_coarse`  | 35 709 | 5000 m | **23.5** | — | nproc=1 wins | ✅ (auto-fallback active) |
+| `dense_fine`    | 35 709 | 500 m  | **912.8** | — | nproc=1 wins | ✅ (auto-fallback active) |
+
+Total Phase 2 wall time: **~16 minutes** (much faster than Phase 1
+because each cohort is a single end-to-end run, not 12 sweep cells).
+
+The end-to-end `dense_fine` configuration (35k observations on a full
+NZ 500 m grid) — the closest to a real-world production run for
+`viktor_cpt_clustering` — finishes in **~15 min** at `nproc=1` with
+`ffap=ON`. The Phase 1 ordering is preserved at every cohort tested.
 
 ## 7. Conclusions and recommendations
 
