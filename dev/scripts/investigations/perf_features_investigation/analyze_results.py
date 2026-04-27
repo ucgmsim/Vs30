@@ -11,9 +11,13 @@ Run::
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+import matplotlib
+
+matplotlib.use("Agg")  # non-interactive backend — runs headless
+
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
 
 HERE = Path(__file__).parent
 ISOLATED_CSV = HERE / "results_isolated.csv"

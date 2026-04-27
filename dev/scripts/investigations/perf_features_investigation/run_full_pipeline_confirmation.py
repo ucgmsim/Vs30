@@ -128,13 +128,23 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.smoke:
-        cohorts = COHORTS[:2]
-        nproc_options = (1,)
+        cohorts_with_nproc = [(c, (1,)) for c in COHORTS[:2]]
     else:
-        cohorts = COHORTS
-        nproc_options = (1, 8)
+        # Phase 1 already established nproc=8 loses everywhere by 50-100x;
+        # the only meaningful end-to-end multiproc comparison is on a sparse
+        # cohort (the dense cohorts auto-fall-back to nproc=1 via the
+        # MULTIPROCESS_OBSERVATION_THRESHOLD guard). Run all 4 cohorts at
+        # nproc=1, plus sparse_coarse at nproc=8 to confirm Phase 1's
+        # finding survives the surrounding pipeline overhead.
+        cohorts_with_nproc = []
+        for label, version, resolution in COHORTS:
+            if label == "sparse_coarse":
+                cohorts_with_nproc.append(((label, version, resolution), (1, 8)))
+            else:
+                cohorts_with_nproc.append(((label, version, resolution), (1,)))
 
-    for label, version, resolution in cohorts:
+    for cohort, nproc_options in cohorts_with_nproc:
+        label, version, resolution = cohort
         for nproc in nproc_options:
             run_cohort(label, version, resolution, nproc)
 

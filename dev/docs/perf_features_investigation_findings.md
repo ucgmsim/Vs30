@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-27
 **Branch:** `vs30_refactor`
-**Status:** Draft (awaiting Phase 2 confirmation runs)
+**Status:** Phase 1 complete (354 cells), awaiting Phase 2 confirmation runs
 
 ## 1. Summary
 
@@ -106,9 +106,9 @@ production path under nproc=1 is the recommended configuration anyway).
 **Headline:** `nproc=8` (parallel + single-threaded BLAS) is 2×–110× slower
 than `nproc=1` (sequential + multi-threaded BLAS) in every cell measured.
 
-| Speedup (nproc=1 / nproc=8), `ffap=ON` | min | median | max |
-|---|---|---|---|
-| Across all cells | 0.0091 | 0.0163 | 0.5144 |
+| Speedup (nproc=1 / nproc=8), `ffap=ON` | min | median | max | cells where `nproc=8` wins |
+|---|---|---|---|---|
+| Across 21 cells (N_obs ≤ 4751, N_grid ≤ 100k) | 0.0091 | 0.0163 | 0.5144 | **0 / 21** |
 
 > A speedup `<1` means `nproc=8` LOSES. A speedup of 0.01 means `nproc=8` is
 > **100× slower** than `nproc=1`.
@@ -131,18 +131,18 @@ forces `nproc=1` whenever `n_obs > 1000`, is therefore correctly directed
 but **insufficient**: the multiproc path loses everywhere we measured,
 including well below the 1000-obs threshold.
 
-**Heatmap:** see `figures/perf_features/multiproc_speedup_ffap_on.png`.
+![Multiproc speedup at ffap=ON](figures/perf_features/multiproc_speedup_ffap_on.png)
 
 ### 5.2 `find_affected_pixels`
 
 **Headline:** `ffap=ON` is faster than `ffap=OFF` in every cell measured at
-`nproc=1`. Speedup decreases monotonically with N_obs (more observations →
-more pixels are within `MAX_DIST_M=10000m` of some observation → less work
-saved).
+`nproc=1`. The largest savings appear at small N_obs / large N_grid (sparse
+observations, the regime closest to a real-world ad-hoc query). At very high
+N_obs the savings dip toward 1× before recovering — see "patterns" below.
 
-| Speedup (ffap=OFF / ffap=ON), `nproc=1` | min | median | max |
-|---|---|---|---|
-| Across all cells | 1.04 | 1.47 | 6.99 |
+| Speedup (ffap=OFF / ffap=ON), `nproc=1` | min | median | max | cells where `ffap=ON` wins |
+|---|---|---|---|---|
+| Across 35 cells (full N_obs × N_grid space) | 1.03 | 1.45 | 6.99 | **35 / 35** |
 
 **Patterns:**
 
@@ -150,22 +150,32 @@ saved).
   on a 1M-pixel grid, only a small fraction of pixels are within
   `MAX_DIST_M`, so the bbox pre-filter eliminates most of the work.
   Speedup 6.99×.
-- **Smallest savings at large N_obs / small N_grid.** With 2373 obs on a
-  1k-pixel grid, nearly every pixel is "affected" anyway, and the bbox
-  step's own cost approaches the savings. Speedup 1.05×.
-- **Saturation, not regression.** As N_obs grows, the ratio approaches
-  1.0 from above but does not cross — the bbox phase is cheap (broadcast
-  numpy arithmetic), and even when no pixels are filtered, the cost is
-  modest.
+- **Saturation dip near the middle.** As N_obs grows from 50 to ~2400,
+  the ratio drops monotonically (more observations → more pixels are
+  affected anyway → less work saved). At N_obs=2373 / N_grid=1k the
+  speedup is 1.06× — the smallest in the matrix.
+- **Recovery at very high N_obs.** Counter-intuitively, the speedup
+  *grows* again above N_obs ≈ 5 000, reaching 2.24× at N_obs=34 035 /
+  N_grid=1M. This is because the harness's central-NZ sub-domain is
+  much smaller than the full NZ extent, so as `viktor_cpt`'s
+  observations are subsampled across NZ, an increasing share of them
+  fall **outside** the sub-domain. Their bbox-only-distance test rules
+  them out cheaply; without the bbox step, every one of those
+  observations' euclidean distances would still be computed inside
+  `select_observations_for_pixel` for every pixel. So the bbox step is
+  also acting as an "obs-domain pre-filter", not just a pixel filter.
+  In a full-NZ production run with `viktor_cpt`, this regime would
+  dominate.
+- **No regressions.** The ratio is always ≥ 1.03; the bbox phase is
+  cheap broadcast numpy arithmetic and never out-costs its savings.
 
-**Heatmap:** see `figures/perf_features/ffap_speedup_nproc1.png`.
+![ffap speedup at nproc=1](figures/perf_features/ffap_speedup_nproc1.png)
 
 ### 5.3 Best strategy per regime
 
-For every (N_obs, N_grid) cell measured, the fastest configuration is
-**(nproc=1, ffap=ON)**. The finding is consistent across `N_obs` from 50
-to ~9 500 (filling pending for higher N_obs) and `N_grid` from 1 k to
-1 M.
+For every (N_obs, N_grid) cell measured — **36 out of 36** — the fastest
+configuration is **(nproc=1, ffap=ON)**. The finding is consistent across
+post-filter `N_obs` from 50 to 34 035 and `N_grid_target` from 1 k to 1 M.
 
 ## 6. Phase 2 — full-pipeline confirmation
 
