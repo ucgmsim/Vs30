@@ -43,7 +43,9 @@ CSV_FIELDS = [
 
 # Only the cells the Phase 1 sweep didn't reach. nproc=1 only — nproc=8 at
 # these sizes was already known to be far slower from cells we did run.
-N_OBS_VALUES = [5000, 10000, 35709]
+# Note: the 5000 tier was completed by an earlier fill-in attempt before
+# an unrelated OOM (since fixed); not re-run here.
+N_OBS_VALUES = [10000, 35709]
 N_GRID_VALUES = [1_000, 10_000, 100_000, 1_000_000]
 N_REPS = 3
 
