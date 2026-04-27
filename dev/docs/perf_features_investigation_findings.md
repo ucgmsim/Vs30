@@ -15,7 +15,7 @@ across a wide parameter sweep:
 | **`find_affected_pixels`** bbox pre-filter | **Keep** | `ffap=ON` is **1.04×–7× faster** than `ffap=OFF` in every cell tested at `nproc=1`; median speedup `1.5×`. |
 | **Best strategy** in every regime | `nproc=1, ffap=ON` | Unanimous across all (N_obs, N_grid) cells. |
 
-(See §6 for sketches of the simplification that follows from removing the
+(See §7 for sketches of the simplification that follows from removing the
 multiproc path.)
 
 ## 2. Methodology
@@ -47,7 +47,11 @@ from any observation, a side-effect of the `MIN_DIST_ENFORCED=0.1` clamp inside
 `exponential_correlation_function`. This is a separate observation; see §7).
 
 **Phase 2 — Full-pipeline confirmation.** Four representative cohorts run via
-`pipeline.grid_pipeline` end-to-end at both `nproc=1` and `nproc=8`. Used to
+`pipeline.grid_pipeline` end-to-end. The sparse-coarse cohort is also run at
+`nproc=8`; the other three are skipped because the dense cohorts auto-fall
+back to `nproc=1` via the production `MULTIPROCESS_OBSERVATION_THRESHOLD`
+guard, and `sparse_fine` would have been the same comparison as
+`sparse_coarse` (both at 470 obs, just different grid resolutions). Used to
 verify that the Phase 1 ordering of strategies survives the surrounding
 pipeline overhead (Bayesian update, hybrid mods, raster writes, etc.).
 
@@ -279,13 +283,18 @@ source /home/arr65/miniforge-pypy3/etc/profile.d/conda.sh && \
 source /home/arr65/miniforge-pypy3/etc/profile.d/mamba.sh && \
 mamba activate vs30_venv
 
-# Phase 1 — full sweep (~7 h on the i7-9700, with nproc=8 trim policy)
+# Phase 1 — main sweep (~7 h on the i7-9700, with the nproc=8 trim policy
+# active). On this hardware the sweep was stopped manually after ~5 h
+# at N_obs=4751 because the multiproc trend was already overwhelming;
+# the fill-in below ran the remaining nproc=1 cells.
 python -m dev.scripts.investigations.perf_features_investigation.run_isolated_sweep
 
-# (Optional) fill in nproc=1 cells at high N_obs that the sweep skipped:
+# Fill in nproc=1 cells at high N_obs that the main sweep skipped (~1.5 h).
+# Edit N_OBS_VALUES at the top of the script to match what's missing.
 python -m dev.scripts.investigations.perf_features_investigation.fill_high_nobs
 
-# Phase 2 — full pipeline confirmation (~2-4 h)
+# Phase 2 — full pipeline confirmation (~16 min). 4 cohorts at nproc=1,
+# plus sparse_coarse at nproc=8 for end-to-end multiproc comparison.
 python -m dev.scripts.investigations.perf_features_investigation.run_full_pipeline_confirmation
 
 # Analysis (figures + medians + best-strategy CSVs)
