@@ -115,7 +115,7 @@ def run_grid_pipeline_at_point(
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        nproc=1,
+        dbscan_nproc=1,
         geology_corr_fn=cfg.get("geology_corr_fn"),
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
@@ -142,7 +142,9 @@ def check_consistency_for_version(
     cfg = load_fixed_model_config(version)
     points_df = load_test_points()
     if point_filter is not None:
-        points_df = points_df[points_df["name"].isin(point_filter)].reset_index(drop=True)
+        points_df = points_df[points_df["name"].isin(point_filter)].reset_index(
+            drop=True
+        )
 
     # Batch points pipeline call
     points_result = run_points_pipeline_for_version(cfg, points_df)

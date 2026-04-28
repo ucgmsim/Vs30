@@ -322,11 +322,10 @@ def points_custom(
         bool, typer.Option("--apply-alluvium-slope-mod/--no-apply-alluvium-slope-mod")
     ] = ...,
     apply_coastal_distance_mod: typing.Annotated[
-        bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+        bool,
+        typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod"),
     ] = ...,
-    fill_gaps: typing.Annotated[
-        bool, typer.Option("--fill-gaps/--no-fill-gaps")
-    ] = ...,
+    fill_gaps: typing.Annotated[bool, typer.Option("--fill-gaps/--no-fill-gaps")] = ...,
     locations_csv: typing.Annotated[
         Path, typer.Option(exists=True, dir_okay=False)
     ] = ...,
@@ -459,7 +458,7 @@ def grid(
         ),
     ] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
-    nproc: typing.Annotated[int, typer.Option()] = -1,
+    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
@@ -488,8 +487,8 @@ def grid(
         Grid Y spacing (meters).
     output_dir : Path
         Directory to save all pipeline outputs.
-    nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering. Use -1 for all cores.
     include_intermediate : bool
         Include intermediate rasters in output.
     max_spatial_boolean_array_memory_gb : float, optional
@@ -519,7 +518,7 @@ def grid(
         mvn=config_data["mvn"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
-        nproc=nproc,
+        dbscan_nproc=dbscan_nproc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         geology_corr_fn=config_data["geology_corr_fn"],
         terrain_corr_fn=config_data["terrain_corr_fn"],
@@ -555,11 +554,10 @@ def grid_custom(
         bool, typer.Option("--apply-alluvium-slope-mod/--no-apply-alluvium-slope-mod")
     ] = ...,
     apply_coastal_distance_mod: typing.Annotated[
-        bool, typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod")
+        bool,
+        typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod"),
     ] = ...,
-    fill_gaps: typing.Annotated[
-        bool, typer.Option("--fill-gaps/--no-fill-gaps")
-    ] = ...,
+    fill_gaps: typing.Annotated[bool, typer.Option("--fill-gaps/--no-fill-gaps")] = ...,
     grid_xmin: typing.Annotated[
         int,
         typer.Option(
@@ -611,7 +609,7 @@ def grid_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    nproc: typing.Annotated[int, typer.Option()] = -1,
+    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
     max_spatial_boolean_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
@@ -666,8 +664,8 @@ def grid_custom(
         Which model(s) to run: geology, terrain, or combined (default).
     include_intermediate : bool
         Include intermediate rasters in output.
-    nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
@@ -699,7 +697,7 @@ def grid_custom(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        nproc=nproc,
+        dbscan_nproc=dbscan_nproc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,

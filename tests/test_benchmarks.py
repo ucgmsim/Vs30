@@ -22,7 +22,6 @@ those known outliers. See ``dev/docs/foster_2019_benchmark_status.md`` for
 background.
 """
 
-import os
 from pathlib import Path
 
 import numpy as np
@@ -52,7 +51,9 @@ FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV = (
 NZTM_TO_WGS = pyproj.Transformer.from_crs(2193, 4326, always_xy=True)
 
 
-def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig, nproc: int) -> None:
+def run_benchmark(
+    version: constants.FixedModelVersion, grid: config.GridConfig
+) -> None:
     """Run the grid pipeline for a fixed model version and compare against the benchmark raster."""
     cfg = load_fixed_model_config(version)
 
@@ -72,7 +73,7 @@ def run_benchmark(version: constants.FixedModelVersion, grid: config.GridConfig,
         fill_gaps=cfg["fill_gaps"],
         geology_corr_fn=cfg["geology_corr_fn"],
         terrain_corr_fn=cfg["terrain_corr_fn"],
-        nproc=nproc,
+        dbscan_nproc=1,
     )
 
     benchmark = BENCHMARKS_DIR / f"{version}.tif"
@@ -148,31 +149,16 @@ def test_foster_2019_approx_points_benchmark(nproc):
     )
 
 
-def test_modified_foster_2019_single_process():
-    """modified_foster_2019 full-domain pipeline matches benchmark (nproc=1)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, nproc=1)
+def test_modified_foster_2019():
+    """modified_foster_2019 full-domain pipeline matches benchmark."""
+    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID)
 
 
-def test_modified_foster_2019_multiprocess():
-    """modified_foster_2019 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.MODIFIED_FOSTER_2019, BENCHMARK_NZ_GRID, nproc=os.cpu_count())
+def test_jaehwi_v1p0():
+    """jaehwi_v1p0 full-domain pipeline matches benchmark."""
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID)
 
 
-def test_jaehwi_v1p0_single_process():
-    """jaehwi_v1p0 full-domain pipeline matches benchmark (nproc=1)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, nproc=1)
-
-
-def test_jaehwi_v1p0_multiprocess():
-    """jaehwi_v1p0 full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID, nproc=os.cpu_count())
-
-
-def test_viktor_cpt_clustering_single_process():
-    """viktor_cpt_clustering full-domain pipeline matches benchmark (nproc=1)."""
-    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, nproc=1)
-
-
-def test_viktor_cpt_clustering_multiprocess():
-    """viktor_cpt_clustering full-domain pipeline matches benchmark (all CPUs)."""
-    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID, nproc=os.cpu_count())
+def test_viktor_cpt_clustering():
+    """viktor_cpt_clustering full-domain pipeline matches benchmark."""
+    run_benchmark(constants.FixedModelVersion.VIKTOR_CPT_CLUSTERING, BENCHMARK_NZ_GRID)

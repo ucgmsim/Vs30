@@ -15,7 +15,7 @@ import rasterio
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 
-from vs30 import config, constants, pipeline
+from vs30 import constants, pipeline
 from conftest import load_fixed_model_config
 
 STANDARD_NZ_GRID = dataclasses.replace(
@@ -45,7 +45,7 @@ def run_pipeline():
         fill_gaps=cfg["fill_gaps"],
         geology_corr_fn=cfg["geology_corr_fn"],
         terrain_corr_fn=cfg["terrain_corr_fn"],
-        nproc=1,
+        dbscan_nproc=1,
     )
     np.save(CACHE_V, result["combined_vs30"])
     np.save(CACHE_S, result["combined_stdv"])
@@ -63,7 +63,6 @@ def compare():
 
     with rasterio.open(BENCH) as src:
         exp_v = src.read(1)
-        exp_s = src.read(2)
         nodata = src.nodata
 
     act_valid = ~np.isnan(act_v)
@@ -80,7 +79,9 @@ def compare():
 
     # Sample some pixel coordinates from each discrepancy set
     rows, cols = np.where(only_act)
-    print(f"\nSample refactored-only pixels (row, col): {list(zip(rows[:10], cols[:10]))}")
+    print(
+        f"\nSample refactored-only pixels (row, col): {list(zip(rows[:10], cols[:10]))}"
+    )
     rows, cols = np.where(only_exp)
     print(f"Sample benchmark-only pixels (row, col): {list(zip(rows[:10], cols[:10]))}")
 

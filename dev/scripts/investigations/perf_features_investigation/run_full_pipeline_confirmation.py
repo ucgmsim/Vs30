@@ -103,7 +103,7 @@ def run_cohort(
         fill_gaps=cfg["fill_gaps"],
         geology_corr_fn=cfg["geology_corr_fn"],
         terrain_corr_fn=cfg["terrain_corr_fn"],
-        nproc=nproc,
+        dbscan_nproc=nproc,
     )
     t_total = time.perf_counter() - t0
     _append_row(

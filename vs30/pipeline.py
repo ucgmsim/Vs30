@@ -172,7 +172,7 @@ def compute_categorical_vs30_updates(
     model_type: constants.ModelType,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    nproc: int = 1,
+    dbscan_nproc: int = 1,
 ) -> pd.DataFrame:
     """
     Compute Bayesian updates to categorical model values and return as DataFrame.
@@ -207,8 +207,9 @@ def compute_categorical_vs30_updates(
         Path to CSV file with independent observations
         (e.g., modified_foster_2019_measured_vs30_independent_observations.csv).
         These will be processed without clustering.
-    nproc : int, optional
-        Number of processes for DBSCAN clustering. Use -1 for all available cores.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering of clustered observations.
+        Use -1 for all available cores.
 
     Returns
     -------
@@ -255,7 +256,7 @@ def compute_categorical_vs30_updates(
         )
         logger.info("Performing spatial clustering...")
         clustered_observations_df = category.perform_clustering(
-            clustered_observations_df, nproc
+            clustered_observations_df, dbscan_nproc
         )
 
     independent_observations_df = None
@@ -678,7 +679,7 @@ def compute_model_grid(
     do_bayesian_update: bool = True,
     mvn: bool = True,
     noisy: bool = True,
-    nproc: int = 1,
+    dbscan_nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
@@ -718,8 +719,9 @@ def compute_model_grid(
         Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering of clustered observations.
+        Use -1 for all available cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     output_dir : Path, optional
@@ -758,7 +760,7 @@ def compute_model_grid(
             model_type=model_type,
             clustered_observations_csv=clustered_observations_csv,
             independent_observations_csv=independent_observations_csv,
-            nproc=nproc,
+            dbscan_nproc=dbscan_nproc,
         )
 
         if output_dir is not None and include_intermediate:
@@ -915,7 +917,7 @@ def grid_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = True,
     include_intermediate: bool = False,
-    nproc: int = 1,
+    dbscan_nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
@@ -971,8 +973,9 @@ def grid_pipeline(
     include_intermediate : bool, optional
         Whether to write intermediate files (ID rasters, initial VS30, slope,
         coast distance, hybrid geology). Default False.
-    nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering of clustered observations.
+        Use -1 for all available cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     geology_corr_fn : Callable, optional
@@ -1028,7 +1031,7 @@ def grid_pipeline(
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
-            nproc=nproc,
+            dbscan_nproc=dbscan_nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
@@ -1051,7 +1054,7 @@ def grid_pipeline(
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
-            nproc=nproc,
+            dbscan_nproc=dbscan_nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
@@ -1352,7 +1355,7 @@ def points_pipeline(
                 model_type=constants.ModelType.GEOLOGY,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                nproc=nproc,
+                dbscan_nproc=nproc,
             )
         else:
             geol_model_df = read_categorical_csv(geology_categorical_csv)
@@ -1371,7 +1374,7 @@ def points_pipeline(
                 model_type=constants.ModelType.TERRAIN,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                nproc=nproc,
+                dbscan_nproc=nproc,
             )
         else:
             terr_model_df = read_categorical_csv(terrain_categorical_csv)
