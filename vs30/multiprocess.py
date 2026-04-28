@@ -16,9 +16,16 @@ spawn_context = mp.get_context("spawn")
 
 
 @contextlib.contextmanager
-def single_threaded_blas():
-    """Restrict BLAS to single-threaded operation to prevent oversubscription during multiprocessing."""
-    with threadpoolctl.threadpool_limits(limits=1, user_api="blas"):
+def limit_blas_threads(threads: int = 1):
+    """Restrict BLAS to ``threads`` threads to prevent oversubscription during multiprocessing.
+
+    When the caller spawns N worker processes on an M-core machine, set
+    ``threads = max(1, M // N)`` so the workers collectively saturate the
+    CPU without oversubscription. Default ``threads=1`` matches the prior
+    ``single_threaded_blas`` behaviour for callers that already pin BLAS
+    explicitly elsewhere.
+    """
+    with threadpoolctl.threadpool_limits(limits=threads, user_api="blas"):
         yield
 
 

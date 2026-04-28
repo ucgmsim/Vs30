@@ -520,7 +520,11 @@ def run_parallel_locations(
         if len(idx) > 0
     ]
 
-    with multiprocess.single_threaded_blas():
+    # Allocate BLAS threads so workers collectively saturate the CPU without
+    # oversubscription. When nproc == cpu_count, this is single-threaded BLAS;
+    # when nproc < cpu_count, each worker gets multiple threads.
+    blas_threads = max(1, multiprocess.spawn_context.cpu_count() // nproc)
+    with multiprocess.limit_blas_threads(threads=blas_threads):
         with multiprocess.spawn_context.Pool(processes=nproc) as pool:
             results = []
             with tqdm(total=len(points), unit="point") as pbar:
