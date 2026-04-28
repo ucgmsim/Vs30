@@ -1379,6 +1379,22 @@ def points_pipeline(
         else:
             terr_model_df = read_categorical_csv(terrain_categorical_csv)
 
+    geology_obs_data = (
+        parallel.prepare_geology_obs_data(
+            observations_df,
+            geol_model_df,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
+        )
+        if run_geology
+        else None
+    )
+    terrain_obs_data = (
+        parallel.prepare_terrain_obs_data(observations_df, terr_model_df)
+        if run_terrain
+        else None
+    )
+
     nproc_resolved = multiprocess.resolve_nproc(nproc)
 
     # ================================================================
@@ -1401,7 +1417,8 @@ def points_pipeline(
 
         result_df = parallel.run_parallel_locations(
             points=points,
-            observations_df=observations_df,
+            geology_obs_data=geology_obs_data,
+            terrain_obs_data=terrain_obs_data,
             geol_model_df=geol_model_df,
             terr_model_df=terr_model_df,
             config=loc_config,
@@ -1439,7 +1456,7 @@ def points_pipeline(
                 ) = parallel.process_geology_at_points(
                     points,
                     geol_model_df,
-                    observations_df,
+                    geology_obs_data,
                     corr_fn=geology_corr_fn,
                     noisy=noisy,
                     progress_bar=pbar,
@@ -1471,7 +1488,7 @@ def points_pipeline(
                 ) = parallel.process_terrain_at_points(
                     points,
                     terr_model_df,
-                    observations_df,
+                    terrain_obs_data,
                     corr_fn=terrain_corr_fn,
                     noisy=noisy,
                     progress_bar=pbar,

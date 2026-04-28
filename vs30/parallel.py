@@ -143,7 +143,7 @@ def prepare_terrain_obs_data(
 def process_geology_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
-    observations_df: pd.DataFrame,
+    geology_obs_data: PointsObsData,
     corr_fn: Callable,
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
@@ -161,14 +161,15 @@ def process_geology_at_points(
         Array of shape (n_points, 2) with (easting, northing) coordinates.
     model_df : DataFrame
         Categorical geology model with Vs30 mean and standard deviation per category.
-    observations_df : DataFrame
-        Observation data with columns: easting, northing, vs30, uncertainty.
+    geology_obs_data : PointsObsData
+        Precomputed observation-side geology values from
+        ``prepare_geology_obs_data``.
     corr_fn : Callable
         Correlation function for spatial adjustment.
     apply_alluvium_slope_mod : bool
-        Whether to apply the alluvium slope modification.
+        Whether to apply the alluvium slope modification (to query-point hybrid mods).
     apply_coastal_distance_mod : bool
-        Whether to apply the coastal distance modification.
+        Whether to apply the coastal distance modification (to query-point hybrid mods).
     noisy : bool
         Whether to apply noise weighting in spatial adjustment.
     progress_bar : tqdm, optional
@@ -214,13 +215,6 @@ def process_geology_at_points(
         apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
-    geology_obs_data = prepare_geology_obs_data(
-        observations_df,
-        model_df,
-        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-        apply_coastal_distance_mod=apply_coastal_distance_mod,
-    )
-
     if len(geology_obs_data.locations) > 0:
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
@@ -253,7 +247,7 @@ def process_geology_at_points(
 def process_terrain_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
-    observations_df: pd.DataFrame,
+    terrain_obs_data: PointsObsData,
     corr_fn: Callable,
     noisy: bool = False,
     progress_bar: tqdm | None = None,
@@ -267,8 +261,9 @@ def process_terrain_at_points(
         Array of shape (n_points, 2) with (easting, northing) coordinates.
     model_df : DataFrame
         Categorical terrain model with Vs30 mean and standard deviation per category.
-    observations_df : DataFrame
-        Observation data with columns: easting, northing, vs30, uncertainty.
+    terrain_obs_data : PointsObsData
+        Precomputed observation-side terrain values from
+        ``prepare_terrain_obs_data``.
     corr_fn : Callable
         Correlation function for spatial adjustment.
     noisy : bool
@@ -294,8 +289,6 @@ def process_terrain_at_points(
     terr_vs30_df = category.get_vs30_for_ids(terr_ids, model_df)
     terr_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
     terr_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
-
-    terrain_obs_data = prepare_terrain_obs_data(observations_df, model_df)
 
     if len(terrain_obs_data.locations) > 0:
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -358,17 +351,16 @@ def process_locations_chunk(
     """
     Worker function: process a chunk of locations through the full pipeline.
 
-    This function runs in a separate process and processes a subset of
-    locations through the complete VS30 pipeline (geology + terrain + combine).
-
     Note: This function is excluded from coverage because it runs in a
     spawned subprocess which cannot be tracked by pytest-cov.
 
     Parameters
     ----------
     args : tuple
-        (points, chunk_id, observations_df, geol_model_df, terr_model_df, config)
-        where points is an (N, 2) array of NZTM (easting, northing) coordinates.
+        (points, chunk_id, geology_obs_data, terrain_obs_data, geol_model_df, terr_model_df, config)
+        where points is an (N, 2) array of NZTM (easting, northing) coordinates,
+        and geology_obs_data / terrain_obs_data are PointsObsData instances
+        (or None if that branch is not running).
 
     Returns
     -------
@@ -378,7 +370,8 @@ def process_locations_chunk(
     (
         points,
         chunk_id,
-        observations_df,
+        geology_obs_data,
+        terrain_obs_data,
         geol_model_df,
         terr_model_df,
         config,
@@ -407,7 +400,7 @@ def process_locations_chunk(
         ) = process_geology_at_points(
             points,
             geol_model_df,
-            observations_df,
+            geology_obs_data,
             config.geology_corr_fn,
             apply_alluvium_slope_mod=config.apply_alluvium_slope_mod,
             apply_coastal_distance_mod=config.apply_coastal_distance_mod,
@@ -431,7 +424,11 @@ def process_locations_chunk(
             terr_mvn_vs30,
             terr_mvn_stdv,
         ) = process_terrain_at_points(
-            points, terr_model_df, observations_df, config.terrain_corr_fn, config.noisy
+            points,
+            terr_model_df,
+            terrain_obs_data,
+            config.terrain_corr_fn,
+            config.noisy,
         )
 
         if config.include_intermediate:
@@ -464,7 +461,8 @@ def process_locations_chunk(
 
 def run_parallel_locations(
     points: np.ndarray,
-    observations_df: pd.DataFrame,
+    geology_obs_data: PointsObsData | None,
+    terrain_obs_data: PointsObsData | None,
     geol_model_df: pd.DataFrame | None,
     terr_model_df: pd.DataFrame | None,
     config: LocationsChunkConfig,
@@ -475,14 +473,21 @@ def run_parallel_locations(
 
     Divides the points array into chunks and processes each chunk
     in a separate process using the full VS30 pipeline. Pass None for
-    the model that is not used by ``config.model_type``.
+    the model and obs-data fields whose branch is not used by
+    ``config.model_type``.
 
     Parameters
     ----------
     points : ndarray
         Array of shape (N, 2) with NZTM (easting, northing) coordinates.
-    observations_df : DataFrame
-        Observation data for spatial adjustment (must have easting, northing, vs30, uncertainty)
+    geology_obs_data : PointsObsData or None
+        Precomputed observation-side geology values from
+        ``prepare_geology_obs_data``. Required when running geology;
+        otherwise None.
+    terrain_obs_data : PointsObsData or None
+        Precomputed observation-side terrain values from
+        ``prepare_terrain_obs_data``. Required when running terrain;
+        otherwise None.
     geol_model_df : DataFrame or None
         Geology categorical model. Required when running geology; otherwise None.
     terr_model_df : DataFrame or None
@@ -497,15 +502,14 @@ def run_parallel_locations(
     DataFrame
         Results with vs30, stdv, and intermediate columns (if requested)
     """
-    # Split into many small chunks for smooth progress bar updates.
-    # pool.imap distributes chunks to nproc workers automatically.
     n_chunks = min(len(points), constants.N_PROGRESS_CHUNKS)
     split_indices = np.array_split(range(len(points)), n_chunks)
     chunk_args = [
         (
             points[idx],
             i,
-            observations_df,
+            geology_obs_data,
+            terrain_obs_data,
             geol_model_df,
             terr_model_df,
             config,
