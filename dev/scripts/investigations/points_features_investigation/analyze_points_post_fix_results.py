@@ -127,6 +127,9 @@ def write_best_nproc_heatmap(piv: pd.DataFrame, out_path: Path) -> None:
         valid = row.dropna()
         if valid.empty:
             continue
+        # Ties resolve to the lowest nproc (idxmin returns first-positional
+        # match; valid is constructed in NPROC_VALUES order, ascending). That
+        # is the operationally preferred tie-break: less CPU for equal time.
         winning_nproc = int(valid.idxmin())
         best_nproc[i, j] = winning_nproc
         if 1 in valid.index:
@@ -157,15 +160,18 @@ def write_best_nproc_heatmap(piv: pd.DataFrame, out_path: Path) -> None:
                 ax.text(j, i, "—", ha="center", va="center", fontsize=10)
                 continue
             label = f"nproc={n}\n{sp:.2f}x" if not np.isnan(sp) else f"nproc={n}"
-            ax.text(j, i, label, ha="center", va="center", fontsize=9, color="white")
+            # nproc=1 (blue) and nproc=8 (red) are dark; nproc=2 (green) and
+            # nproc=4 (orange) are mid-luminance — black text reads better on
+            # those.
+            text_color = "white" if n in (1, 8) else "black"
+            ax.text(j, i, label, ha="center", va="center", fontsize=9, color=text_color)
 
     legend_handles = [
         plt.matplotlib.patches.Patch(color=NPROC_COLORS[n], label=f"nproc={n}")
         for n in nproc_cols
     ]
     ax.legend(handles=legend_handles, bbox_to_anchor=(1.02, 1), loc="upper left")
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+    fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
 
 
