@@ -117,7 +117,9 @@ def load_and_assign_observations(
     logger.info(f"Loading {label} observations from: {csv_path}")
     df = read_observations_csv(csv_path)
     utils.validate_csv_columns(
-        df, constants.ObservationColumn.REQUIRED, f"{label.capitalize()} observations CSV"
+        df,
+        constants.ObservationColumn.REQUIRED,
+        f"{label.capitalize()} observations CSV",
     )
     logger.info(f"Loaded {len(df)} {label} observations")
 
@@ -522,10 +524,7 @@ def compute_spatial_adjustment_on_grid(
     # producing large covariance matrices. In this regime, letting BLAS
     # parallelise each matrix inverse (nproc=1) is much faster than
     # Python-level multiprocessing with single-threaded BLAS.
-    if (
-        nproc_resolved > 1
-        and n_obs > constants.MULTIPROCESS_OBSERVATION_THRESHOLD
-    ):
+    if nproc_resolved > 1 and n_obs > constants.MULTIPROCESS_OBSERVATION_THRESHOLD:
         logger.info(
             f"Falling back to single-process mode: {n_obs} observations "
             f"exceeds threshold ({constants.MULTIPROCESS_OBSERVATION_THRESHOLD}). "
@@ -541,7 +540,6 @@ def compute_spatial_adjustment_on_grid(
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
         model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
-        nproc=nproc_resolved,
     )
     t_bbox_elapsed = time.perf_counter() - t_bbox_start
     logger.info(
@@ -1125,8 +1123,16 @@ def grid_pipeline(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                     profile,
                     [
-                        np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
-                        np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                        np.where(
+                            np.isnan(combined_vs30),
+                            constants.NODATA_VALUE,
+                            combined_vs30,
+                        ),
+                        np.where(
+                            np.isnan(combined_stdv),
+                            constants.NODATA_VALUE,
+                            combined_stdv,
+                        ),
                     ],
                     (
                         constants.BAND_DESCRIPTION_VS30_COMBINED,
@@ -1145,8 +1151,12 @@ def grid_pipeline(
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 profile,
                 [
-                    np.where(np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30),
-                    np.where(np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv),
+                    np.where(
+                        np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
+                    ),
+                    np.where(
+                        np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
+                    ),
                 ],
                 (
                     constants.BAND_DESCRIPTION_VS30_COMBINED,
@@ -1537,9 +1547,7 @@ def points_pipeline(
 
         # Resample geology IDs at query points rather than threading them
         # through both parallel and sequential paths.
-        geology_ids = category.assign_to_category(
-            points, constants.ModelType.GEOLOGY
-        )
+        geology_ids = category.assign_to_category(points, constants.ModelType.GEOLOGY)
         fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, points)
 
         if np.any(fillable_mask):

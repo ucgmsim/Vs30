@@ -239,7 +239,6 @@ def _compute_one(
             max_spatial_boolean_array_memory_gb=1.0,
             model_type=constants.ModelType.TERRAIN,
             max_dist_m=max_dist_m,
-            nproc=nproc,
         )
     else:
         bbox = make_full_bbox_result(raster_data, n_obs=len(obs_data.locations))
@@ -364,7 +363,6 @@ def time_one_run(
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             model_type=constants.ModelType.TERRAIN,
             max_dist_m=max_dist_m,
-            nproc=nproc,
         )
         t_bbox = time.perf_counter() - t0
     else:

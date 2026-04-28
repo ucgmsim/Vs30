@@ -10,7 +10,7 @@ import rasterio
 import scipy.spatial.distance
 from tqdm import tqdm
 
-from vs30 import category, constants, multiprocess, raster, utils
+from vs30 import category, constants, raster, utils
 
 logger = logging.getLogger(__name__)
 
@@ -773,7 +773,6 @@ def find_affected_pixels(
     max_spatial_boolean_array_memory_gb: float,
     model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
-    nproc: int = 1,
 ) -> BoundingBoxResult:
     """
     Find pixels affected by observations using bounding boxes.
@@ -791,9 +790,6 @@ def find_affected_pixels(
         progress bar labelling.
     max_dist_m : float, optional
         Maximum distance for considering observations.
-    nproc : int, optional
-        Number of parallel processes. 1 for sequential (default),
-        >1 for parallel processing.
 
     Returns
     -------
@@ -839,22 +835,7 @@ def find_affected_pixels(
         grid_locs_chunk = grid_locs[start_idx:end_idx]
         chunk_args.append((chunk_idx, grid_locs_chunk, obs_bounds))
 
-    if nproc > 1 and n_chunks > 1:
-        # Parallel processing
-        actual_nproc = min(nproc, n_chunks)
-        logger.info(f"Using {actual_nproc} parallel workers")
-        with multiprocess.spawn_context.Pool(processes=actual_nproc) as pool:
-            results = list(
-                tqdm(
-                    pool.imap(process_bbox_chunk, chunk_args),
-                    total=n_chunks,
-                    desc=f"{label}: checking pixels for nearby observations ({n_chunks} chunks)",
-                    unit="chunk",
-                )
-            )
-
-    elif n_chunks > 1:
-        # Sequential processing with multiple chunks
+    if n_chunks > 1:
         results = []
         for chunk_idx in tqdm(
             range(n_chunks),
@@ -862,14 +843,13 @@ def find_affected_pixels(
             unit="chunk",
         ):
             results.append(process_bbox_chunk(chunk_args[chunk_idx]))
-
     else:
         logger.info(
             f"{label}: checking {len(grid_locs):,} pixels for nearby observations"
         )
         results = [process_bbox_chunk(chunk_args[0])]
 
-    # Merge results from either parallel or sequential processing
+    # Merge results
     for chunk_idx, chunk_mask in results:
         start_idx = chunk_idx * chunk_size
         valid_points_in_bbox_mask[start_idx : start_idx + len(chunk_mask)] = chunk_mask
@@ -878,7 +858,7 @@ def find_affected_pixels(
     grid_points_in_bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
     grid_points_in_bbox_mask[raster_data.valid_flat_indices] = valid_points_in_bbox_mask
 
-    n_affected = np.sum(valid_points_in_bbox_mask)
+    n_affected = int(np.sum(valid_points_in_bbox_mask))
     logger.info(
         f"Bounding box search complete: {n_affected:,} pixels affected "
         f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
