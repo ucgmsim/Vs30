@@ -118,4 +118,4 @@ python -m dev.scripts.investigations.points_features_investigation.run_points_sw
 python -m dev.scripts.investigations.points_features_investigation.analyze_points_results
 ```
 
-The buggy-multiproc evidence in §3.2 was captured before the matrix was trimmed; the partial CSV is preserved at `dev/scripts/investigations/points_features_investigation/results_points_partial_with_buggy_nproc8.csv` (gitignored, regeneratable from the original `NPROC_VALUES = [1, 8]` matrix on a clean checkout of commit `4fa4fa4`).
+The buggy-multiproc evidence in §3.2 was captured before the matrix was trimmed; the partial CSV is preserved at `dev/scripts/investigations/points_features_investigation/results_points_partial_with_buggy_nproc8.csv` (gitignored). To regenerate: at any commit from `26b6b4c` onwards, restore `NPROC_VALUES = [1, 8]` in `run_points_sweep.py` and re-run the sweep — the buggy `nproc=8` cells appear naturally. Note that the full `[1, 8]` matrix takes days to weeks to complete owing to the bug itself; the partial CSV captures roughly the first half before the original sweep was killed.
