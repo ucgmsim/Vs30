@@ -31,7 +31,6 @@ CSV_FIELDS = [
     "N_grid_target",
     "N_grid_actual",
     "N_affected",
-    "nproc",
     "ffap",
     "rep",
     "t_bbox_s",
@@ -72,12 +71,11 @@ def main() -> None:
                 for rep in range(N_REPS):
                     logger.info(
                         f"  cell N_obs={n_obs:>6} N_grid_target={n_grid:>9,} "
-                        f"nproc=1 ffap={int(ffap)} rep={rep}"
+                        f"ffap={int(ffap)} rep={rep}"
                     )
                     row = bench_utils.time_one_run(
                         raster_data=raster_data,
                         obs_data=obs_data,
-                        nproc=1,
                         ffap=ffap,
                         rep=rep,
                     )

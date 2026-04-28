@@ -1,8 +1,14 @@
 """Phase 1 driver — isolated MVN parameter sweep.
 
-Loops the (N_obs x N_grid x nproc x ffap x rep) matrix and writes one CSV
+Loops the (N_obs x N_grid x ffap x rep) matrix and writes one CSV
 row per cell. CSV is written incrementally so partial results survive an
 interrupt or crash.
+
+Note: this driver historically also varied ``nproc`` (1 vs 8). After the
+multiproc spatial-fit path was removed from the production code (commit
+6abe61d), only sequential execution remains, so the ``nproc`` axis is
+gone. The script is preserved as reusable infrastructure for future
+ffap-style investigations on different hardware.
 
 Run with::
 
@@ -29,7 +35,6 @@ CSV_FIELDS = [
     "N_grid_target",
     "N_grid_actual",
     "N_affected",
-    "nproc",
     "ffap",
     "rep",
     "t_bbox_s",
@@ -42,20 +47,12 @@ CSV_FIELDS = [
 # Full sweep — overridden when --smoke is passed.
 N_OBS_VALUES = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 35709]
 N_GRID_VALUES = [1_000, 10_000, 100_000, 1_000_000]
-NPROC_VALUES = [1, 8]
 FFAP_VALUES = [True, False]
 N_REPS = 3
 
 # Skip cells whose previous-rep total time exceeds this — the sweep budget
 # is finite and very long cells contribute little additional information.
 PER_CELL_TIME_BUDGET_S = 1800.0
-
-# Phase 1 trim policy. The smoke run showed nproc=8 is 50x slower than
-# nproc=1 even at modest sizes, so the largest nproc>1 cells would dominate
-# wall time without changing the qualitative finding. We skip them and
-# document the omission in the findings doc.
-_NPROC_PARALLEL_MAX_N_OBS = 10_000
-_NPROC_PARALLEL_MAX_N_GRID = 100_000
 
 
 def _append_row(row: dict) -> None:
@@ -67,17 +64,16 @@ def _append_row(row: dict) -> None:
         writer.writerow(row)
 
 
-def _run_cell(raster_data, obs_data, n_obs, n_grid_target, nproc, ffap, n_reps) -> None:
+def _run_cell(raster_data, obs_data, n_obs, n_grid_target, ffap, n_reps) -> None:
     for rep in range(n_reps):
         logger.info(
             f"  cell N_obs={n_obs:>6} N_grid_target={n_grid_target:>9,} "
-            f"nproc={nproc} ffap={int(ffap)} rep={rep}"
+            f"ffap={int(ffap)} rep={rep}"
         )
         try:
             row = bench_utils.time_one_run(
                 raster_data=raster_data,
                 obs_data=obs_data,
-                nproc=nproc,
                 ffap=ffap,
                 rep=rep,
             )
@@ -88,7 +84,6 @@ def _run_cell(raster_data, obs_data, n_obs, n_grid_target, nproc, ffap, n_reps) 
                 {
                     "N_obs": n_obs,
                     "N_grid_target": n_grid_target,
-                    "nproc": nproc,
                     "ffap": ffap,
                     "rep": rep,
                 }
@@ -104,27 +99,12 @@ def _run_cell(raster_data, obs_data, n_obs, n_grid_target, nproc, ffap, n_reps) 
             return
 
 
-def _skip_reason(n_obs: int, n_grid: int, nproc: int) -> str | None:
-    """Return a skip reason if this cell falls outside the trimmed matrix.
-
-    Returns ``None`` if the cell should be run.
-    """
-    if nproc > 1 and (
-        n_obs > _NPROC_PARALLEL_MAX_N_OBS or n_grid > _NPROC_PARALLEL_MAX_N_GRID
-    ):
-        return (
-            "smoke-test extrapolation predicts >24h wall time for this cell "
-            "at nproc=8; clear loss vs nproc=1"
-        )
-    return None
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--smoke",
         action="store_true",
-        help="Run a tiny matrix (3 N_obs x 2 N_grid x 2 nproc x 2 ffap x 1 rep)",
+        help="Run a tiny matrix (3 N_obs x 2 N_grid x 2 ffap x 1 rep)",
     )
     args = parser.parse_args()
 
@@ -137,12 +117,6 @@ def main() -> None:
         n_grid_values = N_GRID_VALUES
         n_reps = N_REPS
 
-    logger.info("Numerical equivalence guardrail starting...")
-    bench_utils.run_numerical_equivalence_check(
-        n_obs=200, n_target=1_000, nproc_options=(1, 8)
-    )
-    logger.info("Numerical equivalence guardrail passed.")
-
     for n_obs in n_obs_values:
         obs_df = bench_utils.subsample_observations(n_obs, seed=42)
         for n_grid in n_grid_values:
@@ -151,16 +125,8 @@ def main() -> None:
             )
             raster_data, _ = bench_utils.make_raster_data(n_grid)
             obs_data = bench_utils.prepare_terrain_obs_data(obs_df, raster_data)
-            for nproc in NPROC_VALUES:
-                for ffap in FFAP_VALUES:
-                    skip = _skip_reason(n_obs, n_grid, nproc)
-                    if skip is not None:
-                        logger.info(
-                            f"  [SKIP] N_obs={n_obs:>6} N_grid_target={n_grid:>9,} "
-                            f"nproc={nproc} ffap={int(ffap)} — {skip}"
-                        )
-                        continue
-                    _run_cell(raster_data, obs_data, n_obs, n_grid, nproc, ffap, n_reps)
+            for ffap in FFAP_VALUES:
+                _run_cell(raster_data, obs_data, n_obs, n_grid, ffap, n_reps)
 
     logger.info(f"Sweep complete - results at {OUT_CSV}")
 
