@@ -1,0 +1,6 @@
+results_*.csv
+figures/
+__pycache__/
+*.pyc
+.pytest_cache/
+obs_csvs/
