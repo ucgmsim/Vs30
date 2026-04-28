@@ -798,7 +798,7 @@ def find_affected_pixels(
     Returns
     -------
     BoundingBoxResult
-        Result containing mask and observation-to-grid mappings.
+        Result containing the affected-pixel mask and pixel count.
     """
     # Get coordinates for valid pixels
     grid_locs = raster_data.get_coordinates()
