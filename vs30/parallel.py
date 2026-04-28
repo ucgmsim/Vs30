@@ -10,6 +10,136 @@ from tqdm import tqdm
 from vs30 import category, constants, multiprocess, raster, spatial, utils
 
 
+@dataclass
+class PointsObsData:
+    """Precomputed observation arrays for use in points-pipeline workers.
+
+    All arrays have length N_obs. ``model_vs30`` and ``model_stdv`` carry
+    post-hybrid-mods values for geology, raw categorical values for terrain.
+    """
+
+    locations: np.ndarray
+    vs30: np.ndarray
+    uncertainty: np.ndarray
+    model_vs30: np.ndarray
+    model_stdv: np.ndarray
+
+    @classmethod
+    def empty(cls) -> "PointsObsData":
+        return cls(
+            locations=np.empty((0, 2)),
+            vs30=np.empty(0),
+            uncertainty=np.empty(0),
+            model_vs30=np.empty(0),
+            model_stdv=np.empty(0),
+        )
+
+
+def prepare_geology_obs_data(
+    observations_df: pd.DataFrame,
+    geol_model_df: pd.DataFrame,
+    apply_alluvium_slope_mod: bool,
+    apply_coastal_distance_mod: bool,
+) -> PointsObsData:
+    """Precompute observation-side geology values for points_pipeline.
+
+    Parameters
+    ----------
+    observations_df
+        Combined observations DataFrame (easting, northing, vs30, uncertainty).
+    geol_model_df
+        Categorical geology model with Vs30 mean and standard deviation per category.
+    apply_alluvium_slope_mod
+        Whether to apply the alluvium slope modification.
+    apply_coastal_distance_mod
+        Whether to apply the coastal distance modification.
+
+    Returns
+    -------
+    PointsObsData
+        Precomputed observation arrays (model_vs30/stdv are post-hybrid-mods).
+        Returns ``PointsObsData.empty()`` if ``observations_df`` is empty.
+    """
+    if len(observations_df) == 0:
+        return PointsObsData.empty()
+
+    obs_locs = observations_df[
+        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
+    ].values
+    obs_geol_ids = category.assign_to_category_geology(obs_locs)
+    obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, geol_model_df)
+
+    # Apply hybrid modifications to observation model values so residuals
+    # match the grid pipeline; see spatial.prepare_observation_data.
+    obs_slope = raster.sample_slope_at_points(obs_locs)
+    # Legacy parity: NODATA slope samples at observations are replaced with
+    # the 255 sentinel so log10(255) ≈ 2.41 feeds np.interp and returns the
+    # MAX Vs30 for the gid; the equivalent grid-pixel handling uses 1e-9
+    # and returns the MIN Vs30. See constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL.
+    obs_slope = np.where(
+        obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
+    )
+    obs_coast_dist = (
+        raster.compute_coastal_distance_at_points(obs_locs)
+        if apply_coastal_distance_mod
+        else np.zeros(len(obs_locs))
+    )
+    obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
+        obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+        obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+        obs_geol_ids,
+        obs_slope,
+        obs_coast_dist,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
+    )
+
+    return PointsObsData(
+        locations=obs_locs,
+        vs30=observations_df[constants.ObservationColumn.VS30].values,
+        uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+        model_vs30=obs_model_vs30,
+        model_stdv=obs_model_stdv,
+    )
+
+
+def prepare_terrain_obs_data(
+    observations_df: pd.DataFrame,
+    terr_model_df: pd.DataFrame,
+) -> PointsObsData:
+    """Precompute observation-side terrain values for points_pipeline.
+
+    Parameters
+    ----------
+    observations_df
+        Combined observations DataFrame (easting, northing, vs30, uncertainty).
+    terr_model_df
+        Categorical terrain model with Vs30 mean and standard deviation per category.
+
+    Returns
+    -------
+    PointsObsData
+        Precomputed observation arrays.
+        Returns ``PointsObsData.empty()`` if ``observations_df`` is empty.
+    """
+    if len(observations_df) == 0:
+        return PointsObsData.empty()
+
+    obs_locs = observations_df[
+        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
+    ].values
+    obs_terr_ids = category.assign_to_category_terrain(obs_locs)
+    obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, terr_model_df)
+
+    return PointsObsData(
+        locations=obs_locs,
+        vs30=observations_df[constants.ObservationColumn.VS30].values,
+        uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+        model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
+        model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
+    )
+
+
 def process_geology_at_points(
     points: np.ndarray,
     model_df: pd.DataFrame,
@@ -24,11 +154,6 @@ def process_geology_at_points(
 ]:
     """
     Process geology model at points, including hybrid modifications and spatial adjustment.
-
-    This function encapsulates the full geology processing pipeline:
-    1. Get initial Vs30 values from categorical model
-    2. Apply hybrid modifications (slope and coastal distance)
-    3. Apply spatial adjustment using observations
 
     Parameters
     ----------
@@ -89,49 +214,23 @@ def process_geology_at_points(
         apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
-    if len(observations_df) > 0:
-        obs_locs = observations_df[
-            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-        ].values
-        obs_geol_ids = category.assign_to_category_geology(obs_locs)
-        obs_geol_vs30_df = category.get_vs30_for_ids(obs_geol_ids, model_df)
+    geology_obs_data = prepare_geology_obs_data(
+        observations_df,
+        model_df,
+        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+        apply_coastal_distance_mod=apply_coastal_distance_mod,
+    )
 
-        # Apply hybrid modifications to observation model values so residuals
-        # match the grid pipeline; see spatial.prepare_observation_data.
-        obs_slope = raster.sample_slope_at_points(obs_locs)
-        # Legacy parity: NODATA slope samples at observations are replaced with
-        # the 255 sentinel so log10(255) ≈ 2.41 feeds np.interp and returns the
-        # MAX Vs30 for the gid; the equivalent grid-pixel handling uses 1e-9
-        # and returns the MIN Vs30. See constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL.
-        obs_slope = np.where(
-            obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
-        )
-        obs_coast_dist = (
-            raster.compute_coastal_distance_at_points(obs_locs)
-            if apply_coastal_distance_mod
-            else np.zeros(len(obs_locs))
-        )
-        obs_model_vs30, obs_model_stdv = raster.apply_hybrid_geology_modifications(
-            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-            obs_geol_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
-            obs_geol_ids,
-            obs_slope,
-            obs_coast_dist,
-            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-            apply_coastal_distance_mod=apply_coastal_distance_mod,
-        )
-
+    if len(geology_obs_data.locations) > 0:
         geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
-            obs_locations=obs_locs,
-            obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
-            obs_model_vs30=obs_model_vs30,
-            obs_model_stdv=obs_model_stdv,
-            obs_uncertainty=observations_df[
-                constants.ObservationColumn.UNCERTAINTY
-            ].values,
+            obs_locations=geology_obs_data.locations,
+            obs_vs30=geology_obs_data.vs30,
+            obs_model_vs30=geology_obs_data.model_vs30,
+            obs_model_stdv=geology_obs_data.model_stdv,
+            obs_uncertainty=geology_obs_data.uncertainty,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
@@ -161,10 +260,6 @@ def process_terrain_at_points(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Process terrain model at points, including spatial adjustment.
-
-    This function encapsulates the full terrain processing pipeline:
-    1. Get initial Vs30 values from categorical model
-    2. Apply spatial adjustment using observations (no hybrid modifications for terrain)
 
     Parameters
     ----------
@@ -200,23 +295,18 @@ def process_terrain_at_points(
     terr_vs30 = terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values
     terr_stdv = terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values
 
-    if len(observations_df) > 0:
-        obs_locs = observations_df[
-            [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-        ].values
-        obs_terr_ids = category.assign_to_category_terrain(obs_locs)
-        obs_terr_vs30_df = category.get_vs30_for_ids(obs_terr_ids, model_df)
+    terrain_obs_data = prepare_terrain_obs_data(observations_df, model_df)
+
+    if len(terrain_obs_data.locations) > 0:
         terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,
-            obs_locations=obs_locs,
-            obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
-            obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
-            obs_model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
-            obs_uncertainty=observations_df[
-                constants.ObservationColumn.UNCERTAINTY
-            ].values,
+            obs_locations=terrain_obs_data.locations,
+            obs_vs30=terrain_obs_data.vs30,
+            obs_model_vs30=terrain_obs_data.model_vs30,
+            obs_model_stdv=terrain_obs_data.model_stdv,
+            obs_uncertainty=terrain_obs_data.uncertainty,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
