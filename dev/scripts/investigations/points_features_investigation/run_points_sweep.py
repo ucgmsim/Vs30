@@ -38,7 +38,15 @@ CSV_FIELDS = [
 # Full sweep — overridden by --smoke.
 N_QUERY_VALUES = [1, 10, 100, 1_000, 10_000, 50_000, 100_000]
 N_OBS_VALUES = [100, 1_000, 35_706]
-NPROC_VALUES = [1, 8]
+# Trimmed from [1, 8] mid-investigation: a per-chunk obs-prep redundancy bug
+# in vs30/parallel.py::run_parallel_locations made nproc=8 cells take >150x
+# longer than nproc=1 at large N_query. The bug, not the inherent
+# multiproc/BLAS-MT tradeoff, dominates those measurements. We complete the
+# nproc=1 sweep to answer the §7 ffap question; a separate piece of work will
+# fix the bug and re-measure nproc=8 cleanly. Pre-trim partial data with the
+# buggy nproc=8 cells is preserved in
+# results_points_partial_with_buggy_nproc8.csv (gitignored, regenerable).
+NPROC_VALUES = [1]
 N_REPS = 3
 
 
