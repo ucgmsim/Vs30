@@ -502,6 +502,8 @@ def run_parallel_locations(
     DataFrame
         Results with vs30, stdv, and intermediate columns (if requested)
     """
+    # Split into many small chunks for smooth progress bar updates.
+    # pool.imap distributes chunks to nproc workers automatically.
     n_chunks = min(len(points), constants.N_PROGRESS_CHUNKS)
     split_indices = np.array_split(range(len(points)), n_chunks)
     chunk_args = [
