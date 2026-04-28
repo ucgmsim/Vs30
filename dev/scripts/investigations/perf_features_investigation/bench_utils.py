@@ -1,6 +1,5 @@
 """Helpers for the perf-features-investigation benchmarking harness."""
 
-import contextlib
 import datetime as _dt
 import functools
 import resource
@@ -10,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from vs30 import config, constants, parallel, pipeline, raster, spatial, utils
+from vs30 import config, constants, pipeline, raster, spatial, utils
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -150,24 +149,6 @@ def make_full_bbox_result(
     )
 
 
-@contextlib.contextmanager
-def bypass_observation_threshold():
-    """Disable the n_obs > 1000 fallback for one measurement.
-
-    The production guard at ``pipeline.compute_spatial_adjustment_on_grid``
-    forces ``nproc=1`` whenever the observation count exceeds
-    ``MULTIPROCESS_OBSERVATION_THRESHOLD``. To measure the multiproc path
-    in that regime we temporarily raise the threshold to a value larger
-    than any conceivable observation count, then restore it.
-    """
-    original = constants.MULTIPROCESS_OBSERVATION_THRESHOLD
-    constants.MULTIPROCESS_OBSERVATION_THRESHOLD = 10**12
-    try:
-        yield
-    finally:
-        constants.MULTIPROCESS_OBSERVATION_THRESHOLD = original
-
-
 DEFAULT_CORR_FN = functools.partial(
     utils.exponential_correlation_function, phi=constants.DEFAULT_TERRAIN_PHI
 )
@@ -220,115 +201,6 @@ def prepare_terrain_obs_data(
     )
 
 
-def _compute_one(
-    raster_data: spatial.RasterData,
-    obs_data: spatial.ObservationData,
-    nproc: int,
-    ffap: bool,
-    corr_fn=DEFAULT_CORR_FN,
-    max_dist_m: int = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
-    cov_reduc: float = constants.COV_REDUC,
-    noisy: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Run one variant and return the (vs30, stdv) arrays."""
-    if ffap:
-        bbox = spatial.find_affected_pixels(
-            raster_data,
-            obs_data,
-            max_spatial_boolean_array_memory_gb=1.0,
-            model_type=constants.ModelType.TERRAIN,
-            max_dist_m=max_dist_m,
-        )
-    else:
-        bbox = make_full_bbox_result(raster_data, n_obs=len(obs_data.locations))
-    if nproc == 1:
-        return spatial.compute_spatial_adjustments(
-            raster_data,
-            obs_data,
-            bbox,
-            corr_fn,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-        )
-    with bypass_observation_threshold():
-        affected_flat_indices = np.where(bbox.mask)[0]
-        return parallel.run_parallel_spatial_fit(
-            affected_flat_indices=affected_flat_indices,
-            raster_data=raster_data,
-            obs_data=obs_data,
-            corr_fn=corr_fn,
-            model_type=constants.ModelType.TERRAIN,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-            nproc=nproc,
-        )
-
-
-def run_numerical_equivalence_check(
-    n_obs: int = 200,
-    n_target: int = 1_000,
-    nproc_options: tuple[int, ...] = (1, 8),
-    atol: float = 1e-9,
-    rtol: float = 1e-7,
-) -> None:
-    """Confirm that nproc does not change output for each ffap setting.
-
-    For each value of ffap, compares every nproc variant against the nproc=1
-    baseline for that same ffap.  ffap=True and ffap=False are intentionally
-    compared within their own groups: the two settings process different pixel
-    sets (find_affected_pixels filters to a smaller neighbourhood), so
-    array-level equality across ffap groups is not expected.
-
-    Run before the sweep so we know any timing differences reflect the
-    feature's effect, not a logic divergence between nproc variants.
-
-    Parameters
-    ----------
-    n_obs
-        Number of observations for the small case.
-    n_target
-        Approximate number of valid pixels for the small case.
-    nproc_options
-        Process counts to test; nproc=1 is always included as the baseline.
-    atol, rtol
-        Tolerances passed to ``numpy.testing.assert_allclose``.
-
-    Raises
-    ------
-    AssertionError
-        If any (nproc>1, ffap) variant differs from (nproc=1, ffap).
-    """
-    raster_data, _ = make_raster_data(n_target=n_target)
-    obs_df = subsample_observations(n_obs, seed=42)
-    obs_data = prepare_terrain_obs_data(obs_df, raster_data)
-
-    for ffap in (True, False):
-        ref_vs30, ref_stdv = _compute_one(raster_data, obs_data, nproc=1, ffap=ffap)
-        for nproc in nproc_options:
-            if nproc == 1:
-                continue
-            vs30, stdv = _compute_one(raster_data, obs_data, nproc=nproc, ffap=ffap)
-            np.testing.assert_allclose(
-                vs30,
-                ref_vs30,
-                atol=atol,
-                rtol=rtol,
-                err_msg=f"vs30 mismatch at nproc={nproc}, ffap={ffap}",
-            )
-            np.testing.assert_allclose(
-                stdv,
-                ref_stdv,
-                atol=atol,
-                rtol=rtol,
-                err_msg=f"stdv mismatch at nproc={nproc}, ffap={ffap}",
-            )
-
-
 def _peak_rss_mb() -> float:
     """Peak resident-set size of the current process in MB.
 
@@ -340,7 +212,6 @@ def _peak_rss_mb() -> float:
 def time_one_run(
     raster_data: spatial.RasterData,
     obs_data: spatial.ObservationData,
-    nproc: int,
     ffap: bool,
     rep: int,
     corr_fn=DEFAULT_CORR_FN,
@@ -350,7 +221,7 @@ def time_one_run(
     noisy: bool = True,
     max_spatial_boolean_array_memory_gb: float = 1.0,
 ) -> dict:
-    """Measure one (N_obs, N_grid, nproc, ffap, rep) cell.
+    """Measure one (N_obs, N_grid, ffap, rep) cell.
 
     Returns a dict suitable for a CSV row.
     """
@@ -370,44 +241,23 @@ def time_one_run(
         t_bbox = 0.0
 
     # ---- Spatial-adjustment phase -----------------------------------------
-    # nproc=1 => let BLAS use all cores (do NOT wrap in single_threaded_blas).
-    # nproc>1 => parallel.run_parallel_spatial_fit handles single_threaded_blas
-    #            internally; we only bypass the production observation-threshold
-    #            guard so the multiproc path is actually exercised when N_obs > 1000.
     t0 = time.perf_counter()
-    if nproc == 1:
-        spatial.compute_spatial_adjustments(
-            raster_data,
-            obs_data,
-            bbox,
-            corr_fn,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-        )
-    else:
-        with bypass_observation_threshold():
-            affected_flat_indices = np.where(bbox.mask)[0]
-            parallel.run_parallel_spatial_fit(
-                affected_flat_indices=affected_flat_indices,
-                raster_data=raster_data,
-                obs_data=obs_data,
-                corr_fn=corr_fn,
-                model_type=constants.ModelType.TERRAIN,
-                max_dist_m=max_dist_m,
-                max_points=max_points,
-                noisy=noisy,
-                cov_reduc=cov_reduc,
-                nproc=nproc,
-            )
+    spatial.compute_spatial_adjustments(
+        raster_data,
+        obs_data,
+        bbox,
+        corr_fn,
+        max_dist_m=max_dist_m,
+        max_points=max_points,
+        noisy=noisy,
+        cov_reduc=cov_reduc,
+    )
     t_spatial = time.perf_counter() - t0
 
     return {
         "N_obs": len(obs_data.locations),
         "N_grid_actual": int(raster_data.valid_flat_indices.size),
         "N_affected": int(bbox.n_affected_pixels),
-        "nproc": nproc,
         "ffap": ffap,
         "rep": rep,
         "t_bbox_s": t_bbox,

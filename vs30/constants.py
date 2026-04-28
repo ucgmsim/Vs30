@@ -67,14 +67,6 @@ MAX_DIST_M: int = 10000
 # observations, only the MAX_POINTS closest observations will be considered.
 MAX_POINTS: int = 500
 
-# When the number of valid observations exceeds this threshold, the MVN spatial
-# adjustment falls back to single-process mode (nproc=1) to allow BLAS to
-# parallelise large matrix inversions across all cores. With many observations,
-# pixels frequently hit the MAX_POINTS cap, producing large covariance matrices
-# where BLAS-level parallelism is far more efficient than Python-level
-# multiprocessing with single-threaded BLAS.
-MULTIPROCESS_OBSERVATION_THRESHOLD: int = 1000
-
 # K value for standard deviation based weighting when combining geology and
 # terrain models. Represents the exponent for inverse variance weighting:
 # weight ~ (sigma^2)^-k. Only used when combination_method is "standard_deviation_weighting".
@@ -207,16 +199,28 @@ class HybridGeologyParams:
 
 HYBRID_GEOLOGY_PARAMS: list[HybridGeologyParams] = [
     HybridGeologyParams(
-        gid=2, slope_limits=[-1.85, -1.22], vs30_values=[242, 418], sigma_reduction=0.4888
+        gid=2,
+        slope_limits=[-1.85, -1.22],
+        vs30_values=[242, 418],
+        sigma_reduction=0.4888,
     ),
     HybridGeologyParams(
-        gid=3, slope_limits=[-2.70, -1.35], vs30_values=[171, 228], sigma_reduction=0.7103
+        gid=3,
+        slope_limits=[-2.70, -1.35],
+        vs30_values=[171, 228],
+        sigma_reduction=0.7103,
     ),
     HybridGeologyParams(
-        gid=4, slope_limits=[-3.44, -0.88], vs30_values=[252, 275], sigma_reduction=0.9988
+        gid=4,
+        slope_limits=[-3.44, -0.88],
+        vs30_values=[252, 275],
+        sigma_reduction=0.9988,
     ),
     HybridGeologyParams(
-        gid=6, slope_limits=[-3.56, -0.93], vs30_values=[183, 239], sigma_reduction=0.9348
+        gid=6,
+        slope_limits=[-3.56, -0.93],
+        vs30_values=[183, 239],
+        sigma_reduction=0.9348,
     ),
 ]
 
@@ -343,6 +347,7 @@ COL_TERRAIN_MVN_STDV: str = "terrain_mvn_stdv"
 COL_COMBINED_STDV: str = "stdv"
 COL_VS30_BEFORE_GAPFILL: str = "vs30_before_gapfill"
 COL_STDV_BEFORE_GAPFILL: str = "stdv_before_gapfill"
+
 
 class ModelType(StrEnum):
     """For specifying whether output should be generated using the geology model only, the

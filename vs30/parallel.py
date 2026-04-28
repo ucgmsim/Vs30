@@ -129,7 +129,9 @@ def process_geology_at_points(
             obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
             obs_model_vs30=obs_model_vs30,
             obs_model_stdv=obs_model_stdv,
-            obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+            obs_uncertainty=observations_df[
+                constants.ObservationColumn.UNCERTAINTY
+            ].values,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
@@ -212,7 +214,9 @@ def process_terrain_at_points(
             obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
             obs_model_vs30=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_MEAN].values,
             obs_model_stdv=obs_terr_vs30_df[constants.COL_CATEGORY_VS30_STDV].values,
-            obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+            obs_uncertainty=observations_df[
+                constants.ObservationColumn.UNCERTAINTY
+            ].values,
             corr_fn=corr_fn,
             noisy=noisy,
             progress_bar=progress_bar,
@@ -368,60 +372,6 @@ def process_locations_chunk(
     return chunk_id, pd.DataFrame(result)
 
 
-def process_pixels_chunk(
-    args: tuple,
-) -> tuple[int, list[tuple[int, float, float]]]:  # pragma: no cover
-    """
-    Worker function: compute spatial adjustments for a chunk of affected pixels.
-
-    This function runs in a separate process and computes spatial adjustments
-    for a subset of affected pixels.
-
-    Note: This function is excluded from coverage because it runs in a
-    spawned subprocess which cannot be tracked by pytest-cov.
-
-    Parameters
-    ----------
-    args : tuple
-        (pixels, chunk_id, obs_data, corr_fn, max_dist_m, max_points,
-        noisy, cov_reduc, corr_zero)
-
-    Returns
-    -------
-    tuple
-        (chunk_id, list of (flat_index, updated_vs30, updated_stdv) tuples)
-    """
-    (
-        pixels,
-        chunk_id,
-        obs_data,
-        corr_fn,
-        max_dist_m,
-        max_points,
-        noisy,
-        cov_reduc,
-        corr_zero,
-    ) = args
-
-    updates = []
-    for pixel in pixels:
-        result = spatial.compute_spatial_adjustment_for_pixel(
-            pixel,
-            obs_data,
-            corr_fn,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-            corr_zero=corr_zero,
-        )
-        if result is not None:
-            vs30, stdv, _ = result
-            updates.append((pixel.index, vs30, stdv))
-
-    return chunk_id, updates
-
-
 def run_parallel_locations(
     points: np.ndarray,
     observations_df: pd.DataFrame,
@@ -486,120 +436,3 @@ def run_parallel_locations(
 
     results.sort(key=lambda x: x[0])
     return pd.concat([r[1] for r in results], ignore_index=True)
-
-
-def run_parallel_spatial_fit(
-    affected_flat_indices: np.ndarray,
-    raster_data,  # RasterData - avoid import cycle
-    obs_data: spatial.ObservationData,
-    corr_fn: Callable,
-    model_type: constants.ModelType,
-    max_dist_m: float,
-    max_points: int,
-    noisy: bool,
-    cov_reduc: float,
-    nproc: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Compute spatial adjustments for affected pixels in parallel.
-
-    Divides the affected pixels into chunks and processes each chunk
-    in a separate process.
-
-    Parameters
-    ----------
-    affected_flat_indices : ndarray
-        Flat indices of affected pixels in the raster
-    raster_data : RasterData
-        Raster data object with vs30, stdv, and coordinate info
-    obs_data : ObservationData
-        Observation data for spatial adjustment
-    corr_fn : Callable
-        Correlation function for spatial adjustment
-    model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN)
-    max_dist_m : float
-        Maximum distance for considering observations
-    max_points : int
-        Maximum number of observations per pixel
-    noisy : bool
-        Whether to apply noise weighting
-    cov_reduc : float
-        Covariance reduction factor
-    nproc : int
-        Number of processes to use (must be > 1)
-
-    Returns
-    -------
-    tuple of ndarray
-        (updated_vs30, updated_stdv) arrays with spatial adjustments applied.
-    """
-    if len(affected_flat_indices) == 0:
-        return raster_data.vs30.copy(), raster_data.stdv.copy()
-
-    grid_locs = raster_data.get_coordinates()
-
-    # Build a flat-index → valid-index map. searchsorted returns an insertion
-    # point, so we additionally check equality to confirm the flat_idx really
-    # is in valid_flat_indices and skip otherwise.
-    pixels = []
-    for flat_idx in affected_flat_indices:
-        valid_idx = np.searchsorted(raster_data.valid_flat_indices, flat_idx)
-        if (
-            valid_idx < len(raster_data.valid_flat_indices)
-            and raster_data.valid_flat_indices[valid_idx] == flat_idx
-        ):
-            pixels.append(
-                spatial.PixelData(
-                    location=grid_locs[valid_idx],
-                    vs30=float(raster_data.vs30.flat[flat_idx]),
-                    stdv=float(raster_data.stdv.flat[flat_idx]),
-                    index=int(flat_idx),
-                )
-            )
-
-    corr_zero = corr_fn(np.array([0.0]))[0]
-
-    # Split into many small chunks for smooth progress bar updates.
-    # pool.imap distributes chunks to nproc workers automatically.
-    n_chunks = min(len(pixels), constants.N_PROGRESS_CHUNKS)
-    chunks = np.array_split(np.arange(len(pixels)), n_chunks)
-    chunk_args = [
-        (
-            [pixels[i] for i in chunk],
-            chunk_id,
-            obs_data,
-            corr_fn,
-            max_dist_m,
-            max_points,
-            noisy,
-            cov_reduc,
-            corr_zero,
-        )
-        for chunk_id, chunk in enumerate(chunks)
-        if len(chunk) > 0
-    ]
-
-    label = str(model_type).capitalize()
-    with multiprocess.single_threaded_blas():
-        with multiprocess.spawn_context.Pool(processes=min(nproc, len(chunk_args))) as pool:
-            results = []
-            with tqdm(
-                total=len(pixels),
-                desc=f"{label}: spatial adjustment",
-                unit="pixel",
-            ) as pbar:
-                for chunk_id, chunk_updates in pool.imap(
-                    process_pixels_chunk, chunk_args
-                ):
-                    results.append((chunk_id, chunk_updates))
-                    pbar.update(len(chunks[chunk_id]))
-
-    updated_vs30 = raster_data.vs30.copy()
-    updated_stdv = raster_data.stdv.copy()
-    for _, chunk_updates in results:
-        for flat_idx, vs30, stdv in chunk_updates:
-            updated_vs30.flat[flat_idx] = vs30
-            updated_stdv.flat[flat_idx] = stdv
-
-    return updated_vs30, updated_stdv

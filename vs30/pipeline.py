@@ -421,7 +421,6 @@ def compute_spatial_adjustment_on_grid(
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
-    nproc: int = 1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
@@ -459,8 +458,6 @@ def compute_spatial_adjustment_on_grid(
         Whether to apply coastal distance modification for GID 4 and GID 10.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
-    nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     slope_array : np.ndarray, optional
@@ -473,8 +470,6 @@ def compute_spatial_adjustment_on_grid(
     tuple[np.ndarray, np.ndarray]
         (adjusted_vs30, adjusted_stdv) arrays.
     """
-    nproc_resolved = multiprocess.resolve_nproc(nproc)
-
     logger.info(f"Starting spatial adjustment for {model_type} model")
 
     raster_data = spatial.RasterData.from_arrays(
@@ -520,18 +515,6 @@ def compute_spatial_adjustment_on_grid(
         )
         return vs30_array.copy(), stdv_array.copy()
 
-    # With many observations, pixels frequently hit the MAX_POINTS cap,
-    # producing large covariance matrices. In this regime, letting BLAS
-    # parallelise each matrix inverse (nproc=1) is much faster than
-    # Python-level multiprocessing with single-threaded BLAS.
-    if nproc_resolved > 1 and n_obs > constants.MULTIPROCESS_OBSERVATION_THRESHOLD:
-        logger.info(
-            f"Falling back to single-process mode: {n_obs} observations "
-            f"exceeds threshold ({constants.MULTIPROCESS_OBSERVATION_THRESHOLD}). "
-            f"BLAS will parallelise matrix inversions across all cores."
-        )
-        nproc_resolved = 1
-
     logger.info("Finding pixels affected by observations...")
     t_bbox_start = time.perf_counter()
     bbox_result = spatial.find_affected_pixels(
@@ -549,32 +532,16 @@ def compute_spatial_adjustment_on_grid(
 
     logger.info("Computing spatial updates...")
     t_spatial_start = time.perf_counter()
-    if nproc_resolved > 1:
-        logger.info(f"Using {nproc_resolved} parallel workers")
-        affected_flat_indices = np.where(bbox_result.mask)[0]
-        adjusted_vs30, adjusted_stdv = parallel.run_parallel_spatial_fit(
-            affected_flat_indices=affected_flat_indices,
-            raster_data=raster_data,
-            obs_data=obs_data,
-            corr_fn=corr_fn,
-            model_type=model_type,
-            max_dist_m=constants.MAX_DIST_M,
-            max_points=constants.MAX_POINTS,
-            noisy=noisy,
-            cov_reduc=constants.COV_REDUC,
-            nproc=nproc_resolved,
-        )
-    else:
-        adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
-            raster_data,
-            obs_data,
-            bbox_result,
-            corr_fn,
-            max_dist_m=constants.MAX_DIST_M,
-            max_points=constants.MAX_POINTS,
-            noisy=noisy,
-            cov_reduc=constants.COV_REDUC,
-        )
+    adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
+        raster_data,
+        obs_data,
+        bbox_result,
+        corr_fn,
+        max_dist_m=constants.MAX_DIST_M,
+        max_points=constants.MAX_POINTS,
+        noisy=noisy,
+        cov_reduc=constants.COV_REDUC,
+    )
     t_spatial_elapsed = time.perf_counter() - t_spatial_start
     logger.info(f"Spatial adjustments completed in {t_spatial_elapsed:.1f}s")
 
@@ -907,7 +874,6 @@ def compute_model_grid(
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             noisy=noisy,
-            nproc=nproc,
             max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
             slope_array=slope_array,
             coast_dist_array=coast_dist_array,
