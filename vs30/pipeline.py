@@ -1542,7 +1542,7 @@ def points_pipeline(
                 "mvn": mvn,
                 "do_bayesian_update": do_bayesian_update,
                 "include_intermediate": False,
-                "nproc": 1,
+                "dbscan_nproc": 1,
                 "geology_corr_fn": geology_corr_fn,
                 "terrain_corr_fn": terrain_corr_fn,
                 "apply_coastal_distance_mod": apply_coastal_distance_mod,
