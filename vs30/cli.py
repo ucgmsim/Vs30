@@ -251,7 +251,7 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    nproc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = 1,
 ) -> None:
     """
     Compute Vs30 at locations using a fixed model version's config.
@@ -346,7 +346,7 @@ def points_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    nproc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = 1,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations with explicit parameters.
