@@ -170,7 +170,7 @@ def compute_categorical_vs30_updates(
     model_type: constants.ModelType,
     clustered_observations_csv: Path | None = None,
     independent_observations_csv: Path | None = None,
-    dbscan_nproc: int = 1,
+    dbscan_nproc: int = -1,
 ) -> pd.DataFrame:
     """
     Compute Bayesian updates to categorical model values and return as DataFrame.
@@ -207,7 +207,7 @@ def compute_categorical_vs30_updates(
         These will be processed without clustering.
     dbscan_nproc : int, optional
         Number of processes for DBSCAN clustering of clustered observations.
-        Use -1 for all available cores.
+        Default -1 (all cores).
 
     Returns
     -------
@@ -291,7 +291,7 @@ def compute_model_grid(
     do_bayesian_update: bool = True,
     mvn: bool = True,
     noisy: bool = True,
-    dbscan_nproc: int = 1,
+    dbscan_nproc: int = -1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
@@ -332,8 +332,9 @@ def compute_model_grid(
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of clustered observations.
-        Use -1 for all available cores.
+        Number of processes for DBSCAN clustering of clustered observations
+        when do_bayesian_update is True. Default -1 (all cores). Has no
+        effect when do_bayesian_update is False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     output_dir : Path, optional
@@ -529,7 +530,7 @@ def grid_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = True,
     include_intermediate: bool = False,
-    dbscan_nproc: int = 1,
+    dbscan_nproc: int = -1,
     max_spatial_boolean_array_memory_gb: float = 1.0,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
@@ -586,8 +587,9 @@ def grid_pipeline(
         Whether to write intermediate files (ID rasters, initial VS30, slope,
         coast distance, hybrid geology). Default False.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of clustered observations.
-        Use -1 for all available cores.
+        Number of processes for DBSCAN clustering of clustered observations
+        when do_bayesian_update is True. Default -1 (all cores). Has no
+        effect when do_bayesian_update is False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     geology_corr_fn : Callable, optional
