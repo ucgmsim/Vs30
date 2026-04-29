@@ -177,7 +177,9 @@ def run_points_pipeline(
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+        Number of parallel processes. Default 1; set to -1 for all cores.
+        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
+        cell tested for this pipeline.
     lon_column : str, optional
         Name of longitude column in input CSV.
     lat_column : str, optional
@@ -271,7 +273,9 @@ def points(
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
     nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+        Number of parallel processes. Default 1; set to -1 for all cores.
+        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
+        cell tested for this pipeline.
     """
     config_data = load_model_config(version)
 
@@ -393,7 +397,9 @@ def points_custom(
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+        Number of parallel processes. Default 1; set to -1 for all cores.
+        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
+        cell tested for this pipeline.
     """
     run_points_pipeline(
         locations_csv=locations_csv,

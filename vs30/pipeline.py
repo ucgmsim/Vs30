@@ -1284,7 +1284,9 @@ def points_pipeline(
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     nproc : int, optional
-        Number of parallel processes. Use -1 for all cores.
+        Number of parallel processes. Default 1; set to -1 for all cores.
+        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
+        cell tested for this pipeline.
     geology_corr_fn : Callable, optional
         Correlation function for geology spatial adjustment.
     terrain_corr_fn : Callable, optional
