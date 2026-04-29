@@ -20,7 +20,7 @@ from vs30 import (
     constants,
     gapfill,
     multiprocess,
-    parallel,
+    points,
     raster,
     spatial,
     utils,
@@ -1317,9 +1317,9 @@ def points_pipeline(
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([latitudes, longitudes])
     )
-    points = nztm_coords[:, ::-1]  # (easting, northing)
+    locations = nztm_coords[:, ::-1]  # (easting, northing)
 
-    logger.info(f"Processing {len(points)} locations")
+    logger.info(f"Processing {len(locations)} locations")
 
     if mvn:
         observations_df = collect_observation_csvs(
@@ -1382,7 +1382,7 @@ def points_pipeline(
             terr_model_df = read_categorical_csv(terrain_categorical_csv)
 
     geology_obs_data = (
-        parallel.prepare_geology_obs_data(
+        points.prepare_geology_obs_data(
             observations_df,
             geol_model_df,
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
@@ -1392,7 +1392,7 @@ def points_pipeline(
         else None
     )
     terrain_obs_data = (
-        parallel.prepare_terrain_obs_data(observations_df, terr_model_df)
+        points.prepare_terrain_obs_data(observations_df, terr_model_df)
         if run_terrain
         else None
     )
@@ -1405,7 +1405,7 @@ def points_pipeline(
     if nproc_resolved > 1:
         logger.info(f"\nProcessing with {nproc_resolved} parallel workers...")
 
-        loc_config = parallel.LocationsChunkConfig(
+        loc_config = points.LocationsChunkConfig(
             include_intermediate=include_intermediate,
             model_type=model_type,
             combination_method=combination_method,
@@ -1417,8 +1417,8 @@ def points_pipeline(
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         )
 
-        result_df = parallel.run_parallel_locations(
-            points=points,
+        result_df = points.run_parallel_locations(
+            points=locations,
             geology_obs_data=geology_obs_data,
             terrain_obs_data=terrain_obs_data,
             geol_model_df=geol_model_df,
@@ -1428,8 +1428,8 @@ def points_pipeline(
         )
 
         # Add coordinate columns at the front
-        result_df.insert(0, constants.ObservationColumn.EASTING, points[:, 0])
-        result_df.insert(1, constants.ObservationColumn.NORTHING, points[:, 1])
+        result_df.insert(0, constants.ObservationColumn.EASTING, locations[:, 0])
+        result_df.insert(1, constants.ObservationColumn.NORTHING, locations[:, 1])
 
         logger.info(f"  Total locations: {len(result_df)}")
 
@@ -1438,14 +1438,14 @@ def points_pipeline(
         # Sequential Processing Path
         # ================================================================
         result = {}
-        result[constants.ObservationColumn.EASTING] = points[:, 0]
-        result[constants.ObservationColumn.NORTHING] = points[:, 1]
+        result[constants.ObservationColumn.EASTING] = locations[:, 0]
+        result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
         # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
         if run_geology:
             assert geol_model_df is not None  # invariant: required when run_geology
             with tqdm(
-                total=len(points), desc="Geology: spatial adjustment", unit="point"
+                total=len(locations), desc="Geology: spatial adjustment", unit="point"
             ) as pbar:
                 (
                     geol_ids,
@@ -1455,8 +1455,8 @@ def points_pipeline(
                     geol_stdv_hybrid,
                     geol_mvn_vs30,
                     geol_mvn_stdv,
-                ) = parallel.process_geology_at_points(
-                    points,
+                ) = points.process_geology_at_points(
+                    locations,
                     geol_model_df,
                     geology_obs_data,
                     corr_fn=geology_corr_fn,
@@ -1479,7 +1479,7 @@ def points_pipeline(
         if run_terrain:
             assert terr_model_df is not None  # invariant: required when run_terrain
             with tqdm(
-                total=len(points), desc="Terrain: spatial adjustment", unit="point"
+                total=len(locations), desc="Terrain: spatial adjustment", unit="point"
             ) as pbar:
                 (
                     terr_ids,
@@ -1487,8 +1487,8 @@ def points_pipeline(
                     terr_stdv,
                     terr_mvn_vs30,
                     terr_mvn_stdv,
-                ) = parallel.process_terrain_at_points(
-                    points,
+                ) = points.process_terrain_at_points(
+                    locations,
                     terr_model_df,
                     terrain_obs_data,
                     corr_fn=terrain_corr_fn,
@@ -1523,7 +1523,7 @@ def points_pipeline(
             result[constants.ObservationColumn.VS30] = terr_mvn_vs30
             result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
-        logger.info(f"  Total locations: {len(points)}")
+        logger.info(f"  Total locations: {len(locations)}")
         result_df = pd.DataFrame(result)
 
     # ================================================================
@@ -1535,8 +1535,8 @@ def points_pipeline(
 
         # Resample geology IDs at query points rather than threading them
         # through both parallel and sequential paths.
-        geology_ids = category.assign_to_category(points, constants.ModelType.GEOLOGY)
-        fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, points)
+        geology_ids = category.assign_to_category(locations, constants.ModelType.GEOLOGY)
+        fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, locations)
 
         if np.any(fillable_mask):
             if include_intermediate:
@@ -1569,7 +1569,7 @@ def points_pipeline(
             }
 
             for idx in fillable_indices:
-                easting, northing = points[idx]
+                easting, northing = locations[idx]
                 fill_vs30, fill_stdv = fill_one_point_via_local_grid(
                     easting, northing, gapfill_grid_config, grid_pipeline_kwargs
                 )
