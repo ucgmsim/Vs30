@@ -15,7 +15,8 @@ Also reads results_balanced_blas_supplement.csv (63 rows: 3 nproc × 21 cells
 
 - results_points_post_fix_combined_medians.csv  -- long-format medians with a
     ``config`` column disambiguating the 7 distinct configurations across both
-    sweeps (21 cells × 7 configs = 147 rows)
+    sweeps (146 rows: 21 cells × 7 configs minus the 1 missing nproc=8 cell at
+    N_query=100000, N_obs=35706)
 - results_points_post_fix_combined_wide.csv  -- wide-format with one row per
     (N_query, N_obs) and one column per config (21 rows)
 - figures/best_config_per_cell.png  -- categorical heatmap labelling each cell
