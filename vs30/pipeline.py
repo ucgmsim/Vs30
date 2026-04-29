@@ -19,7 +19,6 @@ from vs30 import (
     config,
     constants,
     gapfill,
-    multiprocess,
     points,
     raster,
     spatial,
@@ -1231,7 +1230,7 @@ def points_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
-    nproc: int = 1,
+    dbscan_nproc: int = -1,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
@@ -1283,10 +1282,10 @@ def points_pipeline(
         using observations before computing Vs30. Default False.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    nproc : int, optional
-        Number of parallel processes. Default 1; set to -1 for all cores.
-        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
-        cell tested for this pipeline.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering of clustered observations
+        when do_bayesian_update is True. Default -1 (all cores). Has no
+        effect when do_bayesian_update is False.
     geology_corr_fn : Callable, optional
         Correlation function for geology spatial adjustment.
     terrain_corr_fn : Callable, optional
@@ -1357,7 +1356,7 @@ def points_pipeline(
                 model_type=constants.ModelType.GEOLOGY,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                dbscan_nproc=nproc,
+                dbscan_nproc=dbscan_nproc,
             )
         else:
             geol_model_df = read_categorical_csv(geology_categorical_csv)
@@ -1376,7 +1375,7 @@ def points_pipeline(
                 model_type=constants.ModelType.TERRAIN,
                 clustered_observations_csv=clustered_observations_csv,
                 independent_observations_csv=independent_observations_csv,
-                dbscan_nproc=nproc,
+                dbscan_nproc=dbscan_nproc,
             )
         else:
             terr_model_df = read_categorical_csv(terrain_categorical_csv)
@@ -1397,134 +1396,94 @@ def points_pipeline(
         else None
     )
 
-    nproc_resolved = multiprocess.resolve_nproc(nproc)
+    result = {}
+    result[constants.ObservationColumn.EASTING] = locations[:, 0]
+    result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
-    # ================================================================
-    # Parallel Processing Path
-    # ================================================================
-    if nproc_resolved > 1:
-        logger.info(f"\nProcessing with {nproc_resolved} parallel workers...")
-
-        loc_config = points.LocationsChunkConfig(
-            include_intermediate=include_intermediate,
-            model_type=model_type,
-            combination_method=combination_method,
-            combine_ratio=combine_ratio,
-            noisy=noisy,
-            geology_corr_fn=geology_corr_fn,
-            terrain_corr_fn=terrain_corr_fn,
-            apply_coastal_distance_mod=apply_coastal_distance_mod,
-            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-        )
-
-        result_df = points.run_parallel_locations(
-            points=locations,
-            geology_obs_data=geology_obs_data,
-            terrain_obs_data=terrain_obs_data,
-            geol_model_df=geol_model_df,
-            terr_model_df=terr_model_df,
-            config=loc_config,
-            nproc=nproc_resolved,
-        )
-
-        # Add coordinate columns at the front
-        result_df.insert(0, constants.ObservationColumn.EASTING, locations[:, 0])
-        result_df.insert(1, constants.ObservationColumn.NORTHING, locations[:, 1])
-
-        logger.info(f"  Total locations: {len(result_df)}")
-
-    else:
-        # ================================================================
-        # Sequential Processing Path
-        # ================================================================
-        result = {}
-        result[constants.ObservationColumn.EASTING] = locations[:, 0]
-        result[constants.ObservationColumn.NORTHING] = locations[:, 1]
-
-        # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
-        if run_geology:
-            assert geol_model_df is not None  # invariant: required when run_geology
-            with tqdm(
-                total=len(locations), desc="Geology: spatial adjustment", unit="point"
-            ) as pbar:
-                (
-                    geol_ids,
-                    geol_vs30,
-                    geol_stdv,
-                    geol_vs30_hybrid,
-                    geol_stdv_hybrid,
-                    geol_mvn_vs30,
-                    geol_mvn_stdv,
-                ) = points.process_geology_at_points(
-                    locations,
-                    geol_model_df,
-                    geology_obs_data,
-                    corr_fn=geology_corr_fn,
-                    noisy=noisy,
-                    progress_bar=pbar,
-                    apply_coastal_distance_mod=apply_coastal_distance_mod,
-                    apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-                )
-
-            if include_intermediate:
-                result[constants.COL_GEOLOGY_ID] = geol_ids
-                result[constants.COL_GEOLOGY_VS30] = geol_vs30
-                result[constants.COL_GEOLOGY_STDV] = geol_stdv
-                result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
-                result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
-                result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
-                result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
-
-        # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
-        if run_terrain:
-            assert terr_model_df is not None  # invariant: required when run_terrain
-            with tqdm(
-                total=len(locations), desc="Terrain: spatial adjustment", unit="point"
-            ) as pbar:
-                (
-                    terr_ids,
-                    terr_vs30,
-                    terr_stdv,
-                    terr_mvn_vs30,
-                    terr_mvn_stdv,
-                ) = points.process_terrain_at_points(
-                    locations,
-                    terr_model_df,
-                    terrain_obs_data,
-                    corr_fn=terrain_corr_fn,
-                    noisy=noisy,
-                    progress_bar=pbar,
-                )
-
-            if include_intermediate:
-                result[constants.COL_TERRAIN_ID] = terr_ids
-                result[constants.COL_TERRAIN_VS30] = terr_vs30
-                result[constants.COL_TERRAIN_STDV] = terr_stdv
-                result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
-                result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
-
-        # --- Stage 4: Combine geology and terrain models or use single model result ---
-        if run_geology and run_terrain:
-            logger.info("Combining models...")
-            combined_vs30, combined_stdv = utils.combine_vs30_models(
+    # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
+    if run_geology:
+        assert geol_model_df is not None  # invariant: required when run_geology
+        with tqdm(
+            total=len(locations), desc="Geology: spatial adjustment", unit="point"
+        ) as pbar:
+            (
+                geol_ids,
+                geol_vs30,
+                geol_stdv,
+                geol_vs30_hybrid,
+                geol_stdv_hybrid,
                 geol_mvn_vs30,
                 geol_mvn_stdv,
+            ) = points.process_geology_at_points(
+                locations,
+                geol_model_df,
+                geology_obs_data,
+                corr_fn=geology_corr_fn,
+                noisy=noisy,
+                progress_bar=pbar,
+                apply_coastal_distance_mod=apply_coastal_distance_mod,
+                apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            )
+
+        if include_intermediate:
+            result[constants.COL_GEOLOGY_ID] = geol_ids
+            result[constants.COL_GEOLOGY_VS30] = geol_vs30
+            result[constants.COL_GEOLOGY_STDV] = geol_stdv
+            result[constants.COL_GEOLOGY_VS30_HYBRID] = geol_vs30_hybrid
+            result[constants.COL_GEOLOGY_STDV_HYBRID] = geol_stdv_hybrid
+            result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
+            result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
+
+    # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
+    if run_terrain:
+        assert terr_model_df is not None  # invariant: required when run_terrain
+        with tqdm(
+            total=len(locations), desc="Terrain: spatial adjustment", unit="point"
+        ) as pbar:
+            (
+                terr_ids,
+                terr_vs30,
+                terr_stdv,
                 terr_mvn_vs30,
                 terr_mvn_stdv,
-                combination_method,
-                combine_ratio,
+            ) = points.process_terrain_at_points(
+                locations,
+                terr_model_df,
+                terrain_obs_data,
+                corr_fn=terrain_corr_fn,
+                noisy=noisy,
+                progress_bar=pbar,
             )
-            result[constants.ObservationColumn.VS30] = combined_vs30
-            result[constants.COL_COMBINED_STDV] = combined_stdv
-        elif run_geology:
-            result[constants.ObservationColumn.VS30] = geol_mvn_vs30
-            result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
-        elif run_terrain:
-            result[constants.ObservationColumn.VS30] = terr_mvn_vs30
-            result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
 
-        logger.info(f"  Total locations: {len(locations)}")
-        result_df = pd.DataFrame(result)
+        if include_intermediate:
+            result[constants.COL_TERRAIN_ID] = terr_ids
+            result[constants.COL_TERRAIN_VS30] = terr_vs30
+            result[constants.COL_TERRAIN_STDV] = terr_stdv
+            result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
+            result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
+
+    # --- Stage 4: Combine geology and terrain models or use single model result ---
+    if run_geology and run_terrain:
+        logger.info("Combining models...")
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
+            geol_mvn_vs30,
+            geol_mvn_stdv,
+            terr_mvn_vs30,
+            terr_mvn_stdv,
+            combination_method,
+            combine_ratio,
+        )
+        result[constants.ObservationColumn.VS30] = combined_vs30
+        result[constants.COL_COMBINED_STDV] = combined_stdv
+    elif run_geology:
+        result[constants.ObservationColumn.VS30] = geol_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = geol_mvn_stdv
+    elif run_terrain:
+        result[constants.ObservationColumn.VS30] = terr_mvn_vs30
+        result[constants.COL_COMBINED_STDV] = terr_mvn_stdv
+
+    logger.info(f"  Total locations: {len(locations)}")
+    result_df = pd.DataFrame(result)
 
     # ================================================================
     # Gap-fill: fill on-land nodata points

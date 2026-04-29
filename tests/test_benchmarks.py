@@ -82,14 +82,12 @@ def run_benchmark(
     )
 
 
-@pytest.mark.parametrize("nproc", [1, -1], ids=["single_process", "multiprocess"])
-def test_foster_2019_approx_points_benchmark(nproc):
+def test_foster_2019_approx_points_benchmark():
     """Prior-dominated points from foster_2019_approx.tif match points_pipeline output.
 
     Tests that the categorical posterior + hybrid slope modification
     reproduce the paper's published Vs30 raster at float precision for
-    pixels outside any observation's MVN neighbourhood. Runs in both
-    single-process and multiprocess modes to cover both dispatch paths.
+    pixels outside any observation's MVN neighbourhood.
 
     The assertions use median + 80th-percentile thresholds rather than a
     hard rtol because a small minority of prior-dominated pixels have
@@ -117,7 +115,6 @@ def test_foster_2019_approx_points_benchmark(nproc):
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        nproc=nproc,
         geology_corr_fn=cfg.get("geology_corr_fn"),
         terrain_corr_fn=cfg.get("terrain_corr_fn"),
         apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],

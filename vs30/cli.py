@@ -132,7 +132,7 @@ def run_points_pipeline(
     mvn: bool = True,
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
-    nproc: int = 1,
+    dbscan_nproc: int = -1,
     lon_column: str = constants.LOCATIONS_LON_COLUMN,
     lat_column: str = constants.LOCATIONS_LAT_COLUMN,
     geology_corr_fn: Callable | None = None,
@@ -176,10 +176,10 @@ def run_points_pipeline(
         Whether to perform Bayesian update of categorical Vs30 values.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    nproc : int, optional
-        Number of parallel processes. Default 1; set to -1 for all cores.
-        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
-        cell tested for this pipeline.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering of clustered observations
+        when do_bayesian_update is True. Default -1 (all cores). Has no
+        effect when do_bayesian_update is False.
     lon_column : str, optional
         Name of longitude column in input CSV.
     lat_column : str, optional
@@ -227,7 +227,7 @@ def run_points_pipeline(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        nproc=nproc,
+        dbscan_nproc=dbscan_nproc,
         geology_corr_fn=geology_corr_fn,
         terrain_corr_fn=terrain_corr_fn,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
@@ -253,7 +253,7 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    nproc: typing.Annotated[int, typer.Option()] = 1,
+    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 at locations using a fixed model version's config.
@@ -272,10 +272,8 @@ def points(
         Name of latitude column in input CSV.
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
-    nproc : int, optional
-        Number of parallel processes. Default 1; set to -1 for all cores.
-        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
-        cell tested for this pipeline.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering. Default -1 (all cores).
     """
     config_data = load_model_config(version)
 
@@ -294,7 +292,7 @@ def points(
         mvn=config_data["mvn"],
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
-        nproc=nproc,
+        dbscan_nproc=dbscan_nproc,
         lon_column=lon_column,
         lat_column=lat_column,
         geology_corr_fn=config_data["geology_corr_fn"],
@@ -350,7 +348,7 @@ def points_custom(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    nproc: typing.Annotated[int, typer.Option()] = 1,
+    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
 ) -> None:
     """
     Compute Vs30 values at specific latitude/longitude locations with explicit parameters.
@@ -396,10 +394,8 @@ def points_custom(
         Name of latitude column in input CSV.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
-    nproc : int, optional
-        Number of parallel processes. Default 1; set to -1 for all cores.
-        See dev/docs/points_perf_post_fix_findings.md — nproc=1 wins in every
-        cell tested for this pipeline.
+    dbscan_nproc : int, optional
+        Number of processes for DBSCAN clustering. Default -1 (all cores).
     """
     run_points_pipeline(
         locations_csv=locations_csv,
@@ -415,7 +411,7 @@ def points_custom(
         mvn=mvn,
         do_bayesian_update=do_bayesian_update,
         include_intermediate=include_intermediate,
-        nproc=nproc,
+        dbscan_nproc=dbscan_nproc,
         lon_column=lon_column,
         lat_column=lat_column,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
