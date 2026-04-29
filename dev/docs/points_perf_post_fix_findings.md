@@ -9,6 +9,20 @@
 - [Points-pipeline obs-prep fix — smoke results](parallel_points_obs_prep_fix_smoke_results.md)
 - [Post-fix investigation design](points_perf_post_fix_design.md)
 
+## Postscript (2026-04-29)
+
+§5.1 recommended changing the CLI default from `-1` to `1`. That landed in
+commit `3d0b190`. After further consideration, the multiprocessing path was
+removed entirely (see commit `940de1f`). The `nproc` parameter on
+`points_pipeline` / `vs30 points` / `vs30 points-custom` is gone;
+`dbscan_nproc` was added to the points commands to preserve user control over
+DBSCAN parallelism in the bayesian-update path (mirroring `grid_pipeline`).
+The §3.x data and §5.2/§5.3 conclusions are unchanged. The runner scripts in
+`dev/scripts/investigations/points_features_investigation/`
+(`run_points_sweep.py`, `run_balanced_blas_supplement.py`, `bench_utils.py`,
+`test_bench_utils.py`) were also removed — see git history if a re-run is
+needed.
+
 ## 1. Summary
 
 Across all 21 (N_query × N_obs) cells, `nproc=1` wins decisively over every other
