@@ -441,6 +441,8 @@ Second occurrence (terrain): same change — `dbscan_nproc=nproc` → `dbscan_np
 
 - [ ] **Step 3a.7: Delete the parallel-dispatch branch and `multiprocess.resolve_nproc` call.**
 
+> **Note:** Task 2 renamed the local variable `points` (the `(easting, northing)` numpy array) to `locations` inside `points_pipeline` to avoid shadowing the new `points` module import. The code blocks below show the actual current state of the file.
+
 Find this block in `points_pipeline` (around lines 1400-1434):
 
 ```python
@@ -465,7 +467,7 @@ Find this block in `points_pipeline` (around lines 1400-1434):
         )
 
         result_df = points.run_parallel_locations(
-            points=points,
+            points=locations,
             geology_obs_data=geology_obs_data,
             terrain_obs_data=terrain_obs_data,
             geol_model_df=geol_model_df,
@@ -475,8 +477,8 @@ Find this block in `points_pipeline` (around lines 1400-1434):
         )
 
         # Add coordinate columns at the front
-        result_df.insert(0, constants.ObservationColumn.EASTING, points[:, 0])
-        result_df.insert(1, constants.ObservationColumn.NORTHING, points[:, 1])
+        result_df.insert(0, constants.ObservationColumn.EASTING, locations[:, 0])
+        result_df.insert(1, constants.ObservationColumn.NORTHING, locations[:, 1])
 
         logger.info(f"  Total locations: {len(result_df)}")
 
@@ -485,15 +487,15 @@ Find this block in `points_pipeline` (around lines 1400-1434):
         # Sequential Processing Path
         # ================================================================
         result = {}
-        result[constants.ObservationColumn.EASTING] = points[:, 0]
+        result[constants.ObservationColumn.EASTING] = locations[:, 0]
 ```
 
 Delete from `nproc_resolved = multiprocess.resolve_nproc(nproc)` through the closing `else:` line (inclusive of the section comment headers and the entire `if nproc_resolved > 1:` block). The remaining body (formerly inside the `else:`) is dedented one level. The result becomes:
 
 ```python
     result = {}
-    result[constants.ObservationColumn.EASTING] = points[:, 0]
-    result[constants.ObservationColumn.NORTHING] = points[:, 1]
+    result[constants.ObservationColumn.EASTING] = locations[:, 0]
+    result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
     # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
     if run_geology:
