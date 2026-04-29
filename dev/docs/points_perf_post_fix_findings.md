@@ -12,14 +12,15 @@
 ## 1. Summary
 
 Across all 21 (N_query × N_obs) cells, `nproc=1` wins decisively over every other
-configuration including the balanced-BLAS variants introduced mid-sweep. Every
-multiproc configuration is at least 1.06× and up to 17× slower than `nproc=1`,
-regardless of BLAS-thread allocation strategy. The CLI default should be changed
-from `-1` (all cores) to `1`.
+configuration including the balanced-BLAS variants introduced mid-sweep. The
+margin ranges from `1.05×` at the very smallest cells (where neither side has
+much work to do) to `>180×` at moderate N_query × small N_obs cells (where
+multiproc IPC overhead overwhelms tiny per-point work). The CLI default should
+be changed from `-1` (all cores) to `1`.
 
 | Question | Answer | Evidence |
 |---|---|---|
-| Does multiproc ever win for `points_pipeline` in realistic regimes now? | **No** — nproc=1 wins by 1.1×–17× across all 21 cells, regardless of BLAS-thread allocation strategy | §3.1 wide table; §3.4 best-config map |
+| Does multiproc ever win for `points_pipeline` in realistic regimes now? | **No** — nproc=1 wins by `1.05×` (smallest cells) to `>180×` (where IPC dominates per-point work) across all 21 cells, every multiproc configuration | §3.1 wide table; §3.4 best-config map |
 | What should `vs30 points --nproc` default be? | **Change from `-1` to `1`** — set `vs30/cli.py:254` and `:349` defaults to `1` | §5.1 |
 | Is there a sweet-spot at intermediate nproc? | No — among multiproc options the winning configuration shifts with cell size, but none beat nproc=1 | §3.5 |
 
@@ -81,8 +82,9 @@ Em-dash = not measured.
 ![Endpoint speedup heatmap](figures/points_perf_post_fix/speedup_nproc8_vs_1_post_fix.png)
 
 Every cell is in the negative half-plane — `nproc=8` is consistently slower than
-`nproc=1`, by 1.06× at the very smallest cells (where spawn overhead is small but
-so is per-point work) up to ~7× at the heavy N_query=100000 cells.
+`nproc=1`. The ratio ranges from `1.06×` at `(N_query=1, N_obs=35706)` (essentially
+tied — neither side does much work) up to `~57×` at `(N_query=1000, N_obs=100)`,
+where IPC overhead per chunk overwhelms the tiny per-point work at small N_obs.
 
 ### 3.3 Best nproc per cell (nproc ∈ {1, 2, 4, 8} from the original sweep)
 
@@ -140,11 +142,12 @@ tied with nproc=2 handicapped (317.9s), and both are ~17× slower than nproc=1.
 
 **Change `vs30 points --nproc` default from `-1` to `1`** at `vs30/cli.py:254`
 (the `points` command) and `vs30/cli.py:349` (the `points_custom` command). The
-data is unambiguous: `nproc=1` wins by 1.1×–17× across every realistic operating
-regime. Users who specifically want multiproc — for fault tolerance,
-GIL-side-effects, or other reasons orthogonal to wall time — can explicitly set
-`--nproc N` and refer to §3.5 for the best multiproc choice at their
-(N_query, N_obs) cell size.
+data is unambiguous: `nproc=1` wins in every cell tested, by margins ranging
+from `1.05×` (essentially tied at the smallest cells) to `>180×` (where IPC
+overhead dominates tiny per-point work). Users who specifically want multiproc —
+for fault tolerance, GIL-side-effects, or other reasons orthogonal to wall
+time — can explicitly set `--nproc N` and refer to §3.5 for the best multiproc
+choice at their (N_query, N_obs) cell size.
 
 ### 5.2 Pool initializer optimisation
 
@@ -156,17 +159,35 @@ gap between `nproc=1` (224 s at the largest cell) and the best multiproc option
 multiproc would still lose by ~5×. The optimisation is therefore not a follow-up
 worth doing for this pipeline.
 
-### 5.3 Balanced-BLAS production fix (kept)
+### 5.3 Balanced-BLAS production fix — re-evaluation suggested
 
 The mid-sweep production fix (commit `827a71b`) renamed `single_threaded_blas` →
 `limit_blas_threads(threads)` and allocates BLAS threads as
-`max(1, cpu_count // nproc)`. This is kept in production as a strict improvement:
-it doesn't affect the CLI default decision, but it makes any explicit `--nproc N`
-invocation more CPU-efficient. The balanced-vs-handicapped columns in §3.1 show
-the effect is mixed at large matrices — at (50000, 35706), nproc=4 handicapped
-(944s) is actually faster than balanced (1579s) because BLAS coordination overhead
-outweighs the extra threads — while at small-to-medium matrices balanced and
-handicapped are essentially tied.
+`max(1, cpu_count // nproc)`. The motivation was the observation that the prior
+unconditional `single_threaded_blas()` left CPU cores idle when nproc < cpu_count.
+
+The data does **not** support the fix as a strict improvement. Comparing the
+balanced and handicapped columns of §3.1 cell-by-cell, **handicapped is at least
+as fast as balanced in every cell** for both nproc=2 and nproc=4. Concrete
+regressions where balanced is meaningfully slower:
+
+| Cell | nproc | handicapped (s) | balanced (s) | balanced overhead |
+|---|---|---|---|---|
+| (10000, 35706) | 2 | 390.23 | 463.21 | +19% |
+| (10000, 35706) | 4 | 297.99 | 399.66 | +34% |
+| (50000, 35706) | 4 | 943.53 | 1579.06 | +67% |
+| (100000, 35706) | 4 | 1789.09 | 2869.92 | +60% |
+
+Reason: the per-point matrices in this pipeline are small (typically <50×50; cap
+at 501×501). At those sizes, multi-threaded BLAS adds coordination overhead per
+matrix call that exceeds the parallel-compute benefit; single-threaded BLAS per
+worker is faster.
+
+Since the fix doesn't affect the CLI default decision (nproc=1 wins regardless),
+it is left in place. But a formal evaluation of whether to revert `827a71b` is a
+reasonable follow-up. Reverting would not change the recommendation in §5.1; it
+would just slightly speed up explicit `--nproc N` invocations at large
+(N_query, N_obs) cells.
 
 ## 6. Hardware and software
 
