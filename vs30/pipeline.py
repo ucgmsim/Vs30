@@ -1493,7 +1493,7 @@ def points_pipeline(
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
         # Resample geology IDs at query points rather than threading them
-        # through both parallel and sequential paths.
+        # through the pipeline as an extra output.
         geology_ids = category.assign_to_category(locations, constants.ModelType.GEOLOGY)
         fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, locations)
 

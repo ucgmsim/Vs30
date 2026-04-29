@@ -273,7 +273,8 @@ def points(
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering. Default -1 (all cores).
+        Number of processes for DBSCAN clustering. Use -1 for all cores.
+        Has no effect unless --do-bayesian-update is set.
     """
     config_data = load_model_config(version)
 
@@ -395,7 +396,8 @@ def points_custom(
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering. Default -1 (all cores).
+        Number of processes for DBSCAN clustering. Use -1 for all cores.
+        Has no effect unless --do-bayesian-update is set.
     """
     run_points_pipeline(
         locations_csv=locations_csv,
