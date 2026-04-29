@@ -56,15 +56,24 @@ goes away.
 
 Extracted from `pipeline.py`. Symbols move verbatim:
 
-- `create_initial_vs30_arrays` (current `pipeline.py:286-335`)
-- `compute_hybrid_geology_arrays` (current `pipeline.py:343-407`)
-- `compute_spatial_adjustment_on_grid` (current `pipeline.py:414-549`)
-- `combine_model_arrays` (current `pipeline.py:557-609`)
+- `create_initial_vs30_arrays` (current `pipeline.py:286-335`) — Stage 2
+- `compute_hybrid_geology_arrays` (current `pipeline.py:343-407`) — Stage 3
+- `compute_spatial_adjustment_on_grid` (current `pipeline.py:414-549`) — Stage 4
+- `combine_model_arrays` (current `pipeline.py:557-609`) — Stage 5
 - `write_raster` (current `pipeline.py:617-664`)
-- `compute_model_grid` (current `pipeline.py:672-897`)
 
 Plus their imports re-declared in `grid.py`. New module docstring describes
-*"Grid-pipeline stage helpers and per-model orchestration."*
+*"Grid-pipeline stage helpers (initial arrays, hybrid mods, spatial adjustment,
+combination, raster writing)."*
+
+`compute_model_grid` (the per-model orchestrator at `pipeline.py:672-897`)
+intentionally **stays in `pipeline.py`** — it calls Stage 1
+(`compute_categorical_vs30_updates`, lives in `pipeline.py`) and Stages 2-5
+(now in `grid.py`). Putting it in `grid.py` would introduce a circular import
+(`grid.py` → `pipeline.py` for Stage 1; `pipeline.py` → `grid.py` for Stages
+2-5). Keeping orchestrators in `pipeline.py` and stage helpers in `grid.py` /
+`points.py` gives a clean one-way dependency: `pipeline → grid` and
+`pipeline → points`, with no back-edges.
 
 ### 2.3 `vs30/pipeline.py` — slimmed to orchestrators + shared utilities
 
@@ -74,10 +83,13 @@ Stays:
   `default_correlation_functions`, `load_and_assign_observations`,
   `collect_observation_csvs` (used by both pipelines).
 - `compute_categorical_vs30_updates` (Stage 1 — used by both `points_pipeline`
-  and the relocated `grid.compute_model_grid`).
+  and `compute_model_grid`).
+- `compute_model_grid` (per-model grid orchestrator — stays here per §2.2's
+  rationale; now calls Stages 2-5 via `grid.X`).
 - `grid_pipeline` (top-level grid orchestrator). Now imports
-  `from vs30 import grid` and calls `grid.compute_model_grid`,
-  `grid.combine_model_arrays`, `grid.write_raster`.
+  `from vs30 import grid` and calls `grid.combine_model_arrays`,
+  `grid.write_raster` directly; reaches Stages 2-5 indirectly via
+  `compute_model_grid`.
 - `fill_one_point_via_local_grid` (calls `grid_pipeline` from same module —
   unchanged).
 - `points_pipeline` (top-level points orchestrator). Now imports
@@ -280,9 +292,11 @@ Suggested sequence (to keep diffs reviewable and tests green at each step):
 6. Run the full test suite — should be green.
 7. Delete `vs30/multiprocess.py`. Remove `N_PROGRESS_CHUNKS` from `constants.py`.
 8. Run the verification greps in §4. Run tests again.
-9. Extract grid-stage helpers from `pipeline.py` into new `vs30/grid.py`.
-   Update `pipeline.py`'s `grid_pipeline` to call `grid.X` for the moved
-   symbols.
+9. Extract grid-stage helpers (`create_initial_vs30_arrays`,
+   `compute_hybrid_geology_arrays`, `compute_spatial_adjustment_on_grid`,
+   `combine_model_arrays`, `write_raster`) from `pipeline.py` into new
+   `vs30/grid.py`. Update `compute_model_grid` (which stays in `pipeline.py`)
+   and `grid_pipeline` to call `grid.X` for the moved symbols.
 10. Run tests. Run verification greps.
 11. Delete the dev runner scripts (§2.8).
 12. Add the findings-doc postscript (§2.9). Use the actual commit hash of
