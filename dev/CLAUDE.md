@@ -113,7 +113,7 @@ The suite has two tiers:
 # Default — unit tests, benchmark tests, 3-city grid/points smoke. ~3 min.
 pytest tests/
 
-# Default + full 38-point grid/points consistency across all 4 model versions. ~43 min.
+# Default + full 38-point grid/points consistency across all 4 model versions. ~41 min.
 pytest tests/ --runslow
 ```
 
