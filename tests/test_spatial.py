@@ -11,8 +11,9 @@ import functools
 
 import numpy as np
 import pytest
+import rasterio
 
-from vs30 import spatial, utils
+from vs30 import constants, spatial, utils
 
 # Create a standard geology correlation callable for tests
 geology_corr_fn = functools.partial(utils.exponential_correlation_function, phi=1407)
@@ -153,3 +154,85 @@ class TestComputeMvnAtPoints:
         assert mvn_stdv[0] < model_stdv[0], (
             "Uncertainty should decrease with observation"
         )
+
+
+class TestFindAffectedPixels:
+    """Tests for find_affected_pixels and calculate_chunk_size."""
+
+    def _build_raster_data(self, n_rows: int = 5, n_cols: int = 5) -> spatial.RasterData:
+        """Build a small RasterData with valid pixels everywhere.
+
+        Pixel size is 100m, origin (1500000, 5100000) at the top-left, so
+        pixel (row, col) centre is at (1500050 + col*100, 5099950 - row*100).
+        """
+        vs30 = np.full((n_rows, n_cols), 300.0, dtype=np.float32)
+        stdv = np.full((n_rows, n_cols), 0.5, dtype=np.float32)
+        transform = rasterio.transform.Affine(100, 0, 1500000, 0, -100, 5100000)
+        return spatial.RasterData.from_arrays(vs30=vs30, stdv=stdv, transform=transform)
+
+    def test_calculate_chunk_size_floor_at_one(self):
+        """Chunk size never falls below 1 even with tiny memory budgets."""
+        # 10000 obs × 0 bytes is 0 chunks → must clamp to 1.
+        assert spatial.calculate_chunk_size(n_obs=10000, max_spatial_boolean_array_memory_gb=0.0) == 1
+
+    def test_calculate_chunk_size_scales_with_memory(self):
+        """Larger memory budget yields proportionally larger chunk size."""
+        small = spatial.calculate_chunk_size(n_obs=100, max_spatial_boolean_array_memory_gb=0.001)
+        large = spatial.calculate_chunk_size(n_obs=100, max_spatial_boolean_array_memory_gb=1.0)
+        assert large > small
+        # Memory grows by 1000x → chunk size grows by 1000x.
+        assert large == pytest.approx(small * 1000, rel=0.01)
+
+    def test_find_affected_pixels_single_obs_in_centre(self):
+        """One obs at grid centre with 150m radius affects 9 nearest pixels.
+
+        The 5×5 grid has pixel centres on a 100m lattice starting at
+        (1500050, 5099950). An obs at the centre pixel (1500250, 5099750)
+        with a 150m bbox half-width covers cols 1..3 and rows 1..3 (centres
+        within ±150m), i.e. 3×3 = 9 pixels.
+        """
+        raster_data = self._build_raster_data(5, 5)
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1500250.0, 5099750.0]]),
+            model_stdv=np.array([0.5]),
+            log_model_vs30=np.log(np.array([300.0])),
+            residuals=np.zeros(1),
+            omega=np.ones(1),
+        )
+
+        bbox_mask, grid_locs = spatial.find_affected_pixels(
+            raster_data,
+            obs_data,
+            max_spatial_boolean_array_memory_gb=1.0,
+            model_type=constants.ModelType.GEOLOGY,
+            max_dist_m=150.0,
+        )
+
+        # Mask is sized to the full flat raster.
+        assert bbox_mask.shape == (raster_data.vs30.size,)
+        # 3×3 = 9 pixels in the obs bounding box.
+        assert int(bbox_mask.sum()) == 9
+        # grid_locs covers all valid pixels (5×5 = 25 here).
+        assert grid_locs.shape == (25, 2)
+
+    def test_find_affected_pixels_far_obs_zero(self):
+        """An observation far outside the raster bounds affects zero pixels."""
+        raster_data = self._build_raster_data(5, 5)
+        # Obs ~1 km outside the raster bounds.
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1600000.0, 5200000.0]]),
+            model_stdv=np.array([0.5]),
+            log_model_vs30=np.log(np.array([300.0])),
+            residuals=np.zeros(1),
+            omega=np.ones(1),
+        )
+
+        bbox_mask, _ = spatial.find_affected_pixels(
+            raster_data,
+            obs_data,
+            max_spatial_boolean_array_memory_gb=1.0,
+            model_type=constants.ModelType.GEOLOGY,
+            max_dist_m=1000.0,
+        )
+
+        assert int(bbox_mask.sum()) == 0
