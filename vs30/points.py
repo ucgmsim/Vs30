@@ -58,19 +58,16 @@ def _build_obs_data(
     obs_model_vs30 = obs_model_vs30[valid_mask]
     obs_model_stdv = obs_model_stdv[valid_mask]
 
-    residuals, omega = spatial._compute_residuals_and_omega(
+    residuals, omega = spatial.compute_residuals_and_omega(
         obs_vs30, obs_model_vs30, obs_model_stdv, obs_uncertainty, noisy
     )
 
     return spatial.ObservationData(
         locations=obs_locs,
-        vs30=obs_vs30,
-        model_vs30=obs_model_vs30,
         model_stdv=obs_model_stdv,
         log_model_vs30=np.log(obs_model_vs30),
         residuals=residuals,
         omega=omega,
-        uncertainty=obs_uncertainty,
     )
 
 

@@ -32,16 +32,13 @@ class TestComputeSpatialAdjustmentForPixel:
 
     @pytest.fixture
     def nearby_observation(self):
-        """Create a single nearby observation."""
+        """Create a single nearby observation (vs30=280, model_vs30=260)."""
         return spatial.ObservationData(
             locations=np.array([[1100.0, 1000.0]]),  # 100m away
-            vs30=np.array([280.0]),  # Higher than prior
-            model_vs30=np.array([260.0]),
             model_stdv=np.array([0.4]),
             log_model_vs30=np.log(np.array([260.0])),
             residuals=np.array([np.log(280.0 / 260.0)]),
             omega=np.ones(1),
-            uncertainty=np.array([0.2]),
         )
 
     def test_updates_toward_observation(self, pixel, nearby_observation):
@@ -53,6 +50,7 @@ class TestComputeSpatialAdjustmentForPixel:
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
+            corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
         # Observation is higher (280), prior is 250, update should increase
@@ -69,6 +67,7 @@ class TestComputeSpatialAdjustmentForPixel:
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
+            corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
         # Adding observation should reduce uncertainty
@@ -80,13 +79,10 @@ class TestComputeSpatialAdjustmentForPixel:
         """Test that no nearby observations returns unchanged vs30."""
         far_observation = spatial.ObservationData(
             locations=np.array([[100000.0, 100000.0]]),  # Very far
-            vs30=np.array([300.0]),
-            model_vs30=np.array([300.0]),
             model_stdv=np.array([0.4]),
             log_model_vs30=np.log(np.array([300.0])),
             residuals=np.zeros(1),
             omega=np.ones(1),
-            uncertainty=np.array([0.2]),
         )
 
         result = spatial.compute_spatial_adjustment_for_pixel(
@@ -94,6 +90,7 @@ class TestComputeSpatialAdjustmentForPixel:
             far_observation,
             corr_fn=geology_corr_fn,
             max_dist_m=5000,
+            corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
         # VS30 should be unchanged when no nearby observations
@@ -133,13 +130,10 @@ class TestComputeMvnAtPoints:
         obs_model_vs30 = np.array([300.0])
         obs_data = spatial.ObservationData(
             locations=np.array([[1500100.0, 5100100.0]]),  # 141m away
-            vs30=np.array([400.0]),
-            model_vs30=obs_model_vs30,
             model_stdv=np.array([30.0]),
             log_model_vs30=np.log(obs_model_vs30),
             residuals=np.log(np.array([400.0]) / obs_model_vs30),
             omega=np.ones(1),
-            uncertainty=np.array([25.0]),
         )
 
         mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(

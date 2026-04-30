@@ -13,7 +13,6 @@ and 3. This reproduces the gap-fill logic from Jaehwi's Vs30_extraction_26Mar.py
 
 import logging
 
-import geopandas as gpd
 import numpy as np
 import scipy.ndimage
 import scipy.spatial
@@ -61,9 +60,8 @@ def points_inside_coastline(locations: np.ndarray) -> np.ndarray:
     if len(locations) == 0:
         return np.zeros(0, dtype=bool)
 
-    coast_gdf = raster.load_coast_shapefile()
-    # Merge all coastline features into one geometry for vectorized point-in-polygon test
-    coast_union = coast_gdf.geometry.union_all()
+    # union_all() is expensive — raster.load_coast_union() memoises it.
+    coast_union = raster.load_coast_union()
     return shapely.within(shapely.points(locations), coast_union)
 
 

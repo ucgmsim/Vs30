@@ -362,6 +362,8 @@ class ModelType(StrEnum):
     COMBINED = "combined"
 
 
+# Final per-model output filenames. COMBINED is intentionally absent;
+# combined outputs use COMBINED_VS30_FILENAME directly.
 OUTPUT_FILENAMES: dict[ModelType, str] = {
     ModelType.GEOLOGY: GEOLOGY_VS30_MEAN_STDDEV_FILENAME,
     ModelType.TERRAIN: TERRAIN_VS30_MEAN_STDDEV_FILENAME,

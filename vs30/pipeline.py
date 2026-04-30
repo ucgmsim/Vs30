@@ -62,18 +62,14 @@ def default_correlation_functions(
     return geology_corr_fn, terrain_corr_fn
 
 
-def load_and_assign_observations(
-    csv_path: Path, model_type: constants.ModelType, label: str
-) -> pd.DataFrame:
+def load_observations_csv(csv_path: Path, label: str) -> pd.DataFrame:
     """
-    Load an observations CSV, validate it, and assign category IDs.
+    Load and validate an observations CSV (without category assignment).
 
     Parameters
     ----------
     csv_path : Path
         Path to the observations CSV.
-    model_type : constants.ModelType
-        Model type for category assignment.
     label : str
         Human-readable label used in log messages and validation errors
         (e.g. ``"clustered"`` or ``"independent"``).
@@ -81,7 +77,8 @@ def load_and_assign_observations(
     Returns
     -------
     pd.DataFrame
-        Observations with an added ``STANDARD_ID_COLUMN`` of category IDs.
+        Observations DataFrame with the columns required by
+        ``constants.ObservationColumn``.
     """
     logger.info(f"Loading {label} observations from: {csv_path}")
     df = pd.read_csv(csv_path, comment="#", skipinitialspace=True)
@@ -91,43 +88,44 @@ def load_and_assign_observations(
         f"{label.capitalize()} observations CSV",
     )
     logger.info(f"Loaded {len(df)} {label} observations")
-
-    obs_locs = df[
-        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-    ].values
-    df[constants.STANDARD_ID_COLUMN] = category.assign_to_category(obs_locs, model_type)
     return df
 
 
-def collect_observation_csvs(
-    clustered_observations_csv: Path | None,
-    independent_observations_csv: Path | None,
+def assign_observations_to_category(
+    df: pd.DataFrame, model_type: constants.ModelType
+) -> pd.DataFrame:
+    """Return a copy of ``df`` with a ``STANDARD_ID_COLUMN`` of category IDs.
+
+    The category assignment is model-type specific (geology vs terrain), so
+    the same loaded DataFrame can be reused across both runs.
+    """
+    obs_locs = df[
+        [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
+    ].values
+    out = df.copy()
+    out[constants.STANDARD_ID_COLUMN] = category.assign_to_category(
+        obs_locs, model_type
+    )
+    return out
+
+
+def concat_observation_dfs(
+    clustered_observations_df: pd.DataFrame | None,
+    independent_observations_df: pd.DataFrame | None,
 ) -> pd.DataFrame:
     """
-    Collect and concatenate available observation CSV files into a single DataFrame.
+    Concatenate already-loaded observation DataFrames into a single DataFrame.
 
-    Parameters
-    ----------
-    clustered_observations_csv : Path or None
-        Path to clustered observations CSV.
-    independent_observations_csv : Path or None
-        Path to independent observations CSV.
-
-    Returns
-    -------
-    pd.DataFrame
-        Concatenated observations, or an empty DataFrame if no files are available.
+    Returns an empty DataFrame with the required schema when both inputs
+    are ``None``.
     """
-    csvs = [
-        csv
-        for csv in [clustered_observations_csv, independent_observations_csv]
-        if csv is not None
+    dfs = [
+        df
+        for df in (clustered_observations_df, independent_observations_df)
+        if df is not None
     ]
-    if csvs:
-        return pd.concat(
-            [pd.read_csv(csv, comment="#", skipinitialspace=True) for csv in csvs],
-            ignore_index=True,
-        )
+    if dfs:
+        return pd.concat(dfs, ignore_index=True)
     return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
 
 
@@ -139,16 +137,18 @@ def collect_observation_csvs(
 def compute_categorical_vs30_updates(
     categorical_model_csv: Path,
     model_type: constants.ModelType,
-    clustered_observations_csv: Path | None = None,
-    independent_observations_csv: Path | None = None,
+    clustered_observations_df: pd.DataFrame | None = None,
+    independent_observations_df: pd.DataFrame | None = None,
     dbscan_nproc: int = -1,
 ) -> pd.DataFrame:
     """
     Compute Bayesian updates to categorical model values and return as DataFrame.
 
-    Loads observations and categorical model values, applies Bayesian updates to the
-    categorical model values (mean and standard deviation per category), and returns
-    the updated DataFrame.
+    Loads the categorical model values and applies Bayesian updates using
+    pre-loaded observation DataFrames (mean and standard deviation per
+    category), and returns the updated DataFrame. The observation DataFrames
+    are expected to come from ``load_observations_csv`` so they can be loaded
+    once per pipeline run and reused across geology and terrain.
 
     Can process clustered observations (with spatial clustering) and/or independent
     observations (without clustering). If both are provided, clustered observations
@@ -169,13 +169,13 @@ def compute_categorical_vs30_updates(
         (e.g., geology_model_prior_mean_and_standard_deviation.csv).
     model_type : ModelType
         Model type: either GEOLOGY or TERRAIN.
-    clustered_observations_csv : Path, optional
-        Path to CSV file with clustered observations (e.g., viktor_inferred_vs30_from_cpt.csv).
-        These will be processed with spatial clustering.
-    independent_observations_csv : Path, optional
-        Path to CSV file with independent observations
-        (e.g., modified_foster_2019_measured_vs30_independent_observations.csv).
-        These will be processed without clustering.
+    clustered_observations_df : pd.DataFrame, optional
+        Pre-loaded clustered observations (e.g., from
+        ``load_observations_csv``). Will be processed with spatial
+        clustering.
+    independent_observations_df : pd.DataFrame, optional
+        Pre-loaded independent observations. Will be processed without
+        clustering.
     dbscan_nproc : int, optional
         Number of processes for DBSCAN clustering of clustered observations.
         Default -1 (all cores).
@@ -188,13 +188,13 @@ def compute_categorical_vs30_updates(
     Raises
     ------
     ValueError
-        If neither observations CSV is provided, if model_type is invalid, or if
-        required CSV columns are missing.
+        If neither observations DataFrame is provided, if model_type is
+        invalid, or if required CSV columns are missing.
     """
-    if clustered_observations_csv is None and independent_observations_csv is None:
+    if clustered_observations_df is None and independent_observations_df is None:
         raise ValueError(
-            "At least one of clustered_observations_csv or "
-            "independent_observations_csv must be provided"
+            "At least one of clustered_observations_df or "
+            "independent_observations_df must be provided"
         )
 
     if model_type not in constants.ModelType:
@@ -220,20 +220,18 @@ def compute_categorical_vs30_updates(
 
     current_prior_df = categorical_model_df.copy()
 
-    clustered_observations_df = None
-    if clustered_observations_csv is not None:
-        clustered_observations_df = load_and_assign_observations(
-            clustered_observations_csv, model_type, "clustered"
+    if clustered_observations_df is not None:
+        clustered_observations_df = assign_observations_to_category(
+            clustered_observations_df, model_type
         )
         logger.info("Performing spatial clustering...")
         clustered_observations_df = category.perform_clustering(
             clustered_observations_df, dbscan_nproc
         )
 
-    independent_observations_df = None
-    if independent_observations_csv is not None:
-        independent_observations_df = load_and_assign_observations(
-            independent_observations_csv, model_type, "independent"
+    if independent_observations_df is not None:
+        independent_observations_df = assign_observations_to_category(
+            independent_observations_df, model_type
         )
 
     logger.info("Applying Bayesian updates...")
@@ -257,10 +255,11 @@ def compute_categorical_vs30_updates(
 def compute_model_grid(
     model_type: constants.ModelType,
     grid_config: config.GridConfig,
+    *,
     apply_alluvium_slope_mod: bool,
     categorical_model_csv: Path | None = None,
-    clustered_observations_csv: Path | None = None,
-    independent_observations_csv: Path | None = None,
+    clustered_observations_df: pd.DataFrame | None = None,
+    independent_observations_df: pd.DataFrame | None = None,
     do_bayesian_update: bool = True,
     mvn: bool = True,
     noisy: bool = True,
@@ -294,10 +293,12 @@ def compute_model_grid(
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     categorical_model_csv : Path
         Path to CSV file with categorical Vs30 values.
-    clustered_observations_csv : Path, optional
-        Path to CSV file with clustered observations (e.g., CPT data).
-    independent_observations_csv : Path, optional
-        Path to CSV file with independent observations (e.g., measured filtered).
+    clustered_observations_df : pd.DataFrame, optional
+        Pre-loaded clustered observations (e.g., CPT data). Caller is
+        expected to load this once via ``load_observations_csv`` and reuse
+        the same DataFrame across geology and terrain runs.
+    independent_observations_df : pd.DataFrame, optional
+        Pre-loaded independent observations (e.g., measured filtered).
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical model values.
     mvn : bool, optional
@@ -344,8 +345,8 @@ def compute_model_grid(
         posterior_df = compute_categorical_vs30_updates(
             categorical_model_csv=categorical_model_csv,
             model_type=model_type,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
+            clustered_observations_df=clustered_observations_df,
+            independent_observations_df=independent_observations_df,
             dbscan_nproc=dbscan_nproc,
         )
 
@@ -444,12 +445,12 @@ def compute_model_grid(
 
         logger.info("\n=== STEP 4: Spatial Adjustment ===")
 
-        observations_df = collect_observation_csvs(
-            clustered_observations_csv, independent_observations_csv
+        observations_df = concat_observation_dfs(
+            clustered_observations_df, independent_observations_df
         )
         if len(observations_df) == 0:
             raise ValueError(
-                "No observation CSVs provided for spatial fit. "
+                "No observations provided for spatial fit. "
                 "At least one of clustered or independent observations must be specified."
             )
 
@@ -606,6 +607,18 @@ def grid_pipeline(
         constants.ModelType.COMBINED,
     )
 
+    # Load observation CSVs once and reuse across geology + terrain.
+    clustered_observations_df = (
+        load_observations_csv(clustered_observations_csv, "clustered")
+        if clustered_observations_csv is not None
+        else None
+    )
+    independent_observations_df = (
+        load_observations_csv(independent_observations_csv, "independent")
+        if independent_observations_csv is not None
+        else None
+    )
+
     result: dict[str, np.ndarray | dict | None] = {}
     profile: dict | None = None
 
@@ -615,8 +628,8 @@ def grid_pipeline(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
             categorical_model_csv=geology_categorical_csv,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
+            clustered_observations_df=clustered_observations_df,
+            independent_observations_df=independent_observations_df,
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
@@ -638,8 +651,8 @@ def grid_pipeline(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
             categorical_model_csv=terrain_categorical_csv,
-            clustered_observations_csv=clustered_observations_csv,
-            independent_observations_csv=independent_observations_csv,
+            clustered_observations_df=clustered_observations_df,
+            independent_observations_df=independent_observations_df,
             do_bayesian_update=do_bayesian_update,
             mvn=mvn,
             noisy=noisy,
@@ -790,6 +803,7 @@ def fill_one_point_via_local_grid(
 def points_pipeline(
     longitudes: np.ndarray,
     latitudes: np.ndarray,
+    *,
     apply_alluvium_slope_mod: bool,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
     geology_categorical_csv: Path | None = None,
@@ -892,9 +906,21 @@ def points_pipeline(
 
     logger.info(f"Processing {len(locations)} locations")
 
+    # Load observation CSVs once and reuse across geology + terrain stages.
+    clustered_observations_df = (
+        load_observations_csv(clustered_observations_csv, "clustered")
+        if clustered_observations_csv is not None
+        else None
+    )
+    independent_observations_df = (
+        load_observations_csv(independent_observations_csv, "independent")
+        if independent_observations_csv is not None
+        else None
+    )
+
     if mvn:
-        observations_df = collect_observation_csvs(
-            clustered_observations_csv, independent_observations_csv
+        observations_df = concat_observation_dfs(
+            clustered_observations_df, independent_observations_df
         )
     else:
         observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
@@ -926,8 +952,8 @@ def points_pipeline(
             geol_model_df = compute_categorical_vs30_updates(
                 categorical_model_csv=geology_categorical_csv,
                 model_type=constants.ModelType.GEOLOGY,
-                clustered_observations_csv=clustered_observations_csv,
-                independent_observations_csv=independent_observations_csv,
+                clustered_observations_df=clustered_observations_df,
+                independent_observations_df=independent_observations_df,
                 dbscan_nproc=dbscan_nproc,
             )
         else:
@@ -947,8 +973,8 @@ def points_pipeline(
             terr_model_df = compute_categorical_vs30_updates(
                 categorical_model_csv=terrain_categorical_csv,
                 model_type=constants.ModelType.TERRAIN,
-                clustered_observations_csv=clustered_observations_csv,
-                independent_observations_csv=independent_observations_csv,
+                clustered_observations_df=clustered_observations_df,
+                independent_observations_df=independent_observations_df,
                 dbscan_nproc=dbscan_nproc,
             )
         else:
@@ -1069,10 +1095,8 @@ def points_pipeline(
         combined_vs30 = result_df[constants.ObservationColumn.VS30].values
         combined_stdv = result_df[constants.COL_COMBINED_STDV].values
 
-        # Resample geology IDs at query points rather than threading them
-        # through the pipeline as an extra output.
-        geology_ids = category.assign_to_category(locations, constants.ModelType.GEOLOGY)
-        fillable_mask = gapfill.classify_nodata(combined_vs30, geology_ids, locations)
+        # COMBINED implies run_geology, so geol_ids was already computed above.
+        fillable_mask = gapfill.classify_nodata(combined_vs30, geol_ids, locations)
 
         if np.any(fillable_mask):
             if include_intermediate:
@@ -1102,6 +1126,11 @@ def points_pipeline(
                 "terrain_corr_fn": terrain_corr_fn,
                 "apply_coastal_distance_mod": apply_coastal_distance_mod,
                 "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
+                # Pin to False explicitly: fill_one_point_via_local_grid runs
+                # gapfill.fill_nodata_grid itself (so it can also expand the
+                # search radius on miss). Letting grid_pipeline gap-fill in
+                # parallel would double-process and duplicate work.
+                "fill_gaps": False,
             }
 
             for idx in fillable_indices:

@@ -1,12 +1,10 @@
 """Command-line interface for the vs30 package."""
 
-import functools
 import logging
 import typing
 from collections.abc import Callable
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import typer
 import yaml
@@ -17,41 +15,6 @@ from vs30 import config, constants, pipeline, utils
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
-
-
-def resolve_correlation_function(
-    config_section: dict,
-) -> Callable[[np.ndarray], np.ndarray]:
-    """
-    Resolve a correlation config section into a callable.
-
-    Parameters
-    ----------
-    config_section : dict
-        Must contain a "model" key ("exponential" or "matern") plus the
-        model-specific parameters.
-
-    Returns
-    -------
-    callable
-        Function with signature (distances: ndarray) -> ndarray.
-    """
-    model = config_section["model"]
-    if model == "exponential":
-        return functools.partial(
-            utils.exponential_correlation_function,
-            phi=config_section["phi"],
-        )
-    elif model == "matern":
-        return functools.partial(
-            utils.matern_correlation_function,
-            range_m=config_section["range"],
-            sill=config_section["sill"],
-            nugget=config_section["nugget"],
-            kappa=config_section["kappa"],
-        )
-    else:
-        raise ValueError(f"Unknown correlation model: {model}")
 
 
 def load_model_config(version: constants.FixedModelVersion) -> dict:
@@ -110,10 +73,10 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
                 / config_data[key]
             )
 
-    config_data["geology_corr_fn"] = resolve_correlation_function(
+    config_data["geology_corr_fn"] = utils.resolve_correlation_function(
         config_data["geology_correlation"]
     )
-    config_data["terrain_corr_fn"] = resolve_correlation_function(
+    config_data["terrain_corr_fn"] = utils.resolve_correlation_function(
         config_data["terrain_correlation"]
     )
 

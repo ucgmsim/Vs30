@@ -17,12 +17,17 @@ class TestApplyHybridGeologyModifications:
 
     @pytest.fixture
     def sample_arrays(self):
-        """Create sample arrays for testing."""
+        """Create sample arrays for testing.
+
+        ``id_array`` uses GIDs not in ``HYBRID_GEOLOGY_PARAMS`` (i.e. not
+        in ``{2, 3, 4, 6}``) by default so that pixels are untouched
+        unless a test explicitly overwrites them with a hybrid GID.
+        """
         id_array = np.array(
             [
-                [1, 2, 3],
-                [4, 5, 6],
-                [7, 10, 11],
+                [1, 5, 7],
+                [1, 5, 7],
+                [1, 5, 7],
             ],
             dtype=np.uint8,
         )
@@ -54,7 +59,6 @@ class TestApplyHybridGeologyModifications:
         """Test that coastal distance modification applies to geology ID 4."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
-        # Set specific ID for testing
         id_array[1, 0] = 4  # Alluvium
 
         result_vs30, result_stdv = raster.apply_hybrid_geology_modifications(
@@ -65,16 +69,11 @@ class TestApplyHybridGeologyModifications:
             coast_dist_array,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
-            hybrid=False,
-            hybrid_gid4_dist_min=8000.0,
-            hybrid_gid4_dist_max=20000.0,
-            hybrid_gid4_vs30_min=240.0,
-            hybrid_gid4_vs30_max=500.0,
         )
 
-        # GID 4 pixel at (1,0) has coast_dist=15000
-        # vs30 = 240 + (500-240) * (15000-8000) / (20000-8000)
-        # vs30 = 240 + 260 * 7000/12000 = 240 + 151.67 = 391.67
+        # GID 4 pixel at (1,0) has coast_dist=15000 (within [8000, 20000]),
+        # so the coastal-distance mod overwrites the slope-based vs30.
+        # vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000) = 391.67
         expected_vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000)
         assert result_vs30[1, 0] == pytest.approx(expected_vs30, rel=0.01)
 
@@ -82,7 +81,8 @@ class TestApplyHybridGeologyModifications:
         """Test that coastal distance modification applies to geology ID 10."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
-        # GID 10 is at position (2, 1) with coast_dist=10000
+        id_array[2, 1] = 10  # Floodplain
+
         result_vs30, result_stdv = raster.apply_hybrid_geology_modifications(
             vs30_array.copy(),
             stdv_array.copy(),
@@ -91,16 +91,12 @@ class TestApplyHybridGeologyModifications:
             coast_dist_array,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
-            hybrid=False,
-            hybrid_gid10_dist_min=8000.0,
-            hybrid_gid10_dist_max=20000.0,
-            hybrid_gid10_vs30_min=197.0,
-            hybrid_gid10_vs30_max=500.0,
         )
 
-        # GID 10 pixel at (2,1) has coast_dist=10000
-        # vs30 = 197 + (500-197) * (10000-8000) / (20000-8000)
-        # vs30 = 197 + 303 * 2000/12000 = 197 + 50.5 = 247.5
+        # GID 10 pixel at (2,1) has coast_dist=10000 (within [8000, 20000]).
+        # GID 10 is not in HYBRID_GEOLOGY_PARAMS, so only the coastal-
+        # distance mod runs. vs30 = 197 + (500 - 197) * (10000 - 8000) /
+        # (20000 - 8000) = 247.5
         expected_vs30 = 197 + (500 - 197) * (10000 - 8000) / (20000 - 8000)
         assert result_vs30[2, 1] == pytest.approx(expected_vs30, rel=0.01)
 
@@ -119,11 +115,6 @@ class TestApplyHybridGeologyModifications:
             coast_dist_array,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
-            hybrid=False,
-            hybrid_gid4_dist_min=8000.0,
-            hybrid_gid4_dist_max=20000.0,
-            hybrid_gid4_vs30_min=240.0,
-            hybrid_gid4_vs30_max=500.0,
         )
 
         # Should clamp at minimum (240)
@@ -144,18 +135,13 @@ class TestApplyHybridGeologyModifications:
             coast_dist_array,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
-            hybrid=False,
-            hybrid_gid4_dist_min=8000.0,
-            hybrid_gid4_dist_max=20000.0,
-            hybrid_gid4_vs30_min=240.0,
-            hybrid_gid4_vs30_max=500.0,
         )
 
         # Should clamp at maximum (500)
         assert result_vs30[0, 0] == 500.0
 
     def test_no_modifications_returns_unchanged(self, sample_arrays):
-        """Test that disabling all modifications returns unchanged arrays."""
+        """All-non-hybrid IDs with coastal mod off leaves arrays untouched."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
         original_vs30 = vs30_array.copy()
@@ -169,7 +155,6 @@ class TestApplyHybridGeologyModifications:
             coast_dist_array,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=False,
-            hybrid=False,
         )
 
         np.testing.assert_array_equal(result_vs30, original_vs30)
@@ -197,7 +182,6 @@ class TestApplyHybridModificationsWithArrays:
             coast_dist,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=False,
-            hybrid=True,
         )
 
         # VS30 values should have been modified by slope
@@ -224,7 +208,6 @@ class TestApplyHybridModificationsWithArrays:
             coast_dist,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=True,
-            hybrid=False,
         )
 
         # VS30 values should be modified (different from input)
@@ -250,7 +233,6 @@ class TestApplyHybridModificationsWithArrays:
             coast_dist,
             apply_alluvium_slope_mod=True,
             apply_coastal_distance_mod=False,
-            hybrid=False,
         )
 
         # Values should be unchanged

@@ -148,8 +148,6 @@ class TestMaternCorrelationFunction:
         result = utils.matern_correlation_function(
             distances,
             range_m=range_m,
-            sill=1.0,
-            nugget=0.0,
             kappa=0.5,
         )
         expected = np.exp(-distances / range_m)
@@ -182,24 +180,22 @@ class TestMaternCorrelationFunction:
         result = utils.matern_correlation_function(
             distances,
             range_m=20000.0,
-            sill=0.15,
-            nugget=0.05,
             kappa=0.9,
         )
         np.testing.assert_allclose(result, r_gstat_reference, atol=1e-6)
 
     def test_zero_distance_gives_unit_correlation(self):
-        """At zero distance, correlation must be ≈1 regardless of nugget.
+        """At zero distance, correlation must be ≈1.
 
         R gstat treats the nugget as contributing to per-point variance, not
-        to the correlation function itself (Worden et al. Eq. 7). The
-        correlation-at-zero must therefore be 1, not sill/(sill+nugget).
+        to the correlation function itself (Worden et al. Eq. 7), so the
+        correlation-at-zero must be 1 regardless of variogram nugget. The
+        correlation function does not take a nugget argument; this test
+        documents the contract.
         """
         result = utils.matern_correlation_function(
             np.array([0.0]),
             range_m=20000.0,
-            sill=0.15,
-            nugget=0.05,
             kappa=0.9,
         )
         assert result[0] == pytest.approx(1.0, abs=1e-6)

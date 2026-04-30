@@ -20,14 +20,15 @@ class ObservationData:
     """
     Bundled observation data for spatial processing.
 
+    Only the derived quantities consumed downstream are kept — the raw
+    ``vs30``, ``model_vs30``, and ``uncertainty`` arrays are folded into
+    ``log_model_vs30``, ``residuals``, and ``omega`` at construction time
+    and are not needed afterwards.
+
     Attributes
     ----------
     locations : ndarray
         (n_obs, 2) array of [easting, northing] coordinates.
-    vs30 : ndarray
-        (n_obs,) measured Vs30 values.
-    model_vs30 : ndarray
-        (n_obs,) model Vs30 at observation locations.
     model_stdv : ndarray
         (n_obs,) model standard deviation at observation locations.
     log_model_vs30 : ndarray
@@ -36,18 +37,13 @@ class ObservationData:
         (n_obs,) log residuals: log(vs30 / model_vs30).
     omega : ndarray
         (n_obs,) noise weights (if noisy=True).
-    uncertainty : ndarray
-        (n_obs,) observation uncertainties.
     """
 
     locations: np.ndarray
-    vs30: np.ndarray
-    model_vs30: np.ndarray
     model_stdv: np.ndarray
     log_model_vs30: np.ndarray
     residuals: np.ndarray
     omega: np.ndarray
-    uncertainty: np.ndarray
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -61,13 +57,10 @@ class ObservationData:
         """
         return cls(
             locations=np.empty((0, 2)),
-            vs30=np.empty(0),
-            model_vs30=np.empty(0),
             model_stdv=np.empty(0),
             log_model_vs30=np.empty(0),
             residuals=np.empty(0),
             omega=np.empty(0),
-            uncertainty=np.empty(0),
         )
 
 
@@ -419,23 +412,20 @@ def prepare_observation_data(
             apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
-    residuals, omega = _compute_residuals_and_omega(
+    residuals, omega = compute_residuals_and_omega(
         vs30_obs, model_vs30, model_stdv, uncertainty, noisy
     )
 
     return ObservationData(
         locations=obs_locs,
-        vs30=vs30_obs,
-        model_vs30=model_vs30,
         model_stdv=model_stdv,
         log_model_vs30=np.log(model_vs30),
         residuals=residuals,
         omega=omega,
-        uncertainty=uncertainty,
     )
 
 
-def _compute_residuals_and_omega(
+def compute_residuals_and_omega(
     vs30: np.ndarray,
     model_vs30: np.ndarray,
     model_stdv: np.ndarray,
@@ -664,7 +654,8 @@ def compute_spatial_adjustment_for_pixel(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
-    corr_zero: float | None = None,
+    *,
+    corr_zero: float,
 ) -> tuple[float, float] | None:
     """
     Compute MVN update for a single pixel.
@@ -685,9 +676,11 @@ def compute_spatial_adjustment_for_pixel(
         Whether to apply noise weighting based on observation uncertainty.
     cov_reduc : float, optional
         Covariance reduction factor for dissimilar Vs30 values.
-    corr_zero : float or None, optional
-        Pre-computed correlation at zero distance. If None, computed from
-        corr_fn. Pass this when calling in a loop to avoid recomputing.
+    corr_zero : float
+        Pre-computed correlation at zero distance, i.e.
+        ``corr_fn(np.array([0.0]))[0]``. Required: callers MUST hoist this
+        out of any per-pixel loop. The keyword-only spelling is here to
+        prevent silent regressions from positional drift.
 
     Returns
     -------
@@ -706,8 +699,6 @@ def compute_spatial_adjustment_for_pixel(
     # Correlation at zero distance is ≈1 (minus a tiny epsilon from the
     # enforced minimum distance). Matches the legacy R code, which evaluates
     # the correlation at distances >= 0.1 m and sets corr(0) = 1 explicitly.
-    if corr_zero is None:
-        corr_zero = corr_fn(np.array([0.0]))[0]
     initial_var = (pixel.stdv**2) * corr_zero
 
     obs_indices = select_observations_for_pixel(
@@ -755,7 +746,7 @@ def find_affected_pixels(
     max_spatial_boolean_array_memory_gb: float,
     model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
-) -> BoundingBoxResult:
+) -> tuple[BoundingBoxResult, np.ndarray]:
     """
     Find pixels affected by observations using bounding boxes.
 
@@ -775,8 +766,12 @@ def find_affected_pixels(
 
     Returns
     -------
-    BoundingBoxResult
-        Result containing the affected-pixel mask and pixel count.
+    tuple[BoundingBoxResult, ndarray]
+        - BoundingBoxResult with the affected-pixel mask and pixel count.
+        - (N_valid, 2) array of NZTM pixel-center coordinates for valid
+          pixels. Returned alongside the bbox result so the downstream
+          ``compute_spatial_adjustments`` call can reuse it instead of
+          recomputing ``raster_data.get_coordinates()``.
     """
     grid_locs = raster_data.get_coordinates()
     n_obs = len(obs_data.locations)
@@ -817,13 +812,14 @@ def find_affected_pixels(
         f"Bounding box search complete: {n_affected:,} pixels affected "
         f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
     )
-    return BoundingBoxResult(mask=mask, n_affected_pixels=n_affected)
+    return BoundingBoxResult(mask=mask, n_affected_pixels=n_affected), grid_locs
 
 
 def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_result: BoundingBoxResult,
+    grid_locs: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
@@ -841,6 +837,10 @@ def compute_spatial_adjustments(
         Observation data.
     bbox_result : BoundingBoxResult
         Bounding box result.
+    grid_locs : ndarray
+        (N_valid, 2) NZTM pixel-center coordinates for valid pixels — the
+        same array returned by ``find_affected_pixels`` so this function
+        does not need to recompute ``raster_data.get_coordinates()``.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations (ndarray).
     max_dist_m : float, optional
@@ -858,14 +858,13 @@ def compute_spatial_adjustments(
         (updated_vs30, updated_stdv) arrays with spatial adjustments applied.
     """
     # affected_flat_indices indexes the full raster (used for vs30/stdv reads
-    # and writeback); affected_valid_indices indexes get_coordinates()' output,
-    # which only contains valid pixels.
+    # and writeback); affected_valid_indices indexes grid_locs' rows, which
+    # only cover valid pixels.
     affected_flat_indices = np.where(bbox_result.mask)[0]
     affected_valid_indices = np.where(bbox_result.mask[raster_data.valid_flat_indices])[
         0
     ]
 
-    grid_locs = raster_data.get_coordinates()
     affected_locs = grid_locs[affected_valid_indices]
     affected_vs30 = raster_data.vs30.flat[affected_flat_indices]
     affected_stdv = raster_data.stdv.flat[affected_flat_indices]

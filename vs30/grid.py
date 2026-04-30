@@ -60,7 +60,7 @@ def create_initial_vs30_arrays(
 
     logger.info(f"Creating {model_type} VS30 arrays from IDs...")
     vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
-        id_array, model_values_df, model_type=model_type
+        id_array, model_values_df
     )
 
     return vs30_array, stdv_array, id_array, profile
@@ -238,7 +238,7 @@ def compute_spatial_adjustment_on_grid(
 
     logger.info("Finding pixels affected by observations...")
     t_bbox_start = time.perf_counter()
-    bbox_result = spatial.find_affected_pixels(
+    bbox_result, grid_locs = spatial.find_affected_pixels(
         raster_data,
         obs_data,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
@@ -257,6 +257,7 @@ def compute_spatial_adjustment_on_grid(
         raster_data,
         obs_data,
         bbox_result,
+        grid_locs,
         corr_fn,
         max_dist_m=constants.MAX_DIST_M,
         max_points=constants.MAX_POINTS,

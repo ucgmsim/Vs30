@@ -18,7 +18,6 @@ import rasterio.transform
 import rasterio.warp
 import shapely
 from osgeo import gdal
-from tqdm import tqdm
 
 from vs30 import constants
 
@@ -57,6 +56,19 @@ def load_coast_shapefile() -> gpd.GeoDataFrame:
     coast_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
     ensure_shapefile_extracted(coast_path, "coast")
     return gpd.read_file(coast_path)
+
+
+@functools.lru_cache(maxsize=1)
+def load_coast_union():
+    """
+    Return the unioned NZ coastline geometry, cached across calls.
+
+    ``geometry.union_all()`` is expensive; the result depends only on the
+    cached coast shapefile, so it is safe to memoise. Used by
+    ``gapfill.points_inside_coastline``, which can be called many times
+    per pipeline (especially via ``fill_one_point_via_local_grid``).
+    """
+    return load_coast_shapefile().geometry.union_all()
 
 
 def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
@@ -284,7 +296,6 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
 def create_vs30_arrays_from_ids(
     id_array: np.ndarray,
     model_values_df: pd.DataFrame,
-    model_type: constants.ModelType | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Map category IDs to VS30 mean and standard deviation arrays in memory.
@@ -301,8 +312,6 @@ def create_vs30_arrays_from_ids(
         DataFrame containing category ID-to-VS30 mapping. Must have an 'id'
         column and at least one pair of mean/stdv columns recognized by
         ``select_vs30_columns_by_priority``.
-    model_type : constants.ModelType or None, optional
-        Model type label used in progress bar description. Default None.
 
     Returns
     -------
@@ -333,38 +342,29 @@ def create_vs30_arrays_from_ids(
     mean_col_orig = stripped_columns[mean_col]
     std_col_orig = stripped_columns[std_col]
 
-    id_to_vs30_values = dict(
-        zip(
-            model_values_df[id_col_orig].astype(int),
-            zip(
-                model_values_df[mean_col_orig].astype(float),
-                model_values_df[std_col_orig].astype(float),
-            ),
-        )
-    )
+    # Build LUTs indexed directly by category ID. RASTER_ID_NODATA_VALUE (255)
+    # is the largest id we ever see, so the LUT length is fixed at 256.
+    n_slots = constants.RASTER_ID_NODATA_VALUE + 1
+    mean_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
+    stdv_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
 
-    vs30_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
-    stdv_array = np.full(id_array.shape, constants.NODATA_VALUE, dtype=np.float32)
+    df_ids = model_values_df[id_col_orig].astype(int).to_numpy()
+    mean_lut[df_ids] = model_values_df[mean_col_orig].astype(np.float32).to_numpy()
+    stdv_lut[df_ids] = model_values_df[std_col_orig].astype(np.float32).to_numpy()
 
     unique_ids = np.unique(id_array)
     valid_ids = unique_ids[
         (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
     ]
+    missing_ids = np.setdiff1d(valid_ids, df_ids)
+    if missing_ids.size:
+        raise ValueError(
+            f"ID {int(missing_ids[0])} found in array but not in DataFrame. "
+            f"Available IDs: {sorted(df_ids.tolist())}"
+        )
 
-    label = str(model_type).capitalize() if model_type else "Model"
-    for pixel_id in tqdm(
-        valid_ids, desc=f"{label}: mapping categories to Vs30", unit="ID"
-    ):
-        if pixel_id in id_to_vs30_values:
-            mean_vs30, stddev_vs30 = id_to_vs30_values[pixel_id]
-            mask = id_array == pixel_id
-            vs30_array[mask] = mean_vs30
-            stdv_array[mask] = stddev_vs30
-        else:
-            raise ValueError(
-                f"ID {pixel_id} found in array but not in DataFrame. "
-                f"Available IDs: {sorted(id_to_vs30_values.keys())}"
-            )
+    vs30_array = mean_lut[id_array]
+    stdv_array = stdv_lut[id_array]
 
     return vs30_array, stdv_array
 
@@ -396,10 +396,11 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     )
 
     # Get template bounds for final output extent
-    dx = template_profile["transform"].a
-    dy = abs(template_profile["transform"].e)
-    s_xmin = template_profile["transform"].c
-    s_ymax = template_profile["transform"].f
+    transform = template_profile["transform"]
+    dx = transform.a
+    dy = abs(transform.e)
+    s_xmin = transform.c
+    s_ymax = transform.f
     s_xmax = s_xmin + template_profile["width"] * dx
     s_ymin = s_ymax - template_profile["height"] * dy
 
@@ -494,7 +495,9 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    destination = np.zeros((template_profile["height"], template_profile["width"]))
+    destination = np.zeros(
+        (template_profile["height"], template_profile["width"]), dtype=np.float32
+    )
     with rasterio.open(slope_raster_path) as src:
         rasterio.warp.reproject(
             source=rasterio.band(src, 1),
@@ -612,15 +615,6 @@ def apply_hybrid_geology_modifications(
     coast_dist_array: np.ndarray,
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
-    hybrid: bool = True,
-    hybrid_gid4_dist_min: float = constants.HYBRID_GID4_DIST_MIN,
-    hybrid_gid4_dist_max: float = constants.HYBRID_GID4_DIST_MAX,
-    hybrid_gid4_vs30_min: float = constants.HYBRID_GID4_VS30_MIN,
-    hybrid_gid4_vs30_max: float = constants.HYBRID_GID4_VS30_MAX,
-    hybrid_gid10_dist_min: float = constants.HYBRID_GID10_DIST_MIN,
-    hybrid_gid10_dist_max: float = constants.HYBRID_GID10_DIST_MAX,
-    hybrid_gid10_vs30_min: float = constants.HYBRID_GID10_VS30_MIN,
-    hybrid_gid10_vs30_max: float = constants.HYBRID_GID10_VS30_MAX,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Apply hybrid model modifications to VS30 and standard deviation arrays.
@@ -647,24 +641,6 @@ def apply_hybrid_geology_modifications(
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modifications for GID 4 (alluvium)
         and GID 10 (floodplain).
-    hybrid : bool, optional
-        Whether to apply general hybrid slope-based modifications. Default True.
-    hybrid_gid4_dist_min : float
-        Min distance threshold for GID 4 coastal distance mod.
-    hybrid_gid4_dist_max : float
-        Max distance threshold for GID 4 coastal distance mod.
-    hybrid_gid4_vs30_min : float
-        Min Vs30 for GID 4 coastal distance mod.
-    hybrid_gid4_vs30_max : float
-        Max Vs30 for GID 4 coastal distance mod.
-    hybrid_gid10_dist_min : float
-        Min distance threshold for GID 10 coastal distance mod.
-    hybrid_gid10_dist_max : float
-        Max distance threshold for GID 10 coastal distance mod.
-    hybrid_gid10_vs30_min : float
-        Min Vs30 for GID 10 coastal distance mod.
-    hybrid_gid10_vs30_max : float
-        Max Vs30 for GID 10 coastal distance mod.
 
     Returns
     -------
@@ -676,30 +652,32 @@ def apply_hybrid_geology_modifications(
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
 
-    if hybrid:
-        # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
-        safe_log_slope = np.log10(
-            np.where(
-                (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
-                constants.MIN_SLOPE_FOR_LOG,
-                slope_array,
-            )
+    # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
+    safe_log_slope = np.log10(
+        np.where(
+            (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
+            constants.MIN_SLOPE_FOR_LOG,
+            slope_array,
         )
+    )
 
-        for spec in constants.HYBRID_GEOLOGY_PARAMS:
-            mask = id_array == spec.gid
-            stdv_array[mask] *= spec.sigma_reduction
+    for spec in constants.HYBRID_GEOLOGY_PARAMS:
+        mask = id_array == spec.gid
+        # sigma_reduction always applies — it tightens the categorical lookup
+        # itself (legacy R semantics), not a per-pixel slope refinement. See
+        # dev/docs/sigma_reduction_factor_provenance.md.
+        stdv_array[mask] *= spec.sigma_reduction
 
-            # GID 4 (alluvium) gets coastal-distance handling below when the
-            # slope mod is off, so skip slope interpolation here.
-            if spec.gid == 4 and not apply_alluvium_slope_mod:
-                continue
+        # GID 4 (alluvium) gets coastal-distance handling below when the
+        # slope mod is off, so skip slope interpolation here.
+        if spec.gid == 4 and not apply_alluvium_slope_mod:
+            continue
 
-            if np.any(mask):
-                interpolated_val = np.interp(
-                    safe_log_slope[mask], spec.slope_limits, spec.vs30_values_log10
-                )
-                vs30_array[mask] = 10**interpolated_val
+        if np.any(mask):
+            interpolated_val = np.interp(
+                safe_log_slope[mask], spec.slope_limits, spec.vs30_values_log10
+            )
+            vs30_array[mask] = 10**interpolated_val
 
     if apply_coastal_distance_mod:
         apply_coastal_distance_modification(
@@ -707,10 +685,10 @@ def apply_hybrid_geology_modifications(
             id_array,
             coast_dist_array,
             gid=4,
-            dist_min=hybrid_gid4_dist_min,
-            dist_max=hybrid_gid4_dist_max,
-            vs30_min=hybrid_gid4_vs30_min,
-            vs30_max=hybrid_gid4_vs30_max,
+            dist_min=constants.HYBRID_GID4_DIST_MIN,
+            dist_max=constants.HYBRID_GID4_DIST_MAX,
+            vs30_min=constants.HYBRID_GID4_VS30_MIN,
+            vs30_max=constants.HYBRID_GID4_VS30_MAX,
         )
 
         apply_coastal_distance_modification(
@@ -718,10 +696,10 @@ def apply_hybrid_geology_modifications(
             id_array,
             coast_dist_array,
             gid=10,
-            dist_min=hybrid_gid10_dist_min,
-            dist_max=hybrid_gid10_dist_max,
-            vs30_min=hybrid_gid10_vs30_min,
-            vs30_max=hybrid_gid10_vs30_max,
+            dist_min=constants.HYBRID_GID10_DIST_MIN,
+            dist_max=constants.HYBRID_GID10_DIST_MAX,
+            vs30_min=constants.HYBRID_GID10_VS30_MIN,
+            vs30_max=constants.HYBRID_GID10_VS30_MAX,
         )
 
     return vs30_array, stdv_array

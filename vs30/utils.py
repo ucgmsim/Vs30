@@ -1,5 +1,8 @@
 """Shared utility functions: correlation function and model combination."""
 
+import functools
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 import scipy.special
@@ -36,8 +39,6 @@ def exponential_correlation_function(
 def matern_correlation_function(
     distances: np.ndarray,
     range_m: float,
-    sill: float,
-    nugget: float,
     kappa: float,
     min_dist: float = constants.MIN_DIST_ENFORCED,
 ) -> np.ndarray:
@@ -51,8 +52,10 @@ def matern_correlation_function(
     The output matches ``variogramLine(model, covariance=TRUE)/psill``
     from R gstat: rho(h) = (2^(1-κ)/Γ(κ)) * (h/a)^κ * K_κ(h/a) for h>0,
     with rho(0)=1 enforced via the minimum-distance clamp. The nugget is
-    absorbed into per-point standard deviations elsewhere, so it does not
-    scale the correlation function itself (see Worden et al. Eq. 7).
+    absorbed into per-point standard deviations elsewhere (Worden et al.
+    Eq. 7), and the partial sill is a variance scaling that does not
+    enter the correlation function — both are kept in YAML/gstat configs
+    for round-trip compatibility but ignored here.
 
     Parameters
     ----------
@@ -60,11 +63,6 @@ def matern_correlation_function(
         Array of distances in meters.
     range_m : float
         Matérn range (scale) parameter in meters (gstat convention).
-    sill : float
-        Partial sill. Unused in the correlation function but retained for
-        configuration-parameter compatibility with gstat variogram fits.
-    nugget : float
-        Nugget variance. Unused in the correlation function (see note above).
     kappa : float
         Matérn smoothness parameter.
     min_dist : float, optional
@@ -76,7 +74,6 @@ def matern_correlation_function(
         Correlation values in [0, 1]. Same shape as distances.
         Near zero distance, returns approximately 1.
     """
-    del sill, nugget  # retained for config compatibility only
     d = np.maximum(min_dist, distances)
     scaled = d / range_m
     rho = (
@@ -86,6 +83,41 @@ def matern_correlation_function(
     )
     # Clamp NaN from numerical edge cases (kv can overflow for very small d)
     return np.where(np.isfinite(rho), rho, 1.0)
+
+
+def resolve_correlation_function(
+    config_section: dict,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Resolve a correlation config section into a callable.
+
+    Parameters
+    ----------
+    config_section : dict
+        Must contain a "model" key ("exponential" or "matern") plus the
+        model-specific parameters. Any ``sill``/``nugget`` keys are
+        ignored — they exist purely for round-trip compatibility with
+        gstat variogram fits.
+
+    Returns
+    -------
+    callable
+        Function with signature (distances: ndarray) -> ndarray.
+    """
+    model = config_section["model"]
+    if model == "exponential":
+        return functools.partial(
+            exponential_correlation_function,
+            phi=config_section["phi"],
+        )
+    elif model == "matern":
+        return functools.partial(
+            matern_correlation_function,
+            range_m=config_section["range"],
+            kappa=config_section["kappa"],
+        )
+    else:
+        raise ValueError(f"Unknown correlation model: {model}")
 
 
 def combine_vs30_models(
