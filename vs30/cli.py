@@ -78,7 +78,10 @@ def load_model_config(version: constants.FixedModelVersion) -> dict:
     typer.BadParameter
         If the config is missing required fields.
     """
-    with open(constants.MODEL_VERSION_TO_CONFIG[version], encoding="utf-8") as f:
+    with open(
+        constants.MODEL_VERSION_TO_CONFIG[version],
+        encoding=constants.DEFAULT_TEXT_ENCODING,
+    ) as f:
         config_data = yaml.safe_load(f)
 
     for field in (

@@ -316,6 +316,9 @@ STANDARD_ID_COLUMN: str = "id"
 # Coordinate Reference System for New Zealand Transverse Mercator 2000
 NZTM_CRS: str = "EPSG:2193"
 
+# Default encoding for reading text files (e.g. YAML configs).
+DEFAULT_TEXT_ENCODING: str = "utf-8"
+
 
 class ObservationColumn:
     """Standard column names for observation DataFrames used throughout the package."""
