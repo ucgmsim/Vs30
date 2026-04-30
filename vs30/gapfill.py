@@ -35,8 +35,8 @@ def pixel_coords_float32(
     Float32 precision at NZTM magnitudes (~6.25M meters) gives worst-case
     error of ~0.7m — negligible on a 100m grid for nearest-neighbor lookup.
     """
-    eastings = transform.c + transform.a * (cols + 0.5)
-    northings = transform.f + transform.e * (rows + 0.5)
+    eastings = transform.c + transform.a * (cols + constants.PIXEL_CENTER_OFFSET)
+    northings = transform.f + transform.e * (rows + constants.PIXEL_CENTER_OFFSET)
     return np.column_stack([
         eastings.astype(np.float32),
         northings.astype(np.float32),
@@ -231,7 +231,6 @@ def create_local_grid_config(
         Local grid config aligned to the reference grid.
     """
 
-    # Snap to nearest pixel center
     snap_e = (
         gapfill_grid_config.grid_xmin
         + round((easting - gapfill_grid_config.grid_xmin) / gapfill_grid_config.grid_dx) * gapfill_grid_config.grid_dx

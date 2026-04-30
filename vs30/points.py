@@ -105,7 +105,7 @@ def prepare_geology_obs_data(
 
     obs_locs = observations_df[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-    ].values
+    ].to_numpy()
     obs_geol_ids = category.assign_to_category_geology(obs_locs)
     obs_geol_vs30, obs_geol_stdv = category.get_vs30_for_ids(obs_geol_ids, geol_model_df)
 
@@ -136,8 +136,8 @@ def prepare_geology_obs_data(
 
     return _build_obs_data(
         obs_locs=obs_locs,
-        obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
-        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+        obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
+        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
         obs_model_vs30=obs_model_vs30,
         obs_model_stdv=obs_model_stdv,
         noisy=noisy,
@@ -172,14 +172,14 @@ def prepare_terrain_obs_data(
 
     obs_locs = observations_df[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-    ].values
+    ].to_numpy()
     obs_terr_ids = category.assign_to_category_terrain(obs_locs)
     obs_terr_vs30, obs_terr_stdv = category.get_vs30_for_ids(obs_terr_ids, terr_model_df)
 
     return _build_obs_data(
         obs_locs=obs_locs,
-        obs_vs30=observations_df[constants.ObservationColumn.VS30].values,
-        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].values,
+        obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
+        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
         obs_model_vs30=obs_terr_vs30,
         obs_model_stdv=obs_terr_stdv,
         noisy=noisy,

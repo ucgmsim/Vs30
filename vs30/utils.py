@@ -171,9 +171,6 @@ def combine_vs30_models(
 
     For ratio=1.0 with inputs (200, 400), the result is ~283 (geometric mean),
     not 300 (arithmetic mean).
-
-    Uses K_VALUE and WEIGHT_EPSILON_DIV_BY_ZERO constants from constants.py
-    for standard deviation weighting calculations.
     """
     # Determine weights based on combination method
     if combination_method == constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING:
