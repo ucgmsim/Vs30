@@ -65,7 +65,6 @@ omit = [
     "vs30/cli.py",
     "vs30/config.py",
     "vs30/constants.py",
-    "vs30/parallel.py",
 ]
 
 

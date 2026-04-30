@@ -30,7 +30,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
     """
-    gdf = gpd.read_file(constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH)[
+    gdf = raster.load_qmap_shapefile()[
         [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
     points_shapely = shapely.points(points)
@@ -253,13 +253,18 @@ def update_with_independent_data(
     obs_vs30 = observations_df[constants.ObservationColumn.VS30].to_numpy()
     obs_unc = observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy()
 
-    for category_row_idx, category_row in updated_categorical_model_df.iterrows():
-        category_id = category_row[constants.STANDARD_ID_COLUMN]
+    n_categories = len(updated_categorical_model_df)
+    new_means = np.empty(n_categories)
+    new_stds = np.empty(n_categories)
+    new_ns = np.empty(n_categories)
+
+    for i, row in enumerate(updated_categorical_model_df.itertuples(index=False)):
+        category_id = getattr(row, constants.STANDARD_ID_COLUMN)
         mask = obs_ids == category_id
 
-        current_mean = category_row[constants.COL_POSTERIOR_MEAN_INDEPENDENT]
-        current_std = category_row[constants.COL_POSTERIOR_STDV_INDEPENDENT]
-        current_n = category_row[constants.COL_POSTERIOR_NOBS_INDEPENDENT]
+        current_mean = getattr(row, constants.COL_POSTERIOR_MEAN_INDEPENDENT)
+        current_std = getattr(row, constants.COL_POSTERIOR_STDV_INDEPENDENT)
+        current_n = getattr(row, constants.COL_POSTERIOR_NOBS_INDEPENDENT)
 
         for vs30_value, uncertainty in zip(obs_vs30[mask], obs_unc[mask]):
             new_variance = compute_bayesian_posterior_variance(
@@ -271,15 +276,13 @@ def update_with_independent_data(
             current_std = np.sqrt(new_variance)
             current_n += 1
 
-        updated_categorical_model_df.at[
-            category_row_idx, constants.COL_POSTERIOR_MEAN_INDEPENDENT
-        ] = current_mean
-        updated_categorical_model_df.at[
-            category_row_idx, constants.COL_POSTERIOR_STDV_INDEPENDENT
-        ] = current_std
-        updated_categorical_model_df.at[
-            category_row_idx, constants.COL_POSTERIOR_NOBS_INDEPENDENT
-        ] = current_n
+        new_means[i] = current_mean
+        new_stds[i] = current_std
+        new_ns[i] = current_n
+
+    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = new_means
+    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = new_stds
+    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = new_ns
 
     return updated_categorical_model_df
 
@@ -328,13 +331,15 @@ def perform_clustering(
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
     for category_id in ids:
-        if features[model_ids == category_id].shape[0] < constants.MIN_GROUP:
+        category_mask = model_ids == category_id
+        category_features = features[category_mask]
+        if category_features.shape[0] < constants.MIN_GROUP:
             continue
         dbscan = sklearn.cluster.DBSCAN(
             eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
         )
-        dbscan.fit(features[model_ids == category_id])
-        sites_df.loc[model_ids == category_id, constants.ObservationColumn.CLUSTER] = dbscan.labels_
+        dbscan.fit(category_features)
+        sites_df.loc[category_mask, constants.ObservationColumn.CLUSTER] = dbscan.labels_
 
     return sites_df
 
@@ -472,7 +477,7 @@ def update_with_clustered_data(
 def get_vs30_for_ids(
     category_ids: np.ndarray,
     categorical_model_df: pd.DataFrame,
-) -> pd.DataFrame:
+) -> tuple[np.ndarray, np.ndarray]:
     """Get Vs30 mean and standard deviation for category IDs from categorical model.
 
     Looks up the Vs30 mean and standard deviation for each category ID
@@ -489,12 +494,9 @@ def get_vs30_for_ids(
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame with columns:
-        - constants.COL_CATEGORY_VS30_MEAN: Vs30 mean values (m/s) for each
-          category ID. NaN for IDs not found in the model.
-        - constants.COL_CATEGORY_VS30_STDV: Vs30 standard deviation values for
-          each category ID. NaN for IDs not found in the model.
+    tuple[np.ndarray, np.ndarray]
+        ``(vs30_mean, vs30_stdv)`` arrays of float64. NaN for IDs not found
+        in the model.
 
     Notes
     -----
@@ -508,13 +510,7 @@ def get_vs30_for_ids(
 
     indexed = categorical_model_df.set_index(constants.STANDARD_ID_COLUMN)
     reindexed = indexed.reindex(category_ids)
-    return pd.DataFrame(
-        {
-            constants.COL_CATEGORY_VS30_MEAN: reindexed[mean_col].to_numpy(
-                dtype=np.float64
-            ),
-            constants.COL_CATEGORY_VS30_STDV: reindexed[stdv_col].to_numpy(
-                dtype=np.float64
-            ),
-        }
+    return (
+        reindexed[mean_col].to_numpy(dtype=np.float64),
+        reindexed[stdv_col].to_numpy(dtype=np.float64),
     )

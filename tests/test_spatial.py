@@ -28,7 +28,6 @@ class TestComputeSpatialAdjustmentForPixel:
             location=np.array([1000.0, 1000.0]),
             vs30=250.0,
             stdv=0.4,
-            index=12345,
         )
 
     @pytest.fixture
@@ -39,6 +38,7 @@ class TestComputeSpatialAdjustmentForPixel:
             vs30=np.array([280.0]),  # Higher than prior
             model_vs30=np.array([260.0]),
             model_stdv=np.array([0.4]),
+            log_model_vs30=np.log(np.array([260.0])),
             residuals=np.array([np.log(280.0 / 260.0)]),
             omega=np.ones(1),
             uncertainty=np.array([0.2]),
@@ -57,7 +57,7 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # Observation is higher (280), prior is 250, update should increase
         assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv, n_obs = result
+        updated_vs30, updated_stdv = result
         assert updated_vs30 > pixel.vs30
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
@@ -73,7 +73,7 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # Adding observation should reduce uncertainty
         assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv, n_obs = result
+        updated_vs30, updated_stdv = result
         assert updated_stdv < pixel.stdv
 
     def test_no_observations_returns_unchanged_vs30(self, pixel):
@@ -83,6 +83,7 @@ class TestComputeSpatialAdjustmentForPixel:
             vs30=np.array([300.0]),
             model_vs30=np.array([300.0]),
             model_stdv=np.array([0.4]),
+            log_model_vs30=np.log(np.array([300.0])),
             residuals=np.zeros(1),
             omega=np.ones(1),
             uncertainty=np.array([0.2]),
@@ -97,9 +98,8 @@ class TestComputeSpatialAdjustmentForPixel:
 
         # VS30 should be unchanged when no nearby observations
         assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv, n_obs = result
+        updated_vs30, updated_stdv = result
         assert updated_vs30 == pixel.vs30
-        assert n_obs == 0
 
 
 class TestComputeMvnAtPoints:
@@ -111,22 +111,11 @@ class TestComputeMvnAtPoints:
         model_vs30 = np.array([300.0, 400.0])
         model_stdv = np.array([30.0, 40.0])
 
-        # Empty observations
-        obs_locations = np.empty((0, 2))
-        obs_vs30 = np.empty(0)
-        obs_model_vs30 = np.empty(0)
-        obs_model_stdv = np.empty(0)
-        obs_uncertainty = np.empty(0)
-
         mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=model_vs30,
             model_stdv=model_stdv,
-            obs_locations=obs_locations,
-            obs_vs30=obs_vs30,
-            obs_model_vs30=obs_model_vs30,
-            obs_model_stdv=obs_model_stdv,
-            obs_uncertainty=obs_uncertainty,
+            obs_data=spatial.ObservationData.empty(),
             corr_fn=geology_corr_fn,
         )
 
@@ -141,21 +130,23 @@ class TestComputeMvnAtPoints:
         model_stdv = np.array([30.0])
 
         # Nearby observation with higher vs30
-        obs_locations = np.array([[1500100.0, 5100100.0]])  # 141m away
-        obs_vs30 = np.array([400.0])
         obs_model_vs30 = np.array([300.0])
-        obs_model_stdv = np.array([30.0])
-        obs_uncertainty = np.array([25.0])
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1500100.0, 5100100.0]]),  # 141m away
+            vs30=np.array([400.0]),
+            model_vs30=obs_model_vs30,
+            model_stdv=np.array([30.0]),
+            log_model_vs30=np.log(obs_model_vs30),
+            residuals=np.log(np.array([400.0]) / obs_model_vs30),
+            omega=np.ones(1),
+            uncertainty=np.array([25.0]),
+        )
 
         mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(
             points=points,
             model_vs30=model_vs30,
             model_stdv=model_stdv,
-            obs_locations=obs_locations,
-            obs_vs30=obs_vs30,
-            obs_model_vs30=obs_model_vs30,
-            obs_model_stdv=obs_model_stdv,
-            obs_uncertainty=obs_uncertainty,
+            obs_data=obs_data,
             corr_fn=geology_corr_fn,
             max_dist_m=5000,
         )

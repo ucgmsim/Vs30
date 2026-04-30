@@ -61,8 +61,7 @@ def points_inside_coastline(locations: np.ndarray) -> np.ndarray:
     if len(locations) == 0:
         return np.zeros(0, dtype=bool)
 
-    raster.ensure_shapefile_extracted(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast")
-    coast_gdf = gpd.read_file(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH)
+    coast_gdf = raster.load_coast_shapefile()
     # Merge all coastline features into one geometry for vectorized point-in-polygon test
     coast_union = coast_gdf.geometry.union_all()
     return shapely.within(shapely.points(locations), coast_union)
@@ -159,6 +158,7 @@ def fill_nodata_grid(
     filled_vs30 = vs30.copy()
     filled_stdv = stdv.copy()
 
+    valid_2d = ~np.isnan(vs30)
     while buffer_pixels <= max_buffer_pixels:
         # Dilate only the fillable mask (not the full nodata mask) to define
         # the donor search neighborhood. maximum_filter with a square kernel
@@ -166,7 +166,7 @@ def fill_nodata_grid(
         struct_size = 2 * buffer_pixels + 1
         neighborhood_2d = scipy.ndimage.maximum_filter(fillable_2d, size=struct_size)
 
-        valid_in_neighborhood = ~np.isnan(vs30) & neighborhood_2d
+        valid_in_neighborhood = valid_2d & neighborhood_2d
         if not np.any(valid_in_neighborhood):
             logger.info(
                 f"  Gap-fill: no valid donors within {buffer_pixels}-pixel "

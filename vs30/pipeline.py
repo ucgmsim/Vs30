@@ -27,38 +27,9 @@ from vs30 import (
 logger = logging.getLogger(__name__)
 
 
-def read_observations_csv(path: Path) -> pd.DataFrame:
-    """
-    Read an observations CSV with the conventions used across the package.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the observations CSV.
-
-    Returns
-    -------
-    pd.DataFrame
-        Loaded observations.
-    """
-    return pd.read_csv(path, comment="#", skipinitialspace=True)
-
-
-def read_categorical_csv(path: Path) -> pd.DataFrame:
-    """
-    Read a categorical model CSV with the conventions used across the package.
-
-    Parameters
-    ----------
-    path : Path
-        Path to the categorical model CSV.
-
-    Returns
-    -------
-    pd.DataFrame
-        Loaded categorical model.
-    """
-    return pd.read_csv(path, comment="#", skipinitialspace=True)
+def _nan_to_nodata(arr: np.ndarray) -> np.ndarray:
+    """Replace NaNs with ``constants.NODATA_VALUE`` for raster output."""
+    return np.where(np.isnan(arr), constants.NODATA_VALUE, arr)
 
 
 def default_correlation_functions(
@@ -113,7 +84,7 @@ def load_and_assign_observations(
         Observations with an added ``STANDARD_ID_COLUMN`` of category IDs.
     """
     logger.info(f"Loading {label} observations from: {csv_path}")
-    df = read_observations_csv(csv_path)
+    df = pd.read_csv(csv_path, comment="#", skipinitialspace=True)
     utils.validate_csv_columns(
         df,
         constants.ObservationColumn.REQUIRED,
@@ -154,7 +125,7 @@ def collect_observation_csvs(
     ]
     if csvs:
         return pd.concat(
-            [read_observations_csv(csv) for csv in csvs],
+            [pd.read_csv(csv, comment="#", skipinitialspace=True) for csv in csvs],
             ignore_index=True,
         )
     return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
@@ -232,7 +203,9 @@ def compute_categorical_vs30_updates(
     logger.info(f"Model type: {model_type}")
     logger.info(f"Loading categorical model from: {categorical_model_csv}")
 
-    categorical_model_df = read_categorical_csv(categorical_model_csv)
+    categorical_model_df = pd.read_csv(
+        categorical_model_csv, comment="#", skipinitialspace=True
+    )
 
     # Drop rows with placeholder values for excluded categories (e.g., water)
     categorical_model_df = categorical_model_df[
@@ -385,7 +358,9 @@ def compute_model_grid(
         logger.info(
             "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
         )
-        posterior_df = read_categorical_csv(categorical_model_csv)
+        posterior_df = pd.read_csv(
+            categorical_model_csv, comment="#", skipinitialspace=True
+        )
 
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
     vs30_array, stdv_array, id_array, profile = grid.create_initial_vs30_arrays(
@@ -705,18 +680,7 @@ def grid_pipeline(
                 grid.write_raster(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                     profile,
-                    [
-                        np.where(
-                            np.isnan(combined_vs30),
-                            constants.NODATA_VALUE,
-                            combined_vs30,
-                        ),
-                        np.where(
-                            np.isnan(combined_stdv),
-                            constants.NODATA_VALUE,
-                            combined_stdv,
-                        ),
-                    ],
+                    [_nan_to_nodata(combined_vs30), _nan_to_nodata(combined_stdv)],
                     (
                         constants.BAND_DESCRIPTION_VS30_COMBINED,
                         constants.BAND_DESCRIPTION_STDV_COMBINED,
@@ -733,14 +697,7 @@ def grid_pipeline(
             grid.write_raster(
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 profile,
-                [
-                    np.where(
-                        np.isnan(combined_vs30), constants.NODATA_VALUE, combined_vs30
-                    ),
-                    np.where(
-                        np.isnan(combined_stdv), constants.NODATA_VALUE, combined_stdv
-                    ),
-                ],
+                [_nan_to_nodata(combined_vs30), _nan_to_nodata(combined_stdv)],
                 (
                     constants.BAND_DESCRIPTION_VS30_COMBINED,
                     constants.BAND_DESCRIPTION_STDV_COMBINED,
@@ -974,7 +931,9 @@ def points_pipeline(
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            geol_model_df = read_categorical_csv(geology_categorical_csv)
+            geol_model_df = pd.read_csv(
+                geology_categorical_csv, comment="#", skipinitialspace=True
+            )
 
     if run_terrain:
         if terrain_categorical_csv is None:
@@ -993,7 +952,9 @@ def points_pipeline(
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            terr_model_df = read_categorical_csv(terrain_categorical_csv)
+            terr_model_df = pd.read_csv(
+                terrain_categorical_csv, comment="#", skipinitialspace=True
+            )
 
     geology_obs_data = (
         points.prepare_geology_obs_data(
@@ -1001,12 +962,13 @@ def points_pipeline(
             geol_model_df,
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
+            noisy=noisy,
         )
         if run_geology
         else None
     )
     terrain_obs_data = (
-        points.prepare_terrain_obs_data(observations_df, terr_model_df)
+        points.prepare_terrain_obs_data(observations_df, terr_model_df, noisy=noisy)
         if run_terrain
         else None
     )

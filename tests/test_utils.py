@@ -5,12 +5,10 @@ Tests cover:
 - combine_vs30_models: Model combination in log-space
 """
 
-import pickle
-
 import numpy as np
 import pytest
 
-from vs30 import cli, constants, utils
+from vs30 import constants, utils
 
 
 class TestCombineVs30Models:
@@ -207,25 +205,3 @@ class TestMaternCorrelationFunction:
         assert result[0] == pytest.approx(1.0, abs=1e-6)
 
 
-class TestResolveCorrelationFunction:
-    """Resolved correlation callables must be picklable for multiprocessing."""
-
-    def test_exponential_is_picklable(self):
-        config = {"model": "exponential", "phi": 1407}
-        fn = cli.resolve_correlation_function(config)
-        fn2 = pickle.loads(pickle.dumps(fn))
-        distances = np.array([100.0, 1000.0])
-        np.testing.assert_array_equal(fn(distances), fn2(distances))
-
-    def test_matern_is_picklable(self):
-        config = {
-            "model": "matern",
-            "range": 20000,
-            "sill": 0.15,
-            "nugget": 0.05,
-            "kappa": 0.9,
-        }
-        fn = cli.resolve_correlation_function(config)
-        fn2 = pickle.loads(pickle.dumps(fn))
-        distances = np.array([100.0, 5000.0])
-        np.testing.assert_array_equal(fn(distances), fn2(distances))

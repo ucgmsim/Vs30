@@ -105,6 +105,8 @@ class TestBayesianUpdateFormulas:
         num_prior_observations = 3
         true_value = 250  # True value observations are drawn from
 
+        rng = np.random.default_rng(0)
+
         # Simulate multiple observations around true value
         current_mean = prior_mean
         current_std = prior_stdv
@@ -112,7 +114,7 @@ class TestBayesianUpdateFormulas:
 
         for _ in range(10):
             # Observation with some noise
-            observation_value = true_value * (1 + np.random.normal(0, 0.05))
+            observation_value = true_value * (1 + rng.normal(0, 0.05))
             observation_uncertainty = 0.2
 
             var = category.compute_bayesian_posterior_variance(

@@ -1,8 +1,10 @@
 """Scientific and algorithmic constants for Vs30 calculations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+import numpy as np
 
 from vs30 import config
 
@@ -189,12 +191,19 @@ class HybridGeologyParams:
     sigma_reduction : float
         Multiplicative reduction factor applied to the prior standard
         deviation for this group.
+    vs30_values_log10 : ndarray
+        Precomputed ``np.log10`` of ``vs30_values``, used in the slope
+        interpolation hot path.
     """
 
     gid: int
     slope_limits: list[float]
     vs30_values: list[float]
     sigma_reduction: float
+    vs30_values_log10: np.ndarray = field(init=False)
+
+    def __post_init__(self):
+        self.vs30_values_log10 = np.log10(np.array(self.vs30_values))
 
 
 HYBRID_GEOLOGY_PARAMS: list[HybridGeologyParams] = [
@@ -319,11 +328,6 @@ class ObservationColumn:
 
     REQUIRED = [EASTING, NORTHING, VS30, UNCERTAINTY]
 
-
-# Column names for the DataFrame returned by get_vs30_for_ids,
-# which maps category IDs to their categorical model Vs30 values.
-COL_CATEGORY_VS30_MEAN: str = "category_vs30_mean"
-COL_CATEGORY_VS30_STDV: str = "category_vs30_stdv"
 
 # Cluster label for unclustered/noise points in DBSCAN output
 CLUSTER_UNCLUSTERED_LABEL: int = -1

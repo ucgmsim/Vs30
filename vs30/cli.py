@@ -23,7 +23,7 @@ def resolve_correlation_function(
     config_section: dict,
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
-    Resolve a correlation config section into a picklable callable.
+    Resolve a correlation config section into a callable.
 
     Parameters
     ----------
@@ -35,7 +35,6 @@ def resolve_correlation_function(
     -------
     callable
         Function with signature (distances: ndarray) -> ndarray.
-        Uses functools.partial for picklability in multiprocessing.
     """
     model = config_section["model"]
     if model == "exponential":

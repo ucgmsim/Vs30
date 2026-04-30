@@ -1,5 +1,6 @@
 """Categorical VS30 raster creation and hybrid geology modifications."""
 
+import functools
 import logging
 import math
 import os
@@ -22,6 +23,40 @@ from tqdm import tqdm
 from vs30 import constants
 
 logger = logging.getLogger(__name__)
+
+
+@functools.lru_cache(maxsize=1)
+def load_qmap_shapefile() -> gpd.GeoDataFrame:
+    """
+    Load the bundled QMAP geology shapefile, cached across calls.
+
+    The file is parsed once per process; callers must not mutate the result.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        QMAP polygons with geology ``gid`` attribute.
+    """
+    qmap_path = constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+    ensure_shapefile_extracted(qmap_path, "qmap")
+    return gpd.read_file(qmap_path)
+
+
+@functools.lru_cache(maxsize=1)
+def load_coast_shapefile() -> gpd.GeoDataFrame:
+    """
+    Load the bundled NZ coastline shapefile, cached across calls.
+
+    The file is parsed once per process; callers must not mutate the result.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Coastline land polygons.
+    """
+    coast_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
+    ensure_shapefile_extracted(coast_path, "coast")
+    return gpd.read_file(coast_path)
 
 
 def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
@@ -121,8 +156,11 @@ def create_category_id_array(
     FileNotFoundError
         If input files don't exist.
     """
-    if model_type not in constants.ModelType:
-        raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
+    if model_type not in (constants.ModelType.GEOLOGY, constants.ModelType.TERRAIN):
+        raise ValueError(
+            f"model_type must be ModelType.GEOLOGY or ModelType.TERRAIN, "
+            f"got '{model_type}'"
+        )
 
     nx = round((xmax - xmin) / dx)
     ny = round((ymax - ymin) / dy)
@@ -159,23 +197,11 @@ def create_category_id_array(
                 resampling=rasterio.enums.Resampling.nearest,
             )
 
-    else:  # geology
-        ensure_shapefile_extracted(
-            constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH, "qmap"
-        )
-
-        geology_shapefile_path = (
-            constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
-        )
-        if not geology_shapefile_path.exists():
-            raise FileNotFoundError(
-                f"Geology shapefile not found: {geology_shapefile_path}"
-            )
-
-        gdf = gpd.read_file(geology_shapefile_path)
+    elif model_type == constants.ModelType.GEOLOGY:
+        gdf = load_qmap_shapefile()
         if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
             raise ValueError(
-                f"Shapefile {geology_shapefile_path} missing "
+                f"Shapefile {constants.GEOLOGY_SHAPEFILE_PATH} missing "
                 f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
             )
 
@@ -525,10 +551,7 @@ def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Distance to coast in meters for each point (N,).
     """
-    coastline_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
-    ensure_shapefile_extracted(coastline_path, "coast")
-
-    coast_gdf = gpd.read_file(coastline_path)
+    coast_gdf = load_coast_shapefile()
     # The coastline file contains land polygons. Distance to coast is distance
     # from each point to the nearest polygon boundary.
     coast_boundary = coast_gdf.geometry.boundary.union_all()
@@ -673,9 +696,8 @@ def apply_hybrid_geology_modifications(
                 continue
 
             if np.any(mask):
-                vs30_limits_log10 = np.log10(np.array(spec.vs30_values))
                 interpolated_val = np.interp(
-                    safe_log_slope[mask], spec.slope_limits, vs30_limits_log10
+                    safe_log_slope[mask], spec.slope_limits, spec.vs30_values_log10
                 )
                 vs30_array[mask] = 10**interpolated_val
 
