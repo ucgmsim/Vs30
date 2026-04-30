@@ -16,6 +16,25 @@ logger = logging.getLogger(__name__)
 
 app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
 
+_GRID_XMIN_HELP = (
+    f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: "
+    f"{constants.FULL_NZ_GRID_CONFIG.grid_xmin}."
+)
+_GRID_XMAX_HELP = (
+    f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: "
+    f"{constants.FULL_NZ_GRID_CONFIG.grid_xmax}."
+)
+_GRID_YMIN_HELP = (
+    f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: "
+    f"{constants.FULL_NZ_GRID_CONFIG.grid_ymin}."
+)
+_GRID_YMAX_HELP = (
+    f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: "
+    f"{constants.FULL_NZ_GRID_CONFIG.grid_ymax}."
+)
+_GRID_DX_HELP = f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}."
+_GRID_DY_HELP = f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}."
+
 
 def load_model_config(version: constants.FixedModelVersion) -> dict:
     """
@@ -165,13 +184,6 @@ def run_points_pipeline(
     typer.BadParameter
         If the specified longitude or latitude column is not found in the input CSV.
     """
-    if model_type != constants.ModelType.COMBINED and not include_intermediate:
-        raise typer.BadParameter(
-            "Single-model output (--model-type geology or terrain) requires "
-            "--include-intermediate, as per-model results are intermediate "
-            "data products. The only final product is the combined model."
-        )
-
     df = pd.read_csv(locations_csv)
     if lon_column not in df.columns:
         raise typer.BadParameter(f"Column '{lon_column}' not found in {locations_csv}")
@@ -179,8 +191,8 @@ def run_points_pipeline(
         raise typer.BadParameter(f"Column '{lat_column}' not found in {locations_csv}")
 
     result_df = pipeline.points_pipeline(
-        longitudes=df[lon_column].values,
-        latitudes=df[lat_column].values,
+        longitudes=df[lon_column].to_numpy(),
+        latitudes=df[lat_column].to_numpy(),
         model_type=model_type,
         geology_categorical_csv=geology_categorical_csv,
         terrain_categorical_csv=terrain_categorical_csv,
@@ -390,42 +402,12 @@ def points_custom(
 @cli.from_docstring(app)
 def grid(
     version: typing.Annotated[constants.FixedModelVersion, typer.Option()] = ...,
-    grid_xmin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}."
-        ),
-    ] = ...,
-    grid_xmax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}."
-        ),
-    ] = ...,
-    grid_ymin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}."
-        ),
-    ] = ...,
-    grid_ymax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}."
-        ),
-    ] = ...,
-    grid_dx: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}."
-        ),
-    ] = ...,
-    grid_dy: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}."
-        ),
-    ] = ...,
+    grid_xmin: typing.Annotated[int, typer.Option(help=_GRID_XMIN_HELP)] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=_GRID_XMAX_HELP)] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=_GRID_YMIN_HELP)] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=_GRID_YMAX_HELP)] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=_GRID_DX_HELP)] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=_GRID_DY_HELP)] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
@@ -527,42 +509,12 @@ def grid_custom(
         typer.Option("--apply-coastal-distance-mod/--no-apply-coastal-distance-mod"),
     ] = ...,
     fill_gaps: typing.Annotated[bool, typer.Option("--fill-gaps/--no-fill-gaps")] = ...,
-    grid_xmin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmin}."
-        ),
-    ] = ...,
-    grid_xmax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum X coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_xmax}."
-        ),
-    ] = ...,
-    grid_ymin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymin}."
-        ),
-    ] = ...,
-    grid_ymax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum Y coordinate (NZTM, meters). Suggested for all of NZ: {constants.FULL_NZ_GRID_CONFIG.grid_ymax}."
-        ),
-    ] = ...,
-    grid_dx: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid X spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dx}."
-        ),
-    ] = ...,
-    grid_dy: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid Y spacing (meters). Suggested: {constants.FULL_NZ_GRID_CONFIG.grid_dy}."
-        ),
-    ] = ...,
+    grid_xmin: typing.Annotated[int, typer.Option(help=_GRID_XMIN_HELP)] = ...,
+    grid_xmax: typing.Annotated[int, typer.Option(help=_GRID_XMAX_HELP)] = ...,
+    grid_ymin: typing.Annotated[int, typer.Option(help=_GRID_YMIN_HELP)] = ...,
+    grid_ymax: typing.Annotated[int, typer.Option(help=_GRID_YMAX_HELP)] = ...,
+    grid_dx: typing.Annotated[int, typer.Option(help=_GRID_DX_HELP)] = ...,
+    grid_dy: typing.Annotated[int, typer.Option(help=_GRID_DY_HELP)] = ...,
     output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
     clustered_observations_csv: typing.Annotated[
         Path | None,
@@ -638,13 +590,6 @@ def grid_custom(
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     """
-    if model_type != constants.ModelType.COMBINED and not include_intermediate:
-        raise typer.BadParameter(
-            "Single-model output (--model-type geology or terrain) requires "
-            "--include-intermediate, as per-model results are intermediate "
-            "data products. The only final product is the combined model."
-        )
-
     pipeline.grid_pipeline(
         grid_config=config.GridConfig(
             grid_xmin=grid_xmin,

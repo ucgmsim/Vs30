@@ -209,23 +209,6 @@ class RasterData:
         return np.column_stack((xs, ys)).astype(np.float32)
 
 
-@dataclass
-class BoundingBoxResult:
-    """
-    Result of bounding box search for affected pixels.
-
-    Attributes
-    ----------
-    mask : ndarray
-        Boolean mask of pixels in any observation's bounding box.
-    n_affected_pixels : int
-        Total number of pixels affected by at least one observation.
-    """
-
-    mask: np.ndarray
-    n_affected_pixels: int
-
-
 def validate_raster_data(raster_data: RasterData) -> None:
     """
     Validate raster data before processing.
@@ -333,7 +316,7 @@ def prepare_observation_data(
         )
     obs_locs = observations[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-    ].values
+    ].to_numpy()
 
     model_ids = category.assign_to_category(obs_locs, model_type)
 
@@ -353,10 +336,10 @@ def prepare_observation_data(
 
     valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
     obs_locs = obs_locs[valid_obs_mask]
-    vs30_obs = observations[constants.ObservationColumn.VS30].values[valid_obs_mask]
+    vs30_obs = observations[constants.ObservationColumn.VS30].to_numpy()[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
     model_stdv = model_stdv[valid_obs_mask]
-    uncertainty = observations[constants.ObservationColumn.UNCERTAINTY].values[
+    uncertainty = observations[constants.ObservationColumn.UNCERTAINTY].to_numpy()[
         valid_obs_mask
     ]
 
@@ -388,9 +371,13 @@ def prepare_observation_data(
         if not np.all(within_grid):
             outside_grid_points = obs_locs[~within_grid]
             slope_obs[~within_grid] = raster.sample_slope_at_points(outside_grid_points)
-            coast_obs[~within_grid] = raster.compute_coastal_distance_at_points(
-                outside_grid_points
-            )
+            if apply_coastal_distance_mod:
+                coast_obs[~within_grid] = raster.compute_coastal_distance_at_points(
+                    outside_grid_points
+                )
+            # else: coast_obs[~within_grid] is left at its np.empty initial
+            # value; apply_hybrid_geology_modifications won't read it when the
+            # coastal mod is off.
 
         # Legacy parity: the legacy interpolate_raster replaces tif-NODATA
         # slope samples with ID_NODATA=255 for observations, which slips past
@@ -629,7 +616,6 @@ def select_observations_for_pixel(
     diff = obs_data.locations - pixel.location
     distances = np.sqrt(np.einsum("ij,ij->i", diff, diff))
 
-    # Select observations using distance-based filtering
     max_points_i = min(max_points, len(distances)) - 1
     if max_points_i < 0:
         return np.array([], dtype=np.intp)
@@ -746,7 +732,7 @@ def find_affected_pixels(
     max_spatial_boolean_array_memory_gb: float,
     model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
-) -> tuple[BoundingBoxResult, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Find pixels affected by observations using bounding boxes.
 
@@ -766,10 +752,11 @@ def find_affected_pixels(
 
     Returns
     -------
-    tuple[BoundingBoxResult, ndarray]
-        - BoundingBoxResult with the affected-pixel mask and pixel count.
+    tuple[ndarray, ndarray]
+        - Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in
+          any observation's bounding box.
         - (N_valid, 2) array of NZTM pixel-center coordinates for valid
-          pixels. Returned alongside the bbox result so the downstream
+          pixels. Returned alongside the mask so the downstream
           ``compute_spatial_adjustments`` call can reuse it instead of
           recomputing ``raster_data.get_coordinates()``.
     """
@@ -805,20 +792,20 @@ def find_affected_pixels(
             grid_locs[start:end], e_min, e_max, n_min, n_max,
         )
 
-    mask = np.zeros(raster_data.vs30.size, dtype=bool)
-    mask[raster_data.valid_flat_indices] = valid_in_bbox
+    bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
+    bbox_mask[raster_data.valid_flat_indices] = valid_in_bbox
     n_affected = int(valid_in_bbox.sum())
     logger.info(
         f"Bounding box search complete: {n_affected:,} pixels affected "
         f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
     )
-    return BoundingBoxResult(mask=mask, n_affected_pixels=n_affected), grid_locs
+    return bbox_mask, grid_locs
 
 
 def compute_spatial_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
-    bbox_result: BoundingBoxResult,
+    bbox_mask: np.ndarray,
     grid_locs: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
     max_dist_m: float = constants.MAX_DIST_M,
@@ -835,8 +822,9 @@ def compute_spatial_adjustments(
         Raster data object.
     obs_data : ObservationData
         Observation data.
-    bbox_result : BoundingBoxResult
-        Bounding box result.
+    bbox_mask : ndarray
+        Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
+        observation's bounding box, as returned by ``find_affected_pixels``.
     grid_locs : ndarray
         (N_valid, 2) NZTM pixel-center coordinates for valid pixels — the
         same array returned by ``find_affected_pixels`` so this function
@@ -860,10 +848,8 @@ def compute_spatial_adjustments(
     # affected_flat_indices indexes the full raster (used for vs30/stdv reads
     # and writeback); affected_valid_indices indexes grid_locs' rows, which
     # only cover valid pixels.
-    affected_flat_indices = np.where(bbox_result.mask)[0]
-    affected_valid_indices = np.where(bbox_result.mask[raster_data.valid_flat_indices])[
-        0
-    ]
+    affected_flat_indices = np.where(bbox_mask)[0]
+    affected_valid_indices = np.where(bbox_mask[raster_data.valid_flat_indices])[0]
 
     affected_locs = grid_locs[affected_valid_indices]
     affected_vs30 = raster_data.vs30.flat[affected_flat_indices]
@@ -936,14 +922,14 @@ def compute_spatial_adjustment_at_points(
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations (ndarray).
     max_dist_m : float, optional
-        Maximum distance (meters) to consider observations. Default from constants.
+        Maximum distance (meters) to consider observations.
     max_points : int, optional
-        Maximum number of observations per point. Default from constants.
+        Maximum number of observations per point.
     noisy : bool
         Whether to apply noise weighting in the covariance matrix. Must match
         the setting used to build ``obs_data.residuals`` and ``obs_data.omega``.
     cov_reduc : float
-        Covariance reduction factor. Default from constants.
+        Covariance reduction factor.
     progress_bar : tqdm, optional
         External progress bar to update per point. If None, no progress is shown.
 

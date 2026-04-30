@@ -42,7 +42,7 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     value_mask = ~joined[constants.SHAPEFILE_GEOLOGY_ID_COLUMN].isna()
     values[value_mask] = joined.loc[
         value_mask, constants.SHAPEFILE_GEOLOGY_ID_COLUMN
-    ].values
+    ].to_numpy()
 
     return values
 
@@ -97,16 +97,22 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     ndarray
         Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
     """
-    with rasterio.open(
-        constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
-    ) as src:
-        terrain_ids = np.array(
-            [s[0] for s in src.sample(points, indexes=1)], dtype=src.dtypes[0]
-        )
-
-        if src.nodata is not None:
-            terrain_ids[terrain_ids == src.nodata] = constants.RASTER_ID_NODATA_VALUE
-
+    data, transform, nodata = raster.load_terrain_raster_array()
+    rows, cols = rasterio.transform.rowcol(transform, points[:, 0], points[:, 1])
+    rows = np.asarray(rows)
+    cols = np.asarray(cols)
+    in_bounds = (
+        (rows >= 0)
+        & (rows < data.shape[0])
+        & (cols >= 0)
+        & (cols < data.shape[1])
+    )
+    terrain_ids = np.full(
+        len(points), constants.RASTER_ID_NODATA_VALUE, dtype=data.dtype
+    )
+    terrain_ids[in_bounds] = data[rows[in_bounds], cols[in_bounds]]
+    if nodata is not None:
+        terrain_ids[terrain_ids == nodata] = constants.RASTER_ID_NODATA_VALUE
     return terrain_ids
 
 
@@ -230,7 +236,7 @@ def update_with_independent_data(
         )
 
     updated_categorical_model_df[constants.COL_PRIOR_STDV] = np.clip(
-        updated_categorical_model_df[constants.COL_PRIOR_STDV].values,
+        updated_categorical_model_df[constants.COL_PRIOR_STDV].to_numpy(),
         constants.MIN_SIGMA,
         None,
     )
@@ -252,33 +258,57 @@ def update_with_independent_data(
     obs_ids = observations_df[constants.STANDARD_ID_COLUMN].to_numpy()
     obs_vs30 = observations_df[constants.ObservationColumn.VS30].to_numpy()
     obs_unc = observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy()
+    # Cache log(obs_vs30) once; the inner update is performed entirely in
+    # log space, so we never need to re-take the log of an observation or
+    # round-trip current_mean through exp/log per iteration.
+    log_obs_vs30 = np.log(obs_vs30)
 
-    n_categories = len(updated_categorical_model_df)
-    new_means = np.empty(n_categories)
-    new_stds = np.empty(n_categories)
-    new_ns = np.empty(n_categories)
+    # Posterior arrays start equal to the prior; categories with no matching
+    # observations keep these prior values unchanged.
+    new_means = updated_categorical_model_df[
+        constants.COL_POSTERIOR_MEAN_INDEPENDENT
+    ].to_numpy(dtype=float, copy=True)
+    new_stds = updated_categorical_model_df[
+        constants.COL_POSTERIOR_STDV_INDEPENDENT
+    ].to_numpy(dtype=float, copy=True)
+    new_ns = updated_categorical_model_df[
+        constants.COL_POSTERIOR_NOBS_INDEPENDENT
+    ].to_numpy(dtype=float, copy=True)
 
-    for i, row in enumerate(updated_categorical_model_df.itertuples(index=False)):
-        category_id = getattr(row, constants.STANDARD_ID_COLUMN)
-        mask = obs_ids == category_id
+    cat_id_to_row = {
+        int(cat_id): i
+        for i, cat_id in enumerate(
+            updated_categorical_model_df[constants.STANDARD_ID_COLUMN]
+        )
+    }
 
-        current_mean = getattr(row, constants.COL_POSTERIOR_MEAN_INDEPENDENT)
-        current_std = getattr(row, constants.COL_POSTERIOR_STDV_INDEPENDENT)
-        current_n = getattr(row, constants.COL_POSTERIOR_NOBS_INDEPENDENT)
+    for cat_id in np.unique(obs_ids):
+        row_idx = cat_id_to_row.get(int(cat_id))
+        if row_idx is None:
+            continue
+        cat_mask = obs_ids == cat_id
+        cat_log_obs = log_obs_vs30[cat_mask]
+        cat_unc = obs_unc[cat_mask]
 
-        for vs30_value, uncertainty in zip(obs_vs30[mask], obs_unc[mask]):
-            new_variance = compute_bayesian_posterior_variance(
-                current_std, current_n, uncertainty, current_mean, vs30_value
-            )
-            current_mean = compute_bayesian_posterior_mean(
-                current_mean, current_n, vs30_value
-            )
+        log_current_mean = np.log(new_means[row_idx])
+        current_std = new_stds[row_idx]
+        current_n = new_ns[row_idx]
+
+        for log_obs, unc in zip(cat_log_obs, cat_unc):
+            log_residual = log_obs - log_current_mean
+            mean_shift = (current_n / (current_n + 1)) * log_residual**2
+            new_variance = (
+                current_n * current_std**2 + unc**2 + mean_shift
+            ) / (current_n + 1)
+            log_current_mean = (
+                current_n * log_current_mean + log_obs
+            ) / (current_n + 1)
             current_std = np.sqrt(new_variance)
             current_n += 1
 
-        new_means[i] = current_mean
-        new_stds[i] = current_std
-        new_ns[i] = current_n
+        new_means[row_idx] = float(np.exp(log_current_mean))
+        new_stds[row_idx] = current_std
+        new_ns[row_idx] = current_n
 
     updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = new_means
     updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = new_stds
@@ -312,21 +342,17 @@ def perform_clustering(
     DataFrame
         Modified DataFrame with added "cluster" column containing cluster IDs.
         -1 indicates unclustered points.
-
-    Notes
-    -----
-    Uses MIN_GROUP and EPS constants from constants.py for DBSCAN parameters.
     """
     sites_df = sites_df.copy()
     sites_df[constants.ObservationColumn.CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
 
     features = np.column_stack(
         (
-            sites_df[constants.ObservationColumn.EASTING].values,
-            sites_df[constants.ObservationColumn.NORTHING].values,
+            sites_df[constants.ObservationColumn.EASTING].to_numpy(),
+            sites_df[constants.ObservationColumn.NORTHING].to_numpy(),
         )
     )
-    model_ids = sites_df[constants.STANDARD_ID_COLUMN].values
+    model_ids = sites_df[constants.STANDARD_ID_COLUMN].to_numpy()
     ids = np.unique(model_ids)
     ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
 
@@ -368,8 +394,8 @@ def compute_cluster_weighted_mean_and_stddev(
     tuple[float, float]
         (geometric_mean_vs30, log_space_standard_deviation)
     """
-    log_vs30_all = np.log(category_sites[constants.ObservationColumn.VS30].values)
-    cluster_labels = category_sites[constants.ObservationColumn.CLUSTER].values
+    log_vs30_all = np.log(category_sites[constants.ObservationColumn.VS30].to_numpy())
+    cluster_labels = category_sites[constants.ObservationColumn.CLUSTER].to_numpy()
     weights = np.repeat(1.0 / effective_n, len(category_sites))
     weighted_log_vs30_sum = 0.0
 

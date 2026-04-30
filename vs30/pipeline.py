@@ -32,6 +32,19 @@ def _nan_to_nodata(arr: np.ndarray) -> np.ndarray:
     return np.where(np.isnan(arr), constants.NODATA_VALUE, arr)
 
 
+def _read_categorical_csv(path: Path) -> pd.DataFrame:
+    """Load a categorical-model CSV with whitespace-stripped column names.
+
+    Stripping at load time means downstream consumers (
+    ``raster.select_vs30_columns_by_priority``, ``category.get_vs30_for_ids``,
+    ``grid.compute_spatial_adjustment_on_grid``) can index columns by the
+    canonical names without each having to handle whitespace itself.
+    """
+    df = pd.read_csv(path, comment="#", skipinitialspace=True)
+    df.columns = [c.strip() for c in df.columns]
+    return df
+
+
 def default_correlation_functions(
     geology_corr_fn: Callable | None,
     terrain_corr_fn: Callable | None,
@@ -101,7 +114,7 @@ def assign_observations_to_category(
     """
     obs_locs = df[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
-    ].values
+    ].to_numpy()
     out = df.copy()
     out[constants.STANDARD_ID_COLUMN] = category.assign_to_category(
         obs_locs, model_type
@@ -135,8 +148,10 @@ def concat_observation_dfs(
 
 
 def compute_categorical_vs30_updates(
-    categorical_model_csv: Path,
     model_type: constants.ModelType,
+    *,
+    categorical_model_csv: Path | None = None,
+    categorical_model_df: pd.DataFrame | None = None,
     clustered_observations_df: pd.DataFrame | None = None,
     independent_observations_df: pd.DataFrame | None = None,
     dbscan_nproc: int = -1,
@@ -144,11 +159,12 @@ def compute_categorical_vs30_updates(
     """
     Compute Bayesian updates to categorical model values and return as DataFrame.
 
-    Loads the categorical model values and applies Bayesian updates using
-    pre-loaded observation DataFrames (mean and standard deviation per
-    category), and returns the updated DataFrame. The observation DataFrames
-    are expected to come from ``load_observations_csv`` so they can be loaded
-    once per pipeline run and reused across geology and terrain.
+    Loads the categorical model values (from CSV or pre-loaded DataFrame) and
+    applies Bayesian updates using pre-loaded observation DataFrames (mean and
+    standard deviation per category), and returns the updated DataFrame. The
+    observation DataFrames are expected to come from ``load_observations_csv``
+    so they can be loaded once per pipeline run and reused across geology and
+    terrain.
 
     Can process clustered observations (with spatial clustering) and/or independent
     observations (without clustering). If both are provided, clustered observations
@@ -164,11 +180,16 @@ def compute_categorical_vs30_updates(
 
     Parameters
     ----------
-    categorical_model_csv : Path
-        Path to CSV file with categorical Vs30 mean and standard deviation values
-        (e.g., geology_model_prior_mean_and_standard_deviation.csv).
     model_type : ModelType
         Model type: either GEOLOGY or TERRAIN.
+    categorical_model_csv : Path, optional
+        Path to CSV file with categorical Vs30 mean and standard deviation values
+        (e.g., geology_model_prior_mean_and_standard_deviation.csv). Mutually
+        exclusive with ``categorical_model_df``; exactly one must be provided.
+    categorical_model_df : pd.DataFrame, optional
+        Pre-loaded categorical model DataFrame. Use this when the CSV has
+        already been read by an outer caller (e.g., to avoid re-reading inside
+        a per-point loop).
     clustered_observations_df : pd.DataFrame, optional
         Pre-loaded clustered observations (e.g., from
         ``load_observations_csv``). Will be processed with spatial
@@ -188,8 +209,9 @@ def compute_categorical_vs30_updates(
     Raises
     ------
     ValueError
-        If neither observations DataFrame is provided, if model_type is
-        invalid, or if required CSV columns are missing.
+        If neither observations DataFrame is provided, if neither
+        ``categorical_model_csv`` nor ``categorical_model_df`` is provided,
+        if ``model_type`` is invalid, or if required CSV columns are missing.
     """
     if clustered_observations_df is None and independent_observations_df is None:
         raise ValueError(
@@ -201,11 +223,14 @@ def compute_categorical_vs30_updates(
         raise ValueError(f"model_type must be a valid ModelType, got '{model_type}'")
 
     logger.info(f"Model type: {model_type}")
-    logger.info(f"Loading categorical model from: {categorical_model_csv}")
 
-    categorical_model_df = pd.read_csv(
-        categorical_model_csv, comment="#", skipinitialspace=True
-    )
+    if categorical_model_df is None:
+        if categorical_model_csv is None:
+            raise ValueError(
+                "Either categorical_model_csv or categorical_model_df must be provided"
+            )
+        logger.info(f"Loading categorical model from: {categorical_model_csv}")
+        categorical_model_df = _read_categorical_csv(categorical_model_csv)
 
     # Drop rows with placeholder values for excluded categories (e.g., water)
     categorical_model_df = categorical_model_df[
@@ -258,6 +283,7 @@ def compute_model_grid(
     *,
     apply_alluvium_slope_mod: bool,
     categorical_model_csv: Path | None = None,
+    posterior_df: pd.DataFrame | None = None,
     clustered_observations_df: pd.DataFrame | None = None,
     independent_observations_df: pd.DataFrame | None = None,
     do_bayesian_update: bool = True,
@@ -291,8 +317,13 @@ def compute_model_grid(
         Grid domain and resolution parameters.
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
-    categorical_model_csv : Path
-        Path to CSV file with categorical Vs30 values.
+    categorical_model_csv : Path, optional
+        Path to CSV file with categorical Vs30 values. Required unless
+        ``posterior_df`` is provided.
+    posterior_df : pd.DataFrame, optional
+        Pre-computed posterior categorical model. When provided, Step 1
+        (Bayesian update) is skipped and this DataFrame is used directly.
+        ``do_bayesian_update`` and ``categorical_model_csv`` are ignored.
     clustered_observations_df : pd.DataFrame, optional
         Pre-loaded clustered observations (e.g., CPT data). Caller is
         expected to load this once via ``load_observations_csv`` and reuse
@@ -301,6 +332,7 @@ def compute_model_grid(
         Pre-loaded independent observations (e.g., measured filtered).
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical model values.
+        Ignored when ``posterior_df`` is provided.
     mvn : bool, optional
         Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
     noisy : bool, optional
@@ -328,10 +360,10 @@ def compute_model_grid(
         (vs30, stdv, id_array, profile) — the final VS30 array, standard
         deviation array, category ID array, and rasterio profile.
     """
-    if categorical_model_csv is None:
+    if posterior_df is None and categorical_model_csv is None:
         raise ValueError(
-            f"categorical_model_csv is required for {model_type} pipeline. "
-            "Specify it in the config YAML or pass it explicitly."
+            f"Either categorical_model_csv or posterior_df is required for "
+            f"{model_type} pipeline."
         )
 
     if output_dir is not None:
@@ -340,11 +372,13 @@ def compute_model_grid(
 
     logger.info(f"Starting full pipeline for {model_type}")
 
-    if do_bayesian_update:
+    if posterior_df is not None:
+        logger.info("\n=== STEP 1: SKIPPED - Using pre-computed posterior_df ===")
+    elif do_bayesian_update:
         logger.info("\n=== STEP 1: Updating Categorical Models ===")
         posterior_df = compute_categorical_vs30_updates(
-            categorical_model_csv=categorical_model_csv,
             model_type=model_type,
+            categorical_model_csv=categorical_model_csv,
             clustered_observations_df=clustered_observations_df,
             independent_observations_df=independent_observations_df,
             dbscan_nproc=dbscan_nproc,
@@ -359,9 +393,7 @@ def compute_model_grid(
         logger.info(
             "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
         )
-        posterior_df = pd.read_csv(
-            categorical_model_csv, comment="#", skipinitialspace=True
-        )
+        posterior_df = _read_categorical_csv(categorical_model_csv)
 
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
     vs30_array, stdv_array, id_array, profile = grid.create_initial_vs30_arrays(
@@ -512,6 +544,10 @@ def grid_pipeline(
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
+    clustered_observations_df: pd.DataFrame | None = None,
+    independent_observations_df: pd.DataFrame | None = None,
+    geology_posterior_df: pd.DataFrame | None = None,
+    terrain_posterior_df: pd.DataFrame | None = None,
 ) -> dict[str, np.ndarray | dict | None]:
     """
     Run the full VS30 generation pipeline on a raster grid.
@@ -577,6 +613,18 @@ def grid_pipeline(
     fill_gaps : bool
         Whether to fill on-land nodata gaps in the combined output using
         nearest-neighbor interpolation.
+    clustered_observations_df : pd.DataFrame, optional
+        Pre-loaded clustered observations. When provided, the corresponding
+        CSV path is ignored and this DataFrame is reused directly.
+    independent_observations_df : pd.DataFrame, optional
+        Pre-loaded independent observations. Same semantics as
+        ``clustered_observations_df``.
+    geology_posterior_df : pd.DataFrame, optional
+        Pre-computed posterior categorical model for geology. When provided,
+        the geology Bayesian update step is skipped.
+    terrain_posterior_df : pd.DataFrame, optional
+        Pre-computed posterior categorical model for terrain. When provided,
+        the terrain Bayesian update step is skipped.
 
     Returns
     -------
@@ -584,10 +632,20 @@ def grid_pipeline(
         Dictionary containing the computed raster data with keys:
 
         - ``"geology_vs30"``, ``"geology_stdv"`` : 2D arrays (when geology is computed)
+        - ``"geology_ids"`` : 2D uint8 array of geology category IDs (always
+          populated when geology is computed; required by the gap-fill
+          classifier in ``points_pipeline``).
         - ``"terrain_vs30"``, ``"terrain_stdv"`` : 2D arrays (when terrain is computed)
         - ``"combined_vs30"``, ``"combined_stdv"`` : 2D arrays (when both models are computed)
         - ``"profile"`` : rasterio profile dict with CRS, transform, dimensions, etc.
     """
+    if model_type != constants.ModelType.COMBINED and not include_intermediate:
+        raise ValueError(
+            "Single-model output (model_type=geology or terrain) requires "
+            "include_intermediate=True, as per-model results are intermediate "
+            "data products. The only final product is the combined model."
+        )
+
     start_time = time.time()
 
     geology_corr_fn, terrain_corr_fn = default_correlation_functions(
@@ -607,17 +665,16 @@ def grid_pipeline(
         constants.ModelType.COMBINED,
     )
 
-    # Load observation CSVs once and reuse across geology + terrain.
-    clustered_observations_df = (
-        load_observations_csv(clustered_observations_csv, "clustered")
-        if clustered_observations_csv is not None
-        else None
-    )
-    independent_observations_df = (
-        load_observations_csv(independent_observations_csv, "independent")
-        if independent_observations_csv is not None
-        else None
-    )
+    # Load observation CSVs once and reuse across geology + terrain (skipped
+    # when caller has already supplied the corresponding DataFrame).
+    if clustered_observations_df is None and clustered_observations_csv is not None:
+        clustered_observations_df = load_observations_csv(
+            clustered_observations_csv, "clustered"
+        )
+    if independent_observations_df is None and independent_observations_csv is not None:
+        independent_observations_df = load_observations_csv(
+            independent_observations_csv, "independent"
+        )
 
     result: dict[str, np.ndarray | dict | None] = {}
     profile: dict | None = None
@@ -628,6 +685,7 @@ def grid_pipeline(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
             categorical_model_csv=geology_categorical_csv,
+            posterior_df=geology_posterior_df,
             clustered_observations_df=clustered_observations_df,
             independent_observations_df=independent_observations_df,
             do_bayesian_update=do_bayesian_update,
@@ -651,6 +709,7 @@ def grid_pipeline(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
             categorical_model_csv=terrain_categorical_csv,
+            posterior_df=terrain_posterior_df,
             clustered_observations_df=clustered_observations_df,
             independent_observations_df=independent_observations_df,
             do_bayesian_update=do_bayesian_update,
@@ -895,6 +954,13 @@ def points_pipeline(
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
         terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
     """
+    if model_type != constants.ModelType.COMBINED and not include_intermediate:
+        raise ValueError(
+            "Single-model output (model_type=geology or terrain) requires "
+            "include_intermediate=True, as per-model results are intermediate "
+            "data products. The only final product is the combined model."
+        )
+
     geology_corr_fn, terrain_corr_fn = default_correlation_functions(
         geology_corr_fn, terrain_corr_fn
     )
@@ -950,16 +1016,14 @@ def points_pipeline(
                 "Performing Bayesian update of geology categorical model values..."
             )
             geol_model_df = compute_categorical_vs30_updates(
-                categorical_model_csv=geology_categorical_csv,
                 model_type=constants.ModelType.GEOLOGY,
+                categorical_model_csv=geology_categorical_csv,
                 clustered_observations_df=clustered_observations_df,
                 independent_observations_df=independent_observations_df,
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            geol_model_df = pd.read_csv(
-                geology_categorical_csv, comment="#", skipinitialspace=True
-            )
+            geol_model_df = _read_categorical_csv(geology_categorical_csv)
 
     if run_terrain:
         if terrain_categorical_csv is None:
@@ -971,16 +1035,14 @@ def points_pipeline(
                 "Performing Bayesian update of terrain categorical model values..."
             )
             terr_model_df = compute_categorical_vs30_updates(
-                categorical_model_csv=terrain_categorical_csv,
                 model_type=constants.ModelType.TERRAIN,
+                categorical_model_csv=terrain_categorical_csv,
                 clustered_observations_df=clustered_observations_df,
                 independent_observations_df=independent_observations_df,
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            terr_model_df = pd.read_csv(
-                terrain_categorical_csv, comment="#", skipinitialspace=True
-            )
+            terr_model_df = _read_categorical_csv(terrain_categorical_csv)
 
     geology_obs_data = (
         points.prepare_geology_obs_data(
@@ -1092,8 +1154,8 @@ def points_pipeline(
     # Gap-fill: fill on-land nodata points
     # ================================================================
     if fill_gaps and model_type == constants.ModelType.COMBINED:
-        combined_vs30 = result_df[constants.ObservationColumn.VS30].values
-        combined_stdv = result_df[constants.COL_COMBINED_STDV].values
+        combined_vs30 = result_df[constants.ObservationColumn.VS30].to_numpy()
+        combined_stdv = result_df[constants.COL_COMBINED_STDV].to_numpy()
 
         # COMBINED implies run_geology, so geol_ids was already computed above.
         fillable_mask = gapfill.classify_nodata(combined_vs30, geol_ids, locations)
@@ -1109,19 +1171,23 @@ def points_pipeline(
                 f"via local grid pipeline"
             )
 
+            # Reuse the already-loaded observations DataFrames and the already-
+            # computed posterior categorical models; the local grid_pipeline
+            # invocations should not re-read CSVs or re-run DBSCAN/Bayesian.
             grid_pipeline_kwargs = {
                 "model_type": constants.ModelType.COMBINED,
-                "geology_categorical_csv": geology_categorical_csv,
-                "terrain_categorical_csv": terrain_categorical_csv,
-                "clustered_observations_csv": clustered_observations_csv,
-                "independent_observations_csv": independent_observations_csv,
+                "clustered_observations_df": clustered_observations_df,
+                "independent_observations_df": independent_observations_df,
+                "geology_posterior_df": geol_model_df,
+                "terrain_posterior_df": terr_model_df,
                 "combination_method": combination_method,
                 "combine_ratio": combine_ratio,
                 "noisy": noisy,
                 "mvn": mvn,
-                "do_bayesian_update": do_bayesian_update,
+                # Already applied (or skipped) when geol_model_df / terr_model_df
+                # were computed; do not re-run.
+                "do_bayesian_update": False,
                 "include_intermediate": False,
-                "dbscan_nproc": 1,
                 "geology_corr_fn": geology_corr_fn,
                 "terrain_corr_fn": terrain_corr_fn,
                 "apply_coastal_distance_mod": apply_coastal_distance_mod,

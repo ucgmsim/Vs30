@@ -208,11 +208,12 @@ def compute_spatial_adjustment_on_grid(
         list(model_values_df.columns)
     )
     max_id = model_values_df[constants.STANDARD_ID_COLUMN].max()
+    # Indices are 1-based ids minus 1, so we need max_id rows (covering 0..max_id-1).
     updated_model_table = np.full((max_id, 2), np.nan)
-    ids = model_values_df[constants.STANDARD_ID_COLUMN].values.astype(int) - 1
+    ids = model_values_df[constants.STANDARD_ID_COLUMN].to_numpy().astype(int) - 1
     valid = (ids >= 0) & (ids < max_id)
-    updated_model_table[ids[valid], 0] = model_values_df[mean_col].values[valid]
-    updated_model_table[ids[valid], 1] = model_values_df[std_col].values[valid]
+    updated_model_table[ids[valid], 0] = model_values_df[mean_col].to_numpy()[valid]
+    updated_model_table[ids[valid], 1] = model_values_df[std_col].to_numpy()[valid]
 
     logger.info("Preparing observation data for spatial adjustment...")
     obs_data = spatial.prepare_observation_data(
@@ -238,7 +239,7 @@ def compute_spatial_adjustment_on_grid(
 
     logger.info("Finding pixels affected by observations...")
     t_bbox_start = time.perf_counter()
-    bbox_result, grid_locs = spatial.find_affected_pixels(
+    bbox_mask, grid_locs = spatial.find_affected_pixels(
         raster_data,
         obs_data,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
@@ -247,7 +248,7 @@ def compute_spatial_adjustment_on_grid(
     )
     t_bbox_elapsed = time.perf_counter() - t_bbox_start
     logger.info(
-        f"Found {bbox_result.n_affected_pixels:,} affected pixels "
+        f"Found {int(bbox_mask.sum()):,} affected pixels "
         f"in {t_bbox_elapsed:.1f}s"
     )
 
@@ -256,7 +257,7 @@ def compute_spatial_adjustment_on_grid(
     adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
         raster_data,
         obs_data,
-        bbox_result,
+        bbox_mask,
         grid_locs,
         corr_fn,
         max_dist_m=constants.MAX_DIST_M,
@@ -301,7 +302,7 @@ def combine_model_arrays(
     combine_ratio : float, optional
         Geology-to-terrain weight ratio. Required when combination_method is RATIO.
     nodata : float, optional
-        No-data value. Default from constants.
+        No-data value.
 
     Returns
     -------

@@ -71,6 +71,67 @@ def load_coast_union():
     return load_coast_shapefile().geometry.union_all()
 
 
+@functools.lru_cache(maxsize=1)
+def load_coast_boundary_union():
+    """
+    Return the unioned NZ coastline boundary, cached across calls.
+
+    Distinct from ``load_coast_union`` (which returns the polygon union):
+    the boundary is the polygon edges, used to compute distance-to-coast.
+    ``geometry.boundary.union_all()`` is expensive and has the same
+    memoisation justification as ``load_coast_union``.
+    """
+    return load_coast_shapefile().geometry.boundary.union_all()
+
+
+@functools.lru_cache(maxsize=1)
+def load_terrain_raster_array() -> tuple[
+    np.ndarray, rasterio.transform.Affine, float | None
+]:
+    """
+    Load the bundled terrain (IwahashiPike) raster fully into memory, cached.
+
+    The bundled rasters never change at runtime, so a single in-process load
+    avoids the per-call ``rasterio.open`` overhead in
+    ``category.assign_to_category_terrain``.
+
+    Returns
+    -------
+    tuple[ndarray, rasterio.transform.Affine, float or None]
+        ``(data, transform, nodata)`` where ``data`` is the full 2D uint8
+        category-id raster.
+    """
+    path = constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"Terrain raster not found: {path}")
+    with rasterio.open(path) as src:
+        return src.read(1), src.transform, src.nodata
+
+
+@functools.lru_cache(maxsize=1)
+def load_slope_raster_array() -> tuple[
+    np.ndarray, rasterio.transform.Affine, float | None
+]:
+    """
+    Load the bundled slope raster fully into memory, cached.
+
+    Same memoisation rationale as ``load_terrain_raster_array``: avoids
+    repeated ``rasterio.open`` round-trips when ``sample_slope_at_points`` is
+    called many times per pipeline (especially in points-mode gap-fill).
+
+    Returns
+    -------
+    tuple[ndarray, rasterio.transform.Affine, float or None]
+        ``(data, transform, nodata)`` where ``data`` is the full 2D float
+        slope raster.
+    """
+    path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {path}")
+    with rasterio.open(path) as src:
+        return src.read(1), src.transform, src.nodata
+
+
 def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
     """
     Ensure a shapefile is extracted from shapefiles.tar.xz.
@@ -265,21 +326,16 @@ def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
         If no suitable column pair is found.
     """
     priorities = [
-        # 1. Independent observations posterior
         (
             constants.COL_POSTERIOR_MEAN_INDEPENDENT,
             constants.COL_POSTERIOR_STDV_INDEPENDENT,
         ),
-        # 2. Clustered observations posterior
         (
             constants.COL_POSTERIOR_MEAN_CLUSTERED,
             constants.COL_POSTERIOR_STDV_CLUSTERED,
         ),
-        # 3. Generic posterior
         (constants.COL_POSTERIOR_MEAN, constants.COL_POSTERIOR_STDV),
-        # 4. Explicit prior
         (constants.COL_PRIOR_MEAN, constants.COL_PRIOR_STDV),
-        # 5. Standard/Original names
         (constants.COL_MEAN, constants.COL_STDV),
     ]
 
@@ -326,10 +382,7 @@ def create_vs30_arrays_from_ids(
         If the DataFrame is missing required columns or an ID in the array
         is not found in the DataFrame.
     """
-    # Strip whitespace from column names without copying the DataFrame
-    stripped_columns = {c.strip(): c for c in model_values_df.columns}
-    columns_list = list(stripped_columns.keys())
-
+    columns_list = list(model_values_df.columns)
     mean_col, std_col = select_vs30_columns_by_priority(columns_list)
 
     if constants.STANDARD_ID_COLUMN not in columns_list:
@@ -337,20 +390,15 @@ def create_vs30_arrays_from_ids(
             f"DataFrame is missing required column: {constants.STANDARD_ID_COLUMN}"
         )
 
-    # Map stripped column names back to the originals so we can index the DataFrame.
-    id_col_orig = stripped_columns[constants.STANDARD_ID_COLUMN]
-    mean_col_orig = stripped_columns[mean_col]
-    std_col_orig = stripped_columns[std_col]
-
     # Build LUTs indexed directly by category ID. RASTER_ID_NODATA_VALUE (255)
     # is the largest id we ever see, so the LUT length is fixed at 256.
     n_slots = constants.RASTER_ID_NODATA_VALUE + 1
     mean_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
     stdv_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
 
-    df_ids = model_values_df[id_col_orig].astype(int).to_numpy()
-    mean_lut[df_ids] = model_values_df[mean_col_orig].astype(np.float32).to_numpy()
-    stdv_lut[df_ids] = model_values_df[std_col_orig].astype(np.float32).to_numpy()
+    df_ids = model_values_df[constants.STANDARD_ID_COLUMN].astype(int).to_numpy()
+    mean_lut[df_ids] = model_values_df[mean_col].astype(np.float32).to_numpy()
+    stdv_lut[df_ids] = model_values_df[std_col].astype(np.float32).to_numpy()
 
     unique_ids = np.unique(id_array)
     valid_ids = unique_ids[
@@ -516,6 +564,9 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     """
     Sample slope values at specific NZTM points from the bundled slope raster.
 
+    Out-of-bounds points get the raster's nodata value (matching the legacy
+    ``rasterio.sample`` semantics this used to call).
+
     Parameters
     ----------
     points : np.ndarray
@@ -526,14 +577,19 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Slope values at each point (N,).
     """
-    slope_raster_path = (
-        constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    data, transform, nodata = load_slope_raster_array()
+    rows, cols = rasterio.transform.rowcol(transform, points[:, 0], points[:, 1])
+    rows = np.asarray(rows)
+    cols = np.asarray(cols)
+    in_bounds = (
+        (rows >= 0)
+        & (rows < data.shape[0])
+        & (cols >= 0)
+        & (cols < data.shape[1])
     )
-    if not slope_raster_path.exists():
-        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
-
-    with rasterio.open(slope_raster_path) as src:
-        return np.array([sample[0] for sample in src.sample(points)], dtype=np.float64)
+    out = np.full(len(points), nodata, dtype=np.float64)
+    out[in_bounds] = data[rows[in_bounds], cols[in_bounds]].astype(np.float64)
+    return out
 
 
 def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
@@ -554,11 +610,10 @@ def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Distance to coast in meters for each point (N,).
     """
-    coast_gdf = load_coast_shapefile()
     # The coastline file contains land polygons. Distance to coast is distance
-    # from each point to the nearest polygon boundary.
-    coast_boundary = coast_gdf.geometry.boundary.union_all()
-
+    # from each point to the nearest polygon boundary; load_coast_boundary_union
+    # memoises the expensive union_all().
+    coast_boundary = load_coast_boundary_union()
     point_geoms = shapely.points(points)
     distances = shapely.distance(point_geoms, coast_boundary)
     return np.asarray(distances, dtype=np.float64)
@@ -652,17 +707,10 @@ def apply_hybrid_geology_modifications(
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
 
-    # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
-    safe_log_slope = np.log10(
-        np.where(
-            (slope_array <= 0) | (slope_array == constants.NODATA_VALUE),
-            constants.MIN_SLOPE_FOR_LOG,
-            slope_array,
-        )
-    )
-
     for spec in constants.HYBRID_GEOLOGY_PARAMS:
         mask = id_array == spec.gid
+        if not np.any(mask):
+            continue
         # sigma_reduction always applies — it tightens the categorical lookup
         # itself (legacy R semantics), not a per-pixel slope refinement. See
         # dev/docs/sigma_reduction_factor_provenance.md.
@@ -673,11 +721,17 @@ def apply_hybrid_geology_modifications(
         if spec.gid == 4 and not apply_alluvium_slope_mod:
             continue
 
-        if np.any(mask):
-            interpolated_val = np.interp(
-                safe_log_slope[mask], spec.slope_limits, spec.vs30_values_log10
-            )
-            vs30_array[mask] = 10**interpolated_val
+        spec_slope = slope_array[mask]
+        # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
+        safe_slope = np.where(
+            (spec_slope <= 0) | (spec_slope == constants.NODATA_VALUE),
+            constants.MIN_SLOPE_FOR_LOG,
+            spec_slope,
+        )
+        interpolated_val = np.interp(
+            np.log10(safe_slope), spec.slope_limits, spec.vs30_values_log10
+        )
+        vs30_array[mask] = 10**interpolated_val
 
     if apply_coastal_distance_mod:
         apply_coastal_distance_modification(
