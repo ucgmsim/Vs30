@@ -727,9 +727,9 @@ def grid_pipeline(
         assert profile is not None  # invariant: set by compute_model_grid above
 
         if fill_gaps:
-            # Stage 6: Gap-fill on-land nodata pixels in combined output
+            # Gap-fill on-land nodata pixels in combined output
             logger.info(
-                "\n" + "=" * 80 + "\nSTAGE 6: GAP-FILLING COMBINED OUTPUT\n" + "=" * 80
+                "\n" + "=" * 80 + "\nGAP-FILLING COMBINED OUTPUT\n" + "=" * 80
             )
 
             if output_dir is not None and include_intermediate:
@@ -1044,7 +1044,7 @@ def points_pipeline(
     result[constants.ObservationColumn.EASTING] = locations[:, 0]
     result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
-    # --- Stage 1-3: Geology model (categorical lookup, hybrid mods, spatial adjustment) ---
+    # --- Geology pipeline: categorical lookup, hybrid mods, spatial adjustment ---
     if run_geology:
         assert geol_model_df is not None  # invariant: required when run_geology
         with tqdm(
@@ -1078,7 +1078,7 @@ def points_pipeline(
             result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
             result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
-    # --- Stage 1, 3: Terrain model (categorical lookup, spatial adjustment — no hybrid mods) ---
+    # --- Terrain pipeline: categorical lookup, spatial adjustment (no hybrid mods — geology-only step) ---
     if run_terrain:
         assert terr_model_df is not None  # invariant: required when run_terrain
         with tqdm(
@@ -1106,7 +1106,7 @@ def points_pipeline(
             result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
             result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
-    # --- Stage 4: Combine geology and terrain models or use single model result ---
+    # --- Combine geology and terrain (or pass through single-model result) ---
     if run_geology and run_terrain:
         logger.info("Combining models...")
         combined_vs30, combined_stdv = utils.combine_vs30_models(
