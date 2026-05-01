@@ -62,7 +62,11 @@ def points_inside_coastline(locations: np.ndarray) -> np.ndarray:
 
     # union_all() is expensive — raster.load_coast_union() memoises it.
     coast_union = raster.load_coast_union()
-    return shapely.within(shapely.points(locations), coast_union)
+    # contains_xy takes coordinate arrays directly. The shapely.within(
+    # shapely.points(locations), ...) form allocates ~80 B per coordinate
+    # for the per-point Python wrapper and OOMs the full-NZ grid, which
+    # has 10^8+ off-coast pixels.
+    return shapely.contains_xy(coast_union, locations[:, 0], locations[:, 1])
 
 
 def classify_nodata(
