@@ -255,6 +255,10 @@ NODATA_VALUE: int = -32767
 # Full New Zealand land extent at standard 100m resolution.
 # IMPORTANT: These bounds define the canonical NZ domain and MUST NOT be changed.
 # Used for coastal distance calculations, gap-fill grid alignment, and CLI defaults.
+# The xmin/xmax/ymin/ymax values are pixel centres (not pixel edges) on the
+# 100m NZTM grid, so they are offset by 50m (half a cell) from round-number
+# corners. This convention keeps pixel-centre arithmetic clean and avoids
+# sub-pixel shifts when resampling.
 FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
     grid_xmin=1060050,
     grid_xmax=2120050,
