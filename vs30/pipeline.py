@@ -142,11 +142,6 @@ def concat_observation_dfs(
     return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
 
 
-# ============================================================================
-# Stage 1: Bayesian update of categorical model values
-# ============================================================================
-
-
 def compute_categorical_vs30_updates(
     model_type: constants.ModelType,
     *,
@@ -272,10 +267,6 @@ def compute_categorical_vs30_updates(
     return current_prior_df
 
 
-# ============================================================================
-# Full pipeline for a single model type
-# ============================================================================
-
 
 def compute_model_grid(
     model_type: constants.ModelType,
@@ -290,7 +281,7 @@ def compute_model_grid(
     mvn: bool = True,
     noisy: bool = True,
     dbscan_nproc: int = -1,
-    max_spatial_boolean_array_memory_gb: float = 1.0,
+    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
@@ -427,15 +418,13 @@ def compute_model_grid(
             (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
-    current_vs30 = vs30_array
-    current_stdv = stdv_array
     slope_array = None
     coast_dist_array = None
 
     if model_type == constants.ModelType.GEOLOGY:
         logger.info("\n=== STEP 3: Slope and Coastal Distance Adjusted Geology ===")
 
-        current_vs30, current_stdv, slope_array, coast_dist_array = (
+        vs30_array, stdv_array, slope_array, coast_dist_array = (
             grid.compute_hybrid_geology_arrays(
                 vs30_array,
                 stdv_array,
@@ -464,7 +453,7 @@ def compute_model_grid(
                 output_dir
                 / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME,
                 profile,
-                [current_vs30, current_stdv],
+                [vs30_array, stdv_array],
                 (
                     constants.BAND_DESCRIPTION_VS30_HYBRID,
                     constants.BAND_DESCRIPTION_STDV_HYBRID,
@@ -486,9 +475,9 @@ def compute_model_grid(
                 "At least one of clustered or independent observations must be specified."
             )
 
-        current_vs30, current_stdv = grid.compute_spatial_adjustment_on_grid(
-            vs30_array=current_vs30,
-            stdv_array=current_stdv,
+        vs30_array, stdv_array = grid.compute_spatial_adjustment_on_grid(
+            vs30_array=vs30_array,
+            stdv_array=stdv_array,
             profile=profile,
             observations_df=observations_df,
             model_values_df=posterior_df,
@@ -509,18 +498,13 @@ def compute_model_grid(
         grid.write_raster(
             output_dir / output_filename,
             profile,
-            [current_vs30, current_stdv],
+            [vs30_array, stdv_array],
             (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
     logger.info(f"\nFull pipeline for {model_type} completed successfully")
 
-    return current_vs30, current_stdv, id_array, profile
-
-
-# ============================================================================
-# Full grid pipeline (orchestration)
-# ============================================================================
+    return vs30_array, stdv_array, id_array, profile
 
 
 def grid_pipeline(
@@ -539,7 +523,7 @@ def grid_pipeline(
     do_bayesian_update: bool = True,
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
-    max_spatial_boolean_array_memory_gb: float = 1.0,
+    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
     geology_corr_fn: Callable | None = None,
     terrain_corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
@@ -784,11 +768,6 @@ def grid_pipeline(
         logger.info(f"  Output available in: {output_dir}")
 
     return result
-
-
-# ============================================================================
-# Point-based pipeline
-# ============================================================================
 
 
 def fill_one_point_via_local_grid(
@@ -1150,9 +1129,6 @@ def points_pipeline(
     logger.info(f"  Total locations: {len(locations)}")
     result_df = pd.DataFrame(result)
 
-    # ================================================================
-    # Gap-fill: fill on-land nodata points
-    # ================================================================
     if fill_gaps and model_type == constants.ModelType.COMBINED:
         combined_vs30 = result_df[constants.ObservationColumn.VS30].to_numpy()
         combined_stdv = result_df[constants.COL_COMBINED_STDV].to_numpy()

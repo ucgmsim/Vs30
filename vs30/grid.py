@@ -143,7 +143,7 @@ def compute_spatial_adjustment_on_grid(
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
-    max_spatial_boolean_array_memory_gb: float = 1.0,
+    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
