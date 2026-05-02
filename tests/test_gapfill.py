@@ -102,28 +102,46 @@ def test_create_local_grid_config_expansion():
     This test checks that the expanded grid is larger but stays centered on
     the same point and keeps its pixels aligned to the full NZ grid.
     """
-    # Pick an arbitrary point on the full NZ grid (100 pixels from the origin)
+    dx = constants.FULL_NZ_GRID_CONFIG.grid_dx
+    dy = constants.FULL_NZ_GRID_CONFIG.grid_dy
+
+    # Pick an arbitrary pixel CENTRE on the full NZ grid (100 pixels from the
+    # origin). Pixel centres are at grid_xmin + dx/2 + n*dx under the
+    # pixel-edge bounds convention.
     n_pixels = 100
     easting = (
         constants.FULL_NZ_GRID_CONFIG.grid_xmin
-        + n_pixels * constants.FULL_NZ_GRID_CONFIG.grid_dx
+        + dx / 2
+        + n_pixels * dx
     )
     northing = (
         constants.FULL_NZ_GRID_CONFIG.grid_ymin
-        + n_pixels * constants.FULL_NZ_GRID_CONFIG.grid_dy
+        + dy / 2
+        + n_pixels * dy
     )
 
-    # Simulate the first attempt (5 km half-width -> 10 km x 10 km grid)
+    # Use the production constants directly so this test fails if a future
+    # constant change violates the pixel-edge constraint that
+    # create_local_grid_config requires (half_width must equal k*dx + dx/2).
+    half_dx = dx / 2
+    assert (constants.GAPFILL_LOCAL_GRID_SIZE_M - half_dx) % dx == 0, (
+        f"GAPFILL_LOCAL_GRID_SIZE_M = {constants.GAPFILL_LOCAL_GRID_SIZE_M} "
+        f"must equal k*dx + dx/2 for create_local_grid_config to produce "
+        f"pixel-aligned local grids."
+    )
+    assert constants.GAPFILL_LOCAL_GRID_EXPANSION_M % dx == 0, (
+        f"GAPFILL_LOCAL_GRID_EXPANSION_M = {constants.GAPFILL_LOCAL_GRID_EXPANSION_M} "
+        f"must be a multiple of dx so successive expansions stay aligned."
+    )
     initial_half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
+    expanded_half_width = initial_half_width + constants.GAPFILL_LOCAL_GRID_EXPANSION_M
+
     initial_grid = gapfill.create_local_grid_config(
         easting,
         northing,
         constants.FULL_NZ_GRID_CONFIG,
         initial_half_width,
     )
-
-    # Simulate the retry after expansion (10 km half-width -> 20 km x 20 km grid)
-    expanded_half_width = initial_half_width + constants.GAPFILL_LOCAL_GRID_EXPANSION_M
     expanded_grid = gapfill.create_local_grid_config(
         easting,
         northing,
@@ -136,7 +154,7 @@ def test_create_local_grid_config_expansion():
         initial_grid.grid_xmax - initial_grid.grid_xmin
     )
 
-    # Both grids should still be centered on the same point
+    # Both grids should still be centered on the snapped pixel centre
     assert (initial_grid.grid_xmin + initial_grid.grid_xmax) / 2 == (
         expanded_grid.grid_xmin + expanded_grid.grid_xmax
     ) / 2
@@ -144,12 +162,18 @@ def test_create_local_grid_config_expansion():
         expanded_grid.grid_ymin + expanded_grid.grid_ymax
     ) / 2
 
-    # Both grids should have pixels aligned to the full NZ grid
-    assert initial_grid.grid_dx == constants.FULL_NZ_GRID_CONFIG.grid_dx
-    assert expanded_grid.grid_dx == constants.FULL_NZ_GRID_CONFIG.grid_dx
+    # Both grids should share the same pixel-centre lattice as the full NZ
+    # grid. Pixel centres of a grid are at xmin + dx/2 + n*dx. Two grids
+    # share the same lattice iff their xmin values are an integer number of
+    # dx apart. (With pixel-edge bounds and a pixel-centre snap, xmin is
+    # always snap_e - half_width where snap_e is a full NZ pixel centre and
+    # half_width = n*dx + dx/2, so xmin is also a full NZ pixel centre —
+    # i.e. (xmin - full_xmin) % dx == 0.)
+    assert initial_grid.grid_dx == dx
+    assert expanded_grid.grid_dx == dx
     assert (
         initial_grid.grid_xmin - constants.FULL_NZ_GRID_CONFIG.grid_xmin
-    ) % constants.FULL_NZ_GRID_CONFIG.grid_dx == 0
+    ) % dx == 0
     assert (
         expanded_grid.grid_xmin - constants.FULL_NZ_GRID_CONFIG.grid_xmin
-    ) % constants.FULL_NZ_GRID_CONFIG.grid_dx == 0
+    ) % dx == 0

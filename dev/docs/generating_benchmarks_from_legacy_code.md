@@ -19,11 +19,16 @@ Always use `--nproc 1` — both legacy codebases deadlock with nproc > 1.
 
 ## Grid Bounds
 
-The benchmark test uses two grids (defined in `tests/test_benchmarks.py`):
+The benchmark test uses two grids (defined in `tests/test_benchmarks.py`).
+These bounds were updated 2026-05-02 from `..100` to `..050` so that
+the 5 km pixel centres land on IwahashiPike pixel centres (centres at
+coordinates ending in `..50`), eliminating GDAL nearest-neighbour
+tie-break ambiguity. See
+`dev/docs/grid_bounds_semantics_investigation.md`.
 
 | Grid | xmin | xmax | ymin | ymax | Used by |
 |------|------|------|------|------|---------|
-| `BENCHMARK_NZ_GRID` | 1060100 | 2120100 | 4730100 | 6250100 | modified_foster_2019, jaehwi_v1p0, viktor_cpt_clustering |
+| `BENCHMARK_NZ_GRID` | 1060050 | 2120050 | 4730050 | 6250050 | modified_foster_2019, jaehwi_v1p0, viktor_cpt_clustering |
 | `FOSTER_2019_GRID` | 1000000 | 2126400 | 4700000 | 6338400 | foster_2019_approx |
 
 Pass `--dx 5000 --dy 5000` for benchmark resolution.
@@ -36,7 +41,7 @@ Pass `--dx 5000 --dy 5000` for benchmark resolution.
 $LEGACY_PY run_vs30calc.py \
     --source original \
     --gupdate posterior_paper --tupdate posterior_paper \
-    --xmin 1060100 --xmax 2120100 --ymin 4730100 --ymax 6250100 \
+    --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
     --out /tmp/bench_modified_foster_2019 \
     --nproc 1 --overwrite
@@ -57,7 +62,7 @@ Copy `combined_mvn.tif` to `tests/benchmarks/modified_foster_2019.tif`.
 $LEGACY_PY run_vs30calc.py \
     --source cpt \
     --gupdate posterior --tupdate posterior \
-    --xmin 1060100 --xmax 2120100 --ymin 4730100 --ymax 6250100 \
+    --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
     --out /tmp/bench_viktor_cpt_clustering \
     --nproc 1 --overwrite
@@ -77,7 +82,7 @@ Copy `combined_mvn.tif` to `tests/benchmarks/viktor_cpt_clustering.tif`.
 ```bash
 $LEGACY_PY run_vs30calc_V1.py \
     --gupdate posterior --tupdate posterior \
-    --xmin 1060100 --xmax 2120100 --ymin 4730100 --ymax 6250100 \
+    --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
     --out /tmp/bench_jaehwi_v1p0 \
     --nproc 1 --overwrite
@@ -98,11 +103,6 @@ python dev/scripts/generators/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.
   config uses Bayesian update from priors, which corresponds to `posterior`
   in the legacy code).
 - No `--source` flag needed — the fork defaults to `original`.
-
-**Coordinate note:** Jaehwi's fork has different default grid bounds
-(xmin=1060100 vs pre-refactor's 1060050, ymin=4730000 vs 4730050). At 5000m
-resolution with explicit bounds, both codebases produce identical pixel grids
-so no coordinate adjustment is needed.
 
 ## foster_2019_approx
 

@@ -253,33 +253,50 @@ RASTER_ID_NODATA_VALUE: int = 255
 NODATA_VALUE: int = -32767
 
 # Full New Zealand land extent at standard 100m resolution.
-# IMPORTANT: These bounds define the canonical NZ domain and MUST NOT be changed.
 # Used for coastal distance calculations, gap-fill grid alignment, and CLI defaults.
-# The xmin/xmax/ymin/ymax values are pixel centres (not pixel edges) on the
-# 100m NZTM grid, so they are offset by 50m (half a cell) from round-number
-# corners. This convention keeps pixel-centre arithmetic clean and avoids
-# sub-pixel shifts when resampling.
+#
+# Convention: xmin/xmax/ymin/ymax are PIXEL EDGES (outer bounds), per
+# rasterio.transform.from_bounds() and GDAL outputBounds. The number of
+# pixels is (xmax-xmin)/dx, and pixel CENTRES are at xmin + dx/2 + n*dx.
+#
+# These specific bounds are chosen so that pixel CENTRES (1060150, 1060250,
+# ..., 2120050 in x) coincide exactly with the bundled IwahashiPike.tif
+# pixel centres (which end in ..50 in both axes — see
+# dev/docs/grid_bounds_semantics_investigation.md). This avoids GDAL's
+# nearest-neighbour tie-break at every pixel during terrain resampling.
 FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
-    grid_xmin=1060050,
-    grid_xmax=2120050,
-    grid_ymin=4730050,
-    grid_ymax=6250050,
+    grid_xmin=1060100,
+    grid_xmax=2120100,
+    grid_ymin=4730100,
+    grid_ymax=6250100,
     grid_dx=100,
     grid_dy=100,
 )
 
 # Gap-fill constants
 # Half-width (meters) of the local grid generated around each fillable point
-# in the points pipeline. A value of 5000 gives a 10 km x 10 km local grid.
-GAPFILL_LOCAL_GRID_SIZE_M: int = 5000
+# in the points pipeline.
+#
+# Constraint: must equal ``k * grid_dx + grid_dx / 2`` for integer k. This is
+# because ``create_local_grid_config`` snaps the query point to the nearest
+# pixel centre and then constructs bounds at ``snap ± half_width``; for those
+# bounds to be pixel edges (per ``rasterio.transform.from_bounds`` convention),
+# half_width must offset by exactly half a pixel. With ``grid_dx = 100`` m
+# this gives 5050 = 50 pixels per side + half-pixel = a 101 x 101 pixel
+# (~10.1 km x 10.1 km) local grid.
+GAPFILL_LOCAL_GRID_SIZE_M: int = 5050
 
 # Amount (meters) to expand the local grid half-width if the initial local
-# grid has no valid donor pixels for a fillable point.
+# grid has no valid donor pixels for a fillable point. Must be a multiple of
+# ``grid_dx`` so that successive expansions of a valid initial half-width
+# remain valid.
 GAPFILL_LOCAL_GRID_EXPANSION_M: int = 5000
 
 # Maximum half-width (meters) for local grid expansion. Prevents unbounded
-# growth if a fillable point has no valid donors nearby.
-GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M: int = 50000
+# growth if a fillable point has no valid donors nearby. Set to 50050 so the
+# expansion sequence (5050, 10050, ..., 50050) ends at 10 iterations matching
+# the previous max of 50000 with the old initial of 5000.
+GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M: int = 50050
 
 # Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0

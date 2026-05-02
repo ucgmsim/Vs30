@@ -213,10 +213,12 @@ def create_local_grid_config(
     """
     Create a local grid config for gap-filling a single point.
 
-    Snaps the point to the nearest pixel center in the reference grid
-    config, then creates a local grid of size (2 * half_width) centered on
-    that pixel. The local grid uses the same spacing and origin alignment as
-    gapfill_grid_config to ensure pixel centers match the full grid.
+    Snaps the point to the nearest pixel CENTRE in the reference grid
+    (where pixel centres are at ``grid_xmin + grid_dx/2 + n*grid_dx``,
+    per the codebase's pixel-edge bounds convention), then creates a
+    local grid of size (2 * half_width) on each side. The local grid's
+    centre pixel CENTRE coincides with that snapped point, so it shares
+    the same pixel-centre lattice as the reference grid.
 
     Parameters
     ----------
@@ -227,23 +229,28 @@ def create_local_grid_config(
     gapfill_grid_config : GridConfig
         Reference grid config defining the pixel alignment.
     half_width : int
-        Half-width of the local grid in meters.
+        Half-width of the local grid in meters. Must be a multiple of
+        ``grid_dx`` plus ``grid_dx / 2`` (e.g. 150 m for dx=100 m, 250 m
+        for dx=100 m, …) so the local grid's outer bounds remain pixel
+        edges.
 
     Returns
     -------
     GridConfig
         Local grid config aligned to the reference grid.
     """
+    # Pixel centres of the reference grid lie at grid_xmin + dx/2 + n*dx.
+    # Snap the query point to the nearest such centre.
+    half_dx = gapfill_grid_config.grid_dx / 2
+    half_dy = gapfill_grid_config.grid_dy / 2
+    first_centre_x = gapfill_grid_config.grid_xmin + half_dx
+    first_centre_y = gapfill_grid_config.grid_ymin + half_dy
 
-    snap_e = (
-        gapfill_grid_config.grid_xmin
-        + round((easting - gapfill_grid_config.grid_xmin) / gapfill_grid_config.grid_dx) * gapfill_grid_config.grid_dx
-    )
-    snap_n = (
-        gapfill_grid_config.grid_ymin
-        + round((northing - gapfill_grid_config.grid_ymin) / gapfill_grid_config.grid_dy) * gapfill_grid_config.grid_dy
-    )
+    snap_e = first_centre_x + round((easting - first_centre_x) / gapfill_grid_config.grid_dx) * gapfill_grid_config.grid_dx
+    snap_n = first_centre_y + round((northing - first_centre_y) / gapfill_grid_config.grid_dy) * gapfill_grid_config.grid_dy
 
+    # Build the local grid. Bounds are pixel EDGES, so the local grid's
+    # centre pixel has its centre at snap_e/snap_n exactly.
     return config.GridConfig(
         grid_xmin=snap_e - half_width,
         grid_xmax=snap_e + half_width,
