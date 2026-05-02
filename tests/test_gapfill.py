@@ -120,12 +120,21 @@ def test_create_local_grid_config_expansion():
         + n_pixels * dy
     )
 
-    # Use half-widths that satisfy the pixel-edge constraint: half_width must
-    # be n*dx + dx/2 so that snap_e ± half_width lands on a pixel edge (not a
-    # pixel centre). 4950 = 49*dx + dx/2 is the closest such value to the
-    # production constant GAPFILL_LOCAL_GRID_SIZE_M = 5000.
-    initial_half_width = 49 * dx + dx // 2  # 4950 m for dx=100
-    expanded_half_width = initial_half_width + 50 * dx  # +5000 m
+    # Use the production constants directly so this test fails if a future
+    # constant change violates the pixel-edge constraint that
+    # create_local_grid_config requires (half_width must equal k*dx + dx/2).
+    half_dx = dx / 2
+    assert (constants.GAPFILL_LOCAL_GRID_SIZE_M - half_dx) % dx == 0, (
+        f"GAPFILL_LOCAL_GRID_SIZE_M = {constants.GAPFILL_LOCAL_GRID_SIZE_M} "
+        f"must equal k*dx + dx/2 for create_local_grid_config to produce "
+        f"pixel-aligned local grids."
+    )
+    assert constants.GAPFILL_LOCAL_GRID_EXPANSION_M % dx == 0, (
+        f"GAPFILL_LOCAL_GRID_EXPANSION_M = {constants.GAPFILL_LOCAL_GRID_EXPANSION_M} "
+        f"must be a multiple of dx so successive expansions stay aligned."
+    )
+    initial_half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
+    expanded_half_width = initial_half_width + constants.GAPFILL_LOCAL_GRID_EXPANSION_M
 
     initial_grid = gapfill.create_local_grid_config(
         easting,
