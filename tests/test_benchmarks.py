@@ -35,11 +35,17 @@ from vs30 import config, constants, pipeline
 BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
 
 # Shared grid for modified_foster_2019, jaehwi_v1p0, and viktor_cpt_clustering.
+#
+# At dx=dy=5000, pixel CENTRES sit at xmin + 2500 + n*5000. To land each
+# centre exactly on an IwahashiPike pixel centre (which is at coordinates
+# ending in ..50 in both axes), xmin/ymin must end in ..50 — different
+# from FULL_NZ_GRID_CONFIG's ..100 (which is correct for dx=100). See
+# dev/docs/grid_bounds_semantics_investigation.md.
 BENCHMARK_NZ_GRID = config.GridConfig(
-    grid_xmin=1060100,
-    grid_xmax=2120100,
-    grid_ymin=4730100,
-    grid_ymax=6250100,
+    grid_xmin=1060050,
+    grid_xmax=2120050,
+    grid_ymin=4730050,
+    grid_ymax=6250050,
     grid_dx=5000,
     grid_dy=5000,
 )
