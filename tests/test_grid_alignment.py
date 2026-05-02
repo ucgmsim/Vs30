@@ -11,7 +11,6 @@ dev/docs/grid_bounds_semantics_investigation.md §4.1).
 These tests pin the alignment as a contract.
 """
 
-import pytest
 import rasterio
 
 from vs30 import config, constants
@@ -50,7 +49,8 @@ def _assert_grid_aligned_with_iwahashipike(grid: config.GridConfig) -> None:
     )
     assert row_offset_pixels < 1e-6, (
         f"Grid pixel (0,0) CENTRE y = {ul_centre_y} is offset by "
-        f"{row_offset_pixels * iw_dy:.1f} m from the nearest IwahashiPike pixel CENTRE."
+        f"{row_offset_pixels * iw_dy:.1f} m from the nearest IwahashiPike pixel CENTRE. "
+        f"This causes GDAL's nearest-neighbour resampling to tie at every pixel."
     )
 
 
