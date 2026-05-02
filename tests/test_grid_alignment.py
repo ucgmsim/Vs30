@@ -61,7 +61,7 @@ def test_full_nz_grid_config_aligned_with_iwahashipike():
 
 def test_benchmark_nz_grid_aligned_with_iwahashipike():
     """The 5 km benchmark grid must also be IwahashiPike-aligned."""
-    # Imported lazily so this file can be collected without the full test
-    # path being importable.
-    from tests.test_benchmarks import BENCHMARK_NZ_GRID
+    # pytest adds tests/ to sys.path, matching the existing convention used
+    # in tests/test_grid_points_consistency.py:20 and tests/test_benchmarks.py:30.
+    from test_benchmarks import BENCHMARK_NZ_GRID
     _assert_grid_aligned_with_iwahashipike(BENCHMARK_NZ_GRID)
