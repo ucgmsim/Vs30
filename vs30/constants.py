@@ -253,17 +253,22 @@ RASTER_ID_NODATA_VALUE: int = 255
 NODATA_VALUE: int = -32767
 
 # Full New Zealand land extent at standard 100m resolution.
-# IMPORTANT: These bounds define the canonical NZ domain and MUST NOT be changed.
 # Used for coastal distance calculations, gap-fill grid alignment, and CLI defaults.
-# The xmin/xmax/ymin/ymax values are pixel centres (not pixel edges) on the
-# 100m NZTM grid, so they are offset by 50m (half a cell) from round-number
-# corners. This convention keeps pixel-centre arithmetic clean and avoids
-# sub-pixel shifts when resampling.
+#
+# Convention: xmin/xmax/ymin/ymax are PIXEL EDGES (outer bounds), per
+# rasterio.transform.from_bounds() and GDAL outputBounds. The number of
+# pixels is (xmax-xmin)/dx, and pixel CENTRES are at xmin + dx/2 + n*dx.
+#
+# These specific bounds are chosen so that pixel CENTRES (1060150, 1060250,
+# ..., 2120050 in x) coincide exactly with the bundled IwahashiPike.tif
+# pixel centres (which end in ..50 in both axes — see
+# dev/docs/grid_bounds_semantics_investigation.md). This avoids GDAL's
+# nearest-neighbour tie-break at every pixel during terrain resampling.
 FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
-    grid_xmin=1060050,
-    grid_xmax=2120050,
-    grid_ymin=4730050,
-    grid_ymax=6250050,
+    grid_xmin=1060100,
+    grid_xmax=2120100,
+    grid_ymin=4730100,
+    grid_ymax=6250100,
     grid_dx=100,
     grid_dy=100,
 )
