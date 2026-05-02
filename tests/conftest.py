@@ -78,6 +78,7 @@ def assert_arrays_match_raster_benchmark(
     vs30_array: np.ndarray,
     stdv_array: np.ndarray,
     benchmark_path: Path,
+    rtol: float | None = None,
 ) -> None:
     """
     Compare in-memory vs30 and stdv arrays against a two-band benchmark raster.
@@ -90,7 +91,15 @@ def assert_arrays_match_raster_benchmark(
         Combined standard deviation array (matches band 2 of benchmark).
     benchmark_path : Path
         Path to the benchmark .tif file.
+    rtol : float, optional
+        Relative tolerance for the value comparison. If None, uses
+        ``TEST_RTOL`` (default ``1e-3``). Pass a larger value for
+        benchmarks where sub-meter coordinate drift between the legacy
+        observation CSV and the refactored CSV produces small bounded
+        deviations independent of any code change.
     """
+    if rtol is None:
+        rtol = TEST_RTOL
     with rasterio.open(benchmark_path) as benchmark:
         nodata = benchmark.nodata
         for band_idx, actual_data in enumerate([vs30_array, stdv_array], start=1):
@@ -113,6 +122,6 @@ def assert_arrays_match_raster_benchmark(
             if np.any(valid_actual):
                 assert valid_actual == pytest.approx(
                     valid_expected,
-                    rel=TEST_RTOL,
+                    rel=rtol,
                     abs=0,
                 ), f"Band {band_idx}: Data values differ beyond tolerance"
