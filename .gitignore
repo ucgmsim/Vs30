@@ -6,6 +6,7 @@ vs30/resources/geospatial/qmap
 vs30map
 .claude/
 .vscode/
+.worktrees/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
