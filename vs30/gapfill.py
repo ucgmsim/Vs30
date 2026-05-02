@@ -241,10 +241,8 @@ def create_local_grid_config(
     """
     # Pixel centres of the reference grid lie at grid_xmin + dx/2 + n*dx.
     # Snap the query point to the nearest such centre.
-    half_dx = gapfill_grid_config.grid_dx / 2
-    half_dy = gapfill_grid_config.grid_dy / 2
-    first_centre_x = gapfill_grid_config.grid_xmin + half_dx
-    first_centre_y = gapfill_grid_config.grid_ymin + half_dy
+    first_centre_x = gapfill_grid_config.grid_xmin + gapfill_grid_config.grid_dx / 2
+    first_centre_y = gapfill_grid_config.grid_ymin + gapfill_grid_config.grid_dy / 2
 
     snap_e = first_centre_x + round((easting - first_centre_x) / gapfill_grid_config.grid_dx) * gapfill_grid_config.grid_dx
     snap_n = first_centre_y + round((northing - first_centre_y) / gapfill_grid_config.grid_dy) * gapfill_grid_config.grid_dy
