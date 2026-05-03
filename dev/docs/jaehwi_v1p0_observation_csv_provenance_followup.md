@@ -1,8 +1,33 @@
 # jaehwi_v1p0 Observation CSV Provenance — Follow-up
 
-**Status:** Open follow-up
+**Status:** ✅ Resolved 2026-05-02
 **Created:** 2026-05-02
 **Surfaced by:** `dev/docs/grid_bounds_alignment_fix_plan.md` work
+
+## Resolution
+
+`vs30/resources/observations/jaehwi_v1p0_independent_observations.csv` was
+replaced with the `easting`, `northing`, `vs30`, `uncertainty` columns
+extracted directly from a fresh legacy `measured_sites.csv` run, so the
+refactored code now reads the same NZTM coordinates Jaehwi's pipeline
+produced (including its float32 precision quirk). After the swap, the
+residual deviation between refactored and legacy outputs is ~140x
+smaller than before:
+
+| | Before swap | After swap |
+|---|---:|---:|
+| Band 1 (Vs30 mean) max rel diff | 5.78e-3 | 6.1e-5 |
+| Band 2 (Vs30 stdv) max rel diff | 1.55e-2 | 1.1e-4 |
+| `test_jaehwi_v1p0` rtol | 2e-2 | **2e-4** |
+
+The remaining ~1e-4 floor is from minor numerical/algorithmic
+differences in the MVN linear algebra (likely BLAS/LAPACK and library
+versions between `oldvs30_venv` and `vs30_venv`), not coordinate drift.
+Tightening the tolerance further is not worth chasing at this scale.
+
+The original issue text is preserved below for historical reference.
+
+---
 
 ## Issue
 

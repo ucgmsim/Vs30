@@ -162,50 +162,30 @@ def test_modified_foster_2019():
 def test_jaehwi_v1p0():
     """jaehwi_v1p0 full-domain pipeline matches benchmark.
 
-    Tolerance is widened from the default 1e-3 to 2e-2 for this version
-    only. The reason is observation-CSV provenance, not anything about
-    the grid pipeline:
-
-    7 of 671 observations in
+    Tolerance is set to 2e-4 (5x tighter than the default 1e-3) because
     ``vs30/resources/observations/jaehwi_v1p0_independent_observations.csv``
-    have NZTM coordinates that differ by sub-meter from the corresponding
-    entries in jaehwi's legacy ``measured_sites.csv`` (median 0 m, max
-    1.35 m across all 671 stations). The two CSVs were derived from the
-    same source dataset via different upstream coordinate-conversion
-    pipelines.
+    now contains the exact NZTM coordinates jaehwi's legacy fork
+    produces (the file's ``easting``/``northing`` columns are sourced
+    from a legacy ``measured_sites.csv`` run, preserving its float32-
+    precision lat/lon→NZTM transform). With identical observation
+    coords, refactored and legacy agree to within ~1.1e-4 relative on
+    both bands; the residual is from minor numerical/algorithmic
+    differences (likely BLAS/LAPACK linear algebra in the MVN step,
+    independent of model-level logic):
 
-    At those 7 observations (rows 87, 154, 166, 186, 193, 249, 270) the
-    sub-meter drift happens to flip the assigned IwahashiPike pixel
-    because the observation sits close to a pixel boundary. The 7 flipped
-    terrain IDs propagate through MVN spatial conditioning (~10 km radii
-    each) into deviations in both output bands:
+    - Band 1 (Vs30 mean): max 6.1e-5 relative.
+    - Band 2 (Vs30 stdv): max 1.1e-4 relative.
 
-    - Band 1 (Vs30 mean): ~357 / 10511 valid pixels deviate, max 0.58 %
-      relative.
-    - Band 2 (Vs30 stdv): ~20 / 10511 valid pixels deviate, max 1.55 %
-      relative. The stdv band is more sensitive because the conditional
-      variance reacts more strongly than the conditional mean to which
-      observations dominate a pixel's MVN fit.
-
-    Setting rtol = 2e-2 covers both bands with margin while still being
-    tight enough to catch real regressions (the precedent is
-    ``test_foster_2019_approx_points_benchmark`` above, which uses the
-    same 2e-2 ceiling for stdv).
-
-    This is independent of the grid alignment fix that landed in this
-    branch -- the same drift would have produced the same deviations at
-    any grid alignment; it just happened to fall under 1e-3 at the old
-    ..100 bounds.
-
-    The proper long-term fix is to regenerate the refactored observation
-    CSV from raw data using jaehwi's coordinate-transform pipeline, so
-    the two CSVs match bit-for-bit. That work is tracked separately
-    (see dev/docs/jaehwi_v1p0_observation_csv_provenance_followup.md).
+    rtol = 2e-4 sits ~1.8x above the observed Band 2 max, giving
+    headroom for minor BLAS / numpy version drift while staying tight
+    enough to flag any real regression. If this test starts failing on
+    margin, regenerate the benchmark and re-measure rather than just
+    widening the tolerance.
     """
     run_benchmark(
         constants.FixedModelVersion.JAEHWI_V1P0,
         BENCHMARK_NZ_GRID,
-        rtol=2e-2,
+        rtol=2e-4,
     )
 
 
