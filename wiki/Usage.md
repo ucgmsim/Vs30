@@ -57,7 +57,7 @@ vs30 grid \
     --nproc 6
 ```
 
-Coordinates are NZTM2000 (EPSG:2193), in metres. Reduce the domain or coarsen the spacing (`--grid-dx 400 --grid-dy 400`) for faster test runs — a 400 m national grid finishes in ~20 minutes on a typical workstation.
+Coordinates are NZTM2000 (EPSG:2193), in metres. The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pixel-edge convention), not pixel centres — so the leftmost pixel's left edge sits at `xmin` and its centre at `xmin + dx/2`. Reduce the domain or coarsen the spacing (`--grid-dx 400 --grid-dy 400`) for faster test runs — a 400 m national grid finishes in ~20 minutes on a typical workstation.
 
 If the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-boolean-array-memory-gb` (default: 1.0). It caps the size of the per-chunk boolean arrays used to find observations near each pixel — smaller values trade a small amount of speed for a lower peak memory footprint.
 

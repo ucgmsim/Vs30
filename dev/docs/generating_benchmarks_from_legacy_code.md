@@ -1,112 +1,101 @@
-# Generating Benchmark Rasters from Legacy Code
+# Regenerating Benchmark Rasters from Legacy Code
 
-How to produce each refactored model version's benchmark `.tif` using the
-legacy codebases. These benchmarks live in `tests/benchmarks/`
-and are compared against the refactored pipeline output by `test_benchmarks.py`.
+Three of the four benchmark `.tif` files in `tests/benchmarks/` are
+produced by the original (pre-refactor) Vs30 codebases and committed as
+fixtures the refactored pipeline is compared against. This page records
+the legacy CLI commands used to produce each one.
 
-## Environment
+The legacy CLIs deadlock with `--nproc > 1`, so always pass `--nproc 1`.
 
-All legacy runs use the `oldvs30_venv` conda environment. Because the system
-`gdal_calc.py` is incompatible with the environment's NumPy, prepend the
-environment's bin directory to PATH:
+## Grid bounds
 
-```bash
-PATH="/home/arr65/miniforge-pypy3/envs/oldvs30_venv/bin:$PATH"
-LEGACY_PY=/home/arr65/miniforge-pypy3/envs/oldvs30_venv/bin/python3
-```
+Two grids are used:
 
-Always use `--nproc 1` — both legacy codebases deadlock with nproc > 1.
+| Grid              | xmin    | xmax    | ymin    | ymax    | Used by                                                         |
+|-------------------|---------|---------|---------|---------|-----------------------------------------------------------------|
+| Benchmark NZ grid | 1060050 | 2120050 | 4730050 | 6250050 | `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`  |
+| Foster 2019 grid  | 1000000 | 2126400 | 4700000 | 6338400 | `foster_2019_approx`                                            |
 
-## Grid Bounds
-
-The benchmark test uses two grids (defined in `tests/test_benchmarks.py`).
-These bounds were updated 2026-05-02 from `..100` to `..050` so that
-the 5 km pixel centres land on IwahashiPike pixel centres (centres at
-coordinates ending in `..50`), eliminating GDAL nearest-neighbour
-tie-break ambiguity. See
-`dev/docs/grid_bounds_semantics_investigation.md`.
-
-| Grid | xmin | xmax | ymin | ymax | Used by |
-|------|------|------|------|------|---------|
-| `BENCHMARK_NZ_GRID` | 1060050 | 2120050 | 4730050 | 6250050 | modified_foster_2019, jaehwi_v1p0, viktor_cpt_clustering |
-| `FOSTER_2019_GRID` | 1000000 | 2126400 | 4700000 | 6338400 | foster_2019_approx |
-
-Pass `--dx 5000 --dy 5000` for benchmark resolution.
+Pass `--dx 5000 --dy 5000` for benchmark resolution. The benchmark NZ
+grid bounds were chosen so 5 km pixel centres land on IwahashiPike pixel
+centres — see [Grid bounds semantics](grid_bounds_semantics_investigation.md).
 
 ## modified_foster_2019
 
-**Legacy repo:** `/home/arr65/src/pre-refactor-Vs30-for-comparison`
+Run from the pre-refactor Vs30 codebase:
 
 ```bash
-$LEGACY_PY run_vs30calc.py \
+run_vs30calc.py \
     --source original \
     --gupdate posterior_paper --tupdate posterior_paper \
     --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
-    --out /tmp/bench_modified_foster_2019 \
+    --out <out_dir> \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/modified_foster_2019.tif`.
+The output `combined_mvn.tif` becomes
+`tests/benchmarks/modified_foster_2019.tif`.
 
-**Key flags:**
+Key flags:
+
 - `--source original` selects the original (non-CPT) observation dataset.
-- `--gupdate posterior_paper --tupdate posterior_paper` — NOT `posterior`.
-  Using `--gupdate posterior` produces different (wrong) values.
+- `--gupdate posterior_paper --tupdate posterior_paper` — *not*
+  `posterior`. Using `--gupdate posterior` produces different (wrong)
+  values.
 
 ## viktor_cpt_clustering
 
-**Legacy repo:** `/home/arr65/src/pre-refactor-Vs30-for-comparison`
+Run from the same pre-refactor Vs30 codebase:
 
 ```bash
-$LEGACY_PY run_vs30calc.py \
+run_vs30calc.py \
     --source cpt \
     --gupdate posterior --tupdate posterior \
     --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
-    --out /tmp/bench_viktor_cpt_clustering \
+    --out <out_dir> \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/viktor_cpt_clustering.tif`.
+The output `combined_mvn.tif` becomes
+`tests/benchmarks/viktor_cpt_clustering.tif`.
 
-**Key flags:**
+Key flags:
+
 - `--source cpt` selects the CPT-derived observation dataset.
-- `--gupdate posterior --tupdate posterior` (not `posterior_paper`).
+- `--gupdate posterior --tupdate posterior` — *not* `posterior_paper`.
 
 ## jaehwi_v1p0
 
-**Legacy repo:** `/home/arr65/src/jaehwi_fork_vs30/Vs30_2026`
-(Jaehwi's fork, NOT the pre-refactor repo — it has model-specific modifications.)
+Run from Jaehwi's fork (which has model-specific modifications, not the
+pre-refactor Vs30 codebase used above):
 
 ```bash
-$LEGACY_PY run_vs30calc_V1.py \
+run_vs30calc_V1.py \
     --gupdate posterior --tupdate posterior \
     --xmin 1060050 --xmax 2120050 --ymin 4730050 --ymax 6250050 \
     --dx 5000 --dy 5000 \
-    --out /tmp/bench_jaehwi_v1p0 \
+    --out <out_dir> \
     --nproc 1 --overwrite
 ```
 
-Copy `combined_mvn.tif` to `tests/benchmarks/jaehwi_v1p0.tif`.
+The output `combined_mvn.tif` becomes
+`tests/benchmarks/jaehwi_v1p0.tif` after a separate gap-fill pass — the
+Jaehwi fork does not fill nodata gaps, but the refactored pipeline does,
+so the benchmark needs to match.
 
-Then **gap-fill** the benchmark (the Jaehwi fork does not fill nodata gaps,
-but the refactored pipeline does):
+Key flags:
 
-```bash
-python dev/scripts/generators/gapfill_benchmark.py tests/benchmarks/jaehwi_v1p0.tif
-```
-
-**Key flags:**
-- `--gupdate posterior --tupdate posterior` — NOT `posterior_paper` (the
-  Jaehwi fork defaults to `posterior_paper`, but the refactored jaehwi_v1p0
-  config uses Bayesian update from priors, which corresponds to `posterior`
-  in the legacy code).
+- `--gupdate posterior --tupdate posterior` — *not* `posterior_paper`.
+  The fork defaults to `posterior_paper`, but the refactored
+  `jaehwi_v1p0` config uses Bayesian update from priors, which
+  corresponds to `posterior` in the legacy code.
 - No `--source` flag needed — the fork defaults to `original`.
 
 ## foster_2019_approx
 
-Not yet documented. The foster_2019_approx model uses a Matern correlation
-function and different observation filtering, so generating its benchmark from
-legacy code requires a different approach. See
-`wiki/differences_between_foster_2019_approx_and_modified_foster_2019.md`.
+The `foster_2019_approx` model uses a Matérn correlation function and
+different observation filtering, so generating its benchmark from legacy
+code requires a different approach. See
+[The modified_foster_2019 model](modified_foster_2019.md).

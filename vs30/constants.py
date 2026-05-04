@@ -261,8 +261,7 @@ NODATA_VALUE: int = -32767
 #
 # These specific bounds are chosen so that pixel CENTRES (1060150, 1060250,
 # ..., 2120050 in x) coincide exactly with the bundled IwahashiPike.tif
-# pixel centres (which end in ..50 in both axes — see
-# dev/docs/grid_bounds_semantics_investigation.md). This avoids GDAL's
+# pixel centres (which end in ..50 in both axes). This avoids GDAL's
 # nearest-neighbour tie-break at every pixel during terrain resampling.
 FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
     grid_xmin=1060100,

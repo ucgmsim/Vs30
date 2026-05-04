@@ -712,8 +712,7 @@ def apply_hybrid_geology_modifications(
         if not np.any(mask):
             continue
         # sigma_reduction always applies — it tightens the categorical lookup
-        # itself (legacy R semantics), not a per-pixel slope refinement. See
-        # dev/docs/sigma_reduction_factor_provenance.md.
+        # itself (legacy R semantics), not a per-pixel slope refinement.
         stdv_array[mask] *= spec.sigma_reduction
 
         # GID 4 (alluvium) gets coastal-distance handling below when the

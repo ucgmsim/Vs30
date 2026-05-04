@@ -1,11 +1,10 @@
 # Performance Features Investigation Harness
 
 Code to measure the effect of multiprocessing and `find_affected_pixels`
-on `vs30` grid-mode performance.
-
-See:
-- `dev/docs/perf_features_investigation_design.md` — methodology and rationale
-- `dev/docs/perf_features_investigation_findings.md` — results and recommendations
+on `vs30` grid-mode performance. The investigation is complete — its
+findings drove the multiproc removal in the grid pipeline, and the
+recommendations now live in the codebase. The harness is preserved here
+for reproducibility on different hardware.
 
 ## Run order
 

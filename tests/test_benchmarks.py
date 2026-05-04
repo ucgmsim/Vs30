@@ -18,8 +18,7 @@ so the categorical posterior and hybrid slope modification reproduce the
 paper at float precision. A small minority of pixels have larger
 discrepancies due to categorical/hybrid edge cases unrelated to MVN; the
 test uses median + percentile assertions to catch drift while tolerating
-those known outliers. See ``dev/docs/foster_2019_benchmark_status.md`` for
-background.
+those known outliers.
 """
 
 from pathlib import Path
@@ -39,8 +38,7 @@ BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
 # At dx=dy=5000, pixel CENTRES sit at xmin + 2500 + n*5000. To land each
 # centre exactly on an IwahashiPike pixel centre (which is at coordinates
 # ending in ..50 in both axes), xmin/ymin must end in ..50 — different
-# from FULL_NZ_GRID_CONFIG's ..100 (which is correct for dx=100). See
-# dev/docs/grid_bounds_semantics_investigation.md.
+# from FULL_NZ_GRID_CONFIG's ..100 (which is correct for dx=100).
 BENCHMARK_NZ_GRID = config.GridConfig(
     grid_xmin=1060050,
     grid_xmax=2120050,

@@ -5,8 +5,7 @@ benchmarks produce pixel centres aligned with IwahashiPike pixel centres.
 If a grid's pixel centres land between IwahashiPike centres, GDAL's
 nearest-neighbour resampling has to break a tie at every pixel — which is
 non-deterministic across GDAL versions and produces ~22 % terrain ID
-differences vs the IwahashiPike-aligned grid (see
-dev/docs/grid_bounds_semantics_investigation.md §4.1).
+differences vs the IwahashiPike-aligned grid.
 
 These tests pin the alignment as a contract.
 """
