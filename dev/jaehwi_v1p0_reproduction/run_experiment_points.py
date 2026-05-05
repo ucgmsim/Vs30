@@ -4,6 +4,7 @@ Instead of generating full grids (~hours per experiment due to MVN),
 sample ~200 points from the reference raster and run points_pipeline()
 at those points. Each experiment takes seconds instead of hours.
 """
+import functools
 import sys
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from pyproj import Transformer
 
 sys.path.insert(0, str(Path("/home/arr65/src/vs30")))
 
-from vs30 import pipeline, constants
+from vs30 import pipeline, constants, utils
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -194,6 +195,14 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
         mvn=True,
         include_intermediate=True,
         nproc=-1,
+        geology_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_GEOLOGY_PHI,
+        ),
+        terrain_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_TERRAIN_PHI,
+        ),
         **params,
     )
 

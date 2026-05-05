@@ -1,4 +1,5 @@
 """Analyze which points have large discrepancies and what categories they fall in."""
+import functools
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from pyproj import Transformer
 
 sys.path.insert(0, str(Path("/home/arr65/src/vs30")))
 
-from vs30 import pipeline, constants
+from vs30 import pipeline, constants, utils
 
 REPO = Path("/home/arr65/src/vs30")
 VS30_PKG = REPO / "vs30"
@@ -62,6 +63,14 @@ if __name__ == "__main__":
         apply_coastal_distance_mod=False,
         apply_alluvium_slope_mod=False,
         independent_observations_csv=RECONSTRUCTED_OBS,
+        geology_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_GEOLOGY_PHI,
+        ),
+        terrain_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_TERRAIN_PHI,
+        ),
     )
 
     result_df["ref_vs30"] = ref_vs30

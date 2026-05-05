@@ -2,9 +2,6 @@ name: Pytest Check
 
 on:
   pull_request:
-  push:
-    branches:
-      - vs30_refactor
 
 jobs:
   test-fast:

@@ -235,3 +235,21 @@ def validate_csv_columns(
     missing = [col for col in required_cols if col not in df.columns]
     if missing:
         raise ValueError(f"{label} missing required columns: {missing}")
+
+
+def nan_to_nodata(arr: np.ndarray) -> np.ndarray:
+    """
+    Replace NaNs with ``constants.NODATA_VALUE`` for raster output.
+
+    Parameters
+    ----------
+    arr : ndarray
+        Input array, possibly containing NaN values.
+
+    Returns
+    -------
+    ndarray
+        Copy of ``arr`` with NaN entries replaced by
+        ``constants.NODATA_VALUE``. Same shape as input.
+    """
+    return np.where(np.isnan(arr), constants.NODATA_VALUE, arr)

@@ -19,7 +19,7 @@ import rasterio.warp
 import shapely
 from osgeo import gdal
 
-from vs30 import constants
+from vs30 import config, constants
 
 logger = logging.getLogger(__name__)
 
@@ -457,7 +457,7 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     # to a whole number of pixels so the extended grid's pixel centres remain
     # exactly aligned with the template grid; otherwise GDAL trims to integer
     # pixel counts and shifts every distance sample by a sub-pixel offset.
-    nz = constants.FULL_NZ_GRID_CONFIG
+    nz = config.FULL_NZ_GRID_CONFIG
     g_xmin = s_xmin - math.ceil(max(0, s_xmin - nz.grid_xmin) / dx) * dx
     g_xmax = s_xmax + math.ceil(max(0, nz.grid_xmax - s_xmax) / dx) * dx
     g_ymin = s_ymin - math.ceil(max(0, s_ymin - nz.grid_ymin) / dy) * dy

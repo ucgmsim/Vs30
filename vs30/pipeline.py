@@ -2,7 +2,6 @@
 Pipeline functions for generating Vs30 models.
 """
 
-import functools
 import logging
 import time
 from collections.abc import Callable
@@ -25,54 +24,6 @@ from vs30 import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _nan_to_nodata(arr: np.ndarray) -> np.ndarray:
-    """Replace NaNs with ``constants.NODATA_VALUE`` for raster output."""
-    return np.where(np.isnan(arr), constants.NODATA_VALUE, arr)
-
-
-def _read_categorical_csv(path: Path) -> pd.DataFrame:
-    """Load a categorical-model CSV with whitespace-stripped column names.
-
-    Stripping at load time means downstream consumers (
-    ``raster.select_vs30_columns_by_priority``, ``category.get_vs30_for_ids``,
-    ``grid.compute_spatial_adjustment_on_grid``) can index columns by the
-    canonical names without each having to handle whitespace itself.
-    """
-    df = pd.read_csv(path, comment="#", skipinitialspace=True)
-    df.columns = [c.strip() for c in df.columns]
-    return df
-
-
-def default_correlation_functions(
-    geology_corr_fn: Callable | None,
-    terrain_corr_fn: Callable | None,
-) -> tuple[Callable, Callable]:
-    """
-    Fill in default exponential correlation functions where None is given.
-
-    Parameters
-    ----------
-    geology_corr_fn : callable or None
-        Geology correlation function. If None, uses exponential with phi=1407.
-    terrain_corr_fn : callable or None
-        Terrain correlation function. If None, uses exponential with phi=993.
-
-    Returns
-    -------
-    tuple[callable, callable]
-        (geology_corr_fn, terrain_corr_fn) with defaults filled in.
-    """
-    if geology_corr_fn is None:
-        geology_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=constants.DEFAULT_GEOLOGY_PHI
-        )
-    if terrain_corr_fn is None:
-        terrain_corr_fn = functools.partial(
-            utils.exponential_correlation_function, phi=constants.DEFAULT_TERRAIN_PHI
-        )
-    return geology_corr_fn, terrain_corr_fn
 
 
 def load_observations_csv(csv_path: Path, label: str) -> pd.DataFrame:
@@ -225,7 +176,9 @@ def compute_categorical_vs30_updates(
                 "Either categorical_model_csv or categorical_model_df must be provided"
             )
         logger.info(f"Loading categorical model from: {categorical_model_csv}")
-        categorical_model_df = _read_categorical_csv(categorical_model_csv)
+        categorical_model_df = pd.read_csv(
+            categorical_model_csv, comment="#", skipinitialspace=True
+        ).rename(columns=str.strip)
 
     # Drop rows with placeholder values for excluded categories (e.g., water)
     categorical_model_df = categorical_model_df[
@@ -384,7 +337,9 @@ def compute_model_grid(
         logger.info(
             "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
         )
-        posterior_df = _read_categorical_csv(categorical_model_csv)
+        posterior_df = pd.read_csv(
+            categorical_model_csv, comment="#", skipinitialspace=True
+        ).rename(columns=str.strip)
 
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
     vs30_array, stdv_array, id_array, profile = grid.create_initial_vs30_arrays(
@@ -510,6 +465,7 @@ def compute_model_grid(
 def grid_pipeline(
     grid_config: config.GridConfig,
     apply_alluvium_slope_mod: bool,
+    *,
     output_dir: Path | None = None,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
     geology_categorical_csv: Path | None = None,
@@ -524,8 +480,8 @@ def grid_pipeline(
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
     max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
-    geology_corr_fn: Callable | None = None,
-    terrain_corr_fn: Callable | None = None,
+    geology_corr_fn: Callable,
+    terrain_corr_fn: Callable,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
     clustered_observations_df: pd.DataFrame | None = None,
@@ -588,9 +544,9 @@ def grid_pipeline(
         effect when do_bayesian_update is False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
-    geology_corr_fn : Callable, optional
+    geology_corr_fn : Callable
         Correlation function for geology spatial adjustment.
-    terrain_corr_fn : Callable, optional
+    terrain_corr_fn : Callable
         Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
@@ -631,10 +587,6 @@ def grid_pipeline(
         )
 
     start_time = time.time()
-
-    geology_corr_fn, terrain_corr_fn = default_correlation_functions(
-        geology_corr_fn, terrain_corr_fn
-    )
 
     if output_dir is not None:
         output_dir = output_dir.resolve()
@@ -736,7 +688,7 @@ def grid_pipeline(
                 grid.write_raster(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                     profile,
-                    [_nan_to_nodata(combined_vs30), _nan_to_nodata(combined_stdv)],
+                    [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
                     (
                         constants.BAND_DESCRIPTION_VS30_COMBINED,
                         constants.BAND_DESCRIPTION_STDV_COMBINED,
@@ -753,7 +705,7 @@ def grid_pipeline(
             grid.write_raster(
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 profile,
-                [_nan_to_nodata(combined_vs30), _nan_to_nodata(combined_stdv)],
+                [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
                 (
                     constants.BAND_DESCRIPTION_VS30_COMBINED,
                     constants.BAND_DESCRIPTION_STDV_COMBINED,
@@ -855,11 +807,11 @@ def points_pipeline(
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
-    geology_corr_fn: Callable | None = None,
-    terrain_corr_fn: Callable | None = None,
+    geology_corr_fn: Callable,
+    terrain_corr_fn: Callable,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
-    gapfill_grid_config: config.GridConfig = constants.FULL_NZ_GRID_CONFIG,
+    gapfill_grid_config: config.GridConfig = config.FULL_NZ_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
@@ -910,9 +862,9 @@ def points_pipeline(
         Number of processes for DBSCAN clustering of clustered observations
         when do_bayesian_update is True. Default -1 (all cores). Has no
         effect when do_bayesian_update is False.
-    geology_corr_fn : Callable, optional
+    geology_corr_fn : Callable
         Correlation function for geology spatial adjustment.
-    terrain_corr_fn : Callable, optional
+    terrain_corr_fn : Callable
         Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool, optional
         Whether to apply coastal distance modification for GID 4 and GID 10.
@@ -939,10 +891,6 @@ def points_pipeline(
             "include_intermediate=True, as per-model results are intermediate "
             "data products. The only final product is the combined model."
         )
-
-    geology_corr_fn, terrain_corr_fn = default_correlation_functions(
-        geology_corr_fn, terrain_corr_fn
-    )
 
     nztm_coords = coordinates.wgs_depth_to_nztm(
         np.column_stack([latitudes, longitudes])
@@ -1002,7 +950,9 @@ def points_pipeline(
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            geol_model_df = _read_categorical_csv(geology_categorical_csv)
+            geol_model_df = pd.read_csv(
+                geology_categorical_csv, comment="#", skipinitialspace=True
+            ).rename(columns=str.strip)
 
     if run_terrain:
         if terrain_categorical_csv is None:
@@ -1021,7 +971,9 @@ def points_pipeline(
                 dbscan_nproc=dbscan_nproc,
             )
         else:
-            terr_model_df = _read_categorical_csv(terrain_categorical_csv)
+            terr_model_df = pd.read_csv(
+                terrain_categorical_csv, comment="#", skipinitialspace=True
+            ).rename(columns=str.strip)
 
     geology_obs_data = (
         points.prepare_geology_obs_data(

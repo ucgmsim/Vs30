@@ -55,7 +55,7 @@ def _assert_grid_aligned_with_iwahashipike(grid: config.GridConfig) -> None:
 
 def test_full_nz_grid_config_aligned_with_iwahashipike():
     """The production NZ-wide grid must be IwahashiPike-aligned."""
-    _assert_grid_aligned_with_iwahashipike(constants.FULL_NZ_GRID_CONFIG)
+    _assert_grid_aligned_with_iwahashipike(config.FULL_NZ_GRID_CONFIG)
 
 
 def test_benchmark_nz_grid_aligned_with_iwahashipike():

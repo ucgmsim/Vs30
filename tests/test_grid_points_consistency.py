@@ -20,7 +20,7 @@ import pytest
 from conftest import FIXTURES_DIR, load_fixed_model_config
 from qcore import coordinates
 
-from vs30 import constants, gapfill, pipeline
+from vs30 import config, constants, gapfill, pipeline
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -100,7 +100,7 @@ def run_grid_pipeline_at_point(
     Returns the center pixel (row=1, col=1) Vs30 and stdv.
     """
     local_config = gapfill.create_local_grid_config(
-        easting, northing, constants.FULL_NZ_GRID_CONFIG, LOCAL_GRID_HALF_WIDTH
+        easting, northing, config.FULL_NZ_GRID_CONFIG, LOCAL_GRID_HALF_WIDTH
     )
 
     result = pipeline.grid_pipeline(

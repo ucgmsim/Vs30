@@ -57,7 +57,7 @@ def _load_cli_config(version: constants.FixedModelVersion) -> dict:
 
 
 def _grid_for(resolution: int) -> config.GridConfig:
-    base = constants.FULL_NZ_GRID_CONFIG
+    base = config.FULL_NZ_GRID_CONFIG
     return config.GridConfig(
         grid_xmin=base.grid_xmin,
         grid_xmax=base.grid_xmax,

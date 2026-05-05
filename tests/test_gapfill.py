@@ -9,7 +9,7 @@ fill_nodata_grid copies the nearest valid neighbor's values.
 import numpy as np
 import rasterio
 
-from vs30 import constants, gapfill
+from vs30 import config, constants, gapfill
 
 
 def test_classify_nodata_excludes_water_and_offshore():
@@ -102,20 +102,20 @@ def test_create_local_grid_config_expansion():
     This test checks that the expanded grid is larger but stays centered on
     the same point and keeps its pixels aligned to the full NZ grid.
     """
-    dx = constants.FULL_NZ_GRID_CONFIG.grid_dx
-    dy = constants.FULL_NZ_GRID_CONFIG.grid_dy
+    dx = config.FULL_NZ_GRID_CONFIG.grid_dx
+    dy = config.FULL_NZ_GRID_CONFIG.grid_dy
 
     # Pick an arbitrary pixel CENTRE on the full NZ grid (100 pixels from the
     # origin). Pixel centres are at grid_xmin + dx/2 + n*dx under the
     # pixel-edge bounds convention.
     n_pixels = 100
     easting = (
-        constants.FULL_NZ_GRID_CONFIG.grid_xmin
+        config.FULL_NZ_GRID_CONFIG.grid_xmin
         + dx / 2
         + n_pixels * dx
     )
     northing = (
-        constants.FULL_NZ_GRID_CONFIG.grid_ymin
+        config.FULL_NZ_GRID_CONFIG.grid_ymin
         + dy / 2
         + n_pixels * dy
     )
@@ -139,13 +139,13 @@ def test_create_local_grid_config_expansion():
     initial_grid = gapfill.create_local_grid_config(
         easting,
         northing,
-        constants.FULL_NZ_GRID_CONFIG,
+        config.FULL_NZ_GRID_CONFIG,
         initial_half_width,
     )
     expanded_grid = gapfill.create_local_grid_config(
         easting,
         northing,
-        constants.FULL_NZ_GRID_CONFIG,
+        config.FULL_NZ_GRID_CONFIG,
         expanded_half_width,
     )
 
@@ -172,8 +172,8 @@ def test_create_local_grid_config_expansion():
     assert initial_grid.grid_dx == dx
     assert expanded_grid.grid_dx == dx
     assert (
-        initial_grid.grid_xmin - constants.FULL_NZ_GRID_CONFIG.grid_xmin
+        initial_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin
     ) % dx == 0
     assert (
-        expanded_grid.grid_xmin - constants.FULL_NZ_GRID_CONFIG.grid_xmin
+        expanded_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin
     ) % dx == 0

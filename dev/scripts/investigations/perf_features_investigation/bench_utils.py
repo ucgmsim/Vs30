@@ -100,11 +100,13 @@ def make_raster_data(n_target: int):
         grid_config,
         constants.ModelType.TERRAIN,
         # Read the canonical terrain prior CSV, which is bundled.
-        pipeline.read_categorical_csv(
+        pd.read_csv(
             constants.RESOURCE_PATH
             / constants.RESOURCE_SUBDIRS["terrain_categorical_csv"]
-            / "terrain_model_prior_mean_and_standard_deviation.csv"
-        ),
+            / "terrain_model_prior_mean_and_standard_deviation.csv",
+            comment="#",
+            skipinitialspace=True,
+        ).rename(columns=str.strip),
     )
     raster_data = spatial.RasterData.from_arrays(
         vs30=vs30_array,
@@ -181,7 +183,9 @@ def prepare_terrain_obs_data(
         / constants.RESOURCE_SUBDIRS["terrain_categorical_csv"]
         / "terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv"
     )
-    model_df = pipeline.read_categorical_csv(posterior_csv)
+    model_df = pd.read_csv(
+        posterior_csv, comment="#", skipinitialspace=True
+    ).rename(columns=str.strip)
     mean_col, std_col = raster.select_vs30_columns_by_priority(list(model_df.columns))
     max_id = int(model_df[constants.STANDARD_ID_COLUMN].max())
     updated_model_table = np.full((max_id, 2), np.nan)

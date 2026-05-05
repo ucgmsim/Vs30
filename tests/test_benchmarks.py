@@ -25,7 +25,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pytest
 from conftest import assert_arrays_match_raster_benchmark, load_fixed_model_config
 import pyproj
 

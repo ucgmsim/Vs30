@@ -8,6 +8,7 @@ Reads:
 Compares intermediate values (geology_vs30, terrain_vs30, MVN corrections)
 to identify where the implementations diverge.
 """
+import functools
 import sys
 from pathlib import Path
 
@@ -18,7 +19,7 @@ from pyproj import Transformer
 
 sys.path.insert(0, str(Path("/home/arr65/src/vs30")))
 
-from vs30 import pipeline, constants
+from vs30 import pipeline, constants, utils
 
 EXPERIMENT_DIR = Path("/home/arr65/src/vs30/dev/jaehwi_v1p0_reproduction")
 JAEHWI_OUTPUT = EXPERIMENT_DIR / "jaehwi_output" / "vs30points.csv"
@@ -65,6 +66,14 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
             noisy=True, mvn=True, include_intermediate=True, nproc=-1,
+            geology_corr_fn=functools.partial(
+                utils.exponential_correlation_function,
+                phi=constants.DEFAULT_GEOLOGY_PHI,
+            ),
+            terrain_corr_fn=functools.partial(
+                utils.exponential_correlation_function,
+                phi=constants.DEFAULT_TERRAIN_PHI,
+            ),
         )
     elif mode == "bayesian":
         return pipeline.points_pipeline(
@@ -78,6 +87,14 @@ def run_our_pipeline(longitudes, latitudes, mode="foster_posterior"):
             apply_alluvium_slope_mod=False,
             independent_observations_csv=RECONSTRUCTED_OBS,
             noisy=True, mvn=True, include_intermediate=True, nproc=-1,
+            geology_corr_fn=functools.partial(
+                utils.exponential_correlation_function,
+                phi=constants.DEFAULT_GEOLOGY_PHI,
+            ),
+            terrain_corr_fn=functools.partial(
+                utils.exponential_correlation_function,
+                phi=constants.DEFAULT_TERRAIN_PHI,
+            ),
         )
 
 

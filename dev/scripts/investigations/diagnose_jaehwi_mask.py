@@ -15,11 +15,11 @@ import rasterio
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tests"))
 
-from vs30 import constants, pipeline
+from vs30 import config, constants, pipeline
 from conftest import load_fixed_model_config
 
 STANDARD_NZ_GRID = dataclasses.replace(
-    constants.FULL_NZ_GRID_CONFIG, grid_dx=400, grid_dy=400
+    config.FULL_NZ_GRID_CONFIG, grid_dx=400, grid_dy=400
 )
 
 BENCH = Path("tests/benchmarks/jaehwi_v1p0.tif")

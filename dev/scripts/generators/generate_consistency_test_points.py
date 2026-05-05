@@ -20,7 +20,7 @@ import pandas as pd
 import shapely
 from qcore import coordinates
 
-from vs30 import category, constants, raster
+from vs30 import category, config, constants, raster
 
 FIXTURES_DIR = Path(__file__).resolve().parents[3] / "tests" / "fixtures"
 OUTPUT_CSV = FIXTURES_DIR / "consistency_test_points.csv"
@@ -33,7 +33,7 @@ def _snap_to_pixel_center(easting: float, northing: float) -> tuple[float, float
     """Snap to the nearest grid node aligned with FULL_NZ_GRID_CONFIG,
     matching the snap logic in gapfill.create_local_grid_config.
     """
-    nz = constants.FULL_NZ_GRID_CONFIG
+    nz = config.FULL_NZ_GRID_CONFIG
     snap_e = nz.grid_xmin + round((easting - nz.grid_xmin) / nz.grid_dx) * nz.grid_dx
     snap_n = nz.grid_ymin + round((northing - nz.grid_ymin) / nz.grid_dy) * nz.grid_dy
     return snap_e, snap_n
@@ -72,7 +72,7 @@ def _find_point_with_geology_id(
     max_attempts: int = 5000,
 ) -> tuple[float, float] | None:
     """Random-sample until we find an on-land point with the given geology ID."""
-    nz = constants.FULL_NZ_GRID_CONFIG
+    nz = config.FULL_NZ_GRID_CONFIG
     for _ in range(max_attempts):
         e = rng.uniform(nz.grid_xmin, nz.grid_xmax)
         n = rng.uniform(nz.grid_ymin, nz.grid_ymax)
@@ -136,7 +136,7 @@ def generate_deliberate_points(
     coast_boundary = coast_union.boundary
     for gid, description in coastal_gids.items():
         # Find a point with this GID that is within 5 km of coast
-        nz = constants.FULL_NZ_GRID_CONFIG
+        nz = config.FULL_NZ_GRID_CONFIG
         for _ in range(5000):
             e_r = rng.uniform(nz.grid_xmin, nz.grid_xmax)
             n_r = rng.uniform(nz.grid_ymin, nz.grid_ymax)
@@ -177,7 +177,7 @@ def generate_deliberate_points(
 
     # --- Near geology boundary ---
     # Find two adjacent pixels with different geology IDs
-    nz = constants.FULL_NZ_GRID_CONFIG
+    nz = config.FULL_NZ_GRID_CONFIG
     for _ in range(5000):
         e_r = rng.uniform(nz.grid_xmin + 200, nz.grid_xmax - 200)
         n_r = rng.uniform(nz.grid_ymin + 200, nz.grid_ymax - 200)
@@ -214,7 +214,7 @@ def generate_random_points(
     existing_eastings_northings: list[tuple[float, float]],
 ) -> list[dict]:
     """Generate random on-land points, avoiding duplicates with existing points."""
-    nz = constants.FULL_NZ_GRID_CONFIG
+    nz = config.FULL_NZ_GRID_CONFIG
     existing_set = set(existing_eastings_northings)
     points = []
 

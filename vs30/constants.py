@@ -6,8 +6,6 @@ from pathlib import Path
 
 import numpy as np
 
-from vs30 import config
-
 
 class CombinationMethod(StrEnum):
     """Valid combination methods for geology and terrain Vs30."""
@@ -251,26 +249,6 @@ RASTER_ID_NODATA_VALUE: int = 255
 # -32767 is a traditional no-data value in many GIS applications
 # (minimum value for signed 16-bit integers)
 NODATA_VALUE: int = -32767
-
-# Full New Zealand land extent at standard 100m resolution.
-# Used for coastal distance calculations, gap-fill grid alignment, and CLI defaults.
-#
-# Convention: xmin/xmax/ymin/ymax are PIXEL EDGES (outer bounds), per
-# rasterio.transform.from_bounds() and GDAL outputBounds. The number of
-# pixels is (xmax-xmin)/dx, and pixel CENTRES are at xmin + dx/2 + n*dx.
-#
-# These specific bounds are chosen so that pixel CENTRES (1060150, 1060250,
-# ..., 2120050 in x) coincide exactly with the bundled IwahashiPike.tif
-# pixel centres (which end in ..50 in both axes). This avoids GDAL's
-# nearest-neighbour tie-break at every pixel during terrain resampling.
-FULL_NZ_GRID_CONFIG: config.GridConfig = config.GridConfig(
-    grid_xmin=1060100,
-    grid_xmax=2120100,
-    grid_ymin=4730100,
-    grid_ymax=6250100,
-    grid_dx=100,
-    grid_dy=100,
-)
 
 # Gap-fill constants
 # Half-width (meters) of the local grid generated around each fillable point

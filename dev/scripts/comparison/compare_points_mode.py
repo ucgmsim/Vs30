@@ -7,6 +7,7 @@ Generates test points from valid pixels in V1.0_26Mar.tif, runs both
 codebases, and prints comparison statistics.
 """
 
+import functools
 import subprocess
 import tempfile
 from pathlib import Path
@@ -117,7 +118,7 @@ def run_jaehwi_points(points_nztm: np.ndarray, output_dir: Path) -> pd.DataFrame
 
 def run_our_pipeline(points_nztm: np.ndarray) -> pd.DataFrame:
     """Run our refactored pipeline in points mode."""
-    from vs30 import pipeline, constants
+    from vs30 import pipeline, constants, utils
 
     lons, lats = NZTM2WGS.transform(points_nztm[:, 0], points_nztm[:, 1])
 
@@ -140,6 +141,14 @@ def run_our_pipeline(points_nztm: np.ndarray) -> pd.DataFrame:
         mvn=True,
         include_intermediate=True,
         nproc=-1,
+        geology_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_GEOLOGY_PHI,
+        ),
+        terrain_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_TERRAIN_PHI,
+        ),
     )
     return result_df
 

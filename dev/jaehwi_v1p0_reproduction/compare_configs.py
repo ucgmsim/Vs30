@@ -1,4 +1,5 @@
 """Compare Foster posteriors vs our Bayesian update at sample points."""
+import functools
 import sys
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from pyproj import Transformer
 
 sys.path.insert(0, str(Path("/home/arr65/src/vs30")))
 
-from vs30 import pipeline, constants
+from vs30 import pipeline, constants, utils
 
 REPO = Path("/home/arr65/src/vs30")
 VS30_PKG = REPO / "vs30"
@@ -48,6 +49,14 @@ def run_config(name, longitudes, latitudes, **params):
     return pipeline.points_pipeline(
         longitudes=longitudes, latitudes=latitudes,
         noisy=True, mvn=True, include_intermediate=True, nproc=-1,
+        geology_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_GEOLOGY_PHI,
+        ),
+        terrain_corr_fn=functools.partial(
+            utils.exponential_correlation_function,
+            phi=constants.DEFAULT_TERRAIN_PHI,
+        ),
         **params,
     )
 
