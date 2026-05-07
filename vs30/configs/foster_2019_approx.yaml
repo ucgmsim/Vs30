@@ -28,16 +28,13 @@ apply_coastal_distance_mod: false
 fill_gaps: false
 
 # --- Spatial correlation ---
-# Geology: Matérn (κ=0.9) as fitted in the original R code.
+# Matérn fits as in the original R code.
 geology_correlation:
   model: matern
   range: 20000
-  sill: 0.15
-  nugget: 0.05
   kappa: 0.9
 
-# Terrain: Exponential. The original R code uses Matérn with κ=0.5,
-# which is mathematically equivalent to exponential.
 terrain_correlation:
-  model: exponential
-  phi: 993
+  model: matern
+  range: 993
+  kappa: 0.5

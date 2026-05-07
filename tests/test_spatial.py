@@ -13,10 +13,10 @@ import numpy as np
 import pytest
 import rasterio
 
-from vs30 import constants, spatial, utils
+from vs30 import constants, correlations, spatial
 
 # Create a standard geology correlation callable for tests
-geology_corr_fn = functools.partial(utils.exponential_correlation_function, phi=1407)
+geology_corr_fn = functools.partial(correlations.exponential, phi=1407)
 
 
 class TestComputeSpatialAdjustmentForPixel:

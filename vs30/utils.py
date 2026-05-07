@@ -1,123 +1,9 @@
-"""Shared utility functions: correlation function and model combination."""
-
-import functools
-from collections.abc import Callable
+"""Shared utility functions: model combination and data helpers."""
 
 import numpy as np
 import pandas as pd
-import scipy.special
 
 from vs30 import constants
-
-
-def exponential_correlation_function(
-    distances: np.ndarray,
-    phi: float,
-    min_dist: float = constants.MIN_DIST_ENFORCED,
-) -> np.ndarray:
-    """
-    Calculate exponential correlation from distances.
-
-    Parameters
-    ----------
-    distances : ndarray
-        Array of distances in meters. Can be scalar, 1D, or 2D (distance matrix).
-    phi : float
-        Correlation length parameter in meters.
-    min_dist : float, optional
-        Minimum distance enforced to prevent division issues. Default is MIN_DIST_ENFORCED.
-
-    Returns
-    -------
-    ndarray
-        Correlation values between 0 and 1. Same shape as distances.
-
-    """
-    return np.exp(-np.maximum(min_dist, distances) / phi)
-
-
-def matern_correlation_function(
-    distances: np.ndarray,
-    range_m: float,
-    kappa: float,
-    min_dist: float = constants.MIN_DIST_ENFORCED,
-) -> np.ndarray:
-    """
-    Calculate Matérn correlation from distances.
-
-    Uses the gstat parameterization where the range parameter is used
-    directly as the scale (NOT multiplied by sqrt(2*kappa)). This matches
-    R's gstat::vgm() which was used to fit the original model parameters.
-
-    The output matches ``variogramLine(model, covariance=TRUE)/psill``
-    from R gstat: rho(h) = (2^(1-κ)/Γ(κ)) * (h/a)^κ * K_κ(h/a) for h>0,
-    with rho(0)=1 enforced via the minimum-distance clamp. The nugget is
-    absorbed into per-point standard deviations elsewhere (Worden et al.
-    Eq. 7), and the partial sill is a variance scaling that does not
-    enter the correlation function — both are kept in YAML/gstat configs
-    for round-trip compatibility but ignored here.
-
-    Parameters
-    ----------
-    distances : ndarray
-        Array of distances in meters.
-    range_m : float
-        Matérn range (scale) parameter in meters (gstat convention).
-    kappa : float
-        Matérn smoothness parameter.
-    min_dist : float, optional
-        Minimum distance enforced to prevent numerical issues.
-
-    Returns
-    -------
-    ndarray
-        Correlation values in [0, 1]. Same shape as distances.
-        Near zero distance, returns approximately 1.
-    """
-    d = np.maximum(min_dist, distances)
-    scaled = d / range_m
-    rho = (
-        (2 ** (1 - kappa) / scipy.special.gamma(kappa))
-        * (scaled ** kappa)
-        * scipy.special.kv(kappa, scaled)
-    )
-    # Clamp NaN from numerical edge cases (kv can overflow for very small d)
-    return np.where(np.isfinite(rho), rho, 1.0)
-
-
-def resolve_correlation_function(
-    config_section: dict,
-) -> Callable[[np.ndarray], np.ndarray]:
-    """
-    Resolve a correlation config section into a callable.
-
-    Parameters
-    ----------
-    config_section : dict
-        Must contain a "model" key ("exponential" or "matern") plus the
-        model-specific parameters. Any ``sill``/``nugget`` keys are
-        ignored — they exist purely for round-trip compatibility with
-        gstat variogram fits.
-
-    Returns
-    -------
-    callable
-        Function with signature (distances: ndarray) -> ndarray.
-    """
-    model = config_section["model"]
-    if model == "exponential":
-        return functools.partial(
-            exponential_correlation_function,
-            phi=config_section["phi"],
-        )
-    elif model == "matern":
-        return functools.partial(
-            matern_correlation_function,
-            range_m=config_section["range"],
-            kappa=config_section["kappa"],
-        )
-    else:
-        raise ValueError(f"Unknown correlation model: {model}")
 
 
 def combine_vs30_models(
@@ -131,10 +17,8 @@ def combine_vs30_models(
     """
     Combine geology and terrain Vs30 models using log-space weighted mixture.
 
-    This function implements the correct combination algorithm that matches
-    the raster-based `combine` CLI command. Models are combined in log-space
-    (geometric weighting) with standard deviation computed using the mixture
-    of log-normals formula.
+    Models are combined in log-space (geometric weighting) with standard
+    deviation computed using the mixture of log-normals formula.
 
     Parameters
     ----------

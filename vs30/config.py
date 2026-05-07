@@ -5,7 +5,7 @@ from pathlib import Path
 
 import yaml
 
-from vs30 import constants, utils
+from vs30 import constants, correlations
 
 
 @dataclass
@@ -166,10 +166,10 @@ def load_config_from_yaml(yaml_path: Path) -> dict:
                     / value
                 )
 
-    config_data["geology_corr_fn"] = utils.resolve_correlation_function(
+    config_data["geology_corr_fn"] = correlations.resolve_correlation_function(
         config_data["geology_correlation"]
     )
-    config_data["terrain_corr_fn"] = utils.resolve_correlation_function(
+    config_data["terrain_corr_fn"] = correlations.resolve_correlation_function(
         config_data["terrain_correlation"]
     )
 
