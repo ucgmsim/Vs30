@@ -153,28 +153,28 @@ def fill_nodata_grid(
     fillable_locations = candidate_locations[fillable_of_candidates]
 
     dx = abs(transform.a)
-    buffer_pixels = round(constants.GAPFILL_LOCAL_GRID_SIZE_M / dx)
-    expansion_pixels = round(constants.GAPFILL_LOCAL_GRID_EXPANSION_M / dx)
-    max_buffer_pixels = round(constants.GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M / dx)
+    half_width_pixels = round(constants.GAPFILL_INITIAL_HALF_WIDTH_M / dx)
+    half_width_expansion_pixels = round(constants.GAPFILL_HALF_WIDTH_EXPANSION_M / dx)
+    max_half_width_pixels = round(constants.GAPFILL_MAX_HALF_WIDTH_M / dx)
 
     filled_vs30 = vs30.copy()
     filled_stdv = stdv.copy()
 
     valid_2d = ~np.isnan(vs30)
-    while buffer_pixels <= max_buffer_pixels:
+    while half_width_pixels <= max_half_width_pixels:
         # Dilate only the fillable mask (not the full nodata mask) to define
         # the donor search neighborhood. maximum_filter with a square kernel
         # is separable and runs in O(N) regardless of kernel size.
-        struct_size = 2 * buffer_pixels + 1
+        struct_size = 2 * half_width_pixels + 1
         neighborhood_2d = scipy.ndimage.maximum_filter(fillable_2d, size=struct_size)
 
         valid_in_neighborhood = valid_2d & neighborhood_2d
         if not np.any(valid_in_neighborhood):
             logger.info(
-                f"  Gap-fill: no valid donors within {buffer_pixels}-pixel "
-                f"({buffer_pixels * dx:.0f}m) buffer, expanding"
+                f"  Gap-fill: no valid donors within {half_width_pixels}-pixel "
+                f"({half_width_pixels * dx:.0f}m) half-width, expanding"
             )
-            buffer_pixels += expansion_pixels
+            half_width_pixels += half_width_expansion_pixels
             continue
 
         valid_rows, valid_cols = np.where(valid_in_neighborhood)
@@ -195,10 +195,10 @@ def fill_nodata_grid(
         )
         return filled_vs30, filled_stdv
 
-    # Exhausted all buffer expansions without finding valid donors
+    # Exhausted all half-width expansions without finding valid donors
     logger.warning(
-        f"  Gap-fill: no valid donors found within maximum buffer of "
-        f"{max_buffer_pixels} pixels ({max_buffer_pixels * dx:.0f}m). "
+        f"  Gap-fill: no valid donors found within maximum half-width of "
+        f"{max_half_width_pixels} pixels ({max_half_width_pixels * dx:.0f}m). "
         f"{len(fillable_rows)} pixel(s) remain unfilled."
     )
     return filled_vs30, filled_stdv

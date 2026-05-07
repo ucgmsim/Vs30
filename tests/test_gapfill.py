@@ -124,17 +124,17 @@ def test_create_local_grid_config_expansion():
     # constant change violates the pixel-edge constraint that
     # create_local_grid_config requires (half_width must equal k*dx + dx/2).
     half_dx = dx / 2
-    assert (constants.GAPFILL_LOCAL_GRID_SIZE_M - half_dx) % dx == 0, (
-        f"GAPFILL_LOCAL_GRID_SIZE_M = {constants.GAPFILL_LOCAL_GRID_SIZE_M} "
+    assert (constants.GAPFILL_INITIAL_HALF_WIDTH_M - half_dx) % dx == 0, (
+        f"GAPFILL_INITIAL_HALF_WIDTH_M = {constants.GAPFILL_INITIAL_HALF_WIDTH_M} "
         f"must equal k*dx + dx/2 for create_local_grid_config to produce "
         f"pixel-aligned local grids."
     )
-    assert constants.GAPFILL_LOCAL_GRID_EXPANSION_M % dx == 0, (
-        f"GAPFILL_LOCAL_GRID_EXPANSION_M = {constants.GAPFILL_LOCAL_GRID_EXPANSION_M} "
+    assert constants.GAPFILL_HALF_WIDTH_EXPANSION_M % dx == 0, (
+        f"GAPFILL_HALF_WIDTH_EXPANSION_M = {constants.GAPFILL_HALF_WIDTH_EXPANSION_M} "
         f"must be a multiple of dx so successive expansions stay aligned."
     )
-    initial_half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
-    expanded_half_width = initial_half_width + constants.GAPFILL_LOCAL_GRID_EXPANSION_M
+    initial_half_width = constants.GAPFILL_INITIAL_HALF_WIDTH_M
+    expanded_half_width = initial_half_width + constants.GAPFILL_HALF_WIDTH_EXPANSION_M
 
     initial_grid = gapfill.create_local_grid_config(
         easting,

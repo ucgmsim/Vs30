@@ -48,10 +48,10 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             nearby_observation,
             corr_fn=geology_corr_fn,
+            corr_zero=geology_corr_fn(np.array([0.0]))[0],
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
-            corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
         # Observation is higher (280), prior is 250, update should increase
@@ -65,10 +65,10 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             nearby_observation,
             corr_fn=geology_corr_fn,
+            corr_zero=geology_corr_fn(np.array([0.0]))[0],
             max_dist_m=5000.0,
             max_points=100,
             noisy=False,
-            corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
         # Adding observation should reduce uncertainty
@@ -90,8 +90,8 @@ class TestComputeSpatialAdjustmentForPixel:
             pixel,
             far_observation,
             corr_fn=geology_corr_fn,
-            max_dist_m=5000,
             corr_zero=geology_corr_fn(np.array([0.0]))[0],
+            max_dist_m=5000,
         )
 
         # VS30 should be unchanged when no nearby observations

@@ -76,6 +76,9 @@ def run_points_pipeline_for_version(cfg: dict, points_df: pd.DataFrame) -> pd.Da
     return pipeline.points_pipeline(
         longitudes=points_df["longitude"].values,
         latitudes=points_df["latitude"].values,
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg.get("geology_corr_fn"),
+        terrain_corr_fn=cfg.get("terrain_corr_fn"),
         geology_categorical_csv=cfg["geology_categorical_csv"],
         terrain_categorical_csv=cfg["terrain_categorical_csv"],
         clustered_observations_csv=cfg.get("clustered_observations_csv"),
@@ -84,9 +87,6 @@ def run_points_pipeline_for_version(cfg: dict, points_df: pd.DataFrame) -> pd.Da
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        geology_corr_fn=cfg.get("geology_corr_fn"),
-        terrain_corr_fn=cfg.get("terrain_corr_fn"),
-        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
         fill_gaps=cfg.get("fill_gaps", False),
     )
@@ -105,6 +105,9 @@ def run_grid_pipeline_at_point(
 
     result = pipeline.grid_pipeline(
         grid_config=local_config,
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg.get("geology_corr_fn"),
+        terrain_corr_fn=cfg.get("terrain_corr_fn"),
         output_dir=None,
         geology_categorical_csv=cfg["geology_categorical_csv"],
         terrain_categorical_csv=cfg["terrain_categorical_csv"],
@@ -115,9 +118,6 @@ def run_grid_pipeline_at_point(
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
         dbscan_nproc=1,
-        geology_corr_fn=cfg.get("geology_corr_fn"),
-        terrain_corr_fn=cfg.get("terrain_corr_fn"),
-        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
         fill_gaps=cfg.get("fill_gaps", False),
     )

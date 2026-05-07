@@ -251,29 +251,31 @@ RASTER_ID_NODATA_VALUE: int = 255
 NODATA_VALUE: int = -32767
 
 # Gap-fill constants
-# Half-width (meters) of the local grid generated around each fillable point
-# in the points pipeline.
+# Initial half-width (meters) of the donor search neighborhood:
+# - Points mode: half-width of the local grid generated around each
+#   fillable point.
+# - Grid mode: half-width of the donor search window around each fillable
+#   pixel.
 #
-# Constraint: must equal ``k * grid_dx + grid_dx / 2`` for integer k. This is
-# because ``create_local_grid_config`` snaps the query point to the nearest
-# pixel centre and then constructs bounds at ``snap ± half_width``; for those
-# bounds to be pixel edges (per ``rasterio.transform.from_bounds`` convention),
-# half_width must offset by exactly half a pixel. With ``grid_dx = 100`` m
-# this gives 5050 = 50 pixels per side + half-pixel = a 101 x 101 pixel
-# (~10.1 km x 10.1 km) local grid.
-GAPFILL_LOCAL_GRID_SIZE_M: int = 5050
+# Constraint (points mode): must equal ``k * grid_dx + grid_dx / 2`` for
+# integer k. ``create_local_grid_config`` snaps the query point to the
+# nearest pixel centre and constructs bounds at ``snap ± half_width``; for
+# those bounds to be pixel edges (per ``rasterio.transform.from_bounds``
+# convention), half_width must offset by exactly half a pixel. With
+# ``grid_dx = 100`` m this gives 5050 = 50 pixels per side + half-pixel
+# = a 101 x 101 pixel (~10.1 km x 10.1 km) local grid.
+GAPFILL_INITIAL_HALF_WIDTH_M: int = 5050
 
-# Amount (meters) to expand the local grid half-width if the initial local
-# grid has no valid donor pixels for a fillable point. Must be a multiple of
-# ``grid_dx`` so that successive expansions of a valid initial half-width
-# remain valid.
-GAPFILL_LOCAL_GRID_EXPANSION_M: int = 5000
+# Amount (meters) to expand the half-width on each retry if no valid donor
+# is found at the current half-width. Must be a multiple of ``grid_dx`` so
+# successive expansions of a valid initial half-width remain valid.
+GAPFILL_HALF_WIDTH_EXPANSION_M: int = 5000
 
-# Maximum half-width (meters) for local grid expansion. Prevents unbounded
-# growth if a fillable point has no valid donors nearby. Set to 50050 so the
-# expansion sequence (5050, 10050, ..., 50050) ends at 10 iterations matching
-# the previous max of 50000 with the old initial of 5000.
-GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M: int = 50050
+# Maximum half-width (meters) for expansion. Prevents unbounded growth if
+# a fillable point has no valid donors nearby. Set to 50050 so the
+# expansion sequence (5050, 10050, ..., 50050) ends at 10 iterations
+# matching the previous max of 50000 with the old initial of 5000.
+GAPFILL_MAX_HALF_WIDTH_M: int = 50050
 
 # Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0

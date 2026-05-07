@@ -64,6 +64,9 @@ def run_benchmark(
 
     result = pipeline.grid_pipeline(
         grid_config=grid,
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg["geology_corr_fn"],
+        terrain_corr_fn=cfg["terrain_corr_fn"],
         output_dir=None,
         geology_categorical_csv=cfg["geology_categorical_csv"],
         terrain_categorical_csv=cfg["terrain_categorical_csv"],
@@ -73,12 +76,9 @@ def run_benchmark(
         combine_ratio=cfg["combine_ratio"],
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        dbscan_nproc=1,
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
         fill_gaps=cfg["fill_gaps"],
-        geology_corr_fn=cfg["geology_corr_fn"],
-        terrain_corr_fn=cfg["terrain_corr_fn"],
-        dbscan_nproc=1,
     )
 
     benchmark = BENCHMARKS_DIR / f"{version}.tif"
@@ -112,6 +112,9 @@ def test_foster_2019_approx_points_benchmark():
     result = pipeline.points_pipeline(
         longitudes=np.asarray(lons),
         latitudes=np.asarray(lats),
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg.get("geology_corr_fn"),
+        terrain_corr_fn=cfg.get("terrain_corr_fn"),
         geology_categorical_csv=cfg["geology_categorical_csv"],
         terrain_categorical_csv=cfg["terrain_categorical_csv"],
         clustered_observations_csv=cfg.get("clustered_observations_csv"),
@@ -120,9 +123,6 @@ def test_foster_2019_approx_points_benchmark():
         combine_ratio=cfg.get("combine_ratio"),
         noisy=cfg["noisy"],
         do_bayesian_update=cfg["do_bayesian_update"],
-        geology_corr_fn=cfg.get("geology_corr_fn"),
-        terrain_corr_fn=cfg.get("terrain_corr_fn"),
-        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
         apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
         fill_gaps=cfg.get("fill_gaps", False),
     )

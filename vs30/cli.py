@@ -17,7 +17,7 @@ app = typer.Typer(name="vs30", help="VS30 map generation and categorical model u
 _MODEL_ARG_HELP = (
     "Either a bundled model version name ("
     f"{', '.join(v.value for v in constants.FixedModelVersion)}"
-    ") or a path to a YAML config file with the same schema."
+    ") or a path to a custom YAML config file."
 )
 
 
@@ -69,6 +69,9 @@ def points(
     result_df = pipeline.points_pipeline(
         longitudes=df[lon_column].to_numpy(),
         latitudes=df[lat_column].to_numpy(),
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        geology_corr_fn=config_data["geology_corr_fn"],
+        terrain_corr_fn=config_data["terrain_corr_fn"],
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
         clustered_observations_csv=config_data["clustered_observations_csv"],
@@ -82,10 +85,7 @@ def points(
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
         dbscan_nproc=dbscan_nproc,
-        geology_corr_fn=config_data["geology_corr_fn"],
-        terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
         fill_gaps=config_data["fill_gaps"],
     )
 
@@ -192,6 +192,9 @@ def grid(
             grid_dx=grid_dx,
             grid_dy=grid_dy,
         ),
+        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+        geology_corr_fn=config_data["geology_corr_fn"],
+        terrain_corr_fn=config_data["terrain_corr_fn"],
         output_dir=output_dir,
         geology_categorical_csv=config_data["geology_categorical_csv"],
         terrain_categorical_csv=config_data["terrain_categorical_csv"],
@@ -207,10 +210,7 @@ def grid(
         include_intermediate=include_intermediate,
         dbscan_nproc=dbscan_nproc,
         max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
-        geology_corr_fn=config_data["geology_corr_fn"],
-        terrain_corr_fn=config_data["terrain_corr_fn"],
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
         fill_gaps=config_data["fill_gaps"],
     )
 

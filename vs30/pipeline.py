@@ -26,7 +26,7 @@ from vs30 import (
 logger = logging.getLogger(__name__)
 
 
-def load_observations_csv(csv_path: Path, label: str) -> pd.DataFrame:
+def load_observations_csv(csv_path: Path) -> pd.DataFrame:
     """
     Load and validate an observations CSV (without category assignment).
 
@@ -34,9 +34,6 @@ def load_observations_csv(csv_path: Path, label: str) -> pd.DataFrame:
     ----------
     csv_path : Path
         Path to the observations CSV.
-    label : str
-        Human-readable label used in log messages and validation errors
-        (e.g. ``"clustered"`` or ``"independent"``).
 
     Returns
     -------
@@ -44,33 +41,48 @@ def load_observations_csv(csv_path: Path, label: str) -> pd.DataFrame:
         Observations DataFrame with the columns required by
         ``constants.ObservationColumn``.
     """
-    logger.info(f"Loading {label} observations from: {csv_path}")
+    logger.info(f"Loading observations from: {csv_path}")
     df = pd.read_csv(csv_path, comment="#", skipinitialspace=True)
     utils.validate_csv_columns(
         df,
         constants.ObservationColumn.REQUIRED,
-        f"{label.capitalize()} observations CSV",
+        f"Observations CSV ({csv_path.name})",
     )
-    logger.info(f"Loaded {len(df)} {label} observations")
+    logger.info(f"Loaded {len(df)} observations from {csv_path.name}")
     return df
 
 
 def assign_observations_to_category(
     df: pd.DataFrame, model_type: constants.ModelType
 ) -> pd.DataFrame:
-    """Return a copy of ``df`` with a ``STANDARD_ID_COLUMN`` of category IDs.
+    """
+    Return a copy of ``df`` annotated with category IDs in ``STANDARD_ID_COLUMN``.
 
     The category assignment is model-type specific (geology vs terrain), so
     the same loaded DataFrame can be reused across both runs.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Observations DataFrame with the easting and northing columns from
+        ``constants.ObservationColumn``.
+    model_type : constants.ModelType
+        Model type used to select the category map (geology or terrain).
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of ``df`` with an added ``STANDARD_ID_COLUMN`` column holding
+        the category ID for each observation.
     """
     obs_locs = df[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
     ].to_numpy()
-    out = df.copy()
-    out[constants.STANDARD_ID_COLUMN] = category.assign_to_category(
+    out_df = df.copy()
+    out_df[constants.STANDARD_ID_COLUMN] = category.assign_to_category(
         obs_locs, model_type
     )
-    return out
+    return out_df
 
 
 def concat_observation_dfs(
@@ -80,8 +92,20 @@ def concat_observation_dfs(
     """
     Concatenate already-loaded observation DataFrames into a single DataFrame.
 
-    Returns an empty DataFrame with the required schema when both inputs
-    are ``None``.
+    Parameters
+    ----------
+    clustered_observations_df : pd.DataFrame or None
+        Clustered observations (e.g., CPT data), or ``None`` if not provided.
+    independent_observations_df : pd.DataFrame or None
+        Independent observations (e.g., direct Vs30 measurements), or
+        ``None`` if not provided.
+
+    Returns
+    -------
+    pd.DataFrame
+        Concatenated observations DataFrame. Returns an empty DataFrame with
+        the columns required by ``constants.ObservationColumn`` when both
+        inputs are ``None``.
     """
     dfs = [
         df
@@ -95,7 +119,6 @@ def concat_observation_dfs(
 
 def compute_categorical_vs30_updates(
     model_type: constants.ModelType,
-    *,
     categorical_model_csv: Path | None = None,
     categorical_model_df: pd.DataFrame | None = None,
     clustered_observations_df: pd.DataFrame | None = None,
@@ -221,10 +244,9 @@ def compute_categorical_vs30_updates(
 
 
 
-def compute_model_grid(
+def compute_component_grid(
     model_type: constants.ModelType,
     grid_config: config.GridConfig,
-    *,
     apply_alluvium_slope_mod: bool,
     categorical_model_csv: Path | None = None,
     posterior_df: pd.DataFrame | None = None,
@@ -241,17 +263,7 @@ def compute_model_grid(
     apply_coastal_distance_mod: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
-    Run the full VS30 generation pipeline for a single model type in memory.
-
-    Executes the complete pipeline in sequence:
-
-    1. Bayesian update of categorical model values using observations (conditional).
-    2. Create initial VS30 arrays from categorical model.
-    3. Apply hybrid modifications for slope and coastal distance (geology only).
-    4. Spatial adjustment using MVN conditioning with observations (conditional).
-
-    When output_dir is provided, intermediate files are written at each stage
-    (gated by include_intermediate for non-final outputs).
+    Compute the Vs30 grid for one component (geology or terrain).
 
     Parameters
     ----------
@@ -265,26 +277,23 @@ def compute_model_grid(
         Path to CSV file with categorical Vs30 values. Required unless
         ``posterior_df`` is provided.
     posterior_df : pd.DataFrame, optional
-        Pre-computed posterior categorical model. When provided, Step 1
-        (Bayesian update) is skipped and this DataFrame is used directly.
-        ``do_bayesian_update`` and ``categorical_model_csv`` are ignored.
+        Pre-computed posterior categorical model. When provided, the
+        Bayesian update is skipped; ``do_bayesian_update`` and
+        ``categorical_model_csv`` are ignored.
     clustered_observations_df : pd.DataFrame, optional
-        Pre-loaded clustered observations (e.g., CPT data). Caller is
-        expected to load this once via ``load_observations_csv`` and reuse
-        the same DataFrame across geology and terrain runs.
+        Pre-loaded clustered observations (e.g., CPT data).
     independent_observations_df : pd.DataFrame, optional
         Pre-loaded independent observations (e.g., measured filtered).
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical model values.
         Ignored when ``posterior_df`` is provided.
     mvn : bool, optional
-        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+        Whether to perform MVN spatial adjustment.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of clustered observations
-        when do_bayesian_update is True. Default -1 (all cores). Has no
-        effect when do_bayesian_update is False.
+        Number of processes for DBSCAN clustering. Default -1 (all cores).
+        No effect when ``do_bayesian_update`` is False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
     output_dir : Path, optional
@@ -303,6 +312,13 @@ def compute_model_grid(
     tuple[ndarray, ndarray, ndarray, dict]
         (vs30, stdv, id_array, profile) — the final VS30 array, standard
         deviation array, category ID array, and rasterio profile.
+
+    Raises
+    ------
+    ValueError
+        If neither ``categorical_model_csv`` nor ``posterior_df`` is provided;
+        if ``mvn`` is True and ``corr_fn`` is not provided; or if ``mvn`` is
+        True and no observations are provided.
     """
     if posterior_df is None and categorical_model_csv is None:
         raise ValueError(
@@ -314,7 +330,7 @@ def compute_model_grid(
         output_dir = output_dir.resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    logger.info(f"Starting full pipeline for {model_type}")
+    logger.info(f"Starting {model_type} grid computation")
 
     if posterior_df is not None:
         logger.info("\n=== STEP 1: SKIPPED - Using pre-computed posterior_df ===")
@@ -457,7 +473,7 @@ def compute_model_grid(
             (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
-    logger.info(f"\nFull pipeline for {model_type} completed successfully")
+    logger.info(f"\n{model_type} grid computation completed")
 
     return vs30_array, stdv_array, id_array, profile
 
@@ -465,7 +481,8 @@ def compute_model_grid(
 def grid_pipeline(
     grid_config: config.GridConfig,
     apply_alluvium_slope_mod: bool,
-    *,
+    geology_corr_fn: Callable,
+    terrain_corr_fn: Callable,
     output_dir: Path | None = None,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
     geology_categorical_csv: Path | None = None,
@@ -480,8 +497,6 @@ def grid_pipeline(
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
     max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
-    geology_corr_fn: Callable,
-    terrain_corr_fn: Callable,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
     clustered_observations_df: pd.DataFrame | None = None,
@@ -490,20 +505,7 @@ def grid_pipeline(
     terrain_posterior_df: pd.DataFrame | None = None,
 ) -> dict[str, np.ndarray | dict | None]:
     """
-    Run the full VS30 generation pipeline on a raster grid.
-
-    Executes the VS30 pipeline for the requested model type(s) on a raster grid
-    defined by grid_config. For COMBINED mode (default), runs both geology and
-    terrain pipelines then combines the results.
-
-    Each single-model pipeline runs the following stages:
-    1. Bayesian update of categorical model values using observations (conditional).
-    2. Create initial VS30 raster from categorical model.
-    3. Apply hybrid modifications for slope and coastal distance (geology only).
-    4. MVN spatial adjustment using observations (conditional).
-
-    For COMBINED mode, an additional stage combines the two models:
-    5. Combine geology and terrain models using weighted average.
+    Compute the Vs30 grid.
 
     Parameters
     ----------
@@ -511,6 +513,10 @@ def grid_pipeline(
         Grid domain and resolution parameters.
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
+    geology_corr_fn : Callable
+        Correlation function for geology spatial adjustment.
+    terrain_corr_fn : Callable
+        Correlation function for terrain spatial adjustment.
     output_dir : Path, optional
         Directory to save all pipeline outputs (intermediate and final rasters).
         If None, no files are written.
@@ -532,22 +538,17 @@ def grid_pipeline(
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     mvn : bool, optional
-        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+        Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical model values.
     include_intermediate : bool, optional
         Whether to write intermediate files (ID rasters, initial VS30, slope,
         coast distance, hybrid geology). Default False.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of clustered observations
-        when do_bayesian_update is True. Default -1 (all cores). Has no
-        effect when do_bayesian_update is False.
+        Number of processes for DBSCAN clustering. Default -1 (all cores).
+        No effect when ``do_bayesian_update`` is False.
     max_spatial_boolean_array_memory_gb : float, optional
         Maximum memory for spatial boolean arrays.
-    geology_corr_fn : Callable
-        Correlation function for geology spatial adjustment.
-    terrain_corr_fn : Callable
-        Correlation function for terrain spatial adjustment.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
     fill_gaps : bool
@@ -578,6 +579,12 @@ def grid_pipeline(
         - ``"terrain_vs30"``, ``"terrain_stdv"`` : 2D arrays (when terrain is computed)
         - ``"combined_vs30"``, ``"combined_stdv"`` : 2D arrays (when both models are computed)
         - ``"profile"`` : rasterio profile dict with CRS, transform, dimensions, etc.
+
+    Raises
+    ------
+    ValueError
+        If a single-model run (``model_type=GEOLOGY`` or ``TERRAIN``) is
+        requested without ``include_intermediate=True``.
     """
     if model_type != constants.ModelType.COMBINED and not include_intermediate:
         raise ValueError(
@@ -604,22 +611,19 @@ def grid_pipeline(
     # Load observation CSVs once and reuse across geology + terrain (skipped
     # when caller has already supplied the corresponding DataFrame).
     if clustered_observations_df is None and clustered_observations_csv is not None:
-        clustered_observations_df = load_observations_csv(
-            clustered_observations_csv, "clustered"
-        )
+        clustered_observations_df = load_observations_csv(clustered_observations_csv)
     if independent_observations_df is None and independent_observations_csv is not None:
-        independent_observations_df = load_observations_csv(
-            independent_observations_csv, "independent"
-        )
+        independent_observations_df = load_observations_csv(independent_observations_csv)
 
     result: dict[str, np.ndarray | dict | None] = {}
     profile: dict | None = None
 
     if run_geology:
         logger.info("\n" + "=" * 80 + "\nRUNNING GEOLOGY PIPELINE\n" + "=" * 80)
-        geol_vs30, geol_stdv, geol_ids, profile = compute_model_grid(
+        geol_vs30, geol_stdv, geol_ids, profile = compute_component_grid(
             model_type=constants.ModelType.GEOLOGY,
             grid_config=grid_config,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             categorical_model_csv=geology_categorical_csv,
             posterior_df=geology_posterior_df,
             clustered_observations_df=clustered_observations_df,
@@ -633,7 +637,6 @@ def grid_pipeline(
             include_intermediate=include_intermediate,
             corr_fn=geology_corr_fn,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
-            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -641,9 +644,10 @@ def grid_pipeline(
 
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
-        terr_vs30, terr_stdv, _, profile = compute_model_grid(
+        terr_vs30, terr_stdv, _, profile = compute_component_grid(
             model_type=constants.ModelType.TERRAIN,
             grid_config=grid_config,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             categorical_model_csv=terrain_categorical_csv,
             posterior_df=terrain_posterior_df,
             clustered_observations_df=clustered_observations_df,
@@ -656,7 +660,6 @@ def grid_pipeline(
             output_dir=output_dir,
             include_intermediate=include_intermediate,
             corr_fn=terrain_corr_fn,
-            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
         result["terrain_vs30"] = terr_vs30
@@ -676,7 +679,7 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        assert profile is not None  # invariant: set by compute_model_grid above
+        assert profile is not None  # invariant: set by compute_component_grid above
 
         if fill_gaps:
             # Gap-fill on-land nodata pixels in combined output
@@ -731,9 +734,6 @@ def fill_one_point_via_local_grid(
     """
     Fill a single nodata point by running ``grid_pipeline`` on a local grid.
 
-    Expands the local grid up to ``GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M`` if no
-    valid donor is found at the initial half-width.
-
     Parameters
     ----------
     easting : float
@@ -751,8 +751,8 @@ def fill_one_point_via_local_grid(
     tuple[float, float]
         ``(fill_vs30, fill_stdv)``. Both are NaN if no donor was found.
     """
-    half_width = constants.GAPFILL_LOCAL_GRID_SIZE_M
-    while half_width <= constants.GAPFILL_MAX_LOCAL_GRID_HALF_WIDTH_M:
+    half_width = constants.GAPFILL_INITIAL_HALF_WIDTH_M
+    while half_width <= constants.GAPFILL_MAX_HALF_WIDTH_M:
         local_config = gapfill.create_local_grid_config(
             easting, northing, gapfill_grid_config, half_width
         )
@@ -777,10 +777,10 @@ def fill_one_point_via_local_grid(
         if not np.isnan(fill_vs30):
             return float(fill_vs30), float(fill_stdv)
 
-        half_width += constants.GAPFILL_LOCAL_GRID_EXPANSION_M
+        half_width += constants.GAPFILL_HALF_WIDTH_EXPANSION_M
         logger.info(
             f"  Gap-fill: expanding local grid to "
-            f"{half_width * 2}m for point ({easting:.0f}, {northing:.0f})"
+            f"{half_width * 2}m wide for point ({easting:.0f}, {northing:.0f})"
         )
 
     logger.warning(
@@ -793,8 +793,9 @@ def fill_one_point_via_local_grid(
 def points_pipeline(
     longitudes: np.ndarray,
     latitudes: np.ndarray,
-    *,
     apply_alluvium_slope_mod: bool,
+    geology_corr_fn: Callable,
+    terrain_corr_fn: Callable,
     model_type: constants.ModelType = constants.ModelType.COMBINED,
     geology_categorical_csv: Path | None = None,
     terrain_categorical_csv: Path | None = None,
@@ -807,24 +808,12 @@ def points_pipeline(
     do_bayesian_update: bool = False,
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
-    geology_corr_fn: Callable,
-    terrain_corr_fn: Callable,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
     gapfill_grid_config: config.GridConfig = config.FULL_NZ_GRID_CONFIG,
 ) -> pd.DataFrame:
     """
     Compute Vs30 values at specific latitude/longitude locations.
-
-    Runs the Vs30 pipeline at the specified query points without generating
-    raster grids. This is efficient for querying Vs30 at a small number of
-    locations.
-
-    The pipeline stages mirror those in grid_pipeline:
-    1. Look up categorical model values at each point.
-    2. Apply hybrid modifications for slope and coastal distance (geology only).
-    3. MVN spatial adjustment using observations (conditional).
-    4. Combine geology and terrain models using weighted average.
 
     Parameters
     ----------
@@ -834,6 +823,10 @@ def points_pipeline(
         Array of latitude values (WGS84).
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
+    geology_corr_fn : Callable
+        Correlation function for geology spatial adjustment.
+    terrain_corr_fn : Callable
+        Correlation function for terrain spatial adjustment.
     model_type : ModelType, optional
         Which model(s) to run: GEOLOGY, TERRAIN, or COMBINED (default).
     geology_categorical_csv : Path
@@ -852,20 +845,15 @@ def points_pipeline(
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     mvn : bool, optional
-        Whether to perform MVN spatial adjustment. If False, spatial fit is skipped.
+        Whether to perform MVN spatial adjustment.
     do_bayesian_update : bool, optional
         Whether to perform Bayesian update of categorical Vs30 values
         using observations before computing Vs30. Default False.
     include_intermediate : bool, optional
         Include intermediate values (geology/terrain separately) in output.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of clustered observations
-        when do_bayesian_update is True. Default -1 (all cores). Has no
-        effect when do_bayesian_update is False.
-    geology_corr_fn : Callable
-        Correlation function for geology spatial adjustment.
-    terrain_corr_fn : Callable
-        Correlation function for terrain spatial adjustment.
+        Number of processes for DBSCAN clustering. Default -1 (all cores).
+        No effect when ``do_bayesian_update`` is False.
     apply_coastal_distance_mod : bool, optional
         Whether to apply coastal distance modification for GID 4 and GID 10.
     fill_gaps : bool
@@ -884,6 +872,14 @@ def points_pipeline(
         geology_vs30, geology_stdv, geology_vs30_hybrid, geology_stdv_hybrid,
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
         terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
+
+    Raises
+    ------
+    ValueError
+        If a single-model run (``model_type=GEOLOGY`` or ``TERRAIN``) is
+        requested without ``include_intermediate=True``; if running geology
+        without ``geology_categorical_csv``; or if running terrain without
+        ``terrain_categorical_csv``.
     """
     if model_type != constants.ModelType.COMBINED and not include_intermediate:
         raise ValueError(
@@ -901,12 +897,12 @@ def points_pipeline(
 
     # Load observation CSVs once and reuse across geology + terrain stages.
     clustered_observations_df = (
-        load_observations_csv(clustered_observations_csv, "clustered")
+        load_observations_csv(clustered_observations_csv)
         if clustered_observations_csv is not None
         else None
     )
     independent_observations_df = (
-        load_observations_csv(independent_observations_csv, "independent")
+        load_observations_csv(independent_observations_csv)
         if independent_observations_csv is not None
         else None
     )
@@ -929,7 +925,6 @@ def points_pipeline(
         constants.ModelType.COMBINED,
     )
 
-    # Load categorical models (with optional Bayesian update)
     geol_model_df = None
     terr_model_df = None
 
@@ -996,7 +991,6 @@ def points_pipeline(
     result[constants.ObservationColumn.EASTING] = locations[:, 0]
     result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
-    # --- Geology pipeline: categorical lookup, hybrid mods, spatial adjustment ---
     if run_geology:
         assert geol_model_df is not None  # invariant: required when run_geology
         with tqdm(
@@ -1030,7 +1024,6 @@ def points_pipeline(
             result[constants.COL_GEOLOGY_MVN_VS30] = geol_mvn_vs30
             result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
-    # --- Terrain pipeline: categorical lookup, spatial adjustment (no hybrid mods — geology-only step) ---
     if run_terrain:
         assert terr_model_df is not None  # invariant: required when run_terrain
         with tqdm(
@@ -1058,7 +1051,6 @@ def points_pipeline(
             result[constants.COL_TERRAIN_MVN_VS30] = terr_mvn_vs30
             result[constants.COL_TERRAIN_MVN_STDV] = terr_mvn_stdv
 
-    # --- Combine geology and terrain (or pass through single-model result) ---
     if run_geology and run_terrain:
         logger.info("Combining models...")
         combined_vs30, combined_stdv = utils.combine_vs30_models(
@@ -1099,31 +1091,28 @@ def points_pipeline(
                 f"via local grid pipeline"
             )
 
-            # Reuse the already-loaded observations DataFrames and the already-
-            # computed posterior categorical models; the local grid_pipeline
-            # invocations should not re-read CSVs or re-run DBSCAN/Bayesian.
+            # Local grid_pipeline calls reuse already-computed observations
+            # and posteriors, and disable Bayesian update + internal gap-fill
+            # (grid_pipeline's fill_gaps only searches within the local grid
+            # bounds; fill_one_point_via_local_grid runs gapfill.fill_nodata_grid
+            # itself so it can also grow the local grid on miss).
             grid_pipeline_kwargs = {
+                "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
+                "geology_corr_fn": geology_corr_fn,
+                "terrain_corr_fn": terrain_corr_fn,
                 "model_type": constants.ModelType.COMBINED,
-                "clustered_observations_df": clustered_observations_df,
-                "independent_observations_df": independent_observations_df,
-                "geology_posterior_df": geol_model_df,
-                "terrain_posterior_df": terr_model_df,
                 "combination_method": combination_method,
                 "combine_ratio": combine_ratio,
                 "noisy": noisy,
                 "mvn": mvn,
-                # Already applied (or skipped) when geol_model_df / terr_model_df
-                # were computed; do not re-run.
+                "apply_coastal_distance_mod": apply_coastal_distance_mod,
+                "clustered_observations_df": clustered_observations_df,
+                "independent_observations_df": independent_observations_df,
+                "geology_posterior_df": geol_model_df,
+                "terrain_posterior_df": terr_model_df,
+                # Overrides:
                 "do_bayesian_update": False,
                 "include_intermediate": False,
-                "geology_corr_fn": geology_corr_fn,
-                "terrain_corr_fn": terrain_corr_fn,
-                "apply_coastal_distance_mod": apply_coastal_distance_mod,
-                "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
-                # Pin to False explicitly: fill_one_point_via_local_grid runs
-                # gapfill.fill_nodata_grid itself (so it can also expand the
-                # search radius on miss). Letting grid_pipeline gap-fill in
-                # parallel would double-process and duplicate work.
                 "fill_gaps": False,
             }
 

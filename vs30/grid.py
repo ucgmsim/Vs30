@@ -331,7 +331,6 @@ def write_raster(
     profile: dict,
     bands: list[np.ndarray],
     band_descriptions: tuple[str, ...],
-    *,
     dtype: str = "float32",
     nodata: float | None = constants.NODATA_VALUE,
 ) -> None:

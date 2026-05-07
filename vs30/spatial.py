@@ -636,12 +636,11 @@ def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
     corr_fn: Callable[[np.ndarray], np.ndarray],
+    corr_zero: float,
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
-    *,
-    corr_zero: float,
 ) -> tuple[float, float] | None:
     """
     Compute MVN update for a single pixel.
@@ -654,6 +653,9 @@ def compute_spatial_adjustment_for_pixel(
         Full observation data.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations (ndarray).
+    corr_zero : float
+        Pre-computed correlation at zero distance, i.e.
+        ``corr_fn(np.array([0.0]))[0]``. Hoist this out of any per-pixel loop.
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
@@ -662,11 +664,6 @@ def compute_spatial_adjustment_for_pixel(
         Whether to apply noise weighting based on observation uncertainty.
     cov_reduc : float, optional
         Covariance reduction factor for dissimilar Vs30 values.
-    corr_zero : float
-        Pre-computed correlation at zero distance, i.e.
-        ``corr_fn(np.array([0.0]))[0]``. Required: callers MUST hoist this
-        out of any per-pixel loop. The keyword-only spelling is here to
-        prevent silent regressions from positional drift.
 
     Returns
     -------
@@ -873,11 +870,11 @@ def compute_spatial_adjustments(
             pixel,
             obs_data,
             corr_fn,
+            corr_zero=corr_zero,
             max_dist_m=max_dist_m,
             max_points=max_points,
             noisy=noisy,
             cov_reduc=cov_reduc,
-            corr_zero=corr_zero,
         )
         if result is not None:
             vs30, stdv = result
@@ -960,11 +957,11 @@ def compute_spatial_adjustment_at_points(
             pixel,
             obs_data,
             corr_fn,
+            corr_zero=corr_zero,
             max_dist_m=max_dist_m,
             max_points=max_points,
             noisy=noisy,
             cov_reduc=cov_reduc,
-            corr_zero=corr_zero,
         )
 
         if result is not None:
