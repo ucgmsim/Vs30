@@ -48,6 +48,7 @@ def require_extracted_shapefiles():
             returncode=1,
         )
 
+
 TESTS_DIR: Path = Path(__file__).parent
 FIXTURES_DIR: Path = TESTS_DIR / "fixtures"
 
@@ -58,7 +59,7 @@ def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
     """
     Load and resolve a fixed model version's YAML config for testing.
 
-    Thin wrapper around ``config.load_model_config`` so tests pick up any
+    Thin wrapper around ``config.load_config_from_yaml`` so tests pick up any
     validation changes there.
 
     Parameters
@@ -71,7 +72,7 @@ def load_fixed_model_config(version: constants.FixedModelVersion) -> dict:
     dict
         Resolved config dict ready to pass to pipeline functions.
     """
-    return config.load_model_config(version)
+    return config.load_config_from_yaml(constants.MODEL_VERSION_TO_CONFIG[version])
 
 
 def assert_arrays_match_raster_benchmark(

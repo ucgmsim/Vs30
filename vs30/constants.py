@@ -47,6 +47,25 @@ RESOURCE_SUBDIRS: dict[str, str] = {
     "independent_observations_csv": "observations",
 }
 
+# YAML config keys that must be present in every config (validated by
+# load_config_from_yaml).
+REQUIRED_CONFIG_FIELDS: tuple[str, ...] = (
+    "geology_correlation",
+    "terrain_correlation",
+    "apply_coastal_distance_mod",
+    "apply_alluvium_slope_mod",
+    "fill_gaps",
+    "mvn",
+    "noisy",
+    "do_bayesian_update",
+    "combination_method",
+    "combine_ratio",
+    "geology_categorical_csv",
+    "terrain_categorical_csv",
+    "clustered_observations_csv",
+    "independent_observations_csv",
+)
+
 # Covariance reduction factor for dissimilar Vs30 values (dimensionless).
 # Controls how much the correlation between two points is reduced when their
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
