@@ -15,46 +15,37 @@ def combine_vs30_models(
     combine_ratio: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Combine geology and terrain Vs30 models using log-space weighted mixture.
-
-    Models are combined in log-space (geometric weighting) with standard
-    deviation computed using the mixture of log-normals formula.
+    Combine geology and terrain Vs30 models using a weighted geometric mean.
 
     Parameters
     ----------
     geol_vs30 : ndarray
         Geology model Vs30 values.
     geol_stdv : ndarray
-        Geology model standard deviation (in log-space).
+        Geology model standard deviation, in log-space.
     terr_vs30 : ndarray
         Terrain model Vs30 values.
     terr_stdv : ndarray
-        Terrain model standard deviation (in log-space).
+        Terrain model standard deviation, in log-space.
     combination_method : CombinationMethod
-        Method for combining models: STANDARD_DEVIATION_WEIGHTING for
-        variance-based weighting, or RATIO for fixed-ratio weighting.
+        STANDARD_DEVIATION_WEIGHTING (lower-stdv model gets higher weight) or
+        RATIO (fixed geology-to-terrain ratio).
     combine_ratio : float, optional
-        Geology-to-terrain weight ratio (e.g., 1.0 for equal weighting,
-        2.0 for geology having twice the weight). Required when
-        combination_method is RATIO.
+        Geology-to-terrain weight ratio (e.g., 2.0 weights geology twice as
+        heavily as terrain); required when method is RATIO.
 
     Returns
     -------
     combined_vs30 : ndarray
-        Combined Vs30 values (geometric weighted mean).
+        Combined Vs30 values.
     combined_stdv : ndarray
-        Combined standard deviation (mixture of log-normals formula).
+        Combined log-space standard deviation.
 
-    Notes
-    -----
-    The combination is performed in log-space:
-    - Weights are computed based on the combination method
-    - Log-space combination: log_comb = w_g * log(geol) + w_t * log(terr)
-    - Combined Vs30 = exp(log_comb)
-    - Combined stdv uses mixture of log-normals: sqrt(w_g*(diff_g² + σ_g²) + w_t*(diff_t² + σ_t²))
-
-    For ratio=1.0 with inputs (200, 400), the result is ~283 (geometric mean),
-    not 300 (arithmetic mean).
+    Raises
+    ------
+    ValueError
+        If combine_ratio is None when combination_method is RATIO, or if
+        combination_method is not a recognized CombinationMethod value.
     """
     # Determine weights based on combination method
     if combination_method == constants.CombinationMethod.STANDARD_DEVIATION_WEIGHTING:
@@ -100,7 +91,7 @@ def validate_csv_columns(
     df: pd.DataFrame, required_cols: list[str], label: str
 ) -> None:
     """
-    Raise ValueError if the DataFrame is missing any required columns.
+    Validate that the DataFrame contains all required columns.
 
     Parameters
     ----------
