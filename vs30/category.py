@@ -15,27 +15,28 @@ from vs30 import constants, raster
 
 def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     """
-    Assign geology category IDs to points using polygon spatial join.
-
-    Uses QMAP shapefile polygons to determine which geology category
-    each point belongs to.
+    Assign geology category IDs to points using QMAP polygon spatial join.
 
     Parameters
     ----------
     points : ndarray
-        2D numpy array of NZTM coordinates (easting, northing).
+        Array of NZTM (easting, northing) coordinates.
 
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside polygons).
+        Category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE for
+        points outside the polygons).
     """
     gdf = raster.load_qmap_shapefile()[
         [constants.SHAPEFILE_GEOLOGY_ID_COLUMN, constants.SHAPEFILE_GEOMETRY_COLUMN]
     ]
-    points_shapely = shapely.points(points)
-    points_gdf = gpd.GeoDataFrame(geometry=points_shapely, crs=gdf.crs)
-    joined = gpd.sjoin(points_gdf, gdf, how="left", predicate="within")
+    joined = gpd.sjoin(
+        gpd.GeoDataFrame(geometry=shapely.points(points), crs=gdf.crs),
+        gdf,
+        how="left",
+        predicate="within",
+    )
 
     # Default to ID_NODATA where the spatial join returned no match.
     values = np.full(len(points), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
@@ -47,65 +48,27 @@ def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
     return values
 
 
-def assign_to_category(
-    points: np.ndarray, model_type: constants.ModelType
-) -> np.ndarray:
-    """
-    Assign category IDs to points using the geology or terrain model.
-
-    Parameters
-    ----------
-    points : ndarray
-        2D numpy array of NZTM coordinates (easting, northing).
-    model_type : constants.ModelType
-        ``ModelType.GEOLOGY`` or ``ModelType.TERRAIN``.
-
-    Returns
-    -------
-    ndarray
-        Array of category IDs.
-
-    Raises
-    ------
-    ValueError
-        If ``model_type`` is not GEOLOGY or TERRAIN.
-    """
-    if model_type == constants.ModelType.GEOLOGY:
-        return assign_to_category_geology(points)
-    if model_type == constants.ModelType.TERRAIN:
-        return assign_to_category_terrain(points)
-    raise ValueError(
-        f"Unsupported model_type for category assignment: {model_type}"
-    )
-
-
 def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     """
-    Assign terrain category IDs to points using raster nearest neighbor lookup.
-
-    Uses IwahashiPike terrain raster to determine which terrain category
-    each point belongs to. Reads the category ID value from the pixel
-    containing each point.
+    Assign terrain category IDs to points using IwahashiPike raster lookup.
 
     Parameters
     ----------
     points : ndarray
-        2D numpy array of NZTM coordinates (easting, northing).
+        Array of NZTM (easting, northing) coordinates.
 
     Returns
     -------
     ndarray
-        Array of category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE if outside raster).
+        Category IDs (1-indexed, or constants.RASTER_ID_NODATA_VALUE for
+        points outside the raster).
     """
     data, transform, nodata = raster.load_terrain_raster_array()
     rows, cols = rasterio.transform.rowcol(transform, points[:, 0], points[:, 1])
     rows = np.asarray(rows)
     cols = np.asarray(cols)
     in_bounds = (
-        (rows >= 0)
-        & (rows < data.shape[0])
-        & (cols >= 0)
-        & (cols < data.shape[1])
+        (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     )
     terrain_ids = np.full(
         len(points), constants.RASTER_ID_NODATA_VALUE, dtype=data.dtype
@@ -116,71 +79,34 @@ def assign_to_category_terrain(points: np.ndarray) -> np.ndarray:
     return terrain_ids
 
 
-def compute_bayesian_posterior_mean(
-    prior_mean: float,
-    num_prior_observations: float,
-    observation_value: float,
-) -> float:
+def assign_to_category(
+    points: np.ndarray, model_type: constants.ModelType
+) -> np.ndarray:
     """
-    Compute posterior mean using Bayesian update formula.
+    Assign category IDs to points using the geology or terrain model.
 
     Parameters
     ----------
-    prior_mean : float
-        Prior mean (in linear space, not log space).
-    num_prior_observations : float
-        Effective number of prior observations.
-    observation_value : float
-        New observation value (in linear space).
+    points : ndarray
+        Array of NZTM (easting, northing) coordinates.
+    model_type : constants.ModelType
+        ``ModelType.GEOLOGY`` or ``ModelType.TERRAIN``.
 
     Returns
     -------
-    float
-        Posterior mean (in linear space).
+    ndarray
+        Category IDs.
+
+    Raises
+    ------
+    ValueError
+        If ``model_type`` is not GEOLOGY or TERRAIN.
     """
-
-    weighted_log_mean = (
-        num_prior_observations * np.log(prior_mean) + np.log(observation_value)
-    ) / (num_prior_observations + 1)
-    return np.exp(weighted_log_mean)
-
-
-def compute_bayesian_posterior_variance(
-    prior_stdv: float,
-    num_prior_observations: float,
-    observation_uncertainty: float,
-    prior_mean: float,
-    observation_value: float,
-) -> float:
-    """
-    Compute posterior variance using Bayesian update formula.
-
-    Parameters
-    ----------
-    prior_stdv : float
-        Prior standard deviation.
-    num_prior_observations : float
-        Effective number of prior observations.
-    observation_uncertainty : float
-        Uncertainty (standard deviation) of new observation.
-    prior_mean : float
-        Prior mean.
-    observation_value : float
-        New observation value (in linear space).
-
-    Returns
-    -------
-    float
-        Posterior variance.
-    """
-    log_residual = np.log(observation_value) - np.log(prior_mean)
-    mean_shift = (
-        num_prior_observations / (num_prior_observations + 1)
-    ) * log_residual**2
-    pooled_variance = (
-        num_prior_observations * prior_stdv**2 + observation_uncertainty**2 + mean_shift
-    )
-    return pooled_variance / (num_prior_observations + 1)
+    if model_type == constants.ModelType.GEOLOGY:
+        return assign_to_category_geology(points)
+    if model_type == constants.ModelType.TERRAIN:
+        return assign_to_category_terrain(points)
+    raise ValueError(f"Unsupported model_type for category assignment: {model_type}")
 
 
 def update_with_independent_data(
@@ -297,12 +223,12 @@ def update_with_independent_data(
         for log_obs, unc in zip(cat_log_obs, cat_unc):
             log_residual = log_obs - log_current_mean
             mean_shift = (current_n / (current_n + 1)) * log_residual**2
-            new_variance = (
-                current_n * current_std**2 + unc**2 + mean_shift
-            ) / (current_n + 1)
-            log_current_mean = (
-                current_n * log_current_mean + log_obs
-            ) / (current_n + 1)
+            new_variance = (current_n * current_std**2 + unc**2 + mean_shift) / (
+                current_n + 1
+            )
+            log_current_mean = (current_n * log_current_mean + log_obs) / (
+                current_n + 1
+            )
             current_std = np.sqrt(new_variance)
             current_n += 1
 
@@ -365,7 +291,9 @@ def perform_clustering(
             eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
         )
         dbscan.fit(category_features)
-        sites_df.loc[category_mask, constants.ObservationColumn.CLUSTER] = dbscan.labels_
+        sites_df.loc[category_mask, constants.ObservationColumn.CLUSTER] = (
+            dbscan.labels_
+        )
 
     return sites_df
 
@@ -409,9 +337,7 @@ def compute_cluster_weighted_mean_and_stddev(
             weights[cluster_mask] /= cluster_log.size
 
     log_geometric_mean = weighted_log_vs30_sum / effective_n
-    log_stddev = np.sqrt(
-        np.sum(weights * (log_vs30_all - log_geometric_mean) ** 2)
-    )
+    log_stddev = np.sqrt(np.sum(weights * (log_vs30_all - log_geometric_mean) ** 2))
     return float(np.exp(log_geometric_mean)), float(log_stddev)
 
 
@@ -481,7 +407,9 @@ def update_with_clustered_data(
         category_sites = valid_sites[
             valid_sites[constants.STANDARD_ID_COLUMN] == category_id_int
         ]
-        cluster_counts = category_sites[constants.ObservationColumn.CLUSTER].value_counts()
+        cluster_counts = category_sites[
+            constants.ObservationColumn.CLUSTER
+        ].value_counts()
 
         # Effective independent observations: one per cluster, plus each unclustered point.
         effective_n = len(cluster_counts)
