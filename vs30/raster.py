@@ -160,71 +160,48 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
 
 def create_category_id_array(
     model_type: constants.ModelType,
-    xmin: float,
-    xmax: float,
-    ymin: float,
-    ymax: float,
-    dx: float,
-    dy: float,
+    grid_config: config.GridConfig,
 ) -> tuple[np.ndarray, dict]:
     """
     Create category ID array for terrain or geology in memory.
-
-    For terrain: Resamples IwahashiPike.tif to target grid using reprojection.
-    For geology: Rasterizes qmap.shp shapefile to target grid.
 
     Parameters
     ----------
     model_type : constants.ModelType
         Either ModelType.TERRAIN or ModelType.GEOLOGY.
-    xmin : float
-        Grid minimum easting (m, NZTM2000).
-    xmax : float
-        Grid maximum easting (m, NZTM2000).
-    ymin : float
-        Grid minimum northing (m, NZTM2000).
-    ymax : float
-        Grid maximum northing (m, NZTM2000).
-    dx : float
-        Grid cell width (m).
-    dy : float
-        Grid cell height (m).
+    grid_config : config.GridConfig
+        Grid bounds and spacing.
 
     Returns
     -------
-    tuple[np.ndarray, dict]
-        A tuple containing:
-        - The category ID array (uint8).
-        - The rasterio profile dict describing the array's spatial properties.
+    id_array : ndarray
+        Category ID array (uint8).
+    profile : dict
+        Rasterio profile describing the array's spatial properties.
 
     Raises
     ------
     ValueError
-        If model_type is not a valid ModelType.
+        If model_type is invalid or the geology shapefile is missing required
+        columns.
     FileNotFoundError
-        If input files don't exist.
+        If the input raster or shapefile is not found.
     """
     if model_type not in (constants.ModelType.GEOLOGY, constants.ModelType.TERRAIN):
         raise ValueError(
-            f"model_type must be ModelType.GEOLOGY or ModelType.TERRAIN, "
-            f"got '{model_type}'"
+            f"model_type must be ModelType.GEOLOGY or ModelType.TERRAIN, got '{model_type}'"
         )
 
-    nx = round((xmax - xmin) / dx)
-    ny = round((ymax - ymin) / dy)
-    dst_transform = rasterio.transform.from_bounds(xmin, ymin, xmax, ymax, nx, ny)
-
-    profile = {
-        "driver": constants.GEOTIFF_DRIVER,
-        "width": nx,
-        "height": ny,
-        "count": 1,
-        "dtype": "uint8",
-        "crs": constants.NZTM_CRS,
-        "transform": dst_transform,
-        "nodata": constants.RASTER_ID_NODATA_VALUE,
-        "compress": constants.GEOTIFF_COMPRESSION,
-    }
+    nx = round((grid_config.grid_xmax - grid_config.grid_xmin) / grid_config.grid_dx)
+    ny = round((grid_config.grid_ymax - grid_config.grid_ymin) / grid_config.grid_dy)
+    dst_transform = rasterio.transform.from_bounds(
+        grid_config.grid_xmin,
+        grid_config.grid_ymin,
+        grid_config.grid_xmax,
+        grid_config.grid_ymax,
+        nx,
+        ny,
+    )
 
     if model_type == constants.ModelType.TERRAIN:
         terrain_raster_path = (
@@ -256,14 +233,8 @@ def create_category_id_array(
         if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
             gdf = gdf.to_crs(constants.NZTM_CRS)
 
-        shapes = (
-            (geom, value)
-            for geom, value in zip(
-                gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]
-            )
-        )
         id_array = rasterio.features.rasterize(
-            shapes=shapes,
+            shapes=zip(gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]),
             out_shape=(ny, nx),
             transform=dst_transform,
             fill=constants.RASTER_ID_NODATA_VALUE,
@@ -271,7 +242,17 @@ def create_category_id_array(
             all_touched=False,
         )
 
-    return id_array, profile
+    return id_array, {
+        "driver": constants.GEOTIFF_DRIVER,
+        "width": nx,
+        "height": ny,
+        "count": 1,
+        "dtype": "uint8",
+        "crs": constants.NZTM_CRS,
+        "transform": dst_transform,
+        "nodata": constants.RASTER_ID_NODATA_VALUE,
+        "compress": constants.GEOTIFF_COMPRESSION,
+    }
 
 
 def create_vs30_arrays_from_ids(

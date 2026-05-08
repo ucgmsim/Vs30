@@ -18,7 +18,7 @@ import rasterio
 # Ensure vs30 package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from vs30 import constants, gapfill, raster
+from vs30 import config, constants, gapfill, raster
 
 
 def main(benchmark_path: Path) -> None:
@@ -53,17 +53,21 @@ def main(benchmark_path: Path) -> None:
     xmax = xmin + ncols * dx
     ymin = ymax - nrows * dy
 
-    print(f"Grid: {ncols}x{nrows}, extent: ({xmin}, {ymin}) - ({xmax}, {ymax}), dx={dx}, dy={dy}")
+    print(
+        f"Grid: {ncols}x{nrows}, extent: ({xmin}, {ymin}) - ({xmax}, {ymax}), dx={dx}, dy={dy}"
+    )
     print("Creating geology ID raster...")
 
     geol_ids, _ = raster.create_category_id_array(
         model_type=constants.ModelType.GEOLOGY,
-        xmin=xmin,
-        xmax=xmax,
-        ymin=ymin,
-        ymax=ymax,
-        dx=dx,
-        dy=dy,
+        grid_config=config.GridConfig(
+            grid_xmin=int(xmin),
+            grid_xmax=int(xmax),
+            grid_ymin=int(ymin),
+            grid_ymax=int(ymax),
+            grid_dx=int(dx),
+            grid_dy=int(dy),
+        ),
     )
 
     print("Running gap-fill...")

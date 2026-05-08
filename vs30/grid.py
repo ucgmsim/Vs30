@@ -48,15 +48,7 @@ def create_initial_vs30_arrays(
     logger.info(f"Using grid parameters: {grid_config}")
 
     logger.info(f"Creating {model_type} category ID array...")
-    id_array, profile = raster.create_category_id_array(
-        model_type,
-        xmin=grid_config.grid_xmin,
-        xmax=grid_config.grid_xmax,
-        ymin=grid_config.grid_ymin,
-        ymax=grid_config.grid_ymax,
-        dx=grid_config.grid_dx,
-        dy=grid_config.grid_dy,
-    )
+    id_array, profile = raster.create_category_id_array(model_type, grid_config)
 
     logger.info(f"Creating {model_type} VS30 arrays from IDs...")
     vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
