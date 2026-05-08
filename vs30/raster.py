@@ -163,7 +163,7 @@ def create_category_id_array(
     grid_config: config.GridConfig,
 ) -> tuple[np.ndarray, dict]:
     """
-    Create category ID array for terrain or geology in memory.
+    Create category ID array for terrain or geology.
 
     Parameters
     ----------
@@ -260,72 +260,71 @@ def create_vs30_arrays_from_ids(
     model_values_df: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Map category IDs to VS30 mean and standard deviation arrays in memory.
-
-    Uses the priority-based column selection to find the best available VS30
-    mean and standard deviation columns in the DataFrame, then maps each
-    category ID to its corresponding values.
+    Map category IDs to Vs30 mean and standard deviation arrays.
 
     Parameters
     ----------
     id_array : np.ndarray
         Category ID array (uint8) from terrain or geology rasterization.
     model_values_df : pd.DataFrame
-        DataFrame containing category ID-to-VS30 mapping. Must have an 'id'
-        column and at least one pair of mean/stdv columns recognized by
-        ``select_vs30_columns_by_priority``.
+        Category ID → Vs30 mapping. Must have a STANDARD_ID_COLUMN column
+        and one of the mean/stdv pairs recognized by
+        utils.select_vs30_columns_by_priority.
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        A tuple containing:
-        - vs30_array (float32): VS30 mean values for each pixel.
-        - stdv_array (float32): VS30 standard deviation values for each pixel.
+    vs30_array : ndarray
+        Vs30 mean values for each pixel (float32).
+    stdv_array : ndarray
+        Vs30 standard deviation values for each pixel (float32).
 
     Raises
     ------
     ValueError
-        If the DataFrame is missing required columns or an ID in the array
-        is not found in the DataFrame.
+        If model_values_df lacks required columns, or if id_array contains
+        an ID not present in model_values_df.
     """
-    columns_list = list(model_values_df.columns)
-    mean_col, std_col = utils.select_vs30_columns_by_priority(columns_list)
+    mean_col, std_col = utils.select_vs30_columns_by_priority(
+        list(model_values_df.columns)
+    )
 
-    if constants.STANDARD_ID_COLUMN not in columns_list:
+    if constants.STANDARD_ID_COLUMN not in model_values_df.columns:
         raise ValueError(
             f"DataFrame is missing required column: {constants.STANDARD_ID_COLUMN}"
         )
 
     # Build LUTs indexed directly by category ID. RASTER_ID_NODATA_VALUE (255)
     # is the largest id we ever see, so the LUT length is fixed at 256.
-    n_slots = constants.RASTER_ID_NODATA_VALUE + 1
-    mean_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
-    stdv_lut = np.full(n_slots, constants.NODATA_VALUE, dtype=np.float32)
+    mean_lut = np.full(
+        constants.RASTER_ID_NODATA_VALUE + 1, constants.NODATA_VALUE, dtype=np.float32
+    )
+    stdv_lut = np.full(
+        constants.RASTER_ID_NODATA_VALUE + 1, constants.NODATA_VALUE, dtype=np.float32
+    )
 
     df_ids = model_values_df[constants.STANDARD_ID_COLUMN].astype(int).to_numpy()
     mean_lut[df_ids] = model_values_df[mean_col].astype(np.float32).to_numpy()
     stdv_lut[df_ids] = model_values_df[std_col].astype(np.float32).to_numpy()
 
     unique_ids = np.unique(id_array)
-    valid_ids = unique_ids[
-        (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
-    ]
-    missing_ids = np.setdiff1d(valid_ids, df_ids)
+    missing_ids = np.setdiff1d(
+        unique_ids[
+            (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
+        ],
+        df_ids,
+    )
     if missing_ids.size:
         raise ValueError(
             f"ID {int(missing_ids[0])} found in array but not in DataFrame. "
             f"Available IDs: {sorted(df_ids.tolist())}"
         )
 
-    vs30_array = mean_lut[id_array]
-    stdv_array = stdv_lut[id_array]
-
-    return vs30_array, stdv_array
+    return mean_lut[id_array], stdv_lut[id_array]
 
 
 def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     """
-    Compute distance to the nearest coast (in meters) as an in-memory array.
+    Compute distance to the nearest coast (in meters).
 
     Uses GDAL to rasterize the coast shapefile and compute proximity distances,
     following the legacy implementation for numerical consistency. A temporary
@@ -423,7 +422,7 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
 
 def compute_slope_array(template_profile: dict) -> np.ndarray:
     """
-    Compute a slope array matching the target grid in memory.
+    Compute a slope array matching the target grid.
 
     Resamples the source slope raster to the target grid properties without
     writing any file to disk.

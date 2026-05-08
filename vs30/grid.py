@@ -20,7 +20,7 @@ def create_initial_vs30_arrays(
     model_values_df: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
-    Create initial VS30 arrays from categorical model in memory.
+    Create initial VS30 arrays from categorical model.
 
     Generates category ID arrays by rasterizing terrain or geology data to the
     target grid, then maps category IDs to VS30 mean and standard deviation
@@ -67,7 +67,7 @@ def compute_hybrid_geology_arrays(
     apply_coastal_distance_mod: bool,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Apply hybrid geology modifications in memory.
+    Apply hybrid geology modifications.
 
     Computes slope and coastal distance arrays for the grid, then applies
     slope-based and coast-distance-based modifications to the geology VS30 model.
@@ -140,11 +140,11 @@ def compute_spatial_adjustment_on_grid(
     coast_dist_array: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Compute MVN spatial adjustment on a grid in memory.
+    Compute MVN spatial adjustment on a grid.
 
     Performs a spatial adjustment of VS30 arrays by:
 
-    1. Constructing RasterData from in-memory arrays.
+    1. Constructing RasterData from arrays.
     2. Loading measurements and mapping them to categories.
     3. Computing spatial fits to update pixels affected by measurements.
     4. Returning the updated arrays.
@@ -272,7 +272,7 @@ def combine_model_arrays(
     nodata: float = constants.NODATA_VALUE,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Combine geology and terrain VS30 arrays in memory.
+    Combine geology and terrain VS30 arrays.
 
     Combines the two model outputs in log-space using the specified weighting
     method.

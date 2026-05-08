@@ -153,7 +153,7 @@ class RasterData:
         nodata: float = constants.NODATA_VALUE,
     ) -> "RasterData":
         """
-        Create RasterData from in-memory arrays.
+        Create RasterData from arrays.
 
         Parameters
         ----------
