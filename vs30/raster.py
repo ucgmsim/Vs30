@@ -19,7 +19,7 @@ import rasterio.warp
 import shapely
 from osgeo import gdal
 
-from vs30 import config, constants
+from vs30 import config, constants, utils
 
 logger = logging.getLogger(__name__)
 
@@ -299,56 +299,6 @@ def create_category_id_array(
     return id_array, profile
 
 
-def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
-    """
-    Determine which columns to use for VS30 mean and standard deviation.
-
-    Prioritizes columns in the following order:
-    1. Independent observations posterior (result of second update step)
-    2. Clustered observations posterior (result of first update step)
-    3. Generic posterior
-    4. Explicit prior
-    5. Standard/Original names
-
-    Parameters
-    ----------
-    columns : list[str]
-        List of available column names in the CSV.
-
-    Returns
-    -------
-    tuple[str, str]
-        (mean_column_name, std_column_name)
-
-    Raises
-    ------
-    ValueError
-        If no suitable column pair is found.
-    """
-    priorities = [
-        (
-            constants.COL_POSTERIOR_MEAN_INDEPENDENT,
-            constants.COL_POSTERIOR_STDV_INDEPENDENT,
-        ),
-        (
-            constants.COL_POSTERIOR_MEAN_CLUSTERED,
-            constants.COL_POSTERIOR_STDV_CLUSTERED,
-        ),
-        (constants.COL_POSTERIOR_MEAN, constants.COL_POSTERIOR_STDV),
-        (constants.COL_PRIOR_MEAN, constants.COL_PRIOR_STDV),
-        (constants.COL_MEAN, constants.COL_STDV),
-    ]
-
-    for mean_col, std_col in priorities:
-        if mean_col in columns and std_col in columns:
-            return mean_col, std_col
-
-    raise ValueError(
-        f"Could not find valid VS30 mean and standard deviation columns. "
-        f"Available columns: {columns}"
-    )
-
-
 def create_vs30_arrays_from_ids(
     id_array: np.ndarray,
     model_values_df: pd.DataFrame,
@@ -383,7 +333,7 @@ def create_vs30_arrays_from_ids(
         is not found in the DataFrame.
     """
     columns_list = list(model_values_df.columns)
-    mean_col, std_col = select_vs30_columns_by_priority(columns_list)
+    mean_col, std_col = utils.select_vs30_columns_by_priority(columns_list)
 
     if constants.STANDARD_ID_COLUMN not in columns_list:
         raise ValueError(
@@ -582,10 +532,7 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     rows = np.asarray(rows)
     cols = np.asarray(cols)
     in_bounds = (
-        (rows >= 0)
-        & (rows < data.shape[0])
-        & (cols >= 0)
-        & (cols < data.shape[1])
+        (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     )
     out = np.full(len(points), nodata, dtype=np.float64)
     out[in_bounds] = data[rows[in_bounds], cols[in_bounds]].astype(np.float64)

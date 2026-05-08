@@ -186,7 +186,7 @@ def prepare_terrain_obs_data(
     model_df = pd.read_csv(
         posterior_csv, comment="#", skipinitialspace=True
     ).rename(columns=str.strip)
-    mean_col, std_col = raster.select_vs30_columns_by_priority(list(model_df.columns))
+    mean_col, std_col = utils.select_vs30_columns_by_priority(list(model_df.columns))
     max_id = int(model_df[constants.STANDARD_ID_COLUMN].max())
     updated_model_table = np.full((max_id, 2), np.nan)
     ids = model_df[constants.STANDARD_ID_COLUMN].values.astype(int) - 1

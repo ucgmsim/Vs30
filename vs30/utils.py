@@ -87,6 +87,52 @@ def combine_vs30_models(
     return combined_vs30, combined_stdv
 
 
+def select_vs30_columns_by_priority(columns: list[str]) -> tuple[str, str]:
+    """
+    Determine which columns to use for Vs30 mean and standard deviation.
+
+    Returns the highest-priority pair found in ``columns``, ordered:
+
+    1. Independent-observations posterior (latest update)
+    2. Clustered-observations posterior (earlier update)
+    3. Generic posterior
+    4. Explicit prior
+    5. Standard / original names
+
+    Parameters
+    ----------
+    columns : list[str]
+        Available column names.
+
+    Returns
+    -------
+    tuple[str, str]
+        (mean_column_name, stdv_column_name)
+
+    Raises
+    ------
+    ValueError
+        If no priority pair is fully present in ``columns``.
+    """
+    for mean_col, std_col in [
+        (
+            constants.COL_POSTERIOR_MEAN_INDEPENDENT,
+            constants.COL_POSTERIOR_STDV_INDEPENDENT,
+        ),
+        (
+            constants.COL_POSTERIOR_MEAN_CLUSTERED,
+            constants.COL_POSTERIOR_STDV_CLUSTERED,
+        ),
+        (constants.COL_POSTERIOR_MEAN, constants.COL_POSTERIOR_STDV),
+        (constants.COL_PRIOR_MEAN, constants.COL_PRIOR_STDV),
+        (constants.COL_MEAN, constants.COL_STDV),
+    ]:
+        if mean_col in columns and std_col in columns:
+            return mean_col, std_col
+
+    raise ValueError(f"No valid Vs30 mean/stdv columns. Available: {columns}")
+
+
 def validate_csv_columns(
     df: pd.DataFrame, required_cols: list[str], label: str
 ) -> None:

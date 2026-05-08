@@ -10,7 +10,7 @@ import rasterio
 import shapely
 import sklearn.cluster
 
-from vs30 import constants, raster
+from vs30 import constants, raster, utils
 
 
 def assign_to_category_geology(points: np.ndarray) -> np.ndarray:
@@ -129,6 +129,12 @@ def update_with_independent_data(
     -------
     DataFrame
         Categorical model with new posterior columns added.
+
+    Raises
+    ------
+    ValueError
+        If `categorical_model_df` has neither posterior-clustered columns
+        nor COL_MEAN/COL_STDV columns.
     """
     posterior_df = categorical_model_df.copy()
 
@@ -222,26 +228,19 @@ def perform_clustering(
     nproc: int = -1,
 ) -> pd.DataFrame:
     """
-    Apply DBSCAN clustering to sites DataFrame, adding cluster assignments.
-
-    Clusters sites spatially within each category to avoid over-weighting
-    dense measurement clusters. Clustering is performed separately for each
-    category ID.
+    Apply per-category DBSCAN clustering to sites and add cluster labels.
 
     Parameters
     ----------
     sites_df : DataFrame
-        Observations DataFrame with columns: constants.STANDARD_ID_COLUMN, easting, northing.
-        Must have category IDs already assigned.
+        Observations with category ID, easting, and northing columns.
     nproc : int, optional
-        Number of processes for DBSCAN. -1 to use all available cores.
-        Default is -1.
+        Number of parallel processes for DBSCAN (-1 = all cores).
 
     Returns
     -------
     DataFrame
-        Modified DataFrame with added "cluster" column containing cluster IDs.
-        -1 indicates unclustered points.
+        Copy of sites_df with a "cluster" column. -1 means unclustered.
     """
     sites_df = sites_df.copy()
     sites_df[constants.ObservationColumn.CLUSTER] = constants.CLUSTER_UNCLUSTERED_LABEL
@@ -253,20 +252,18 @@ def perform_clustering(
         )
     )
     model_ids = sites_df[constants.STANDARD_ID_COLUMN].to_numpy()
-    ids = np.unique(model_ids)
-    ids = ids[ids != constants.RASTER_ID_NODATA_VALUE].astype(int)
+    ids = np.unique(model_ids[model_ids != constants.RASTER_ID_NODATA_VALUE]).astype(
+        int
+    )
 
     for category_id in ids:
         category_mask = model_ids == category_id
-        category_features = features[category_mask]
-        if category_features.shape[0] < constants.MIN_GROUP:
+        if category_mask.sum() < constants.MIN_GROUP:
             continue
-        dbscan = sklearn.cluster.DBSCAN(
-            eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
-        )
-        dbscan.fit(category_features)
         sites_df.loc[category_mask, constants.ObservationColumn.CLUSTER] = (
-            dbscan.labels_
+            sklearn.cluster.DBSCAN(
+                eps=constants.EPS, min_samples=constants.MIN_GROUP, n_jobs=nproc
+            ).fit_predict(features[category_mask])
         )
 
     return sites_df
@@ -278,9 +275,6 @@ def compute_cluster_weighted_mean_and_stddev(
     effective_n: int,
 ) -> tuple[float, float]:
     """Compute cluster-weighted geometric mean and log-space standard deviation.
-
-    Clusters contribute their geometric mean as a single pseudo-observation.
-    Unclustered points each contribute individually.
 
     Parameters
     ----------
@@ -302,17 +296,18 @@ def compute_cluster_weighted_mean_and_stddev(
     weighted_log_vs30_sum = 0.0
 
     for cluster_label in cluster_counts.index:
-        cluster_mask = cluster_labels == cluster_label
-        cluster_log = log_vs30_all[cluster_mask]
+        cluster_log = log_vs30_all[cluster_labels == cluster_label]
         if cluster_label == constants.CLUSTER_UNCLUSTERED_LABEL:
             weighted_log_vs30_sum += cluster_log.sum()
         else:
-            weighted_log_vs30_sum += cluster_log.sum() / cluster_log.size
-            weights[cluster_mask] /= cluster_log.size
+            weighted_log_vs30_sum += cluster_log.mean()
+            weights[cluster_labels == cluster_label] /= cluster_log.size
 
-    log_geometric_mean = weighted_log_vs30_sum / effective_n
-    log_stddev = np.sqrt(np.sum(weights * (log_vs30_all - log_geometric_mean) ** 2))
-    return float(np.exp(log_geometric_mean)), float(log_stddev)
+    return float(np.exp(weighted_log_vs30_sum / effective_n)), float(
+        np.sqrt(
+            np.sum(weights * (log_vs30_all - weighted_log_vs30_sum / effective_n) ** 2)
+        )
+    )
 
 
 def update_with_clustered_data(
@@ -320,12 +315,7 @@ def update_with_clustered_data(
     sites_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Perform Bayesian update for clustered CPT data.
-
-    Each DBSCAN cluster contributes a single effective observation
-    (the geometric mean of its members), preventing spatially dense
-    geotechnical investigations from dominating the posterior.
-    Unclustered points (label = -1) each count as one observation.
+    Perform Bayesian update for clustered data.
 
     Parameters
     ----------
@@ -338,18 +328,29 @@ def update_with_clustered_data(
     -------
     DataFrame
         Updated DataFrame with posterior mean and standard deviation columns.
+
+    Raises
+    ------
+    ValueError
+        If `prior_df` has neither posterior-clustered columns nor
+        COL_MEAN/COL_STDV columns.
     """
     posterior_df = prior_df.copy()
 
-    if (
-        constants.COL_PRIOR_MEAN not in posterior_df.columns
-        and constants.COL_MEAN in posterior_df.columns
-    ):
+    if constants.COL_PRIOR_MEAN in posterior_df.columns:
+        pass  # already normalized
+    elif constants.COL_MEAN in posterior_df.columns:
         posterior_df = posterior_df.rename(
             columns={
                 constants.COL_MEAN: constants.COL_PRIOR_MEAN,
                 constants.COL_STDV: constants.COL_PRIOR_STDV,
             }
+        )
+    else:
+        raise ValueError(
+            f"No usable prior columns. Need either "
+            f"{constants.COL_PRIOR_MEAN}+{constants.COL_PRIOR_STDV} "
+            f"or {constants.COL_MEAN}+{constants.COL_STDV}."
         )
 
     # Cast to float so .at[] assignments below don't downcast.
@@ -371,9 +372,7 @@ def update_with_clustered_data(
         )
     )
 
-    unique_ids = valid_sites[constants.STANDARD_ID_COLUMN].unique()
-
-    for category_id in unique_ids:
+    for category_id in valid_sites[constants.STANDARD_ID_COLUMN].unique():
         category_id_int = int(category_id)
         if category_id_int not in id_to_idx:
             continue
@@ -395,9 +394,12 @@ def update_with_clustered_data(
         mean_vs30, stddev = compute_cluster_weighted_mean_and_stddev(
             category_sites, cluster_counts, effective_n
         )
-        df_idx = id_to_idx[category_id_int]
-        posterior_df.at[df_idx, constants.COL_POSTERIOR_MEAN_CLUSTERED] = mean_vs30
-        posterior_df.at[df_idx, constants.COL_POSTERIOR_STDV_CLUSTERED] = stddev
+        posterior_df.at[
+            id_to_idx[category_id_int], constants.COL_POSTERIOR_MEAN_CLUSTERED
+        ] = mean_vs30
+        posterior_df.at[
+            id_to_idx[category_id_int], constants.COL_POSTERIOR_STDV_CLUSTERED
+        ] = stddev
 
     return posterior_df
 
@@ -406,10 +408,8 @@ def get_vs30_for_ids(
     category_ids: np.ndarray,
     categorical_model_df: pd.DataFrame,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Get Vs30 mean and standard deviation for category IDs from categorical model.
-
-    Looks up the Vs30 mean and standard deviation for each category ID
-    from the categorical model DataFrame.
+    """
+    Get Vs30 mean and stddev for category IDs from a categorical model.
 
     Parameters
     ----------
@@ -417,27 +417,20 @@ def get_vs30_for_ids(
         Array of category IDs (e.g. from assign_to_category_geology or
         assign_to_category_terrain).
     categorical_model_df : pd.DataFrame
-        DataFrame with columns for category ID, Vs30 mean, and Vs30 standard deviation.
-        Supports various column naming conventions (see Notes).
+        DataFrame with category ID, Vs30 mean, and Vs30 stddev columns.
+        Column names auto-detected via utils.select_vs30_columns_by_priority.
 
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
-        ``(vs30_mean, vs30_stdv)`` arrays of float64. NaN for IDs not found
-        in the model.
-
-    Notes
-    -----
-    The function automatically detects the column naming convention in the
-    categorical model DataFrame. See raster.select_vs30_columns_by_priority
-    for the priority order.
+        ``(vs30_mean, vs30_stdv)`` float64 arrays. NaN for IDs not found.
     """
-    mean_col, stdv_col = raster.select_vs30_columns_by_priority(
+    mean_col, stdv_col = utils.select_vs30_columns_by_priority(
         list(categorical_model_df.columns)
     )
-
-    indexed = categorical_model_df.set_index(constants.STANDARD_ID_COLUMN)
-    reindexed = indexed.reindex(category_ids)
+    reindexed = categorical_model_df.set_index(constants.STANDARD_ID_COLUMN).reindex(
+        category_ids
+    )
     return (
         reindexed[mean_col].to_numpy(dtype=np.float64),
         reindexed[stdv_col].to_numpy(dtype=np.float64),

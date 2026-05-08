@@ -204,7 +204,7 @@ def compute_spatial_adjustment_on_grid(
     spatial.validate_observations(observations_df)
 
     # Model IDs are 1-indexed; convert to 0-indexed array indices.
-    mean_col, std_col = raster.select_vs30_columns_by_priority(
+    mean_col, std_col = utils.select_vs30_columns_by_priority(
         list(model_values_df.columns)
     )
     max_id = model_values_df[constants.STANDARD_ID_COLUMN].max()
@@ -248,8 +248,7 @@ def compute_spatial_adjustment_on_grid(
     )
     t_bbox_elapsed = time.perf_counter() - t_bbox_start
     logger.info(
-        f"Found {int(bbox_mask.sum()):,} affected pixels "
-        f"in {t_bbox_elapsed:.1f}s"
+        f"Found {int(bbox_mask.sum()):,} affected pixels in {t_bbox_elapsed:.1f}s"
     )
 
     logger.info("Computing spatial updates...")
