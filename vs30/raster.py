@@ -376,9 +376,6 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     os.close(fd)
 
     try:
-        # Output type UInt16. Distances above 65,535 m would saturate; kept here
-        # to match legacy R pipeline benchmarks (changing the type would require
-        # regenerating the benchmarks).
         ds = gdal.Rasterize(
             tmp_path,
             str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
@@ -388,13 +385,13 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
             yRes=dy,
             noData=0,
             burnValues=1,
-            outputType=gdal.GetDataTypeByName("UInt16"),
+            outputType=gdal.GetDataTypeByName("Float32"),
         )
 
-        # DISTUNITS=GEO returns distances in georeferenced units (meters).
-        # ComputeProximity modifies the raster in-place.
         band = ds.GetRasterBand(1)
         band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
+        # band is passed as both source and destination - ComputeProximity
+        # overwrites it with distance values.
         ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
 
         with rasterio.open(tmp_path) as src:
@@ -419,9 +416,6 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     """
     Compute a slope array matching the target grid.
 
-    Resamples the source slope raster to the target grid properties without
-    writing any file to disk.
-
     Parameters
     ----------
     template_profile : dict
@@ -430,7 +424,7 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        The slope array matching the template grid dimensions.
+        Slope array matching the template grid dimensions.
 
     Raises
     ------
@@ -443,13 +437,13 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
     if not slope_raster_path.exists():
         raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
 
-    destination = np.zeros(
+    slope_array = np.zeros(
         (template_profile["height"], template_profile["width"]), dtype=np.float32
     )
     with rasterio.open(slope_raster_path) as src:
         rasterio.warp.reproject(
             source=rasterio.band(src, 1),
-            destination=destination,
+            destination=slope_array,
             src_transform=src.transform,
             src_crs=src.crs,
             dst_transform=template_profile["transform"],
@@ -457,7 +451,7 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
             resampling=rasterio.enums.Resampling.nearest,
         )
 
-    return destination
+    return slope_array
 
 
 def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
