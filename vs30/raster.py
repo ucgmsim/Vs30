@@ -458,8 +458,7 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     """
     Sample slope values at specific NZTM points from the bundled slope raster.
 
-    Out-of-bounds points get the raster's nodata value (matching the legacy
-    ``rasterio.sample`` semantics this used to call).
+    Out-of-bounds points get the slope raster's nodata value.
 
     Parameters
     ----------
@@ -478,9 +477,9 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     in_bounds = (
         (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     )
-    out = np.full(len(points), nodata, dtype=np.float64)
-    out[in_bounds] = data[rows[in_bounds], cols[in_bounds]].astype(np.float64)
-    return out
+    slope_values = np.full(len(points), nodata, dtype=np.float64)
+    slope_values[in_bounds] = data[rows[in_bounds], cols[in_bounds]].astype(np.float64)
+    return slope_values
 
 
 def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
