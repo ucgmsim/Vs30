@@ -116,39 +116,31 @@ def update_with_independent_data(
     """
     Perform Bayesian update of category mean and standard deviation values.
 
-    Finds the posterior model with observations, updating each category's
-    mean and standard deviation based on measurements assigned to that category.
-
     Parameters
     ----------
     categorical_model_df : DataFrame
-        DataFrame with prior mean and standard deviation columns.
-        Can handle various column naming conventions.
+        Prior categorical model — either initial (with COL_MEAN, COL_STDV) or
+        a posterior from a previous clustered update (with
+        COL_POSTERIOR_*_CLUSTERED).
     observations_df : DataFrame
-        Observations containing vs30, uncertainty, and category ID column.
+        Observations with vs30, uncertainty, and category ID columns.
 
     Returns
     -------
     DataFrame
-        Updated DataFrame with posterior mean and standard deviation values.
-        Columns:
-        - constants.COL_POSTERIOR_MEAN_INDEPENDENT
-        - constants.COL_POSTERIOR_STDV_INDEPENDENT
-        - constants.COL_POSTERIOR_NOBS_INDEPENDENT
-        - constants.COL_ASSUMED_NUM_PRIOR_OBS
-        - constants.COL_ENFORCED_MIN_SIGMA
+        Categorical model with new posterior columns added.
     """
-    updated_categorical_model_df = categorical_model_df.copy()
+    posterior_df = categorical_model_df.copy()
 
-    if constants.COL_POSTERIOR_MEAN_CLUSTERED in updated_categorical_model_df.columns:
-        updated_categorical_model_df[constants.COL_PRIOR_MEAN] = (
-            updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_CLUSTERED]
-        )
-        updated_categorical_model_df[constants.COL_PRIOR_STDV] = (
-            updated_categorical_model_df[constants.COL_POSTERIOR_STDV_CLUSTERED]
-        )
-    elif constants.COL_MEAN in updated_categorical_model_df.columns:
-        updated_categorical_model_df = updated_categorical_model_df.rename(
+    if constants.COL_POSTERIOR_MEAN_CLUSTERED in posterior_df.columns:
+        posterior_df[constants.COL_PRIOR_MEAN] = posterior_df[
+            constants.COL_POSTERIOR_MEAN_CLUSTERED
+        ]
+        posterior_df[constants.COL_PRIOR_STDV] = posterior_df[
+            constants.COL_POSTERIOR_STDV_CLUSTERED
+        ]
+    elif constants.COL_MEAN in posterior_df.columns:
+        posterior_df = posterior_df.rename(
             columns={
                 constants.COL_MEAN: constants.COL_PRIOR_MEAN,
                 constants.COL_STDV: constants.COL_PRIOR_STDV,
@@ -156,56 +148,36 @@ def update_with_independent_data(
         )
     else:
         raise ValueError(
-            f"No usable prior information found. Expected either posterior columns from "
-            f"previous Bayesian update or initial categorical model columns ('{constants.COL_MEAN}', "
-            f"'{constants.COL_STDV}')."
+            f"No usable prior columns. Need either "
+            f"{constants.COL_POSTERIOR_MEAN_CLUSTERED}+{constants.COL_POSTERIOR_STDV_CLUSTERED} "
+            f"or {constants.COL_MEAN}+{constants.COL_STDV}."
         )
 
-    updated_categorical_model_df[constants.COL_PRIOR_STDV] = np.clip(
-        updated_categorical_model_df[constants.COL_PRIOR_STDV].to_numpy(),
+    posterior_df[constants.COL_PRIOR_STDV] = np.clip(
+        posterior_df[constants.COL_PRIOR_STDV].to_numpy(),
         constants.MIN_SIGMA,
         None,
     )
 
-    updated_categorical_model_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = (
-        constants.N_PRIOR
-    )
-    updated_categorical_model_df[constants.COL_ENFORCED_MIN_SIGMA] = constants.MIN_SIGMA
-    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = (
-        updated_categorical_model_df[constants.COL_PRIOR_MEAN].astype(float)
-    )
-    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = (
-        updated_categorical_model_df[constants.COL_PRIOR_STDV].astype(float)
-    )
-    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = (
-        constants.N_PRIOR
-    )
+    posterior_df[constants.COL_ASSUMED_NUM_PRIOR_OBS] = constants.N_PRIOR
+    posterior_df[constants.COL_ENFORCED_MIN_SIGMA] = constants.MIN_SIGMA
 
     obs_ids = observations_df[constants.STANDARD_ID_COLUMN].to_numpy()
-    obs_vs30 = observations_df[constants.ObservationColumn.VS30].to_numpy()
     obs_unc = observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy()
     # Cache log(obs_vs30) once; the inner update is performed entirely in
     # log space, so we never need to re-take the log of an observation or
     # round-trip current_mean through exp/log per iteration.
-    log_obs_vs30 = np.log(obs_vs30)
+    log_obs_vs30 = np.log(observations_df[constants.ObservationColumn.VS30].to_numpy())
 
     # Posterior arrays start equal to the prior; categories with no matching
     # observations keep these prior values unchanged.
-    new_means = updated_categorical_model_df[
-        constants.COL_POSTERIOR_MEAN_INDEPENDENT
-    ].to_numpy(dtype=float, copy=True)
-    new_stds = updated_categorical_model_df[
-        constants.COL_POSTERIOR_STDV_INDEPENDENT
-    ].to_numpy(dtype=float, copy=True)
-    new_ns = updated_categorical_model_df[
-        constants.COL_POSTERIOR_NOBS_INDEPENDENT
-    ].to_numpy(dtype=float, copy=True)
+    new_means = posterior_df[constants.COL_PRIOR_MEAN].to_numpy(dtype=float, copy=True)
+    new_stds = posterior_df[constants.COL_PRIOR_STDV].to_numpy(dtype=float, copy=True)
+    new_ns = np.full(len(posterior_df), constants.N_PRIOR, dtype=float)
 
     cat_id_to_row = {
         int(cat_id): i
-        for i, cat_id in enumerate(
-            updated_categorical_model_df[constants.STANDARD_ID_COLUMN]
-        )
+        for i, cat_id in enumerate(posterior_df[constants.STANDARD_ID_COLUMN])
     }
 
     for cat_id in np.unique(obs_ids):
@@ -213,34 +185,36 @@ def update_with_independent_data(
         if row_idx is None:
             continue
         cat_mask = obs_ids == cat_id
-        cat_log_obs = log_obs_vs30[cat_mask]
-        cat_unc = obs_unc[cat_mask]
 
         log_current_mean = np.log(new_means[row_idx])
         current_std = new_stds[row_idx]
         current_n = new_ns[row_idx]
 
-        for log_obs, unc in zip(cat_log_obs, cat_unc):
-            log_residual = log_obs - log_current_mean
-            mean_shift = (current_n / (current_n + 1)) * log_residual**2
-            new_variance = (current_n * current_std**2 + unc**2 + mean_shift) / (
-                current_n + 1
+        for log_obs, unc in zip(log_obs_vs30[cat_mask], obs_unc[cat_mask]):
+            # Variance update reads the OLD mean — compute current_std before
+            # updating log_current_mean below.
+            current_std = np.sqrt(
+                (
+                    current_n * current_std**2
+                    + unc**2
+                    + (current_n / (current_n + 1)) * (log_obs - log_current_mean) ** 2
+                )
+                / (current_n + 1)
             )
             log_current_mean = (current_n * log_current_mean + log_obs) / (
                 current_n + 1
             )
-            current_std = np.sqrt(new_variance)
             current_n += 1
 
         new_means[row_idx] = float(np.exp(log_current_mean))
         new_stds[row_idx] = current_std
         new_ns[row_idx] = current_n
 
-    updated_categorical_model_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = new_means
-    updated_categorical_model_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = new_stds
-    updated_categorical_model_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = new_ns
+    posterior_df[constants.COL_POSTERIOR_MEAN_INDEPENDENT] = new_means
+    posterior_df[constants.COL_POSTERIOR_STDV_INDEPENDENT] = new_stds
+    posterior_df[constants.COL_POSTERIOR_NOBS_INDEPENDENT] = new_ns
 
-    return updated_categorical_model_df
+    return posterior_df
 
 
 def perform_clustering(
