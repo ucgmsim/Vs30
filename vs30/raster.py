@@ -326,14 +326,6 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     """
     Compute distance to the nearest coast (in meters).
 
-    Uses GDAL to rasterize the coast shapefile and compute proximity distances,
-    following the legacy implementation for numerical consistency. A temporary
-    file is used internally because GDAL requires a file path for rasterization
-    and proximity computation. The temporary file is cleaned up when done.
-
-    Computes on full NZ land extent to ensure accurate distances for all
-    observation locations, even those outside the configured study domain.
-
     Parameters
     ----------
     template_profile : dict
@@ -342,13 +334,13 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        The distance array (float32) matching the template grid dimensions.
+        Distance array (float32) matching the template grid dimensions.
     """
     ensure_shapefile_extracted(
         constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
     )
 
-    # Get template bounds for final output extent
+    # Template bounds for output
     transform = template_profile["transform"]
     dx = transform.a
     dy = abs(transform.e)
@@ -357,20 +349,26 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     s_xmax = s_xmin + template_profile["width"] * dx
     s_ymin = s_ymax - template_profile["height"] * dy
 
-    # Extend to full NZ land coverage to ensure accurate distances
-    # (matching legacy _full_land_grid behavior). The extension is rounded up
-    # to a whole number of pixels so the extended grid's pixel centres remain
-    # exactly aligned with the template grid; otherwise GDAL trims to integer
-    # pixel counts and shifts every distance sample by a sub-pixel offset.
-    nz = config.FULL_NZ_GRID_CONFIG
-    g_xmin = s_xmin - math.ceil(max(0, s_xmin - nz.grid_xmin) / dx) * dx
-    g_xmax = s_xmax + math.ceil(max(0, nz.grid_xmax - s_xmax) / dx) * dx
-    g_ymin = s_ymin - math.ceil(max(0, s_ymin - nz.grid_ymin) / dy) * dy
-    g_ymax = s_ymax + math.ceil(max(0, nz.grid_ymax - s_ymax) / dy) * dy
-
-    # Check if grid was extended beyond template bounds (requires cropping later)
-    grid_was_extended = (
-        g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax
+    # Grid extension rationale:
+    # - Full-NZ coverage: accurate distances for observations beyond the
+    #   template bounds.
+    # - Pixel alignment: round up to whole pixels (else GDAL trims to integer
+    #   pixel counts and shifts samples by a sub-pixel offset).
+    g_xmin = (
+        s_xmin
+        - math.ceil(max(0, s_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) / dx) * dx
+    )
+    g_xmax = (
+        s_xmax
+        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_xmax - s_xmax) / dx) * dx
+    )
+    g_ymin = (
+        s_ymin
+        - math.ceil(max(0, s_ymin - config.FULL_NZ_GRID_CONFIG.grid_ymin) / dy) * dy
+    )
+    g_ymax = (
+        s_ymax
+        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_ymax - s_ymax) / dy) * dy
     )
 
     # GDAL requires a file path, so use a temporary file.
@@ -378,8 +376,9 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
     os.close(fd)
 
     try:
-        # UInt16 matches the legacy R pipeline and is sufficient for the
-        # distance range used here.
+        # Output type UInt16. Distances above 65,535 m would saturate; kept here
+        # to match legacy R pipeline benchmarks (changing the type would require
+        # regenerating the benchmarks).
         ds = gdal.Rasterize(
             tmp_path,
             str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
@@ -397,23 +396,19 @@ def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
         band = ds.GetRasterBand(1)
         band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
         ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
-        band = None
-        ds = None
 
-        if grid_was_extended:
-            with rasterio.open(tmp_path) as src:
-                extended_data = src.read(1)
+        with rasterio.open(tmp_path) as src:
+            data = src.read(1)
 
-            col_off = round((s_xmin - g_xmin) / dx)
-            row_off = round((g_ymax - s_ymax) / dy)
-
-            distance_meters = extended_data[
-                row_off : row_off + template_profile["height"],
-                col_off : col_off + template_profile["width"],
+        if g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax:
+            col_offset = round((s_xmin - g_xmin) / dx)
+            row_offset = round((g_ymax - s_ymax) / dy)
+            distance_meters = data[
+                row_offset : row_offset + template_profile["height"],
+                col_offset : col_offset + template_profile["width"],
             ].astype(np.float32)
         else:
-            with rasterio.open(tmp_path) as src:
-                distance_meters = src.read(1).astype(np.float32)
+            distance_meters = data.astype(np.float32)
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
