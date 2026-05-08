@@ -27,9 +27,7 @@ logger = logging.getLogger(__name__)
 @functools.lru_cache(maxsize=1)
 def load_qmap_shapefile() -> gpd.GeoDataFrame:
     """
-    Load the bundled QMAP geology shapefile, cached across calls.
-
-    The file is parsed once per process; callers must not mutate the result.
+    Load the bundled QMAP geology shapefile.
 
     Returns
     -------
@@ -44,9 +42,7 @@ def load_qmap_shapefile() -> gpd.GeoDataFrame:
 @functools.lru_cache(maxsize=1)
 def load_coast_shapefile() -> gpd.GeoDataFrame:
     """
-    Load the bundled NZ coastline shapefile, cached across calls.
-
-    The file is parsed once per process; callers must not mutate the result.
+    Load the bundled NZ coastline shapefile.
 
     Returns
     -------
@@ -61,12 +57,7 @@ def load_coast_shapefile() -> gpd.GeoDataFrame:
 @functools.lru_cache(maxsize=1)
 def load_coast_union():
     """
-    Return the unioned NZ coastline geometry, cached across calls.
-
-    ``geometry.union_all()`` is expensive; the result depends only on the
-    cached coast shapefile, so it is safe to memoise. Used by
-    ``gapfill.points_inside_coastline``, which can be called many times
-    per pipeline (especially via ``fill_one_point_via_local_grid``).
+    Return the unioned NZ coastline geometry.
     """
     return load_coast_shapefile().geometry.union_all()
 
@@ -74,12 +65,8 @@ def load_coast_union():
 @functools.lru_cache(maxsize=1)
 def load_coast_boundary_union():
     """
-    Return the unioned NZ coastline boundary, cached across calls.
-
-    Distinct from ``load_coast_union`` (which returns the polygon union):
-    the boundary is the polygon edges, used to compute distance-to-coast.
-    ``geometry.boundary.union_all()`` is expensive and has the same
-    memoisation justification as ``load_coast_union``.
+    Return the unioned NZ coastline boundary (polygon edges, distinct from
+    ``load_coast_union`` which returns the polygon union).
     """
     return load_coast_shapefile().geometry.boundary.union_all()
 
@@ -89,11 +76,7 @@ def load_terrain_raster_array() -> tuple[
     np.ndarray, rasterio.transform.Affine, float | None
 ]:
     """
-    Load the bundled terrain (IwahashiPike) raster fully into memory, cached.
-
-    The bundled rasters never change at runtime, so a single in-process load
-    avoids the per-call ``rasterio.open`` overhead in
-    ``category.assign_to_category_terrain``.
+    Load the bundled terrain (IwahashiPike) raster fully into memory.
 
     Returns
     -------
@@ -113,11 +96,7 @@ def load_slope_raster_array() -> tuple[
     np.ndarray, rasterio.transform.Affine, float | None
 ]:
     """
-    Load the bundled slope raster fully into memory, cached.
-
-    Same memoisation rationale as ``load_terrain_raster_array``: avoids
-    repeated ``rasterio.open`` round-trips when ``sample_slope_at_points`` is
-    called many times per pipeline (especially in points-mode gap-fill).
+    Load the bundled slope raster fully into memory.
 
     Returns
     -------
@@ -136,14 +115,10 @@ def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> N
     """
     Ensure a shapefile is extracted from shapefiles.tar.xz.
 
-    Checks if the shapefile exists. If not, extracts it from shapefiles.tar.xz.
-    This is needed because shapefiles are stored compressed in the archive and
-    may not be present by default.
-
     Parameters
     ----------
     shapefile_path : Path
-        Full path to the shapefile to check/extract.
+        Shapefile to ensure exists.
     directory_prefix : str
         Directory prefix within the archive (e.g., "qmap" or "coast").
 
