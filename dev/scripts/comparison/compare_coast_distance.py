@@ -1,5 +1,5 @@
 """
-Directly compare refactored compute_coast_distance_array vs legacy coast.tif
+Directly compare refactored compute_coast_distance_raster vs legacy coast.tif
 for the BENCHMARK_NZ_GRID template.
 """
 
@@ -36,7 +36,7 @@ template_profile = {
 print(f"Template: {template_profile['width']}x{template_profile['height']}, transform: {template_profile['transform']}")
 
 print("Computing refactored coast distance...")
-refactored_coast = raster.compute_coast_distance_array(template_profile)
+refactored_coast = raster.compute_coast_distance_raster(template_profile)
 print(f"Refactored coast shape: {refactored_coast.shape}")
 
 with rasterio.open(LEGACY_COAST) as src:

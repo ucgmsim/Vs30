@@ -106,7 +106,7 @@ def compute_hybrid_geology_arrays(
 
     if apply_coastal_distance_mod:
         logger.info("Computing coast distance array...")
-        coast_dist_array = raster.compute_coast_distance_array(profile)
+        coast_dist_array = raster.compute_coast_distance_raster(profile)
     else:
         logger.info("Skipping coast distance computation (disabled in config)")
         coast_dist_array = np.zeros_like(vs30_array)

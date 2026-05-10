@@ -120,7 +120,7 @@ def prepare_geology_obs_data(
         obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
     )
     obs_coast_dist = (
-        raster.compute_coastal_distance_at_points(obs_locs)
+        raster.compute_coast_distance_at_points(obs_locs)
         if apply_coastal_distance_mod
         else np.zeros(len(obs_locs))
     )
@@ -244,7 +244,7 @@ def process_geology_at_points(
 
     slope_at_points = raster.sample_slope_at_points(points)
     coast_dist_at_points = (
-        raster.compute_coastal_distance_at_points(points)
+        raster.compute_coast_distance_at_points(points)
         if apply_coastal_distance_mod
         else np.zeros(len(points))
     )

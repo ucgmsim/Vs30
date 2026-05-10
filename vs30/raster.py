@@ -322,7 +322,7 @@ def create_vs30_arrays_from_ids(
     return mean_lut[id_array], stdv_lut[id_array]
 
 
-def compute_coast_distance_array(template_profile: dict) -> np.ndarray:
+def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     """
     Compute distance to the nearest coast (in meters).
 
@@ -482,13 +482,12 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
     return slope_values
 
 
-def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
+def compute_coast_distance_at_points(points: np.ndarray) -> np.ndarray:
     """
     Compute distance from each point to the nearest coastline.
 
-    Uses the bundled NZ coastline polygon shapefile and shapely geometry
-    operations. For small numbers of points this is much faster than
-    generating a full proximity raster with GDAL.
+    For small numbers of points this is much faster than computing
+    a full proximity raster via ``compute_coast_distance_raster``.
 
     Parameters
     ----------
@@ -500,13 +499,12 @@ def compute_coastal_distance_at_points(points: np.ndarray) -> np.ndarray:
     np.ndarray
         Distance to coast in meters for each point (N,).
     """
-    # The coastline file contains land polygons. Distance to coast is distance
-    # from each point to the nearest polygon boundary; load_coast_boundary_union
-    # memoises the expensive union_all().
-    coast_boundary = load_coast_boundary_union()
-    point_geoms = shapely.points(points)
-    distances = shapely.distance(point_geoms, coast_boundary)
-    return np.asarray(distances, dtype=np.float64)
+    # Distance is to the polygon boundary, not interior — load_coast_boundary_union
+    # returns boundary.union_all(), distinct from load_coast_union's polygon union.
+    return np.asarray(
+        shapely.distance(shapely.points(points), load_coast_boundary_union()),
+        dtype=np.float64,
+    )
 
 
 def apply_coastal_distance_modification(

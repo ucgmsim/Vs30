@@ -372,7 +372,7 @@ def prepare_observation_data(
             outside_grid_points = obs_locs[~within_grid]
             slope_obs[~within_grid] = raster.sample_slope_at_points(outside_grid_points)
             if apply_coastal_distance_mod:
-                coast_obs[~within_grid] = raster.compute_coastal_distance_at_points(
+                coast_obs[~within_grid] = raster.compute_coast_distance_at_points(
                     outside_grid_points
                 )
             # else: coast_obs[~within_grid] is left at its np.empty initial
