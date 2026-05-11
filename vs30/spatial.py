@@ -756,9 +756,9 @@ def compute_spatial_adjustments(
     Parameters
     ----------
     raster_data : RasterData
-        Raster data object.
+        Raster data with vs30/stdv arrays and valid-pixel mask.
     obs_data : ObservationData
-        Observation data.
+        Bundled observation data.
     bbox_mask : ndarray
         Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
         observation's bounding box, as returned by ``find_affected_pixels``.
@@ -767,20 +767,25 @@ def compute_spatial_adjustments(
         same array returned by ``find_affected_pixels`` so this function
         does not need to recompute ``raster_data.get_coordinates()``.
     corr_fn : callable
-        Correlation function mapping distances (ndarray) to correlations (ndarray).
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
-        Maximum number of observations to select per pixel.
+        Target number of observations per pixel; may be exceeded if distances
+        tie at the cutoff.
     noisy : bool, optional
-        Whether to apply noise weighting based on observation uncertainty.
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
-        Covariance reduction factor for dissimilar Vs30 values.
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
 
     Returns
     -------
-    tuple of ndarray
-        (updated_vs30, updated_stdv) arrays with spatial adjustments applied.
+    updated_vs30 : ndarray
+        Vs30 array with spatial adjustments applied at affected pixels.
+    updated_stdv : ndarray
+        Standard deviation array with spatial adjustments applied at affected
+        pixels.
     """
     # affected_flat_indices indexes the full raster (used for vs30/stdv reads
     # and writeback); affected_valid_indices indexes grid_locs' rows, which
