@@ -87,4 +87,4 @@ observation sites) become visible.
 
 ### References
 
-- Foster, K. M., Bradley, B. A., McGann, C. R., & Wotherspoon, L. M. (2019). A VS30 Map for New Zealand Based on Geologic and Terrain Proxy Variables and Field Measurements. *Earthquake Spectra*, 35(4), 1865–1897. https://doi.org/10.1193/121118EQS281M ([PDF in this repo](../reference_papers/foster_2019_nz_vs30_map.pdf))
+- Foster, K. M., Bradley, B. A., McGann, C. R., & Wotherspoon, L. M. (2019). A Vs30 Map for New Zealand Based on Geologic and Terrain Proxy Variables and Field Measurements. *Earthquake Spectra*, 35(4), 1865–1897. https://doi.org/10.1193/121118EQS281M ([PDF in this repo](../reference_papers/foster_2019_nz_vs30_map.pdf))
