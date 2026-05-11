@@ -20,34 +20,7 @@ pip install -e .
 
 ## CLI Commands
 
-The package provides a `vs30` command-line interface with two main commands:
-
-### Compute VS30 at Specific Locations
-
-Calculate Vs30 at lat/lon points listed in a CSV using a predefined model version:
-
-```bash
-vs30 points foster_2019_approx locations.csv results.csv
-```
-
-### Generate VS30 Grid Maps
-
-Run the complete Vs30 mapping workflow on a regular grid (writes GeoTIFFs):
-
-```bash
-vs30 grid \
-    --version foster_2019_approx \
-    --grid-xmin 1060050 --grid-xmax 2120050 \
-    --grid-ymin 4730050 --grid-ymax 6250050 \
-    --grid-dx 100 --grid-dy 100 \
-    --output-dir ./vs30_out
-```
-
-Available model versions: `foster_2019_approx`, `modified_foster_2019`, `jaehwi_v1p0`, `viktor_cpt_clustering`.
-
-Each command also has a `-custom` variant (`points-custom`, `grid-custom`) that exposes every scientific parameter individually for ablation experiments. Run `vs30 <command> --help` for the full option list.
-
-See the [Usage page](wiki/Usage.md) for input formats, parameter overrides, and grid sizing guidance.
+The package provides a `vs30` command-line interface with `points` and `grid` subcommands. See the [Usage page](wiki/Usage.md) for command syntax, input formats, supported model versions, custom YAML configs, and grid sizing guidance.
 
 ## How It Works
 
