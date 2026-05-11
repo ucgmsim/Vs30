@@ -518,11 +518,7 @@ def apply_coastal_distance_modification(
     vs30_max: float,
 ) -> None:
     """
-    Apply linear coastal distance interpolation to a specific geology group.
-
-    Modifies vs30_array in-place for pixels matching the given geology group ID.
-    The Vs30 value is linearly interpolated between vs30_min and vs30_max based
-    on distance from coast, clamped to [vs30_min, vs30_max].
+    Apply linear coastal-distance interpolation to a specific geology group.
 
     Parameters
     ----------
@@ -531,7 +527,7 @@ def apply_coastal_distance_modification(
     id_array : ndarray
         Category ID array.
     coast_dist_array : ndarray
-        Coastal distance array (meters).
+        Coast distance array (meters).
     gid : int
         Geology group ID to modify.
     dist_min, dist_max : float
@@ -539,15 +535,14 @@ def apply_coastal_distance_modification(
     vs30_min, vs30_max : float
         Vs30 range (m/s) for linear interpolation.
     """
-    mask = id_array == gid
-    if not np.any(mask):
-        return
-
-    dist_vals = coast_dist_array[mask]
-    val = vs30_min + (vs30_max - vs30_min) * (dist_vals - dist_min) / (
-        dist_max - dist_min
+    vs30_array[id_array == gid] = np.clip(
+        vs30_min
+        + (vs30_max - vs30_min)
+        * (coast_dist_array[id_array == gid] - dist_min)
+        / (dist_max - dist_min),
+        vs30_min,
+        vs30_max,
     )
-    vs30_array[mask] = np.clip(val, vs30_min, vs30_max)
 
 
 def apply_hybrid_geology_modifications(
