@@ -477,30 +477,32 @@ def build_covariance_matrix(
     cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
     """
-    Build covariance matrix through clear pipeline of steps.
+    Build the covariance matrix for one pixel and its nearby observations.
 
     Parameters
     ----------
     pixel : PixelData
-        Pixel data for the pixel being updated.
+        Pixel being updated.
     obs_data : ObservationData
-        Full observation data.
+        Bundled observation data; the rows used here are selected by
+        ``obs_indices``.
     obs_indices : ndarray
-        Integer indices into obs_data for the selected observations.
+        Integer indices into ``obs_data`` for the selected observations.
     corr_fn : callable
-        Correlation function mapping distances (ndarray) to correlations (ndarray).
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
     noisy : bool, optional
-        Whether to apply noise weighting based on observation uncertainty.
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
-        Covariance reduction factor for dissimilar Vs30 values.
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
 
     Returns
     -------
     ndarray
-        Covariance matrix (n_selected_obs + 1, n_selected_obs + 1).
-        First row/column is for the pixel, rest are for observations.
+        Covariance matrix of shape ``(n_selected_obs + 1, n_selected_obs + 1)``.
+        Row/column 0 is the pixel; rows/columns 1..n are the selected
+        observations.
     """
-
     all_points = np.vstack([pixel.location, obs_data.locations[obs_indices]]).astype(
         np.float64
     )
