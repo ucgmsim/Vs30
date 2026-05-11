@@ -335,11 +335,11 @@ def prepare_observation_data(
                     outside_grid_points
                 )
 
-        # Legacy obs handling of NODATA slope: replace negatives with
-        # LEGACY_OBS_SLOPE_NODATA_SENTINEL so np.interp returns MAX Vs30
-        # (distinct from grid pixels' NODATA path, which yields MIN Vs30).
+        # NODATA slope at obs locations gets replaced with OBS_SLOPE_NODATA_SENTINEL
+        # so np.interp returns MAX Vs30 (distinct from grid pixels' NODATA path,
+        # which yields MIN Vs30).
         slope_obs = np.where(
-            slope_obs < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, slope_obs
+            slope_obs < 0, constants.OBS_SLOPE_NODATA_SENTINEL, slope_obs
         )
 
         model_vs30, model_stdv = raster.apply_hybrid_geology_modifications(

@@ -112,12 +112,11 @@ def prepare_geology_obs_data(
     # Apply hybrid modifications to observation model values so residuals
     # match the grid pipeline; see spatial.prepare_observation_data.
     obs_slope = raster.sample_slope_at_points(obs_locs)
-    # Legacy parity: NODATA slope samples at observations are replaced with
-    # the 255 sentinel so log10(255) ≈ 2.41 feeds np.interp and returns the
-    # MAX Vs30 for the gid; the equivalent grid-pixel handling uses 1e-9
-    # and returns the MIN Vs30. See constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL.
+    # NODATA slope at obs locations gets replaced with OBS_SLOPE_NODATA_SENTINEL
+    # so np.interp returns MAX Vs30 (distinct from grid pixels' NODATA path,
+    # which yields MIN Vs30).
     obs_slope = np.where(
-        obs_slope < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, obs_slope
+        obs_slope < 0, constants.OBS_SLOPE_NODATA_SENTINEL, obs_slope
     )
     obs_coast_dist = (
         raster.compute_coast_distance_at_points(obs_locs)
