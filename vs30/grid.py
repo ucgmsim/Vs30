@@ -1,13 +1,11 @@
-"""Grid-pipeline stage helpers (initial arrays, hybrid mods, spatial adjustment, combination, raster writing)."""
+"""Grid-pipeline MVN spatial adjustment."""
 
 import logging
 import time
 from collections.abc import Callable
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import rasterio
 
 from vs30 import constants, spatial, utils
 
@@ -146,50 +144,3 @@ def compute_spatial_adjustment_on_grid(
     return adjusted_vs30, adjusted_stdv
 
 
-def write_raster(
-    output_path: Path,
-    profile: dict,
-    bands: list[np.ndarray],
-    band_descriptions: tuple[str, ...],
-    dtype: str = "float32",
-    nodata: float | None = constants.NODATA_VALUE,
-) -> None:
-    """
-    Write a multi-band raster to a GeoTIFF file.
-
-    Parameters
-    ----------
-    output_path : Path
-        Output file path.
-    profile : dict
-        Rasterio profile with CRS, transform, dimensions. Caller-supplied
-        values for dtype/count/nodata/compress are overridden.
-    bands : list[np.ndarray]
-        2D arrays to write, one per band.
-    band_descriptions : tuple[str, ...]
-        Per-band description strings; must match ``len(bands)``.
-    dtype : str, optional
-        Output dtype (e.g. ``"float32"`` or ``"uint8"``). Default ``"float32"``.
-    nodata : float or None, optional
-        No-data value. Pass ``None`` to omit nodata metadata.
-        Default ``constants.NODATA_VALUE``.
-    """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    write_profile = profile.copy()
-    write_profile.update(
-        {
-            "dtype": dtype,
-            "count": len(bands),
-            "nodata": nodata,
-            "compress": constants.GEOTIFF_COMPRESSION,
-        }
-    )
-
-    with rasterio.open(output_path, "w", **write_profile) as dst:
-        for i, band in enumerate(bands, start=1):
-            data = band if band.dtype.name == dtype else band.astype(dtype)
-            dst.write(data, i)
-        dst.descriptions = band_descriptions
-
-    logger.info(f"Wrote raster: {output_path}")

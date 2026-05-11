@@ -371,7 +371,7 @@ def compute_component_grid(
             if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_ID_FILENAME
         )
-        grid.write_raster(
+        raster.write_raster(
             output_dir / id_filename,
             profile,
             [id_array],
@@ -385,7 +385,7 @@ def compute_component_grid(
             if model_type == constants.ModelType.GEOLOGY
             else constants.TERRAIN_INITIAL_VS30_FILENAME
         )
-        grid.write_raster(
+        raster.write_raster(
             output_dir / initial_filename,
             profile,
             [vs30_array, stdv_array],
@@ -417,20 +417,20 @@ def compute_component_grid(
         )
 
         if output_dir is not None and include_intermediate:
-            grid.write_raster(
+            raster.write_raster(
                 output_dir / constants.SLOPE_RASTER_FILENAME,
                 profile,
                 [slope_array],
                 (constants.BAND_DESCRIPTION_SLOPE,),
             )
-            grid.write_raster(
+            raster.write_raster(
                 output_dir / constants.COAST_DISTANCE_RASTER_FILENAME,
                 profile,
                 [coast_dist_array],
                 (constants.BAND_DESCRIPTION_COAST_DISTANCE,),
                 nodata=None,
             )
-            grid.write_raster(
+            raster.write_raster(
                 output_dir
                 / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME,
                 profile,
@@ -476,7 +476,7 @@ def compute_component_grid(
 
     if output_dir is not None:
         output_filename = constants.OUTPUT_FILENAMES[model_type]
-        grid.write_raster(
+        raster.write_raster(
             output_dir / output_filename,
             profile,
             [vs30_array, stdv_array],
@@ -702,7 +702,7 @@ def grid_pipeline(
             )
 
             if output_dir is not None and include_intermediate:
-                grid.write_raster(
+                raster.write_raster(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                     profile,
                     [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
@@ -719,7 +719,7 @@ def grid_pipeline(
         result["combined_stdv"] = combined_stdv
 
         if output_dir is not None:
-            grid.write_raster(
+            raster.write_raster(
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 profile,
                 [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
