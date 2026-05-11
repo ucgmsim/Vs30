@@ -951,17 +951,20 @@ def compute_spatial_adjustment_on_grid(
         Measured Vs30 values. Must contain columns: easting, northing, vs30,
         uncertainty.
     model_values_df : pd.DataFrame
-        Updated categorical Vs30 values.
+        Categorical Vs30 values; DataFrame with an ID column plus mean/stdv
+        columns.
     model_type : ModelType
         Either GEOLOGY or TERRAIN.
     corr_fn : Callable
-        Correlation function for spatial adjustment.
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     apply_coastal_distance_mod : bool
         Whether to apply coastal-distance modification for GID 4 and GID 10.
     noisy : bool, optional
-        Whether to apply noise weighting in spatial adjustment.
+        If True, apply noise-aware weighting to residuals and the covariance
+        matrix (via ``obs_data.noise_weights``).
     max_spatial_boolean_array_memory_gb : float, optional
         Memory cap for spatial boolean arrays.
     slope_array : np.ndarray, optional
