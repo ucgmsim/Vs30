@@ -9,53 +9,9 @@ import numpy as np
 import pandas as pd
 import rasterio
 
-from vs30 import config, constants, raster, spatial, utils
+from vs30 import constants, raster, spatial, utils
 
 logger = logging.getLogger(__name__)
-
-
-def create_initial_vs30_arrays(
-    grid_config: config.GridConfig,
-    model_type: constants.ModelType,
-    model_values_df: pd.DataFrame,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
-    """
-    Create initial VS30 arrays from categorical model.
-
-    Generates category ID arrays by rasterizing terrain or geology data to the
-    target grid, then maps category IDs to VS30 mean and standard deviation
-    values from the model DataFrame.
-
-    Parameters
-    ----------
-    grid_config : GridConfig
-        Grid domain and resolution parameters.
-    model_type : ModelType
-        Either GEOLOGY or TERRAIN.
-    model_values_df : pd.DataFrame
-        DataFrame with categorical model values (must have 'id' column and
-        mean/stdv columns recognized by ``select_vs30_columns_by_priority``).
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray, dict]
-        A tuple containing:
-        - vs30_array (float32): VS30 mean values.
-        - stdv_array (float32): VS30 standard deviation values.
-        - id_array (uint8): Category ID array.
-        - profile (dict): Rasterio profile describing the grid.
-    """
-    logger.info(f"Using grid parameters: {grid_config}")
-
-    logger.info(f"Creating {model_type} category ID array...")
-    id_array, profile = raster.create_category_id_array(model_type, grid_config)
-
-    logger.info(f"Creating {model_type} VS30 arrays from IDs...")
-    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
-        id_array, model_values_df
-    )
-
-    return vs30_array, stdv_array, id_array, profile
 
 
 def compute_hybrid_geology_arrays(

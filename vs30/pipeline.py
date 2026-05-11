@@ -20,6 +20,7 @@ from vs30 import (
     gapfill,
     grid,
     points,
+    raster,
     utils,
 )
 
@@ -358,8 +359,10 @@ def compute_component_grid(
         ).rename(columns=str.strip)
 
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
-    vs30_array, stdv_array, id_array, profile = grid.create_initial_vs30_arrays(
-        grid_config, model_type, posterior_df
+    logger.info(f"Using grid parameters: {grid_config}")
+    id_array, profile = raster.create_category_id_array(model_type, grid_config)
+    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
+        id_array, posterior_df
     )
 
     if output_dir is not None and include_intermediate:

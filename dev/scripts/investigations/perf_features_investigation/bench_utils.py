@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from vs30 import config, constants, pipeline, raster, spatial, utils
+from vs30 import config, constants, raster, spatial, utils
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -64,11 +64,12 @@ _DOMAIN_CENTRE = (1_580_000, 5_180_000)
 def make_raster_data(n_target: int):
     """Build a real RasterData of approximately ``n_target`` valid pixels.
 
-    Uses the production ``pipeline.create_initial_vs30_arrays`` with
-    ``model_type=TERRAIN`` to populate a sub-region of NZ. The exact
-    valid-pixel count varies with the underlying terrain raster; callers
-    should log ``raster_data.valid_flat_indices.size`` rather than rely on
-    ``n_target`` exactly.
+    Uses ``raster.create_category_id_array`` +
+    ``raster.create_vs30_arrays_from_ids`` with ``model_type=TERRAIN`` to
+    populate a sub-region of NZ. The exact valid-pixel count varies with the
+    underlying terrain raster; callers should log
+    ``raster_data.valid_flat_indices.size`` rather than rely on ``n_target``
+    exactly.
 
     Parameters
     ----------
@@ -96,9 +97,11 @@ def make_raster_data(n_target: int):
         grid_dx=dx,
         grid_dy=dy,
     )
-    vs30_array, stdv_array, _, profile = pipeline.create_initial_vs30_arrays(
-        grid_config,
-        constants.ModelType.TERRAIN,
+    id_array, profile = raster.create_category_id_array(
+        constants.ModelType.TERRAIN, grid_config
+    )
+    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
+        id_array,
         # Read the canonical terrain prior CSV, which is bundled.
         pd.read_csv(
             constants.RESOURCE_PATH
