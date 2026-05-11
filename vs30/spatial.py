@@ -592,22 +592,24 @@ def compute_spatial_adjustment_for_pixel(
     Parameters
     ----------
     pixel : PixelData
-        Pixel data.
+        Pixel being updated.
     obs_data : ObservationData
-        Full observation data.
+        Bundled observation data.
     corr_fn : callable
-        Correlation function mapping distances (ndarray) to correlations (ndarray).
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
     corr_zero : float
-        Pre-computed correlation at zero distance, i.e.
-        ``corr_fn(np.array([0.0]))[0]``. Hoist this out of any per-pixel loop.
+        Pre-computed ``corr_fn(np.array([0.0]))[0]`` (hoisted out of any
+        per-pixel loop).
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
-        Maximum number of observations to select per pixel.
+        Target number of observations per pixel; may be exceeded if distances
+        tie at the cutoff.
     noisy : bool, optional
-        Whether to apply noise weighting based on observation uncertainty.
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
-        Covariance reduction factor for dissimilar Vs30 values.
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
 
     Returns
     -------
@@ -624,8 +626,7 @@ def compute_spatial_adjustment_for_pixel(
         return None
 
     # Correlation at zero distance is ≈1 (minus a tiny epsilon from the
-    # enforced minimum distance). Matches the legacy R code, which evaluates
-    # the correlation at distances >= 0.1 m and sets corr(0) = 1 explicitly.
+    # enforced minimum distance).
     initial_var = (pixel.stdv**2) * corr_zero
 
     obs_indices = select_observations_for_pixel(
@@ -636,7 +637,7 @@ def compute_spatial_adjustment_for_pixel(
     )
 
     if len(obs_indices) == 0:
-        # No observations nearby, return unchanged values (but with shrunk stdv matching legacy)
+        # No nearby observations: keep prior mean, but apply corr_zero shrinkage to stdv.
         return (pixel.vs30, float(np.sqrt(initial_var)))
 
     cov_matrix = build_covariance_matrix(
