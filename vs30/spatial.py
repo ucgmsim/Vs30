@@ -540,19 +540,17 @@ def select_observations_for_pixel(
     """
     Select observations for a pixel using distance filtering.
 
-    Uses accurate distance-based selection to find the closest observations
-    within the maximum distance limit.
-
     Parameters
     ----------
     pixel : PixelData
-        Pixel data.
+        Pixel being updated.
     obs_data : ObservationData
-        Full observation data.
+        Bundled observation data.
     max_dist_m : float
         Maximum distance in meters to consider observations.
     max_points : int
-        Maximum number of observations to select.
+        Target number of observations; may be exceeded if distances tie at
+        the cutoff.
 
     Returns
     -------
@@ -560,12 +558,8 @@ def select_observations_for_pixel(
         Integer indices into obs_data for the selected observations.
         Empty array if no observations are within range.
     """
-    # Euclidean distance from pixel to each observation.
-    # einsum("ij,ij->i", diff, diff) computes the row-wise dot product,
-    # i.e. sum of squared differences per row — equivalent to
-    # np.sum(diff**2, axis=1) but avoids creating intermediate arrays.
     diff = obs_data.locations - pixel.location
-    distances = np.sqrt(np.einsum("ij,ij->i", diff, diff))
+    distances = np.linalg.norm(diff, axis=1)
 
     max_points_i = min(max_points, len(distances)) - 1
     if max_points_i < 0:
@@ -578,7 +572,6 @@ def select_observations_for_pixel(
         # Not close enough to any observed locations
         return np.array([], dtype=np.intp)
 
-    # Include all observations within cutoff distance (may exceed max_points for accuracy)
     loc_mask = distances <= min(max_dist_m, cutoff_dist)
     return np.where(loc_mask)[0]
 
