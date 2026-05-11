@@ -21,7 +21,7 @@ def _build_obs_data(
     Filter invalid observations and assemble an ``ObservationData``.
 
     Drops observations whose model values are NaN or non-positive, then
-    precomputes residuals, omega, and log(model_vs30) for downstream MVN.
+    precomputes residuals, noise_weights, and log(model_vs30) for downstream MVN.
 
     Parameters
     ----------
@@ -36,7 +36,7 @@ def _build_obs_data(
     obs_model_stdv : ndarray
         (N,) model standard deviation at observation locations.
     noisy : bool
-        Whether to compute noise-weighted residuals/omega.
+        Whether to compute noise-weighted residuals/noise_weights.
 
     Returns
     -------
@@ -58,7 +58,7 @@ def _build_obs_data(
     obs_model_vs30 = obs_model_vs30[valid_mask]
     obs_model_stdv = obs_model_stdv[valid_mask]
 
-    residuals, omega = spatial.compute_residuals_and_omega(
+    residuals, noise_weights = spatial.compute_residuals(
         obs_vs30, obs_model_vs30, obs_model_stdv, obs_uncertainty, noisy
     )
 
@@ -67,7 +67,7 @@ def _build_obs_data(
         model_stdv=obs_model_stdv,
         log_model_vs30=np.log(obs_model_vs30),
         residuals=residuals,
-        omega=omega,
+        noise_weights=noise_weights,
     )
 
 
@@ -91,12 +91,12 @@ def prepare_geology_obs_data(
     apply_coastal_distance_mod
         Whether to apply the coastal distance modification.
     noisy
-        Whether to apply noise weighting when computing residuals/omega.
+        Whether to apply noise weighting when computing residuals/noise_weights.
 
     Returns
     -------
     spatial.ObservationData
-        Filtered observation data with residuals/omega/log_model_vs30 precomputed.
+        Filtered observation data with residuals/noise_weights/log_model_vs30 precomputed.
         Returns ``ObservationData.empty()`` if observations are empty or
         all are invalid.
     """
@@ -158,12 +158,12 @@ def prepare_terrain_obs_data(
     terr_model_df
         Categorical terrain model with Vs30 mean and standard deviation per category.
     noisy
-        Whether to apply noise weighting when computing residuals/omega.
+        Whether to apply noise weighting when computing residuals/noise_weights.
 
     Returns
     -------
     spatial.ObservationData
-        Filtered observation data with residuals/omega/log_model_vs30 precomputed.
+        Filtered observation data with residuals/noise_weights/log_model_vs30 precomputed.
         Returns ``ObservationData.empty()`` if observations are empty or
         all are invalid.
     """

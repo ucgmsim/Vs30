@@ -31,9 +31,9 @@ class ObservationData:
         (n_obs,) precomputed ``np.log(model_vs30)``.
     residuals : ndarray
         (n_obs,) log residuals: log(vs30 / model_vs30). Pre-scaled by
-        ``omega`` when constructed with ``noisy=True``.
-    omega : ndarray
-        (n_obs,) noise-weighting factors when constructed with
+        ``noise_weights`` when constructed with ``noisy=True``.
+    noise_weights : ndarray
+        (n_obs,) per-observation weights when constructed with
         ``noisy=True``; all ones otherwise.
     """
 
@@ -41,7 +41,7 @@ class ObservationData:
     model_stdv: np.ndarray
     log_model_vs30: np.ndarray
     residuals: np.ndarray
-    omega: np.ndarray
+    noise_weights: np.ndarray
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -51,7 +51,7 @@ class ObservationData:
             model_stdv=np.empty(0),
             log_model_vs30=np.empty(0),
             residuals=np.empty(0),
-            omega=np.empty(0),
+            noise_weights=np.empty(0),
         )
 
 
@@ -362,7 +362,7 @@ def prepare_observation_data(
             apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
-    residuals, omega = compute_residuals_and_omega(
+    residuals, noise_weights = compute_residuals(
         vs30_obs, model_vs30, model_stdv, uncertainty, noisy
     )
 
@@ -371,11 +371,11 @@ def prepare_observation_data(
         model_stdv=model_stdv,
         log_model_vs30=np.log(model_vs30),
         residuals=residuals,
-        omega=omega,
+        noise_weights=noise_weights,
     )
 
 
-def compute_residuals_and_omega(
+def compute_residuals(
     vs30: np.ndarray,
     model_vs30: np.ndarray,
     model_stdv: np.ndarray,
@@ -384,6 +384,9 @@ def compute_residuals_and_omega(
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute log residuals and per-observation noise weights.
+
+    The noise weights are ``ω`` from Worden et al. (2018), Eq. 32. They
+    shrink the contribution of high-uncertainty observations toward zero.
 
     Parameters
     ----------
@@ -396,23 +399,32 @@ def compute_residuals_and_omega(
     uncertainty : ndarray
         Per-observation Vs30 uncertainties (in log space).
     noisy : bool
-        If True, scale residuals by ``omega = sqrt(model_stdv**2 /
-        (model_stdv**2 + uncertainty**2))`` and return the same omega for
-        downstream noise weighting in the covariance matrix. Otherwise,
-        omega is all ones and residuals are unscaled.
+        If True, scale residuals by ``noise_weights`` and return the weights
+        for downstream covariance shaping. If False, ``noise_weights`` is
+        all ones and residuals are unscaled.
 
     Returns
     -------
-    tuple[ndarray, ndarray]
-        ``(residuals, omega)``.
+    residuals : ndarray
+        Log residuals, pre-scaled by ``noise_weights`` when ``noisy=True``.
+    noise_weights : ndarray
+        Per-observation weights when ``noisy=True``; all ones otherwise.
+
+    References
+    ----------
+    Worden, C. B., Thompson, E. M., Baker, J. W., Bradley, B. A., Luco, N.,
+    and Wald, D. J. (2018). Spatial and Spectral Interpolation of Ground-Motion
+    Intensity Measure Observations. Bulletin of the Seismological Society of
+    America, 108(2), 866–875. doi:10.1785/0120170201. Local copy at
+    ``reference_papers/worden_2018_mvn_interpolation.pdf``.
     """
     residuals = np.log(vs30 / model_vs30)
     if noisy:
-        omega = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
-        residuals *= omega
+        noise_weights = np.sqrt(model_stdv**2 / (model_stdv**2 + uncertainty**2))
+        residuals *= noise_weights
     else:
-        omega = np.ones(len(residuals))  # Defaults to float64
-    return residuals, omega
+        noise_weights = np.ones(len(residuals))
+    return residuals, noise_weights
 
 
 def grid_points_in_bbox(
@@ -528,10 +540,10 @@ def build_covariance_matrix(
     cov = corr * np.outer(stdvs, stdvs)
 
     if noisy:
-        omega = np.insert(obs_data.omega[obs_indices], 0, 1.0)
-        omega_matrix = np.outer(omega, omega)
-        np.fill_diagonal(omega_matrix, 1.0)
-        cov *= omega_matrix
+        noise_weights = np.insert(obs_data.noise_weights[obs_indices], 0, 1.0)
+        noise_weight_matrix = np.outer(noise_weights, noise_weights)
+        np.fill_diagonal(noise_weight_matrix, 1.0)
+        cov *= noise_weight_matrix
 
     if cov_reduc > 0:
         log_vs30s = np.insert(
@@ -877,7 +889,7 @@ def compute_spatial_adjustment_at_points(
     model_stdv : np.ndarray
         (N,) array of model standard deviation at query points.
     obs_data : ObservationData
-        Pre-filtered observation data with residuals and omega already
+        Pre-filtered observation data with residuals and noise_weights already
         computed for the chosen ``noisy`` setting.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations (ndarray).
@@ -887,7 +899,7 @@ def compute_spatial_adjustment_at_points(
         Maximum number of observations per point.
     noisy : bool
         Whether to apply noise weighting in the covariance matrix. Must match
-        the setting used to build ``obs_data.residuals`` and ``obs_data.omega``.
+        the setting used to build ``obs_data.residuals`` and ``obs_data.noise_weights``.
     cov_reduc : float
         Covariance reduction factor.
     progress_bar : tqdm, optional

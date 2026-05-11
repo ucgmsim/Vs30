@@ -39,7 +39,7 @@ class TestComputeSpatialAdjustmentForPixel:
             model_stdv=np.array([0.4]),
             log_model_vs30=np.log(np.array([260.0])),
             residuals=np.array([np.log(280.0 / 260.0)]),
-            omega=np.ones(1),
+            noise_weights=np.ones(1),
         )
 
     def test_updates_toward_observation(self, pixel, nearby_observation):
@@ -83,7 +83,7 @@ class TestComputeSpatialAdjustmentForPixel:
             model_stdv=np.array([0.4]),
             log_model_vs30=np.log(np.array([300.0])),
             residuals=np.zeros(1),
-            omega=np.ones(1),
+            noise_weights=np.ones(1),
         )
 
         result = spatial.compute_spatial_adjustment_for_pixel(
@@ -134,7 +134,7 @@ class TestComputeMvnAtPoints:
             model_stdv=np.array([30.0]),
             log_model_vs30=np.log(obs_model_vs30),
             residuals=np.log(np.array([400.0]) / obs_model_vs30),
-            omega=np.ones(1),
+            noise_weights=np.ones(1),
         )
 
         mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(
@@ -197,7 +197,7 @@ class TestFindAffectedPixels:
             model_stdv=np.array([0.5]),
             log_model_vs30=np.log(np.array([300.0])),
             residuals=np.zeros(1),
-            omega=np.ones(1),
+            noise_weights=np.ones(1),
         )
 
         bbox_mask, grid_locs = spatial.find_affected_pixels(
@@ -224,7 +224,7 @@ class TestFindAffectedPixels:
             model_stdv=np.array([0.5]),
             log_model_vs30=np.log(np.array([300.0])),
             residuals=np.zeros(1),
-            omega=np.ones(1),
+            noise_weights=np.ones(1),
         )
 
         bbox_mask, _ = spatial.find_affected_pixels(
