@@ -242,29 +242,27 @@ def prepare_observation_data(
     observations : DataFrame
         Observations with vs30, uncertainty, easting, northing columns.
     raster_data : RasterData
-        Raster data object (used for transform/profile info).
+        Provides the transform used to locate observations within the grid.
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN).
+        Either GEOLOGY or TERRAIN.
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
     slope_array : ndarray, optional
-        In-memory 2D slope array. Required for geology models; ignored
-        for terrain. Observation values are sampled from this array using
-        the raster transform.
+        2D slope array. Required for geology models; ignored for terrain.
     coast_dist_array : ndarray, optional
-        In-memory 2D coastal distance array. Required for geology models;
-        ignored for terrain.
+        2D coastal distance array. Required for geology models; ignored
+        for terrain.
     noisy : bool, optional
-        Whether to apply noise weighting. Default is False.
+        Whether to apply noise weighting.
 
     Returns
     -------
     ObservationData
-        Prepared observation data object.
+        Prepared observation data.
 
     Raises
     ------
@@ -284,7 +282,6 @@ def prepare_observation_data(
     model_ids = category.assign_to_category(obs_locs, model_type)
 
     # Model IDs are 1-indexed in the raster, but 0-indexed in the model table.
-    # constants.RASTER_ID_NODATA_VALUE is 255; valid IDs are 1-15 for geology, 1-16 for terrain.
     valid_mask = (
         (model_ids != constants.RASTER_ID_NODATA_VALUE)
         & (model_ids > 0)
@@ -320,13 +317,12 @@ def prepare_observation_data(
             & (cols < slope_array.shape[1])
         )
 
-        # Observations within the grid domain: sample slope and coastal
-        # distance from the grid arrays for consistency with the
-        # grid-resampled values used in pixel updates. Observations outside
-        # the grid domain: sample from the original source rasters since
-        # there are no corresponding grid pixels to be consistent with.
+        # Within-grid observations: sample from grid arrays for consistency
+        # with pixel updates. Outside-grid observations: sample from source
+        # rasters since there are no corresponding grid pixels to be
+        # consistent with.
         slope_obs = np.empty(len(rows), dtype=np.float64)
-        coast_obs = np.empty(len(rows), dtype=np.float64)
+        coast_obs = np.full(len(rows), np.nan, dtype=np.float64)
 
         slope_obs[within_grid] = slope_array[rows[within_grid], cols[within_grid]]
         coast_obs[within_grid] = coast_dist_array[rows[within_grid], cols[within_grid]]
@@ -338,16 +334,10 @@ def prepare_observation_data(
                 coast_obs[~within_grid] = raster.compute_coast_distance_at_points(
                     outside_grid_points
                 )
-            # else: coast_obs[~within_grid] is left at its np.empty initial
-            # value; apply_hybrid_geology_modifications won't read it when the
-            # coastal mod is off.
 
-        # Legacy parity: the legacy interpolate_raster replaces tif-NODATA
-        # slope samples with ID_NODATA=255 for observations, which slips past
-        # the _hyb_calc (slope == 0) | (slope == -9999) check, causing
-        # log10(255) ≈ 2.41 to feed np.interp and return the MAX Vs30 for
-        # the gid. The equivalent grid-pixel NODATA handling uses 1e-9 and
-        # returns the MIN Vs30. Reproduce the legacy obs behaviour.
+        # Legacy obs handling of NODATA slope: replace negatives with
+        # LEGACY_OBS_SLOPE_NODATA_SENTINEL so np.interp returns MAX Vs30
+        # (distinct from grid pixels' NODATA path, which yields MIN Vs30).
         slope_obs = np.where(
             slope_obs < 0, constants.LEGACY_OBS_SLOPE_NODATA_SENTINEL, slope_obs
         )
