@@ -58,16 +58,16 @@ class ObservationData:
 @dataclass
 class PixelData:
     """
-    Data for a single pixel.
+    Per-pixel inputs for MVN spatial adjustment.
 
     Attributes
     ----------
     location : ndarray
-        [easting, northing] coordinates.
+        (2,) [easting, northing] coordinates.
     vs30 : float
         Prior Vs30 value.
     stdv : float
-        Prior standard deviation value.
+        Prior standard deviation.
     """
 
     location: np.ndarray
