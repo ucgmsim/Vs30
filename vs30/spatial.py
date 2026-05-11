@@ -184,17 +184,12 @@ class RasterData:
 
 def validate_raster_data(raster_data: RasterData) -> None:
     """
-    Validate raster data before processing.
-
-    Parameters
-    ----------
-    raster_data : RasterData
-        Raster data object.
+    Check shape match and finiteness/positivity of Vs30/stdv at valid pixels.
 
     Raises
     ------
     ValueError
-        If raster data is invalid.
+        If any check fails.
     """
     if raster_data.vs30.shape != raster_data.stdv.shape:
         raise ValueError("Band shapes must match")
@@ -208,17 +203,12 @@ def validate_raster_data(raster_data: RasterData) -> None:
 
 def validate_observations(observations: pd.DataFrame) -> None:
     """
-    Validate observation data.
-
-    Parameters
-    ----------
-    observations : DataFrame
-        Observation data.
+    Check observations have the required columns and positive Vs30/uncertainty.
 
     Raises
     ------
     ValueError
-        If observation data is invalid.
+        If any check fails.
     """
     utils.validate_csv_columns(
         observations, constants.ObservationColumn.REQUIRED, "Observations"
