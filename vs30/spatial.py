@@ -435,36 +435,29 @@ def grid_points_in_bbox(
     obs_northings_max: np.ndarray,
 ) -> np.ndarray:
     """
-    Find grid points within bounding boxes of observations using fully vectorized NumPy.
-
-    Uses broadcasting to compute all observation-grid pairs simultaneously.
-    Returns a collapsed boolean mask of which grid points fall inside any
-    observation's bounding box.
+    Mark grid points that fall inside any observation's bounding box.
 
     Parameters
     ----------
     grid_locs : array_like, shape (M, 2)
         Grid point coordinates as (easting, northing) in NZTM.
     obs_eastings_min : ndarray, shape (N, 1)
-        Precomputed obs_eastings - max_dist.
+        Per-observation lower easting bound.
     obs_eastings_max : ndarray, shape (N, 1)
-        Precomputed obs_eastings + max_dist.
+        Per-observation upper easting bound.
     obs_northings_min : ndarray, shape (N, 1)
-        Precomputed obs_northings - max_dist.
+        Per-observation lower northing bound.
     obs_northings_max : ndarray, shape (N, 1)
-        Precomputed obs_northings + max_dist.
+        Per-observation upper northing bound.
 
     Returns
     -------
     chunk_mask : ndarray, shape (M,), dtype=bool
-        Boolean array indicating which grid points in this chunk are affected
-        by any observation (collapsed with np.any(axis=0)).
+        True for grid points falling inside at least one observation bbox.
     """
     grid_eastings = grid_locs[:, 0]
     grid_northings = grid_locs[:, 1]
 
-    # Broadcasting (n_obs, 1) against (n_grid,) gives an (n_obs, n_grid) mask
-    # of which grid points fall in each observation's bounding box.
     in_bbox = (
         (grid_eastings >= obs_eastings_min)
         & (grid_eastings <= obs_eastings_max)
