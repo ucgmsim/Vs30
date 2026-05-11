@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ObservationData:
     """
-    Bundled observation data for spatial processing.
+    Prepared observation data for spatial processing.
 
     Attributes
     ----------
@@ -474,7 +474,7 @@ def build_covariance_matrix(
     pixel : PixelData
         Pixel being updated.
     obs_data : ObservationData
-        Bundled observation data; the rows used here are selected by
+        Prepared observation data; the rows used here are selected by
         ``obs_indices``.
     obs_indices : ndarray
         Integer indices into ``obs_data`` for the selected observations.
@@ -535,7 +535,7 @@ def select_observations_for_pixel(
     pixel : PixelData
         Pixel being updated.
     obs_data : ObservationData
-        Bundled observation data.
+        Prepared observation data.
     max_dist_m : float
         Maximum distance in meters to consider observations.
     max_points : int
@@ -584,7 +584,7 @@ def compute_spatial_adjustment_for_pixel(
     pixel : PixelData
         Pixel being updated.
     obs_data : ObservationData
-        Bundled observation data.
+        Prepared observation data.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
@@ -673,7 +673,7 @@ def find_affected_pixels(
     raster_data : RasterData
         Raster data with valid-pixel mask and grid transform.
     obs_data : ObservationData
-        Bundled observation data.
+        Prepared observation data.
     max_spatial_boolean_array_memory_gb : float
         Memory limit (GB) for boolean arrays in spatial processing.
     model_type : constants.ModelType
@@ -758,7 +758,7 @@ def compute_spatial_adjustments(
     raster_data : RasterData
         Raster data with vs30/stdv arrays and valid-pixel mask.
     obs_data : ObservationData
-        Bundled observation data.
+        Prepared observation data.
     bbox_mask : ndarray
         Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
         observation's bounding box, as returned by ``find_affected_pixels``.
