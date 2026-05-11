@@ -259,7 +259,7 @@ def process_geology_at_points(
     )
 
     if len(geology_obs_data.locations) > 0:
-        geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
+        geol_mvn_vs30, geol_mvn_stdv = spatial.compute_spatial_point_adjustments(
             points=points,
             model_vs30=geol_vs30_hybrid,
             model_stdv=geol_stdv_hybrid,
@@ -328,7 +328,7 @@ def process_terrain_at_points(
     terr_vs30, terr_stdv = category.get_vs30_for_ids(terr_ids, model_df)
 
     if len(terrain_obs_data.locations) > 0:
-        terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_adjustment_at_points(
+        terr_mvn_vs30, terr_mvn_stdv = spatial.compute_spatial_point_adjustments(
             points=points,
             model_vs30=terr_vs30,
             model_stdv=terr_stdv,

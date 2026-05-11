@@ -249,7 +249,7 @@ def time_one_run(
 
     # ---- Spatial-adjustment phase -----------------------------------------
     t0 = time.perf_counter()
-    spatial.compute_spatial_adjustments(
+    spatial.compute_spatial_pixel_adjustments(
         raster_data,
         obs_data,
         bbox,

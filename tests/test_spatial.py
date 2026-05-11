@@ -101,7 +101,7 @@ class TestComputeSpatialAdjustmentForPixel:
 
 
 class TestComputeMvnAtPoints:
-    """Tests for compute_spatial_adjustment_at_points function."""
+    """Tests for compute_spatial_point_adjustments function."""
 
     def test_no_observations_returns_prior(self):
         """Test that no observations returns prior values with shrunk stdv."""
@@ -109,7 +109,7 @@ class TestComputeMvnAtPoints:
         model_vs30 = np.array([300.0, 400.0])
         model_stdv = np.array([30.0, 40.0])
 
-        mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(
+        mvn_vs30, mvn_stdv = spatial.compute_spatial_point_adjustments(
             points=points,
             model_vs30=model_vs30,
             model_stdv=model_stdv,
@@ -137,7 +137,7 @@ class TestComputeMvnAtPoints:
             noise_weights=np.ones(1),
         )
 
-        mvn_vs30, mvn_stdv = spatial.compute_spatial_adjustment_at_points(
+        mvn_vs30, mvn_stdv = spatial.compute_spatial_point_adjustments(
             points=points,
             model_vs30=model_vs30,
             model_stdv=model_stdv,

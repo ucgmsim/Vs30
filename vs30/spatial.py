@@ -689,7 +689,7 @@ def find_affected_pixels(
     grid_locs : ndarray
         (N_valid, 2) array of NZTM pixel-center coordinates for valid pixels.
         Returned alongside the mask so the downstream
-        ``compute_spatial_adjustments`` call can reuse it instead of
+        ``compute_spatial_pixel_adjustments`` call can reuse it instead of
         recomputing ``raster_data.get_coordinates()``.
     """
     grid_locs = raster_data.get_coordinates()
@@ -739,7 +739,7 @@ def find_affected_pixels(
     return bbox_mask, grid_locs
 
 
-def compute_spatial_adjustments(
+def compute_spatial_pixel_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
     bbox_mask: np.ndarray,
@@ -832,7 +832,7 @@ def compute_spatial_adjustments(
     return updated_vs30, updated_stdv
 
 
-def compute_spatial_adjustment_at_points(
+def compute_spatial_point_adjustments(
     points: np.ndarray,
     model_vs30: np.ndarray,
     model_stdv: np.ndarray,
@@ -846,7 +846,7 @@ def compute_spatial_adjustment_at_points(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute MVN spatial adjustment at specific query points.
 
-    Point-based equivalent of compute_spatial_adjustments(). Delegates to
+    Point-based equivalent of compute_spatial_pixel_adjustments(). Delegates to
     compute_spatial_adjustment_for_pixel() for each point, sharing the same
     MVN conditioning algorithm used by the grid pipeline.
 
@@ -1031,7 +1031,7 @@ def compute_spatial_adjustment_on_grid(
     )
 
     t_spatial_start = time.perf_counter()
-    adjusted_vs30, adjusted_stdv = compute_spatial_adjustments(
+    adjusted_vs30, adjusted_stdv = compute_spatial_pixel_adjustments(
         raster_data,
         obs_data,
         bbox_mask,
