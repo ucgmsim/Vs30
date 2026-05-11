@@ -555,11 +555,8 @@ def apply_hybrid_geology_modifications(
     apply_coastal_distance_mod: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Apply hybrid model modifications to VS30 and standard deviation arrays.
-
-    Implements slope-based Vs30 interpolation and coastal distance adjustments
-    for specific geology categories. Modifies arrays in-place but also returns
-    them for clarity.
+    Apply hybrid-model per-geology-group modifications: sigma reduction,
+    slope-based Vs30 interpolation, and coastal-distance Vs30 adjustment.
 
     Parameters
     ----------
@@ -590,30 +587,27 @@ def apply_hybrid_geology_modifications(
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
 
-    for spec in constants.HYBRID_GEOLOGY_PARAMS:
-        mask = id_array == spec.gid
-        if not np.any(mask):
-            continue
-        # sigma_reduction always applies — it tightens the categorical lookup
-        # itself (legacy R semantics), not a per-pixel slope refinement.
-        stdv_array[mask] *= spec.sigma_reduction
+    for group_params in constants.HYBRID_GEOLOGY_PARAMS:
+        # sigma_reduction always applies, regardless of the slope/coastal mod gating.
+        stdv_array[id_array == group_params.gid] *= group_params.sigma_reduction
 
         # GID 4 (alluvium) gets coastal-distance handling below when the
         # slope mod is off, so skip slope interpolation here.
-        if spec.gid == 4 and not apply_alluvium_slope_mod:
+        if group_params.gid == 4 and not apply_alluvium_slope_mod:
             continue
 
-        spec_slope = slope_array[mask]
+        group_slopes = slope_array[id_array == group_params.gid]
         # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
         safe_slope = np.where(
-            (spec_slope <= 0) | (spec_slope == constants.NODATA_VALUE),
+            (group_slopes <= 0) | (group_slopes == constants.NODATA_VALUE),
             constants.MIN_SLOPE_FOR_LOG,
-            spec_slope,
+            group_slopes,
         )
-        interpolated_val = np.interp(
-            np.log10(safe_slope), spec.slope_limits, spec.vs30_values_log10
+        vs30_array[id_array == group_params.gid] = 10 ** np.interp(
+            np.log10(safe_slope),
+            group_params.slope_limits,
+            group_params.vs30_values_log10,
         )
-        vs30_array[mask] = 10**interpolated_val
 
     if apply_coastal_distance_mod:
         apply_coastal_distance_modification(
