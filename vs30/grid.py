@@ -32,38 +32,31 @@ def compute_spatial_adjustment_on_grid(
     """
     Compute MVN spatial adjustment on a grid.
 
-    Performs a spatial adjustment of VS30 arrays by:
-
-    1. Constructing RasterData from arrays.
-    2. Loading measurements and mapping them to categories.
-    3. Computing spatial fits to update pixels affected by measurements.
-    4. Returning the updated arrays.
-
     Parameters
     ----------
     vs30_array : np.ndarray
-        Input VS30 array (2D).
+        Input Vs30 array (2D).
     stdv_array : np.ndarray
         Input standard deviation array (2D).
     profile : dict
         Rasterio profile with transform, crs, nodata.
     observations_df : pd.DataFrame
-        DataFrame with measured VS30 values. Must contain columns:
-        easting, northing, vs30, uncertainty.
+        Measured Vs30 values. Must contain columns: easting, northing, vs30,
+        uncertainty.
     model_values_df : pd.DataFrame
-        DataFrame with updated categorical Vs30 values.
+        Updated categorical Vs30 values.
     model_type : ModelType
-        Model type: either GEOLOGY or TERRAIN.
+        Either GEOLOGY or TERRAIN.
     corr_fn : Callable
         Correlation function for spatial adjustment.
     apply_alluvium_slope_mod : bool
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     apply_coastal_distance_mod : bool
-        Whether to apply coastal distance modification for GID 4 and GID 10.
+        Whether to apply coastal-distance modification for GID 4 and GID 10.
     noisy : bool, optional
         Whether to apply noise weighting in spatial adjustment.
     max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
+        Memory cap for spatial boolean arrays.
     slope_array : np.ndarray, optional
         Pre-computed slope array (for geology observation data preparation).
     coast_dist_array : np.ndarray, optional
@@ -71,8 +64,10 @@ def compute_spatial_adjustment_on_grid(
 
     Returns
     -------
-    tuple[np.ndarray, np.ndarray]
-        (adjusted_vs30, adjusted_stdv) arrays.
+    adjusted_vs30 : np.ndarray
+        Spatially-adjusted Vs30 array.
+    adjusted_stdv : np.ndarray
+        Spatially-adjusted standard deviation array.
     """
     logger.info(f"Starting spatial adjustment for {model_type} model")
 
@@ -85,12 +80,11 @@ def compute_spatial_adjustment_on_grid(
     spatial.validate_raster_data(raster_data)
     spatial.validate_observations(observations_df)
 
-    # Model IDs are 1-indexed; convert to 0-indexed array indices.
+    # Convert 1-indexed model IDs to 0-indexed array rows (0..max_id-1).
     mean_col, std_col = utils.select_vs30_columns_by_priority(
         list(model_values_df.columns)
     )
     max_id = model_values_df[constants.STANDARD_ID_COLUMN].max()
-    # Indices are 1-based ids minus 1, so we need max_id rows (covering 0..max_id-1).
     updated_model_table = np.full((max_id, 2), np.nan)
     ids = model_values_df[constants.STANDARD_ID_COLUMN].to_numpy().astype(int) - 1
     valid = (ids >= 0) & (ids < max_id)
@@ -119,7 +113,6 @@ def compute_spatial_adjustment_on_grid(
         )
         return vs30_array.copy(), stdv_array.copy()
 
-    logger.info("Finding pixels affected by observations...")
     t_bbox_start = time.perf_counter()
     bbox_mask, grid_locs = spatial.find_affected_pixels(
         raster_data,
@@ -128,12 +121,11 @@ def compute_spatial_adjustment_on_grid(
         model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
     )
-    t_bbox_elapsed = time.perf_counter() - t_bbox_start
     logger.info(
-        f"Found {int(bbox_mask.sum()):,} affected pixels in {t_bbox_elapsed:.1f}s"
+        f"Found {int(bbox_mask.sum()):,} affected pixels in "
+        f"{time.perf_counter() - t_bbox_start:.1f}s"
     )
 
-    logger.info("Computing spatial updates...")
     t_spatial_start = time.perf_counter()
     adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustments(
         raster_data,
@@ -146,8 +138,10 @@ def compute_spatial_adjustment_on_grid(
         noisy=noisy,
         cov_reduc=constants.COV_REDUC,
     )
-    t_spatial_elapsed = time.perf_counter() - t_spatial_start
-    logger.info(f"Spatial adjustments completed in {t_spatial_elapsed:.1f}s")
+    logger.info(
+        f"Spatial adjustments completed in "
+        f"{time.perf_counter() - t_spatial_start:.1f}s"
+    )
 
     return adjusted_vs30, adjusted_stdv
 
