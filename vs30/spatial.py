@@ -671,26 +671,26 @@ def find_affected_pixels(
     Parameters
     ----------
     raster_data : RasterData
-        Raster data object.
+        Raster data with valid-pixel mask and grid transform.
     obs_data : ObservationData
-        Observation data.
+        Bundled observation data.
     max_spatial_boolean_array_memory_gb : float
         Memory limit (GB) for boolean arrays in spatial processing.
     model_type : constants.ModelType
-        Model type (ModelType.GEOLOGY or ModelType.TERRAIN), used for
-        progress bar labelling.
+        Either GEOLOGY or TERRAIN; used for progress-bar labelling.
     max_dist_m : float, optional
-        Maximum distance for considering observations.
+        Maximum distance in meters for considering observations.
 
     Returns
     -------
-    tuple[ndarray, ndarray]
-        - Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in
-          any observation's bounding box.
-        - (N_valid, 2) array of NZTM pixel-center coordinates for valid
-          pixels. Returned alongside the mask so the downstream
-          ``compute_spatial_adjustments`` call can reuse it instead of
-          recomputing ``raster_data.get_coordinates()``.
+    bbox_mask : ndarray
+        Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
+        observation's bounding box.
+    grid_locs : ndarray
+        (N_valid, 2) array of NZTM pixel-center coordinates for valid pixels.
+        Returned alongside the mask so the downstream
+        ``compute_spatial_adjustments`` call can reuse it instead of
+        recomputing ``raster_data.get_coordinates()``.
     """
     grid_locs = raster_data.get_coordinates()
     chunk_size = max(
@@ -708,19 +708,18 @@ def find_affected_pixels(
     e_min, e_max = obs_eastings - max_dist_m, obs_eastings + max_dist_m
     n_min, n_max = obs_northings - max_dist_m, obs_northings + max_dist_m
 
-    label = str(model_type).capitalize()
     valid_in_bbox = np.zeros(len(grid_locs), dtype=bool)
 
     chunk_indices = range(n_chunks)
     if n_chunks > 1:
         chunk_indices = tqdm(
             chunk_indices,
-            desc=f"{label}: checking pixels for nearby observations ({n_chunks} chunks)",
+            desc=f"{str(model_type).capitalize()}: checking pixels for nearby observations ({n_chunks} chunks)",
             unit="chunk",
         )
     else:
         logger.info(
-            f"{label}: checking {len(grid_locs):,} pixels for nearby observations"
+            f"{str(model_type).capitalize()}: checking {len(grid_locs):,} pixels for nearby observations"
         )
 
     for chunk_idx in chunk_indices:
