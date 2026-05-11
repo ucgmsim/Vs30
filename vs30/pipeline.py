@@ -18,9 +18,9 @@ from vs30 import (
     config,
     constants,
     gapfill,
-    grid,
     points,
     raster,
+    spatial,
     utils,
 )
 
@@ -456,7 +456,7 @@ def compute_component_grid(
                 "At least one of clustered or independent observations must be specified."
             )
 
-        vs30_array, stdv_array = grid.compute_spatial_adjustment_on_grid(
+        vs30_array, stdv_array = spatial.compute_spatial_adjustment_on_grid(
             vs30_array=vs30_array,
             stdv_array=stdv_array,
             profile=profile,
