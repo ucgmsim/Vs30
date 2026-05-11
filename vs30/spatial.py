@@ -844,11 +844,11 @@ def compute_spatial_point_adjustments(
     cov_reduc: float = constants.COV_REDUC,
     progress_bar: tqdm | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compute MVN spatial adjustment at specific query points.
+    """
+    Compute MVN spatial adjustment at specific query points.
 
-    Point-based equivalent of compute_spatial_pixel_adjustments(). Delegates to
-    compute_spatial_adjustment_for_pixel() for each point, sharing the same
-    MVN conditioning algorithm used by the grid pipeline.
+    Point-based equivalent of compute_spatial_pixel_adjustments(), using the
+    same MVN conditioning algorithm.
 
     Parameters
     ----------
@@ -859,21 +859,23 @@ def compute_spatial_point_adjustments(
     model_stdv : np.ndarray
         (N,) array of model standard deviation at query points.
     obs_data : ObservationData
-        Pre-filtered observation data with residuals and noise_weights already
-        computed for the chosen ``noisy`` setting.
+        Prepared observation data.
     corr_fn : callable
-        Correlation function mapping distances (ndarray) to correlations (ndarray).
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
     max_dist_m : float, optional
-        Maximum distance (meters) to consider observations.
+        Maximum distance in meters to consider observations.
     max_points : int, optional
-        Maximum number of observations per point.
-    noisy : bool
-        Whether to apply noise weighting in the covariance matrix. Must match
-        the setting used to build ``obs_data.residuals`` and ``obs_data.noise_weights``.
-    cov_reduc : float
-        Covariance reduction factor.
+        Target number of observations per point; may be exceeded if distances
+        tie at the cutoff.
+    noisy : bool, optional
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
+        Must match the setting used to build ``obs_data``.
+    cov_reduc : float, optional
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
     progress_bar : tqdm, optional
-        External progress bar to update per point. If None, no progress is shown.
+        External progress bar to update per point. If None, no progress is
+        shown.
 
     Returns
     -------
