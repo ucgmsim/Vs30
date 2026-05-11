@@ -680,7 +680,11 @@ def grid_pipeline(
             "\n" + "=" * 80 + "\nCOMBINING GEOLOGY AND TERRAIN RESULTS\n" + "=" * 80
         )
 
-        combined_vs30, combined_stdv = grid.combine_model_arrays(
+        geol_vs30, geol_stdv, terr_vs30, terr_stdv = (
+            np.where(arr == constants.NODATA_VALUE, np.nan, arr.astype(np.float32))
+            for arr in (geol_vs30, geol_stdv, terr_vs30, terr_stdv)
+        )
+        combined_vs30, combined_stdv = utils.combine_vs30_models(
             geol_vs30=geol_vs30,
             geol_stdv=geol_stdv,
             terr_vs30=terr_vs30,

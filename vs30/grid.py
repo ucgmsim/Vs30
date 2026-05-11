@@ -146,61 +146,6 @@ def compute_spatial_adjustment_on_grid(
     return adjusted_vs30, adjusted_stdv
 
 
-def combine_model_arrays(
-    geol_vs30: np.ndarray,
-    geol_stdv: np.ndarray,
-    terr_vs30: np.ndarray,
-    terr_stdv: np.ndarray,
-    combination_method: constants.CombinationMethod,
-    combine_ratio: float | None = None,
-    nodata: float = constants.NODATA_VALUE,
-) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Combine geology and terrain VS30 arrays.
-
-    Combines the two model outputs in log-space using the specified weighting
-    method.
-
-    Parameters
-    ----------
-    geol_vs30 : np.ndarray
-        Geology model VS30 array.
-    geol_stdv : np.ndarray
-        Geology model standard deviation array.
-    terr_vs30 : np.ndarray
-        Terrain model VS30 array.
-    terr_stdv : np.ndarray
-        Terrain model standard deviation array.
-    combination_method : CombinationMethod
-        Method for combining models: STANDARD_DEVIATION_WEIGHTING for
-        variance-based weighting, or RATIO for fixed-ratio weighting.
-    combine_ratio : float, optional
-        Geology-to-terrain weight ratio. Required when combination_method is RATIO.
-    nodata : float, optional
-        No-data value.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        (combined_vs30, combined_stdv) arrays.
-    """
-    geol_vs30 = geol_vs30.astype(np.float32, copy=True)
-    geol_stdv = geol_stdv.astype(np.float32, copy=True)
-    terr_vs30 = terr_vs30.astype(np.float32, copy=True)
-    terr_stdv = terr_stdv.astype(np.float32, copy=True)
-    for arr in (geol_vs30, geol_stdv, terr_vs30, terr_stdv):
-        arr[arr == nodata] = np.nan
-
-    return utils.combine_vs30_models(
-        geol_vs30=geol_vs30,
-        geol_stdv=geol_stdv,
-        terr_vs30=terr_vs30,
-        terr_stdv=terr_stdv,
-        combination_method=combination_method,
-        combine_ratio=combine_ratio,
-    )
-
-
 def write_raster(
     output_path: Path,
     profile: dict,
