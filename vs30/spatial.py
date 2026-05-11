@@ -21,11 +21,6 @@ class ObservationData:
     """
     Bundled observation data for spatial processing.
 
-    Only the derived quantities consumed downstream are kept — the raw
-    ``vs30``, ``model_vs30``, and ``uncertainty`` arrays are folded into
-    ``log_model_vs30``, ``residuals``, and ``omega`` at construction time
-    and are not needed afterwards.
-
     Attributes
     ----------
     locations : ndarray
@@ -35,9 +30,11 @@ class ObservationData:
     log_model_vs30 : ndarray
         (n_obs,) precomputed ``np.log(model_vs30)``.
     residuals : ndarray
-        (n_obs,) log residuals: log(vs30 / model_vs30).
+        (n_obs,) log residuals: log(vs30 / model_vs30). Pre-scaled by
+        ``omega`` when constructed with ``noisy=True``.
     omega : ndarray
-        (n_obs,) noise weights (if noisy=True).
+        (n_obs,) noise-weighting factors when constructed with
+        ``noisy=True``; all ones otherwise.
     """
 
     locations: np.ndarray
@@ -48,14 +45,7 @@ class ObservationData:
 
     @classmethod
     def empty(cls) -> "ObservationData":
-        """
-        Create an empty ObservationData object with zero observations.
-
-        Returns
-        -------
-        ObservationData
-            An ObservationData instance with zero-length arrays.
-        """
+        """Construct an instance with zero-length arrays."""
         return cls(
             locations=np.empty((0, 2)),
             model_stdv=np.empty(0),
