@@ -78,20 +78,21 @@ class PixelData:
 @dataclass
 class RasterData:
     """
-    Raster data and metadata.
+    Vs30 raster data with precomputed valid-pixel mask.
 
     Attributes
     ----------
     vs30 : ndarray
-        Band 1: Vs30 mean values (2D array).
+        2D array of Vs30 mean values.
     stdv : ndarray
-        Band 2: Vs30 standard deviation values (2D array).
+        2D array of Vs30 standard deviation values.
     transform : rasterio.transform.Affine
-        Affine transformation for coordinate conversion.
+        Affine transformation for pixel<->world coordinate conversion.
     valid_mask : ndarray
-        Boolean mask of non-nodata pixels (2D array).
+        2D boolean mask: True where Vs30 and stdv are non-nodata, non-NaN,
+        and positive.
     valid_flat_indices : ndarray
-        Flat indices of non-nodata pixels (1D array).
+        1D flat indices of pixels where valid_mask is True.
     """
 
     vs30: np.ndarray
@@ -107,8 +108,7 @@ class RasterData:
         """
         Compute the boolean mask of valid pixels and their flat indices.
 
-        Valid pixels are those that are not nodata, not NaN, and positive
-        in both the VS30 and standard deviation arrays.
+        Valid pixels are non-nodata, non-NaN, and positive in both arrays.
 
         Parameters
         ----------
@@ -121,9 +121,10 @@ class RasterData:
 
         Returns
         -------
-        tuple[ndarray, ndarray]
-            (valid_mask, valid_flat_indices) where valid_mask is a boolean 2D
-            array and valid_flat_indices is a 1D array of flat indices.
+        valid_mask : ndarray
+            2D boolean mask.
+        valid_flat_indices : ndarray
+            1D flat indices of True entries in valid_mask.
         """
         valid_mask = (
             (vs30 != nodata)
@@ -144,7 +145,7 @@ class RasterData:
         nodata: float = constants.NODATA_VALUE,
     ) -> "RasterData":
         """
-        Create RasterData from arrays.
+        Create RasterData from arrays, computing the valid-pixel mask.
 
         Parameters
         ----------
@@ -155,13 +156,7 @@ class RasterData:
         transform : rasterio.transform.Affine
             Affine transformation for coordinate conversion.
         nodata : float, optional
-            No-data sentinel used to compute the valid-pixel mask. Default
-            from ``constants.NODATA_VALUE``.
-
-        Returns
-        -------
-        RasterData
-            Raster data with valid pixel mask computed from the arrays.
+            No-data sentinel for valid-mask computation.
         """
         valid_mask, valid_flat_indices = cls.compute_valid_mask(vs30, stdv, nodata)
 
@@ -175,7 +170,7 @@ class RasterData:
 
     def get_coordinates(self) -> np.ndarray:
         """
-        Get coordinates for all valid pixels using GDAL affine transform.
+        Pixel-center coordinates of all valid pixels.
 
         Returns
         -------
@@ -183,20 +178,7 @@ class RasterData:
             (N_valid, 2) array of [easting, northing] coordinates.
         """
         valid_rows, valid_cols = np.where(self.valid_mask)
-
-        # Rasterio Affine: [a, b, c, d, e, f] = [x_scale, x_shear, x_origin, y_shear, y_scale, y_origin]
-        x_scale = self.transform[0]
-        x_origin = self.transform[2]
-        y_scale = self.transform[4]
-        y_origin = self.transform[5]
-
-        # Pixel centers: add offset to row/col indices (following legacy implementation)
-        cols_center = valid_cols.astype(float) + constants.PIXEL_CENTER_OFFSET
-        rows_center = valid_rows.astype(float) + constants.PIXEL_CENTER_OFFSET
-
-        xs = x_origin + cols_center * x_scale
-        ys = y_origin + rows_center * y_scale
-
+        xs, ys = rasterio.transform.xy(self.transform, valid_rows, valid_cols)
         return np.column_stack((xs, ys)).astype(np.float32)
 
 
