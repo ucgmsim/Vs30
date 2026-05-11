@@ -9,75 +9,9 @@ import numpy as np
 import pandas as pd
 import rasterio
 
-from vs30 import constants, raster, spatial, utils
+from vs30 import constants, spatial, utils
 
 logger = logging.getLogger(__name__)
-
-
-def compute_hybrid_geology_arrays(
-    vs30_array: np.ndarray,
-    stdv_array: np.ndarray,
-    id_array: np.ndarray,
-    profile: dict,
-    apply_alluvium_slope_mod: bool,
-    apply_coastal_distance_mod: bool,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Apply hybrid geology modifications.
-
-    Computes slope and coastal distance arrays for the grid, then applies
-    slope-based and coast-distance-based modifications to the geology VS30 model.
-
-    Slope and coast distance arrays are returned because they are also needed
-    later by ``prepare_observation_data`` to compute residuals at observation
-    locations.
-
-    Parameters
-    ----------
-    vs30_array : np.ndarray
-        Initial geology VS30 array (2D, float32).
-    stdv_array : np.ndarray
-        Initial geology standard deviation array (2D, float32).
-    id_array : np.ndarray
-        Category ID array (2D, uint8).
-    profile : dict
-        Rasterio profile for the grid (needed for slope/coast computation).
-    apply_alluvium_slope_mod : bool
-        Whether to apply slope-based interpolation for GID 4 (alluvium).
-        When False, GID 4 keeps its categorical Vs30 value.
-    apply_coastal_distance_mod : bool
-        Whether to apply coastal distance modification for GID 4 and GID 10.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-        A tuple containing:
-        - hybrid_vs30 (float32): Modified VS30 array.
-        - hybrid_stdv (float32): Modified standard deviation array.
-        - slope_array: Slope values for the grid.
-        - coast_dist_array (float32): Distance to coast for the grid.
-    """
-    logger.info("Computing slope array...")
-    slope_array = raster.compute_slope_array(profile)
-
-    if apply_coastal_distance_mod:
-        logger.info("Computing coast distance array...")
-        coast_dist_array = raster.compute_coast_distance_raster(profile)
-    else:
-        logger.info("Skipping coast distance computation (disabled in config)")
-        coast_dist_array = np.zeros_like(vs30_array)
-
-    hybrid_vs30, hybrid_stdv = raster.apply_hybrid_geology_modifications(
-        vs30_array,
-        stdv_array,
-        id_array,
-        slope_array,
-        coast_dist_array,
-        apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-        apply_coastal_distance_mod=apply_coastal_distance_mod,
-    )
-
-    return hybrid_vs30, hybrid_stdv, slope_array, coast_dist_array
 
 
 def compute_spatial_adjustment_on_grid(

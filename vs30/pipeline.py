@@ -398,15 +398,22 @@ def compute_component_grid(
     if model_type == constants.ModelType.GEOLOGY:
         logger.info("\n=== STEP 3: Slope and Coastal Distance Adjusted Geology ===")
 
-        vs30_array, stdv_array, slope_array, coast_dist_array = (
-            grid.compute_hybrid_geology_arrays(
-                vs30_array,
-                stdv_array,
-                id_array,
-                profile,
-                apply_coastal_distance_mod=apply_coastal_distance_mod,
-                apply_alluvium_slope_mod=apply_alluvium_slope_mod,
-            )
+        slope_array = raster.compute_slope_array(profile)
+
+        if apply_coastal_distance_mod:
+            coast_dist_array = raster.compute_coast_distance_raster(profile)
+        else:
+            logger.info("Skipping coast distance computation (disabled in config)")
+            coast_dist_array = np.zeros_like(vs30_array)
+
+        vs30_array, stdv_array = raster.apply_hybrid_geology_modifications(
+            vs30_array,
+            stdv_array,
+            id_array,
+            slope_array,
+            coast_dist_array,
+            apply_alluvium_slope_mod=apply_alluvium_slope_mod,
+            apply_coastal_distance_mod=apply_coastal_distance_mod,
         )
 
         if output_dir is not None and include_intermediate:
