@@ -468,25 +468,6 @@ def grid_points_in_bbox(
     return np.any(in_bbox, axis=0)
 
 
-def calculate_chunk_size(n_obs: int, max_spatial_boolean_array_memory_gb: float) -> int:
-    """
-    Calculate the max grid points per chunk given a memory budget for the mask of grid points inside observation bounding boxes.
-
-    Parameters
-    ----------
-    n_obs : int
-        Number of observations.
-    max_spatial_boolean_array_memory_gb : float
-        Maximum memory in GB allocated for spatial boolean arrays during chunked processing.
-
-    Returns
-    -------
-    int
-        Maximum number of grid points per chunk.
-    """
-    return max(1, int(max_spatial_boolean_array_memory_gb * 1024**3 / n_obs))
-
-
 def build_covariance_matrix(
     pixel: PixelData,
     obs_data: ObservationData,
@@ -726,8 +707,14 @@ def find_affected_pixels(
           recomputing ``raster_data.get_coordinates()``.
     """
     grid_locs = raster_data.get_coordinates()
-    n_obs = len(obs_data.locations)
-    chunk_size = calculate_chunk_size(n_obs, max_spatial_boolean_array_memory_gb)
+    chunk_size = max(
+        1,
+        int(
+            max_spatial_boolean_array_memory_gb
+            * constants.BYTES_PER_GB
+            / len(obs_data.locations)
+        ),
+    )
     n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
 
     obs_eastings = obs_data.locations[:, 0:1]

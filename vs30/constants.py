@@ -299,6 +299,9 @@ GAPFILL_MAX_HALF_WIDTH_M: int = 50050
 # Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0
 
+# Bytes per GB (binary; matches the GB unit used elsewhere in this file).
+BYTES_PER_GB: int = 1024**3
+
 # Default column names for longitude and latitude in location input CSV files.
 LOCATIONS_LON_COLUMN: str = "longitude"
 LOCATIONS_LAT_COLUMN: str = "latitude"

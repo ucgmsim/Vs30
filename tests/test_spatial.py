@@ -157,7 +157,7 @@ class TestComputeMvnAtPoints:
 
 
 class TestFindAffectedPixels:
-    """Tests for find_affected_pixels and calculate_chunk_size."""
+    """Tests for find_affected_pixels."""
 
     def _build_raster_data(self, n_rows: int = 5, n_cols: int = 5) -> spatial.RasterData:
         """Build a small RasterData with valid pixels everywhere.
@@ -169,19 +169,6 @@ class TestFindAffectedPixels:
         stdv = np.full((n_rows, n_cols), 0.5, dtype=np.float32)
         transform = rasterio.transform.Affine(100, 0, 1500000, 0, -100, 5100000)
         return spatial.RasterData.from_arrays(vs30=vs30, stdv=stdv, transform=transform)
-
-    def test_calculate_chunk_size_floor_at_one(self):
-        """Chunk size never falls below 1 even with tiny memory budgets."""
-        # 10000 obs × 0 bytes is 0 chunks → must clamp to 1.
-        assert spatial.calculate_chunk_size(n_obs=10000, max_spatial_boolean_array_memory_gb=0.0) == 1
-
-    def test_calculate_chunk_size_scales_with_memory(self):
-        """Larger memory budget yields proportionally larger chunk size."""
-        small = spatial.calculate_chunk_size(n_obs=100, max_spatial_boolean_array_memory_gb=0.001)
-        large = spatial.calculate_chunk_size(n_obs=100, max_spatial_boolean_array_memory_gb=1.0)
-        assert large > small
-        # Memory grows by 1000x → chunk size grows by 1000x.
-        assert large == pytest.approx(small * 1000, rel=0.01)
 
     def test_find_affected_pixels_single_obs_in_centre(self):
         """One obs at grid centre with 150m radius affects 9 nearest pixels.
