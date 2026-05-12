@@ -1,25 +1,30 @@
 # Usage
 
-The package installs a `vs30` CLI entry point with two main modes:
+The `vs30` command-line tool produces Vs30 estimates from geological and topographic data. It has two modes:
 
-- **`vs30 points`** — query Vs30 at a list of specific lat/lon sites. Fast; best for a handful to a few thousand locations.
-- **`vs30 grid`** — run the full pipeline on a regular raster grid and write GeoTIFFs. Appropriate for producing maps.
+- **`vs30 points`** — Vs30 at sites specified by latitude and longitude in a CSV.
+- **`vs30 grid`** — Vs30 across a regular raster grid, written as GeoTIFFs.
 
-Both modes accept either a bundled model version name or a path to a custom YAML config file with the same schema. See [Custom Model Configurations](#custom-model-configurations) for how to derive your own config from a bundled one.
+If you're new to Vs30 or want a description of each available model, see the [Home page](Home.md) first.
 
-## Installation
+## Available model names
 
-Clone and install in editable mode:
+Both modes take a **model** argument that selects which Vs30 model to run. There are four bundled options:
 
-```bash
-pip install -e /path/to/Vs30
-```
+- `foster_2019_approx`
+- `modified_foster_2019`
+- `jaehwi_v1p0`
+- `viktor_cpt_clustering`
 
-The install step unpacks bundled shapefiles from `vs30/resources/geospatial/shapefiles.tar.xz`.
+See the [Home page](Home.md) for a description of each. The examples below all use `modified_foster_2019`; any of the four can be substituted.
 
-## Point Queries
+## Vs30 at specific sites: `vs30 points`
 
-Prepare an input CSV with WGS84 longitude and latitude columns (defaults: `longitude`, `latitude`; override with `--lon-column` / `--lat-column`). For example, `sites.csv`:
+### Input file
+
+Prepare a CSV listing the sites you want Vs30 for, with WGS84 longitude and latitude columns. By default these columns must be named `longitude` and `latitude`; if your file uses different names, pass them with `--lon-column` and `--lat-column`.
+
+For example, `sites.csv`:
 
 ```csv
 site_id,longitude,latitude
@@ -27,22 +32,47 @@ wellington,174.7762,-41.2865
 christchurch,172.6362,-43.5321
 ```
 
-Run the pipeline with one of the supported model versions:
+Any additional columns (like `site_id` above) are preserved in the output.
+
+### Running
+
+The basic form takes a model name, the input CSV, and the output CSV:
 
 ```bash
 vs30 points modified_foster_2019 sites.csv results.csv
 ```
 
-The output CSV contains geology/terrain category IDs, per-model Vs30 values, and the combined Vs30 used as the final answer.
+If you've created a custom model (see [Custom configurations](#custom-configurations)), pass the path to its YAML config file in place of the model name:
 
-Useful options:
+```bash
+vs30 points ./my_custom_config.yaml sites.csv results.csv
+```
 
-- `--lon-column` / `--lat-column` — override the default column names.
-- `--include-intermediate` — also write the geology-only and terrain-only Vs30 values.
+### Output
 
-## Grid Pipeline
+The output CSV contains every column from the input plus four new columns:
 
-The grid command writes a directory of GeoTIFFs (category IDs, pre-MVN Vs30, post-MVN Vs30, and the combined geology+terrain result).
+- `easting`, `northing` — the input coordinates converted to NZTM2000 (EPSG:2193).
+- `vs30` — the final Vs30 estimate (the combined geology + terrain value).
+- `stdv` — the estimated standard deviation of `vs30`.
+
+To also write the intermediate per-model values (geology and terrain category IDs, the separate per-model Vs30 estimates, etc.), pass the `--include-intermediate` flag.
+
+### All options
+
+For the complete list of options:
+
+```bash
+vs30 points --help
+```
+
+## Vs30 across a region: `vs30 grid`
+
+### Inputs
+
+The grid command needs only a bounding box, a spacing, and an output directory — it doesn't take an input CSV (the grid itself defines the locations). The bounding-box and spacing values are in NZTM2000 metres (EPSG:2193).
+
+### Running
 
 A full 100 m New Zealand grid:
 
@@ -55,30 +85,50 @@ vs30 grid \
     --output-dir ./vs30_out
 ```
 
-Coordinates are NZTM2000 (EPSG:2193), in metres. The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pixel-edge convention), not pixel centres — so the leftmost pixel's left edge sits at `xmin` and its centre at `xmin + dx/2`. Reduce the domain or coarsen the spacing (`--grid-dx 400 --grid-dy 400`) for faster test runs — a 400 m national grid finishes in ~20 minutes on a typical workstation.
+If you've created a custom model (see [Custom configurations](#custom-configurations)), pass the path to its YAML config file in place of the model name:
 
-If the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-boolean-array-memory-gb` (default: 1.0). It caps the size of the per-chunk boolean arrays used to find observations near each pixel — smaller values trade a small amount of speed for a lower peak memory footprint.
+```bash
+vs30 grid \
+    --model ./my_custom_config.yaml \
+    --grid-xmin 1060100 --grid-xmax 2120100 \
+    --grid-ymin 4730100 --grid-ymax 6250100 \
+    --grid-dx 100 --grid-dy 100 \
+    --output-dir ./vs30_out
+```
 
-## Model Versions
+The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pixel-edge convention), not pixel centres. So the leftmost pixel's left edge sits at `xmin` and its centre at `xmin + dx/2`.
 
-Any command that takes a model argument (positional `model` for `points`, `--model` for `grid`) accepts one of:
+### Output
 
-- `foster_2019_approx`
-- `modified_foster_2019`
-- `jaehwi_v1p0`
-- `viktor_cpt_clustering`
+The command writes a directory of GeoTIFF rasters covering the bounding box at the chosen spacing:
 
-See the [Home page](Home.md) for a description of each.
+- the geology and terrain category IDs
+- the geology and terrain Vs30 before MVN spatial adjustment
+- the geology and terrain Vs30 after MVN adjustment
+- the combined geology + terrain Vs30 (the final result)
 
-## Custom Model Configurations
+### Practical tips
 
-Where the commands take a model argument (positional `model` for `points`, `--model` for `grid`), you can pass either a bundled model version name (see [Model Versions](#model-versions)) or a path to a YAML config file with the same schema. The YAML option is the simplest way to override pipeline parameters — toggle a hybrid modifier, swap the correlation kernel, point at your own observation CSVs — without modifying the package.
+- **Shorter test runs**: while you're confirming your inputs are right, reduce the bounding box or coarsen the spacing (e.g. `--grid-dx 400 --grid-dy 400`).
+- **Memory**: if the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-boolean-array-memory-gb` (default: 1.0). It caps the size of the per-chunk boolean arrays used to find observations near each pixel — smaller values trade a small amount of speed for a lower peak memory footprint.
 
-The recommended workflow is to copy one of the bundled configs from `vs30/configs/` and edit it:
+### All options
+
+For the complete list of options:
+
+```bash
+vs30 grid --help
+```
+
+## Custom configurations
+
+Each bundled model version is just a YAML config file living in `vs30/configs/`. To customize the pipeline — for example to toggle the coastal-distance modifier or swap the correlation kernel — copy a bundled config, edit it, and pass the path to `vs30 points` or `vs30 grid` in place of a bundled model name.
+
+A typical workflow:
 
 ```bash
 cp vs30/configs/modified_foster_2019.yaml ./my_custom_config.yaml
-# Edit my_custom_config.yaml — e.g. set `apply_coastal_distance_mod: false`
+# edit my_custom_config.yaml — e.g. set `apply_coastal_distance_mod: false`
 
 vs30 points ./my_custom_config.yaml sites.csv results.csv
 
@@ -90,11 +140,13 @@ vs30 grid \
     --output-dir ./vs30_out
 ```
 
-The path to the YAML file may be absolute or relative to the current working directory. All fields from the bundled configs must be present — they are validated when the YAML is loaded, and a missing field raises an error.
+The path to the YAML file can be absolute or relative to your current working directory. All fields from the bundled config must be present — they're validated when the YAML is loaded, and a missing field raises an error.
 
-The CSV path fields inside the YAML (`geology_categorical_csv`, `terrain_categorical_csv`, `clustered_observations_csv`, `independent_observations_csv`) resolve in one of two ways:
+### Path fields inside the YAML
+
+A few YAML fields point at CSV data files: `geology_categorical_csv`, `terrain_categorical_csv`, `clustered_observations_csv`, and `independent_observations_csv`. You can leave these set to the bundled file names (which is what the bundled configs do) or replace them with paths to your own CSVs. The resolution rules:
 
 - An **absolute path** is used as-is, so you can supply your own CSVs anywhere on disk.
-- A **relative path** is resolved against the bundled `vs30/resources/` tree, so you can keep referring to bundled inputs by filename.
+- A **bundled data file name** is automatically resolved under one of two subdirectories: `vs30/resources/categorical_vs30_mean_and_stddev/` for the geology/terrain CSVs, or `vs30/resources/observations/` for the observation CSVs. This lets you refer to bundled CSVs by file name.
 
-This means you can keep all the bundled resources and only override the one or two parameters you actually want to change.
+In practice you'll usually keep most of the bundled config intact and only edit the one or two parameters you actually want to change.
