@@ -38,30 +38,6 @@ class GridConfig:
     grid_dx: int
     grid_dy: int
 
-    @classmethod
-    def from_dict(cls, data: dict) -> "GridConfig":
-        """
-        Construct a GridConfig from a dict.
-
-        Parameters
-        ----------
-        data : dict
-            Must contain grid_xmin, grid_xmax, grid_ymin, grid_ymax, grid_dx, grid_dy.
-
-        Returns
-        -------
-        GridConfig
-            The constructed configuration.
-        """
-        return cls(
-            grid_xmin=data["grid_xmin"],
-            grid_xmax=data["grid_xmax"],
-            grid_ymin=data["grid_ymin"],
-            grid_ymax=data["grid_ymax"],
-            grid_dx=data["grid_dx"],
-            grid_dy=data["grid_dy"],
-        )
-
 
 # Full NZ land extent at 100m. Bounds chosen so pixel centres align with
 # the bundled IwahashiPike.tif (centres ending in ..50), avoiding GDAL
