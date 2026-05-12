@@ -155,7 +155,7 @@ def make_full_bbox_result(
 
 
 DEFAULT_CORR_FN = functools.partial(
-    utils.exponential_correlation_function, phi=constants.DEFAULT_TERRAIN_PHI
+    utils.exponential_correlation_function, phi=993
 )
 
 

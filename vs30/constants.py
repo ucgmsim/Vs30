@@ -174,10 +174,6 @@ COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 # Combined VS30 output before gap-fill (intermediate output)
 COMBINED_VS30_BEFORE_GAPFILL_FILENAME: str = "combined_vs30_before_gapfill.tif"
 
-# Default correlation length parameters (meters) from the Foster 2019 model.
-DEFAULT_GEOLOGY_PHI = 1407
-DEFAULT_TERRAIN_PHI = 993
-
 # HYBRID GEOLOGY Vs30 MODEL PARAMETERS
 # (Adjusts according to slope and coastal distance)
 

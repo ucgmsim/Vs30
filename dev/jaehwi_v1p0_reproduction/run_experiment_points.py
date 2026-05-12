@@ -197,11 +197,11 @@ def run_experiment(name, params, longitudes, latitudes, ref_vs30, ref_stdv):
         nproc=-1,
         geology_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_GEOLOGY_PHI,
+            phi=1407,
         ),
         terrain_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_TERRAIN_PHI,
+            phi=993,
         ),
         **params,
     )

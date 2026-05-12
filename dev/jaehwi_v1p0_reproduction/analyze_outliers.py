@@ -65,11 +65,11 @@ if __name__ == "__main__":
         independent_observations_csv=RECONSTRUCTED_OBS,
         geology_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_GEOLOGY_PHI,
+            phi=1407,
         ),
         terrain_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_TERRAIN_PHI,
+            phi=993,
         ),
     )
 

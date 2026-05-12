@@ -51,11 +51,11 @@ def run_config(name, longitudes, latitudes, **params):
         noisy=True, mvn=True, include_intermediate=True, nproc=-1,
         geology_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_GEOLOGY_PHI,
+            phi=1407,
         ),
         terrain_corr_fn=functools.partial(
             utils.exponential_correlation_function,
-            phi=constants.DEFAULT_TERRAIN_PHI,
+            phi=993,
         ),
         **params,
     )
