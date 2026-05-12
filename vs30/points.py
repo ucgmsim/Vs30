@@ -9,7 +9,7 @@ from tqdm import tqdm
 from vs30 import category, constants, raster, spatial
 
 
-def _build_obs_data(
+def build_obs_data(
     obs_locs: np.ndarray,
     obs_vs30: np.ndarray,
     obs_uncertainty: np.ndarray,
@@ -17,8 +17,7 @@ def _build_obs_data(
     obs_model_stdv: np.ndarray,
     noisy: bool,
 ) -> spatial.ObservationData:
-    """
-    Filter invalid observations and assemble an ``ObservationData``.
+    """Filter invalid observations and assemble an ``ObservationData``.
 
     Drops observations whose model values are NaN or non-positive, then
     precomputes residuals, noise_weights, and log(model_vs30) for downstream MVN.
@@ -36,7 +35,7 @@ def _build_obs_data(
     obs_model_stdv : ndarray
         (N,) model standard deviation at observation locations.
     noisy : bool
-        Whether to compute noise-weighted residuals/noise_weights.
+        Whether to apply noise weighting when computing residuals/noise_weights.
 
     Returns
     -------
@@ -78,27 +77,26 @@ def prepare_geology_obs_data(
     apply_coastal_distance_mod: bool,
     noisy: bool,
 ) -> spatial.ObservationData:
-    """Precompute observation-side geology values for points_pipeline.
+    """Precompute observation-side geology values for the points pipeline.
 
     Parameters
     ----------
-    observations_df
+    observations_df : DataFrame
         Combined observations DataFrame (easting, northing, vs30, uncertainty).
-    geol_model_df
+    geol_model_df : DataFrame
         Categorical geology model with Vs30 mean and standard deviation per category.
-    apply_alluvium_slope_mod
+    apply_alluvium_slope_mod : bool
         Whether to apply the alluvium slope modification.
-    apply_coastal_distance_mod
+    apply_coastal_distance_mod : bool
         Whether to apply the coastal distance modification.
-    noisy
+    noisy : bool
         Whether to apply noise weighting when computing residuals/noise_weights.
 
     Returns
     -------
     spatial.ObservationData
-        Filtered observation data with residuals/noise_weights/log_model_vs30 precomputed.
-        Returns ``ObservationData.empty()`` if observations are empty or
-        all are invalid.
+        Filtered observations with residuals, noise_weights, and log_model_vs30
+        precomputed. ``ObservationData.empty()`` if no valid observations remain.
     """
     if len(observations_df) == 0:
         return spatial.ObservationData.empty()
@@ -133,7 +131,7 @@ def prepare_geology_obs_data(
         apply_coastal_distance_mod=apply_coastal_distance_mod,
     )
 
-    return _build_obs_data(
+    return build_obs_data(
         obs_locs=obs_locs,
         obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
         obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
@@ -148,23 +146,22 @@ def prepare_terrain_obs_data(
     terr_model_df: pd.DataFrame,
     noisy: bool,
 ) -> spatial.ObservationData:
-    """Precompute observation-side terrain values for points_pipeline.
+    """Precompute observation-side terrain values for the points pipeline.
 
     Parameters
     ----------
-    observations_df
+    observations_df : DataFrame
         Combined observations DataFrame (easting, northing, vs30, uncertainty).
-    terr_model_df
+    terr_model_df : DataFrame
         Categorical terrain model with Vs30 mean and standard deviation per category.
-    noisy
+    noisy : bool
         Whether to apply noise weighting when computing residuals/noise_weights.
 
     Returns
     -------
     spatial.ObservationData
-        Filtered observation data with residuals/noise_weights/log_model_vs30 precomputed.
-        Returns ``ObservationData.empty()`` if observations are empty or
-        all are invalid.
+        Filtered observations with residuals, noise_weights, and log_model_vs30
+        precomputed. ``ObservationData.empty()`` if no valid observations remain.
     """
     if len(observations_df) == 0:
         return spatial.ObservationData.empty()
@@ -175,7 +172,7 @@ def prepare_terrain_obs_data(
     obs_terr_ids = category.assign_to_category_terrain(obs_locs)
     obs_terr_vs30, obs_terr_stdv = category.get_vs30_for_ids(obs_terr_ids, terr_model_df)
 
-    return _build_obs_data(
+    return build_obs_data(
         obs_locs=obs_locs,
         obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
         obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
@@ -197,8 +194,7 @@ def process_geology_at_points(
 ) -> tuple[
     np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
-    """
-    Process geology model at points, including hybrid modifications and spatial adjustment.
+    """Process geology model at points, including hybrid modifications and spatial adjustment.
 
     Parameters
     ----------
@@ -291,8 +287,7 @@ def process_terrain_at_points(
     noisy: bool = False,
     progress_bar: tqdm | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Process terrain model at points, including spatial adjustment.
+    """Process terrain model at points, including spatial adjustment.
 
     Parameters
     ----------
