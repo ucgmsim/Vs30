@@ -1,43 +1,20 @@
-"""
-Benchmark tests that compare pipeline output against reference benchmarks.
-
-Three model versions (modified_foster_2019, jaehwi_v1p0, viktor_cpt_clustering)
-run the full grid pipeline at 5000 m resolution and compare the in-memory
-result against a stored benchmark raster in under 30 seconds per test.
-
-foster_2019_approx is benchmarked differently: a full-domain refactored run
-at the paper's 100 m resolution takes ~6 hours, so
-``test_foster_2019_approx_points_benchmark`` instead compares pipeline
-output at 30 fixed prior-dominated points (more than MAX_DIST_M from any
-observation) against reference values sampled from the paper's published
-map. The points and reference values are baked into
-``foster_2019_approx_points.csv``; see
-``dev/generate_foster_2019_approx_points_benchmark.py`` for regeneration.
-Prior-dominated points are used because the MVN step has no effect there,
-so the categorical posterior and hybrid slope modification reproduce the
-paper at float precision. A small minority of pixels have larger
-discrepancies due to categorical/hybrid edge cases unrelated to MVN; the
-test uses median + percentile assertions to catch drift while tolerating
-those known outliers.
-"""
+"""Benchmark tests that compare pipeline output against reference benchmarks."""
 
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from conftest import assert_arrays_match_raster_benchmark, load_fixed_model_config
 import pyproj
 
+from conftest import assert_arrays_match_raster_benchmark, load_fixed_model_config
 from vs30 import config, constants, pipeline
 
 BENCHMARKS_DIR = Path(__file__).parent / "benchmarks"
 
-# Shared grid for modified_foster_2019, jaehwi_v1p0, and viktor_cpt_clustering.
-#
-# At dx=dy=5000, pixel CENTRES sit at xmin + 2500 + n*5000. To land each
-# centre exactly on an IwahashiPike pixel centre (which is at coordinates
-# ending in ..50 in both axes), xmin/ymin must end in ..50 — different
-# from FULL_NZ_GRID_CONFIG's ..100 (which is correct for dx=100).
+# FULL_NZ_GRID_CONFIG is the production grid defined elsewhere in the
+# codebase (100 m resolution). This benchmark grid uses 5000 m and
+# needs different bounds (ending in ..50) so pixel centres still land
+# on the bundled IwahashiPike raster's ..50 centres.
 BENCHMARK_NZ_GRID = config.GridConfig(
     grid_xmin=1060050,
     grid_xmax=2120050,
@@ -88,20 +65,30 @@ def run_benchmark(
 
 
 def test_foster_2019_approx_points_benchmark():
-    """Prior-dominated points from foster_2019_approx.tif match points_pipeline output.
+    """
+    foster_2019 pipeline matches the paper's published Vs30 at points far from any observation.
 
-    Tests that the categorical posterior + hybrid slope modification
-    reproduce the paper's published Vs30 raster at float precision for
-    pixels outside any observation's MVN neighbourhood.
+    The 30 sample points all sit further from any observation than
+    ``MAX_DIST_M``, so the MVN spatial-adjustment step contributes nothing
+    to their predicted Vs30 — only the categorical posterior and hybrid
+    slope modification do. Those two stages reproduce the legacy R
+    pipeline at float precision, so we can pin them tightly against the
+    paper's published values.
 
-    The assertions use median + 80th-percentile thresholds rather than a
-    hard rtol because a small minority of prior-dominated pixels have
-    larger discrepancies from the paper (up to ~19 % in the worst case)
-    due to categorical/hybrid edge-case differences between the legacy
-    R pipeline and the refactored Python one. Those outliers are
-    independent of MVN conditioning and known to exist. The median must
-    stay tight because any drift in the common-case codepath would show
-    up there immediately.
+    The MVN step is intentionally outside this test's scope. foster_2019
+    is itself a known-flawed model, and the refactored implementation
+    approximates it rather than reproducing it exactly: the legacy R and
+    Python MVN fitting routines differ numerically, and matching the
+    legacy behaviour for a flawed model is not worth the engineering
+    cost. The refactored MVN is the accepted reference going forward.
+
+    Notes
+    -----
+    The assertions use a very tight threshold on the median and a looser one
+    on the upper tail. A small minority of points have larger errors due to
+    known edge cases in the categorical posterior and hybrid slope steps.
+    Tightening the tail threshold to chase those outliers would just make
+    the test fail without exposing any real regression.
     """
     cfg = load_fixed_model_config(constants.FixedModelVersion.FOSTER_2019_APPROX)
     bench_df = pd.read_csv(FOSTER_2019_APPROX_BENCHMARK_POINTS_CSV)
@@ -157,28 +144,7 @@ def test_modified_foster_2019():
 
 
 def test_jaehwi_v1p0():
-    """jaehwi_v1p0 full-domain pipeline matches benchmark.
-
-    Tolerance is set to 2e-4 (5x tighter than the default 1e-3) because
-    ``vs30/resources/observations/jaehwi_v1p0_independent_observations.csv``
-    now contains the exact NZTM coordinates jaehwi's legacy fork
-    produces (the file's ``easting``/``northing`` columns are sourced
-    from a legacy ``measured_sites.csv`` run, preserving its float32-
-    precision lat/lon→NZTM transform). With identical observation
-    coords, refactored and legacy agree to within ~1.1e-4 relative on
-    both bands; the residual is from minor numerical/algorithmic
-    differences (likely BLAS/LAPACK linear algebra in the MVN step,
-    independent of model-level logic):
-
-    - Band 1 (Vs30 mean): max 6.1e-5 relative.
-    - Band 2 (Vs30 stdv): max 1.1e-4 relative.
-
-    rtol = 2e-4 sits ~1.8x above the observed Band 2 max, giving
-    headroom for minor BLAS / numpy version drift while staying tight
-    enough to flag any real regression. If this test starts failing on
-    margin, regenerate the benchmark and re-measure rather than just
-    widening the tolerance.
-    """
+    """jaehwi_v1p0 full-domain pipeline matches benchmark."""
     run_benchmark(
         constants.FixedModelVersion.JAEHWI_V1P0,
         BENCHMARK_NZ_GRID,

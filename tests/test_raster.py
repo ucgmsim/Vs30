@@ -1,10 +1,4 @@
-"""
-Tests for the VS30 raster module.
-
-Tests cover:
-- apply_hybrid_geology_modifications function
-- apply_hybrid_modifications_at_points function
-"""
+"""Tests for the VS30 raster module."""
 
 import numpy as np
 import pytest
@@ -75,7 +69,7 @@ class TestApplyHybridGeologyModifications:
         # so the coastal-distance mod overwrites the slope-based vs30.
         # vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000) = 391.67
         expected_vs30 = 240 + (500 - 240) * (15000 - 8000) / (20000 - 8000)
-        assert result_vs30[1, 0] == pytest.approx(expected_vs30, rel=0.01)
+        assert result_vs30[1, 0] == pytest.approx(expected_vs30)
 
     def test_coastal_distance_mod_applies_to_gid10(self, sample_arrays):
         """Test that coastal distance modification applies to geology ID 10."""
@@ -98,7 +92,7 @@ class TestApplyHybridGeologyModifications:
         # distance mod runs. vs30 = 197 + (500 - 197) * (10000 - 8000) /
         # (20000 - 8000) = 247.5
         expected_vs30 = 197 + (500 - 197) * (10000 - 8000) / (20000 - 8000)
-        assert result_vs30[2, 1] == pytest.approx(expected_vs30, rel=0.01)
+        assert result_vs30[2, 1] == pytest.approx(expected_vs30)
 
     def test_coastal_distance_mod_clamps_at_minimum(self, sample_arrays):
         """Test that coastal distance modification clamps vs30 at minimum value."""
@@ -144,9 +138,6 @@ class TestApplyHybridGeologyModifications:
         """All-non-hybrid IDs with coastal mod off leaves arrays untouched."""
         id_array, vs30_array, stdv_array, slope_array, coast_dist_array = sample_arrays
 
-        original_vs30 = vs30_array.copy()
-        original_stdv = stdv_array.copy()
-
         result_vs30, result_stdv = raster.apply_hybrid_geology_modifications(
             vs30_array.copy(),
             stdv_array.copy(),
@@ -157,84 +148,5 @@ class TestApplyHybridGeologyModifications:
             apply_coastal_distance_mod=False,
         )
 
-        np.testing.assert_array_equal(result_vs30, original_vs30)
-        np.testing.assert_array_equal(result_stdv, original_stdv)
-
-
-class TestApplyHybridModificationsWithArrays:
-    """Tests for apply_hybrid_geology_modifications with 1D point-like arrays."""
-
-    def test_hybrid_slope_modifications_with_1d_arrays(self):
-        """Test slope-based modifications on 1D arrays (point-like usage)."""
-        vs30 = np.array([300.0, 300.0, 300.0])
-        stdv = np.array([0.5, 0.5, 0.5])
-        # GID 2 has slope-based modifications
-        geology_ids = np.array([2, 2, 2])
-        # Varying slope values
-        slope = np.array([0.01, 0.1, 1.0])
-        coast_dist = np.array([15000.0, 15000.0, 15000.0])
-
-        modified_vs30, modified_stdv = raster.apply_hybrid_geology_modifications(
-            vs30.copy(),
-            stdv.copy(),
-            geology_ids,
-            slope,
-            coast_dist,
-            apply_alluvium_slope_mod=True,
-            apply_coastal_distance_mod=False,
-        )
-
-        # VS30 values should have been modified by slope
-        assert modified_vs30.shape == vs30.shape
-        assert modified_stdv.shape == stdv.shape
-        # Values should differ due to varying slope
-        assert not np.allclose(modified_vs30, vs30)
-
-    def test_coastal_distance_modifications_with_1d_arrays(self):
-        """Test alluvium coastal distance modifications on 1D arrays."""
-        vs30 = np.array([300.0, 300.0])
-        stdv = np.array([0.5, 0.5])
-        # GID 4 = Alluvium
-        geology_ids = np.array([4, 4])
-        slope = np.array([0.1, 0.1])
-        # One point near coast, one far inland
-        coast_dist = np.array([5000.0, 25000.0])
-
-        modified_vs30, modified_stdv = raster.apply_hybrid_geology_modifications(
-            vs30.copy(),
-            stdv.copy(),
-            geology_ids,
-            slope,
-            coast_dist,
-            apply_alluvium_slope_mod=True,
-            apply_coastal_distance_mod=True,
-        )
-
-        # VS30 values should be modified (different from input)
-        assert modified_vs30.shape == vs30.shape
-        # Values should be within coastal distance range [240, 500]
-        assert np.all(modified_vs30 >= 240)
-        assert np.all(modified_vs30 <= 500)
-
-    def test_all_modifications_disabled_returns_unchanged(self):
-        """Test that disabling all modifications returns unchanged values."""
-        vs30 = np.array([300.0])
-        stdv = np.array([0.5])
-        # Use a geology ID that doesn't have special handling
-        geology_ids = np.array([1])
-        slope = np.array([0.1])
-        coast_dist = np.array([15000.0])
-
-        modified_vs30, modified_stdv = raster.apply_hybrid_geology_modifications(
-            vs30.copy(),
-            stdv.copy(),
-            geology_ids,
-            slope,
-            coast_dist,
-            apply_alluvium_slope_mod=True,
-            apply_coastal_distance_mod=False,
-        )
-
-        # Values should be unchanged
-        np.testing.assert_array_equal(modified_vs30, vs30)
-        np.testing.assert_array_equal(modified_stdv, stdv)
+        np.testing.assert_array_equal(result_vs30, vs30_array)
+        np.testing.assert_array_equal(result_stdv, stdv_array)

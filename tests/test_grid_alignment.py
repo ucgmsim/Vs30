@@ -1,21 +1,12 @@
-"""
-Test that the canonical grid configurations used in production and
-benchmarks produce pixel centres aligned with IwahashiPike pixel centres.
-
-If a grid's pixel centres land between IwahashiPike centres, GDAL's
-nearest-neighbour resampling has to break a tie at every pixel — which is
-non-deterministic across GDAL versions and produces ~22 % terrain ID
-differences vs the IwahashiPike-aligned grid.
-
-These tests pin the alignment as a contract.
-"""
+"""Tests that canonical grid configs are pixel-aligned with IwahashiPike (avoids nondeterministic GDAL nearest-neighbour tie-breaking)."""
 
 import rasterio
 
+from test_benchmarks import BENCHMARK_NZ_GRID
 from vs30 import config, constants
 
 
-def _assert_grid_aligned_with_iwahashipike(grid: config.GridConfig) -> None:
+def assert_grid_aligned_with_iwahashipike(grid: config.GridConfig) -> None:
     """Assert every pixel centre of the grid lands on an IwahashiPike pixel centre."""
     iw_path = constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
     with rasterio.open(iw_path) as src:
@@ -55,12 +46,9 @@ def _assert_grid_aligned_with_iwahashipike(grid: config.GridConfig) -> None:
 
 def test_full_nz_grid_config_aligned_with_iwahashipike():
     """The production NZ-wide grid must be IwahashiPike-aligned."""
-    _assert_grid_aligned_with_iwahashipike(config.FULL_NZ_GRID_CONFIG)
+    assert_grid_aligned_with_iwahashipike(config.FULL_NZ_GRID_CONFIG)
 
 
 def test_benchmark_nz_grid_aligned_with_iwahashipike():
     """The 5 km benchmark grid must also be IwahashiPike-aligned."""
-    # pytest adds tests/ to sys.path, matching the existing convention used
-    # in tests/test_grid_points_consistency.py:20 and tests/test_benchmarks.py:30.
-    from test_benchmarks import BENCHMARK_NZ_GRID
-    _assert_grid_aligned_with_iwahashipike(BENCHMARK_NZ_GRID)
+    assert_grid_aligned_with_iwahashipike(BENCHMARK_NZ_GRID)

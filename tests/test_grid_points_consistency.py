@@ -1,38 +1,18 @@
-"""
-Test that grid and points pipelines produce consistent Vs30 values
-across the full NZ domain for all fixed model versions.
-
-For each test point, a tiny 3x3 grid (300m x 300m at 100m resolution) is
-generated and run through grid_pipeline.  The center pixel is compared
-against the batched points_pipeline result at the same coordinates.
-
-The test is split into two tiers:
-- Fast tier: smoke test over 3 representative cities for the two
-  model versions without coastal distance (foster_2019_approx, jaehwi_v1p0).
-  Runs in ~45 s and is enabled by default.
-- Slow tier (--runslow): full 38-point coverage for all 4 model versions.
-  Runs in ~35-45 minutes.
-"""
+"""Tests that grid and points pipelines produce consistent Vs30 values for the same locations."""
 
 import numpy as np
 import pandas as pd
 import pytest
-from conftest import FIXTURES_DIR, load_fixed_model_config
 from qcore import coordinates
 
+from conftest import FIXTURES_DIR, load_fixed_model_config
 from vs30 import config, constants, gapfill, pipeline
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 POINTS_CSV = FIXTURES_DIR / "consistency_test_points.csv"
 
-# Stdv needs a wider tolerance because the posterior variance depends on the covariance structure of
-# the observations: the points pipeline samples slope/coastal distance directly from source data at
-# each point's exact coordinates, while the grid pipeline uses resampled pixel values. Small
-# differences in those inputs propagate nonlinearly into the MVN posterior variance, producing
-# stdv discrepancies up to ~9.4% even when Vs30 agrees to within 1e-7.
+# Stdv needs a wider tolerance because the points pipeline samples slope/coast distance
+# at exact coordinates while the grid pipeline uses resampled pixel values, and these
+# small input differences propagate nonlinearly into the MVN posterior variance.
 STDV_RTOL = 0.10
 
 # Half-width for the 3x3 local grid (150m each side of center -> 300m / 100m = 3 pixels).
@@ -55,13 +35,8 @@ ALL_VERSIONS = [
 
 # Fast-tier point subset: 3 geologically distinct cities covering the north
 # (volcanic Auckland), central (complex Wellington), and south (alluvial
-# Christchurch). Enough to smoke-test the grid/points pipelines without
-# incurring the full 38-point cost.
+# Christchurch). Enough to smoke-test the grid/points pipelines.
 FAST_POINT_NAMES = ["auckland", "wellington", "christchurch"]
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def load_test_points() -> pd.DataFrame:
@@ -199,19 +174,14 @@ def check_consistency_for_version(
         pytest.fail(msg)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize("version", FAST_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_fast(version):
-    """Grid/points consistency smoke test: 3 cities, 2 simple models (~45 s total)."""
+    """Grid/points consistency smoke test: 3 cities, 2 simple models."""
     check_consistency_for_version(version, point_filter=FAST_POINT_NAMES)
 
 
 @pytest.mark.slow
 @pytest.mark.parametrize("version", ALL_VERSIONS, ids=lambda v: v.value)
 def test_grid_points_consistency_slow(version):
-    """Full grid/points consistency: all 38 points for all 4 model versions."""
+    """Full grid/points consistency: many test points across all model versions."""
     check_consistency_for_version(version)

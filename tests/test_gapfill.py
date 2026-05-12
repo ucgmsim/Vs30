@@ -1,10 +1,4 @@
-"""
-Tests for gap-fill nodata classification and nearest-neighbor filling.
-
-Validates that classify_nodata correctly distinguishes on-land gaps (fillable)
-from water pixels (GID=0) and offshore pixels (outside coastline), and that
-fill_nodata_grid copies the nearest valid neighbor's values.
-"""
+"""Tests for the gap-fill module."""
 
 import numpy as np
 import rasterio
@@ -49,13 +43,7 @@ def test_classify_nodata_excludes_water_and_offshore():
 
 
 def test_fill_nodata_grid_nearest_neighbor():
-    """fill_nodata_grid should fill an on-land gap with the nearest valid value.
-
-    Constructs a 3x3 grid centered on Wellington CBD with the center pixel
-    set to NaN. The four edge-adjacent pixels have distinct values; the
-    nearest-neighbor fill should copy from one of them (all equidistant,
-    so cKDTree picks the first match).
-    """
+    """fill_nodata_grid fills an on-land NaN gap with the nearest valid value."""
     # 3x3 grid at 100m spacing, placed so pixel (1,1) center = (1749050, 5427050)
     # Origin is the top-left corner of pixel (0,0).
     # pixel center = origin + (index + 0.5) * pixel_size
@@ -86,6 +74,7 @@ def test_fill_nodata_grid_nearest_neighbor():
         vs30, stdv, geology_ids, profile
     )
 
+    # All four edge neighbors are equidistant; KDTree picks the first in row-major order.
     assert filled_vs30[1, 1] == 250.0
     assert filled_stdv[1, 1] == 0.6
 
@@ -97,11 +86,7 @@ def test_fill_nodata_grid_nearest_neighbor():
 
 
 def test_create_local_grid_config_expansion():
-    """When gap-fill can't find a valid donor in the initial local grid, it
-    retries with a larger grid. create_local_grid_config builds these grids.
-    This test checks that the expanded grid is larger but stays centered on
-    the same point and keeps its pixels aligned to the full NZ grid.
-    """
+    """create_local_grid_config: bigger half_width → bigger grid, same centre, same pixel lattice as the full NZ grid."""
     dx = config.FULL_NZ_GRID_CONFIG.grid_dx
     dy = config.FULL_NZ_GRID_CONFIG.grid_dy
 
@@ -120,11 +105,9 @@ def test_create_local_grid_config_expansion():
         + n_pixels * dy
     )
 
-    # Use the production constants directly so this test fails if a future
-    # constant change violates the pixel-edge constraint that
-    # create_local_grid_config requires (half_width must equal k*dx + dx/2).
-    half_dx = dx / 2
-    assert (constants.GAPFILL_INITIAL_HALF_WIDTH_M - half_dx) % dx == 0, (
+    # Production constants must satisfy create_local_grid_config's pixel-edge
+    # constraint (half_width = k*dx + dx/2).
+    assert (constants.GAPFILL_INITIAL_HALF_WIDTH_M - dx / 2) % dx == 0, (
         f"GAPFILL_INITIAL_HALF_WIDTH_M = {constants.GAPFILL_INITIAL_HALF_WIDTH_M} "
         f"must equal k*dx + dx/2 for create_local_grid_config to produce "
         f"pixel-aligned local grids."
@@ -162,13 +145,8 @@ def test_create_local_grid_config_expansion():
         expanded_grid.grid_ymin + expanded_grid.grid_ymax
     ) / 2
 
-    # Both grids should share the same pixel-centre lattice as the full NZ
-    # grid. Pixel centres of a grid are at xmin + dx/2 + n*dx. Two grids
-    # share the same lattice iff their xmin values are an integer number of
-    # dx apart. (With pixel-edge bounds and a pixel-centre snap, xmin is
-    # always snap_e - half_width where snap_e is a full NZ pixel centre and
-    # half_width = n*dx + dx/2, so xmin is also a full NZ pixel centre —
-    # i.e. (xmin - full_xmin) % dx == 0.)
+    # Both grids share the full NZ grid's pixel-centre lattice
+    # (xmin offsets are an integer number of dx away from the full grid's xmin).
     assert initial_grid.grid_dx == dx
     assert expanded_grid.grid_dx == dx
     assert (

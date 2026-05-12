@@ -1,9 +1,4 @@
-"""
-Tests for the VS30 utils module.
-
-Tests cover:
-- combine_vs30_models: Model combination in log-space
-"""
+"""Tests for the VS30 utils module."""
 
 import numpy as np
 import pytest
@@ -12,11 +7,6 @@ from vs30 import constants, utils
 
 
 class TestCombineVs30Models:
-    """Tests for the combine_vs30_models function.
-
-    Combines geology and terrain Vs30 models using log-space weighted
-    mixture.
-    """
 
     def test_equal_ratio_gives_geometric_mean(self):
         """Test that ratio=1.0 gives geometric mean, not arithmetic mean."""
@@ -25,7 +15,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])
 
-        combined_vs30, combined_stdv = utils.combine_vs30_models(
+        combined_vs30, _ = utils.combine_vs30_models(
             geol_vs30,
             geol_stdv,
             terr_vs30,
@@ -35,10 +25,8 @@ class TestCombineVs30Models:
         )
 
         # Geometric mean of 200 and 400 is sqrt(200*400) ≈ 282.84
-        # Arithmetic mean would be 300
         expected_geometric = np.sqrt(200.0 * 400.0)
-        assert combined_vs30[0] == pytest.approx(expected_geometric, rel=0.01)
-        assert combined_vs30[0] < 300.0  # Must be less than arithmetic mean
+        assert combined_vs30[0] == pytest.approx(expected_geometric)
 
     def test_ratio_2_gives_more_weight_to_geology(self):
         """Test that ratio=2.0 gives geology twice the weight of terrain."""
@@ -47,7 +35,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.3])
 
-        combined_vs30, combined_stdv = utils.combine_vs30_models(
+        combined_vs30, _ = utils.combine_vs30_models(
             geol_vs30,
             geol_stdv,
             terr_vs30,
@@ -59,12 +47,8 @@ class TestCombineVs30Models:
         # With ratio=2, w_g = 2/3, w_t = 1/3
         # In log-space: log_comb = (2/3)*log(200) + (1/3)*log(400)
         # exp(log_comb) = 200^(2/3) * 400^(1/3) ≈ 251.98
-        # Result should be closer to geology (200) than terrain (400)
-        assert combined_vs30[0] < 300.0  # Below midpoint
-        assert combined_vs30[0] > 200.0  # Above geology
-        # More specifically, check against expected value
         expected = np.exp((2 / 3) * np.log(200.0) + (1 / 3) * np.log(400.0))
-        assert combined_vs30[0] == pytest.approx(expected, rel=0.01)
+        assert combined_vs30[0] == pytest.approx(expected)
 
     def test_stdv_weighting_lower_stdv_gets_more_weight(self):
         """Test that stdv weighting gives more weight to model with lower stdv."""
@@ -103,7 +87,7 @@ class TestCombineVs30Models:
 
         # Equal stdv means equal weight → geometric mean
         expected_geometric = np.sqrt(200.0 * 400.0)
-        assert combined_vs30[0] == pytest.approx(expected_geometric, rel=0.01)
+        assert combined_vs30[0] == pytest.approx(expected_geometric)
 
     def test_combined_stdv_formula(self):
         """Test that combined stdv uses mixture of log-normals formula."""
@@ -112,7 +96,7 @@ class TestCombineVs30Models:
         terr_vs30 = np.array([400.0])
         terr_stdv = np.array([0.4])
 
-        combined_vs30, combined_stdv = utils.combine_vs30_models(
+        _, combined_stdv = utils.combine_vs30_models(
             geol_vs30,
             geol_stdv,
             terr_vs30,
@@ -130,6 +114,6 @@ class TestCombineVs30Models:
             0.5 * ((log_g - log_comb) ** 2 + 0.3**2)
             + 0.5 * ((log_t - log_comb) ** 2 + 0.4**2)
         )
-        assert combined_stdv[0] == pytest.approx(expected_stdv, rel=0.01)
+        assert combined_stdv[0] == pytest.approx(expected_stdv)
 
 

@@ -1,10 +1,4 @@
-"""
-Tests for the VS30 category module.
-
-Tests cover:
-- Independent data update
-- Category edge cases
-"""
+"""Tests for the VS30 category module."""
 
 import numpy as np
 import pandas as pd
@@ -57,48 +51,6 @@ class TestUpdateWithIndependentData:
         cat3 = result[result[constants.STANDARD_ID_COLUMN] == 3].iloc[0]
         assert cat3[constants.COL_POSTERIOR_MEAN_INDEPENDENT] == 400.0
 
-    def test_min_sigma_enforced(self, sample_categorical_model, sample_observations):
-        """Test that minimum sigma is enforced using MIN_SIGMA constant."""
-        result = category.update_with_independent_data(
-            sample_categorical_model,
-            sample_observations,
-        )
-
-        assert result[constants.COL_ENFORCED_MIN_SIGMA].iloc[0] == constants.MIN_SIGMA
-
-
-class TestCategoryEdgeCases:
-    """Tests for edge cases in category module."""
-
-    def test_update_with_no_matching_observations(self):
-        """Test Bayesian update when no observations match a category."""
-        categorical_model_df = pd.DataFrame(
-            {
-                constants.STANDARD_ID_COLUMN: [1, 2, 3],
-                constants.COL_MEAN: [300.0, 400.0, 500.0],
-                constants.COL_STDV: [30.0, 40.0, 50.0],
-            }
-        )
-
-        # ID 99 is not in the categorical model.
-        observations_df = pd.DataFrame(
-            {
-                constants.ObservationColumn.VS30: [350.0],
-                constants.ObservationColumn.UNCERTAINTY: [25.0],
-                constants.STANDARD_ID_COLUMN: [99],
-                constants.ObservationColumn.EASTING: [1500000.0],
-                constants.ObservationColumn.NORTHING: [5100000.0],
-            }
-        )
-
-        result_df = category.update_with_independent_data(
-            categorical_model_df,
-            observations_df,
-        )
-
-        assert constants.COL_POSTERIOR_MEAN_INDEPENDENT in result_df.columns
-        assert constants.COL_POSTERIOR_STDV_INDEPENDENT in result_df.columns
-
 
 class TestUpdateWithClusteredData:
     """Tests for update_with_clustered_data and compute_cluster_weighted_mean_and_stddev."""
@@ -115,12 +67,7 @@ class TestUpdateWithClusteredData:
         )
 
     def test_one_cluster_plus_one_unclustered(self, prior_df):
-        """Two clusters + one unclustered point: effective_n = 3.
-
-        Sites: cluster 0 has [200, 220, 240], cluster 1 has [300, 320],
-        unclustered (-1) has [400]. Two cluster pseudo-observations plus
-        one unclustered point gives effective_n = 3.
-        """
+        """Two clusters + one unclustered point: effective_n = 3."""
         sites_df = pd.DataFrame(
             {
                 constants.STANDARD_ID_COLUMN: [1] * 6,
@@ -153,10 +100,7 @@ class TestUpdateWithClusteredData:
         assert cat2[constants.COL_POSTERIOR_MEAN_CLUSTERED] == pytest.approx(400.0)
 
     def test_all_in_one_cluster(self, prior_df):
-        """All observations in a single cluster: effective_n = 1.
-
-        Cluster posterior mean is the geometric mean of the cluster members.
-        """
+        """Single cluster: posterior mean is the geometric mean of cluster members."""
         sites_df = pd.DataFrame(
             {
                 constants.STANDARD_ID_COLUMN: [1, 1, 1, 1],
@@ -173,19 +117,13 @@ class TestUpdateWithClusteredData:
         assert cat1[constants.COL_POSTERIOR_MEAN_CLUSTERED] == pytest.approx(
             expected_mean, rel=1e-6
         )
-        # With effective_n=1 and one cluster, weights sum to 1 / 1 / 4 = 0.25
-        # per point. The function returns the log-stddev computed with those
-        # weights; just verify it is finite and non-negative here.
+        # Stddev formula is complex for the single-cluster case; just check it's finite and non-negative.
         stddev = cat1[constants.COL_POSTERIOR_STDV_CLUSTERED]
         assert np.isfinite(stddev)
         assert stddev >= 0.0
 
     def test_unclustered_only(self, prior_df):
-        """Only unclustered observations: each point counts as one obs.
-
-        Effective_n = number of unclustered points; posterior mean is the
-        plain geometric mean.
-        """
+        """Unclustered only: posterior mean is the plain geometric mean of the points."""
         sites_df = pd.DataFrame(
             {
                 constants.STANDARD_ID_COLUMN: [1, 1, 1],

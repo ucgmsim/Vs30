@@ -1,11 +1,4 @@
-"""
-Tests for the VS30 spatial module.
-
-Tests cover:
-- Spatial adjustment computations (MVN conditioning)
-- Cluster subsampling
-- Point-based MVN adjustment
-"""
+"""Tests for the VS30 spatial module."""
 
 import functools
 
@@ -55,8 +48,8 @@ class TestComputeSpatialAdjustmentForPixel:
         )
 
         # Observation is higher (280), prior is 250, update should increase
-        assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv = result
+        assert result is not None
+        updated_vs30, _ = result
         assert updated_vs30 > pixel.vs30
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
@@ -72,8 +65,8 @@ class TestComputeSpatialAdjustmentForPixel:
         )
 
         # Adding observation should reduce uncertainty
-        assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv = result
+        assert result is not None
+        _, updated_stdv = result
         assert updated_stdv < pixel.stdv
 
     def test_no_observations_returns_unchanged_vs30(self, pixel):
@@ -95,8 +88,8 @@ class TestComputeSpatialAdjustmentForPixel:
         )
 
         # VS30 should be unchanged when no nearby observations
-        assert result is not None  # Type guard: narrows Optional return type
-        updated_vs30, updated_stdv = result
+        assert result is not None
+        updated_vs30, _ = result
         assert updated_vs30 == pixel.vs30
 
 
@@ -104,12 +97,12 @@ class TestComputeMvnAtPoints:
     """Tests for compute_spatial_point_adjustments function."""
 
     def test_no_observations_returns_prior(self):
-        """Test that no observations returns prior values with shrunk stdv."""
+        """Test that no observations returns prior vs30 unchanged."""
         points = np.array([[1500000, 5100000], [1501000, 5101000]])
         model_vs30 = np.array([300.0, 400.0])
         model_stdv = np.array([30.0, 40.0])
 
-        mvn_vs30, mvn_stdv = spatial.compute_spatial_point_adjustments(
+        mvn_vs30, _ = spatial.compute_spatial_point_adjustments(
             points=points,
             model_vs30=model_vs30,
             model_stdv=model_stdv,
@@ -118,7 +111,7 @@ class TestComputeMvnAtPoints:
         )
 
         # Should return prior vs30 unchanged
-        np.testing.assert_array_equal(mvn_vs30, model_vs30)
+        assert mvn_vs30 == pytest.approx(model_vs30)
 
     def test_with_nearby_observations(self):
         """Test spatial adjustment with nearby observations."""
@@ -147,19 +140,15 @@ class TestComputeMvnAtPoints:
         )
 
         # Should adjust toward observation (increase vs30)
-        assert mvn_vs30[0] > model_vs30[0], (
-            "Adjustment should pull vs30 toward observation"
-        )
+        assert mvn_vs30[0] > model_vs30[0]
         # Uncertainty should decrease
-        assert mvn_stdv[0] < model_stdv[0], (
-            "Uncertainty should decrease with observation"
-        )
+        assert mvn_stdv[0] < model_stdv[0]
 
 
 class TestFindAffectedPixels:
     """Tests for find_affected_pixels."""
 
-    def _build_raster_data(self, n_rows: int = 5, n_cols: int = 5) -> spatial.RasterData:
+    def build_raster_data(self, n_rows: int = 5, n_cols: int = 5) -> spatial.RasterData:
         """Build a small RasterData with valid pixels everywhere.
 
         Pixel size is 100m, origin (1500000, 5100000) at the top-left, so
@@ -171,14 +160,8 @@ class TestFindAffectedPixels:
         return spatial.RasterData.from_arrays(vs30=vs30, stdv=stdv, transform=transform)
 
     def test_find_affected_pixels_single_obs_in_centre(self):
-        """One obs at grid centre with 150m radius affects 9 nearest pixels.
-
-        The 5×5 grid has pixel centres on a 100m lattice starting at
-        (1500050, 5099950). An obs at the centre pixel (1500250, 5099750)
-        with a 150m bbox half-width covers cols 1..3 and rows 1..3 (centres
-        within ±150m), i.e. 3×3 = 9 pixels.
-        """
-        raster_data = self._build_raster_data(5, 5)
+        """One obs at the grid centre with 150m half-width covers a 3×3 = 9-pixel bbox (100m lattice)."""
+        raster_data = self.build_raster_data(5, 5)
         obs_data = spatial.ObservationData(
             locations=np.array([[1500250.0, 5099750.0]]),
             model_stdv=np.array([0.5]),
@@ -204,7 +187,7 @@ class TestFindAffectedPixels:
 
     def test_find_affected_pixels_far_obs_zero(self):
         """An observation far outside the raster bounds affects zero pixels."""
-        raster_data = self._build_raster_data(5, 5)
+        raster_data = self.build_raster_data(5, 5)
         # Obs ~1 km outside the raster bounds.
         obs_data = spatial.ObservationData(
             locations=np.array([[1600000.0, 5200000.0]]),
