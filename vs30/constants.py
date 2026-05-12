@@ -32,11 +32,11 @@ MODEL_VERSION_TO_CONFIG = {
     FixedModelVersion.VIKTOR_CPT_CLUSTERING: CONFIGS_DIR / "viktor_cpt_clustering.yaml",
 }
 
-# Path to the geospatial directory containing shapefiles, rasters, and other input data
-GEOSPATIAL_DIR = Path(__file__).parent / "resources" / "geospatial"
-
-# Path to the resources directory containing CSV files with categorical model parameters
+# Path to the package resources directory (bundled CSVs and geospatial data).
 RESOURCE_PATH = Path(__file__).parent / "resources"
+
+# Geospatial sub-directory: shapefiles, rasters, and other input data.
+GEOSPATIAL_DIR = RESOURCE_PATH / "geospatial"
 
 # Config YAML keys that hold CSV file paths, mapped to their subdirectory
 # under RESOURCE_PATH.
@@ -71,9 +71,9 @@ REQUIRED_CONFIG_FIELDS: tuple[str, ...] = (
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 COV_REDUC: float = 1.5
 
-# Minimum distance (meters) enforced in correlation calculations to prevent
-# division by zero or correlation=1 when points are exactly co-located.
-# The correlation function uses exp(-distance/phi), so distance=0 gives correlation=1.
+# Lower bound (meters) on distances passed to correlation functions.
+# Without it, co-located observations would produce singular covariance
+# (exponential gives corr=1 exactly) or NaN (Matérn Bessel singularity).
 MIN_DIST_ENFORCED: float = 0.1
 
 # Maximum distance (meters) for considering observations in multivariate normal
@@ -86,9 +86,9 @@ MAX_DIST_M: int = 10000
 # observations, only the MAX_POINTS closest observations will be considered.
 MAX_POINTS: int = 500
 
-# K value for standard deviation based weighting when combining geology and
-# terrain models. Represents the exponent for inverse variance weighting:
-# weight ~ (sigma^2)^-k. Only used when combination_method is "standard_deviation_weighting".
+# Exponent for inverse-variance weighting when combining geology and terrain
+# models: weight ~ (sigma^2)^-K. Only used when combination_method is
+# CombinationMethod.STANDARD_DEVIATION_WEIGHTING.
 K_VALUE: float = 3.0
 
 # Small epsilon value added to variance when computing inverse-variance weights
@@ -113,9 +113,8 @@ MIN_GROUP: int = 5
 # (DBSCAN epsilon parameter). Points further apart will be in separate clusters.
 EPS: float = 15000.0
 
-# INTERNAL DATA FILES
-# Filenames for input data files bundled with the package.
-# These are relative to the vs30/resources/geospatial directory.
+# Filenames for input data files bundled with the package, relative to
+# vs30/resources/geospatial.
 
 # Terrain classification raster (IwahashiPike terrain categories)
 TERRAIN_RASTER_FILENAME: str = "IwahashiPike.tif"
@@ -166,7 +165,9 @@ TERRAIN_VS30_MEAN_STDDEV_FILENAME: str = (
 )
 
 # Final geology Vs30 after slope, coastal distance, and spatial adjustment
-GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = (
+    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
+)
 
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
@@ -174,8 +175,7 @@ COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
 # Combined VS30 output before gap-fill (intermediate output)
 COMBINED_VS30_BEFORE_GAPFILL_FILENAME: str = "combined_vs30_before_gapfill.tif"
 
-# HYBRID GEOLOGY Vs30 MODEL PARAMETERS
-# (Adjusts according to slope and coastal distance)
+# Hybrid-geology Vs30 model parameters (slope and coastal-distance adjustments).
 
 HYBRID_GID4_DIST_MIN: float = 8000.0
 HYBRID_GID4_DIST_MAX: float = 20000.0
@@ -190,8 +190,7 @@ HYBRID_GID10_VS30_MAX: float = 500.0
 
 @dataclass
 class HybridGeologyParams:
-    """
-    Per-geology-group parameters for hybrid Vs30 modifications.
+    """Per-geology-group parameters for hybrid Vs30 modifications.
 
     Attributes
     ----------
@@ -283,11 +282,10 @@ GAPFILL_INITIAL_HALF_WIDTH_M: int = 5050
 # successive expansions of a valid initial half-width remain valid.
 GAPFILL_HALF_WIDTH_EXPANSION_M: int = 5000
 
-# Maximum half-width (meters) for expansion. Prevents unbounded growth if
-# a fillable point has no valid donors nearby. Set to 50050 so the
-# expansion sequence (5050, 10050, ..., 50050) ends at 10 iterations
-# matching the previous max of 50000 with the old initial of 5000.
-GAPFILL_MAX_HALF_WIDTH_M: int = 50050
+# Ceiling (meters) on the gap-fill donor-search half-width: the
+# expansion loop stops when half_width exceeds this value. ~50 km is
+# beyond plausible donor distances within NZ.
+GAPFILL_MAX_HALF_WIDTH_M: int = 50000
 
 # Default memory limit (GB) for spatial boolean arrays used during MVN chunking.
 MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB: float = 1.0
@@ -369,8 +367,7 @@ COL_STDV_BEFORE_GAPFILL: str = "stdv_before_gapfill"
 
 
 class ModelType(StrEnum):
-    """For specifying whether output should be generated using the geology model only, the
-    terrain model only, or combination of both models."""
+    """Selects which Vs30 model to produce: geology, terrain, or combined."""
 
     GEOLOGY = "geology"
     TERRAIN = "terrain"
