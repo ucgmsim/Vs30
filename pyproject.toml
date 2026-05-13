@@ -71,7 +71,7 @@ omit = [
 DEP001 = ["conftest", "setuptools", "test_benchmarks"]
 DEP002 = ["ty"]
 DEP003 = ["setuptools"]
-DEP004 = ["pytest"]
+DEP004 = ["pytest", "pyproj"]
 
 [tool.numpydoc_validation]
 checks = [
