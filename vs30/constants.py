@@ -101,8 +101,10 @@ WEIGHT_EPSILON_DIV_BY_ZERO: float = 1.0e-10
 # for each geology and terrain category.
 N_PRIOR: int = 3
 
-# Minimum standard deviation (log-space) allowed after Bayesian update.
-# Prevents over-confidence when many observations are available.
+# Minimum standard deviation (log-space) enforced on the *prior* before each
+# Bayesian update. Posterior stdv is not re-clipped, so categories starting
+# above MIN_SIGMA can fall below it after updates that strongly agree with the
+# prior mean. Matches the legacy R/Python behaviour.
 MIN_SIGMA: float = 0.5
 
 # DBSCAN clustering parameters for spatially clustered observations
