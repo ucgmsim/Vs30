@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 import rasterio
+import scipy.spatial
 import scipy.spatial.distance
 from tqdm import tqdm
 
@@ -35,6 +36,9 @@ class ObservationData:
     noise_weights : ndarray
         (n_obs,) per-observation weights when constructed with
         ``noisy=True``; all ones otherwise.
+    tree : scipy.spatial.KDTree or None
+        Spatial index over ``locations`` for nearest-neighbour observation
+        queries in the MVN pixel loop. None when there are no observations.
     """
 
     locations: np.ndarray
@@ -42,6 +46,12 @@ class ObservationData:
     log_model_vs30: np.ndarray
     residuals: np.ndarray
     noise_weights: np.ndarray
+    tree: scipy.spatial.KDTree | None = None
+
+    def __post_init__(self):
+        """Build the spatial index from ``locations`` if not supplied."""
+        if self.tree is None and len(self.locations) > 0:
+            self.tree = scipy.spatial.KDTree(self.locations)
 
     @classmethod
     def empty(cls) -> "ObservationData":
@@ -552,19 +562,18 @@ def select_observations_for_pixel(
     max_points: int = constants.MAX_POINTS,
 ) -> np.ndarray:
     """
-    Select observations for a pixel using distance filtering.
+    Select observations for a pixel using a KDTree nearest-neighbour query.
 
     Parameters
     ----------
     pixel : PixelData
         Pixel being updated.
     obs_data : ObservationData
-        Prepared observation data.
+        Prepared observation data. Must carry a populated ``tree``.
     max_dist_m : float
         Maximum distance in meters to consider observations.
     max_points : int
-        Target number of observations; may be exceeded if distances tie at
-        the cutoff.
+        Maximum number of observations to return; the closest are kept.
 
     Returns
     -------
@@ -572,22 +581,17 @@ def select_observations_for_pixel(
         Integer indices into obs_data for the selected observations.
         Empty array if no observations are within range.
     """
-    diff = obs_data.locations - pixel.location
-    distances = np.linalg.norm(diff, axis=1)
-
-    max_points_i = min(max_points, len(distances)) - 1
-    if max_points_i < 0:
+    # tree is None iff locations is empty (see __post_init__); nothing to query.
+    if obs_data.tree is None:
         return np.array([], dtype=np.intp)
-
-    min_dist, cutoff_dist = np.partition(distances, [0, max_points_i])[
-        [0, max_points_i]
-    ]
-    if min_dist > max_dist_m:
-        # Not close enough to any observed locations
-        return np.array([], dtype=np.intp)
-
-    loc_mask = distances <= min(max_dist_m, cutoff_dist)
-    return np.where(loc_mask)[0]
+    k = min(max_points, len(obs_data.locations))
+    distances, indices = obs_data.tree.query(
+        pixel.location, k=k, distance_upper_bound=max_dist_m
+    )
+    distances = np.atleast_1d(distances)
+    indices = np.atleast_1d(indices)
+    # Slots beyond max_dist_m come back with distance=inf and index=n_obs.
+    return indices[np.isfinite(distances)]
 
 
 def compute_spatial_adjustment_for_pixel(
