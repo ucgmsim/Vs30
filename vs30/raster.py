@@ -58,6 +58,11 @@ def load_coast_shapefile() -> gpd.GeoDataFrame:
 def load_coast_union():
     """
     Return the unioned NZ coastline geometry.
+
+    Returns
+    -------
+    shapely.geometry.base.BaseGeometry
+        Unioned NZ coastline polygon.
     """
     return load_coast_shapefile().geometry.union_all()
 
@@ -67,6 +72,11 @@ def load_coast_boundary_union():
     """
     Return the unioned NZ coastline boundary (polygon edges, distinct from
     ``load_coast_union`` which returns the polygon union).
+
+    Returns
+    -------
+    shapely.geometry.base.BaseGeometry
+        Unioned NZ coastline boundary geometry.
     """
     return load_coast_shapefile().geometry.boundary.union_all()
 

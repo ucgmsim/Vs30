@@ -215,6 +215,7 @@ class HybridGeologyParams:
     vs30_values_log10: np.ndarray = field(init=False)
 
     def __post_init__(self):
+        """Precompute ``np.log10(vs30_values)`` for the slope interpolation hot path."""
         self.vs30_values_log10 = np.log10(np.array(self.vs30_values))
 
 

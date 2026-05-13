@@ -45,7 +45,14 @@ class ObservationData:
 
     @classmethod
     def empty(cls) -> "ObservationData":
-        """Construct an instance with zero-length arrays."""
+        """
+        Construct an instance with zero-length arrays.
+
+        Returns
+        -------
+        ObservationData
+            Instance with all arrays empty.
+        """
         return cls(
             locations=np.empty((0, 2)),
             model_stdv=np.empty(0),
@@ -157,6 +164,11 @@ class RasterData:
             Affine transformation for coordinate conversion.
         nodata : float, optional
             No-data sentinel for valid-mask computation.
+
+        Returns
+        -------
+        RasterData
+            Instance with computed valid-pixel mask and flat indices.
         """
         valid_mask, valid_flat_indices = cls.compute_valid_mask(vs30, stdv, nodata)
 
@@ -186,6 +198,11 @@ def validate_raster_data(raster_data: RasterData) -> None:
     """
     Check shape match and finiteness/positivity of Vs30/stdv at valid pixels.
 
+    Parameters
+    ----------
+    raster_data : RasterData
+        Raster data to validate.
+
     Raises
     ------
     ValueError
@@ -204,6 +221,11 @@ def validate_raster_data(raster_data: RasterData) -> None:
 def validate_observations(observations: pd.DataFrame) -> None:
     """
     Check observations have the required columns and positive Vs30/uncertainty.
+
+    Parameters
+    ----------
+    observations : DataFrame
+        Observations to validate.
 
     Raises
     ------
@@ -442,8 +464,9 @@ def grid_points_in_bbox(
 
     Returns
     -------
-    chunk_mask : ndarray, shape (M,), dtype=bool
-        True for grid points falling inside at least one observation bbox.
+    ndarray
+        Shape ``(M,)`` boolean mask; True for grid points inside at least one
+        observation bbox.
     """
     grid_eastings = grid_locs[:, 0]
     grid_northings = grid_locs[:, 1]
