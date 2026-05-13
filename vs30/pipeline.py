@@ -6,6 +6,7 @@ import logging
 import time
 from collections.abc import Callable
 from pathlib import Path
+from typing import TypedDict
 
 import numpy as np
 import pandas as pd
@@ -25,6 +26,22 @@ from vs30 import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class GridPipelineResult(TypedDict, total=False):
+    """
+    Output of :func:`grid_pipeline`. ``total=False`` marks every key as
+    optional, since each is populated only when the relevant model ran.
+    """
+
+    geology_vs30: np.ndarray
+    geology_stdv: np.ndarray
+    geology_ids: np.ndarray
+    terrain_vs30: np.ndarray
+    terrain_stdv: np.ndarray
+    combined_vs30: np.ndarray
+    combined_stdv: np.ndarray
+    profile: dict
 
 
 def load_observations_csv(csv_path: Path) -> pd.DataFrame:
@@ -335,28 +352,30 @@ def compute_component_grid(
 
     if posterior_df is not None:
         logger.info("\n=== STEP 1: SKIPPED - Using pre-computed posterior_df ===")
-    elif do_bayesian_update:
-        logger.info("\n=== STEP 1: Updating Categorical Models ===")
-        posterior_df = compute_categorical_vs30_updates(
-            model_type=model_type,
-            categorical_model_csv=categorical_model_csv,
-            clustered_observations_df=clustered_observations_df,
-            independent_observations_df=independent_observations_df,
-            dbscan_nproc=dbscan_nproc,
-        )
-
-        if output_dir is not None and include_intermediate:
-            posterior_csv_path = (
-                output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
-            )
-            posterior_df.to_csv(posterior_csv_path, index=False)
     else:
-        logger.info(
-            "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
-        )
-        posterior_df = pd.read_csv(
-            categorical_model_csv, comment="#", skipinitialspace=True
-        ).rename(columns=str.strip)
+        assert categorical_model_csv is not None  # type guard: entry check raises if both posterior_df and this are None
+        if do_bayesian_update:
+            logger.info("\n=== STEP 1: Updating Categorical Models ===")
+            posterior_df = compute_categorical_vs30_updates(
+                model_type=model_type,
+                categorical_model_csv=categorical_model_csv,
+                clustered_observations_df=clustered_observations_df,
+                independent_observations_df=independent_observations_df,
+                dbscan_nproc=dbscan_nproc,
+            )
+
+            if output_dir is not None and include_intermediate:
+                posterior_csv_path = (
+                    output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+                )
+                posterior_df.to_csv(posterior_csv_path, index=False)
+        else:
+            logger.info(
+                "\n=== STEP 1: SKIPPED - Using prior categorical models directly ==="
+            )
+            posterior_df = pd.read_csv(
+                categorical_model_csv, comment="#", skipinitialspace=True
+            ).rename(columns=str.strip)
 
     logger.info("\n=== STEP 2: Creating Initial VS30 Arrays ===")
     logger.info(f"Using grid parameters: {grid_config}")
@@ -513,7 +532,7 @@ def grid_pipeline(
     independent_observations_df: pd.DataFrame | None = None,
     geology_posterior_df: pd.DataFrame | None = None,
     terrain_posterior_df: pd.DataFrame | None = None,
-) -> dict[str, np.ndarray | dict | None]:
+) -> GridPipelineResult:
     """
     Compute the Vs30 grid.
 
@@ -625,7 +644,7 @@ def grid_pipeline(
     if independent_observations_df is None and independent_observations_csv is not None:
         independent_observations_df = load_observations_csv(independent_observations_csv)
 
-    result: dict[str, np.ndarray | dict | None] = {}
+    result: GridPipelineResult = {}
     profile: dict | None = None
 
     if run_geology:
@@ -693,7 +712,7 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        assert profile is not None  # invariant: set by compute_component_grid above
+        assert profile is not None  # type guard: both run_geology and run_terrain branches set this above
 
         if fill_gaps:
             # Gap-fill on-land nodata pixels in combined output
@@ -729,6 +748,7 @@ def grid_pipeline(
                 ),
             )
 
+    assert profile is not None  # type guard: at least one of run_geology/run_terrain runs and sets this
     result["profile"] = profile
 
     elapsed_time = time.time() - start_time
@@ -984,29 +1004,33 @@ def points_pipeline(
                 terrain_categorical_csv, comment="#", skipinitialspace=True
             ).rename(columns=str.strip)
 
-    geology_obs_data = (
-        points.prepare_geology_obs_data(
+    if run_geology:
+        assert geol_model_df is not None  # type guard: assigned in the run_geology branch above
+        geology_obs_data = points.prepare_geology_obs_data(
             observations_df,
             geol_model_df,
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             noisy=noisy,
         )
-        if run_geology
-        else None
-    )
-    terrain_obs_data = (
-        points.prepare_terrain_obs_data(observations_df, terr_model_df, noisy=noisy)
-        if run_terrain
-        else None
-    )
+    else:
+        geology_obs_data = None
+
+    if run_terrain:
+        assert terr_model_df is not None  # type guard: assigned in the run_terrain branch above
+        terrain_obs_data = points.prepare_terrain_obs_data(
+            observations_df, terr_model_df, noisy=noisy
+        )
+    else:
+        terrain_obs_data = None
 
     result = {}
     result[constants.ObservationColumn.EASTING] = locations[:, 0]
     result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
     if run_geology:
-        assert geol_model_df is not None  # invariant: required when run_geology
+        assert geol_model_df is not None  # type guard: assigned in the run_geology branch above
+        assert geology_obs_data is not None  # type guard: assigned in the run_geology branch above
         with tqdm(
             total=len(locations), desc="Geology: spatial adjustment", unit="point"
         ) as pbar:
@@ -1039,7 +1063,8 @@ def points_pipeline(
             result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     if run_terrain:
-        assert terr_model_df is not None  # invariant: required when run_terrain
+        assert terr_model_df is not None  # type guard: assigned in the run_terrain branch above
+        assert terrain_obs_data is not None  # type guard: assigned in the run_terrain branch above
         with tqdm(
             total=len(locations), desc="Terrain: spatial adjustment", unit="point"
         ) as pbar:

@@ -225,10 +225,10 @@ def create_local_grid_config(
     snap_n = first_centre_y + round((northing - first_centre_y) / dy) * dy
 
     return config.GridConfig(
-        grid_xmin=snap_e - half_width,
-        grid_xmax=snap_e + half_width,
-        grid_ymin=snap_n - half_width,
-        grid_ymax=snap_n + half_width,
+        grid_xmin=round(snap_e - half_width),
+        grid_xmax=round(snap_e + half_width),
+        grid_ymin=round(snap_n - half_width),
+        grid_ymax=round(snap_n + half_width),
         grid_dx=dx,
         grid_dy=dy,
     )

@@ -326,6 +326,7 @@ def prepare_observation_data(
     ]
 
     if model_type == constants.ModelType.GEOLOGY:
+        assert slope_array is not None and coast_dist_array is not None  # type guard: entry check raises if either is None when GEOLOGY
         rows, cols = rasterio.transform.rowcol(
             raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
         )
