@@ -648,6 +648,7 @@ def compute_spatial_adjustment_for_pixel(
     ):
         return None
 
+    # corr_zero ≈ 1 (slightly less than 1 because correlations.exponential enforces MIN_DIST_ENFORCED before the exp).
     initial_var = (pixel.stdv**2) * corr_zero
 
     if len(obs_indices) == 0:
@@ -839,7 +840,7 @@ def compute_spatial_pixel_adjustments(
     ) as pbar:
         for chunk_start in range(0, len(affected_flat_indices), chunk_size):
             chunk_end = min(chunk_start + chunk_size, len(affected_flat_indices))
-            chunk_indices, chunk_distances = select_observations_for_pixel_batch(
+            batch_indices, batch_distances = select_observations_for_pixel_batch(
                 affected_locs[chunk_start:chunk_end],
                 obs_data,
                 max_dist_m=max_dist_m,
@@ -855,7 +856,7 @@ def compute_spatial_pixel_adjustments(
                         stdv=float(affected_stdv[local_idx]),
                     ),
                     obs_data,
-                    chunk_indices[i][np.isfinite(chunk_distances[i])],
+                    batch_indices[i][np.isfinite(batch_distances[i])],
                     corr_fn,
                     corr_zero=corr_zero,
                     noisy=noisy,
@@ -932,7 +933,7 @@ def compute_spatial_point_adjustments(
 
     corr_zero = corr_fn(np.array([0.0]))[0]
 
-    indices_matrix, distances_matrix = select_observations_for_pixel_batch(
+    batch_indices, batch_distances = select_observations_for_pixel_batch(
         points, obs_data, max_dist_m=max_dist_m, max_points=max_points,
     )
 
@@ -944,7 +945,7 @@ def compute_spatial_point_adjustments(
                 stdv=float(model_stdv[i]),
             ),
             obs_data,
-            indices_matrix[i][np.isfinite(distances_matrix[i])],
+            batch_indices[i][np.isfinite(batch_distances[i])],
             corr_fn,
             corr_zero=corr_zero,
             noisy=noisy,
@@ -1084,6 +1085,7 @@ def compute_spatial_adjustment_on_grid(
         max_points=constants.MAX_POINTS,
         noisy=noisy,
         cov_reduc=constants.COV_REDUC,
+        max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
     )
     logger.info(
         f"Spatial adjustments completed in "
