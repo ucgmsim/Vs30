@@ -555,6 +555,53 @@ def build_covariance_matrix(
     return cov
 
 
+def select_observations_for_pixel_batch(
+    pixel_locations: np.ndarray,
+    obs_data: ObservationData,
+    max_dist_m: float = constants.MAX_DIST_M,
+    max_points: int = constants.MAX_POINTS,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Select observations for a batch of pixels via one KDTree query.
+
+    Parameters
+    ----------
+    pixel_locations : ndarray
+        (N_pix, 2) array of [easting, northing] coordinates in NZTM. A (2,)
+        input for a single pixel is also accepted.
+    obs_data : ObservationData
+        Prepared observation data. ``obs_data.tree`` carries the spatial index.
+    max_dist_m : float
+        Maximum distance in meters to consider observations.
+    max_points : int
+        Maximum number of observations to return per pixel.
+
+    Returns
+    -------
+    indices : ndarray, shape (N_pix, k), dtype intp
+        Indices into ``obs_data.locations``. Slots with no neighbour within
+        ``max_dist_m`` are set to ``len(obs_data.locations)`` (scipy sentinel).
+        ``k = min(max_points, n_obs)``.
+    distances : ndarray, shape (N_pix, k), dtype float64
+        Euclidean distances. Sentinel slots are ``np.inf``.
+    """
+    pixel_locations = np.atleast_2d(pixel_locations)
+    if obs_data.tree is None:
+        return (
+            np.empty((len(pixel_locations), 0), dtype=np.intp),
+            np.empty((len(pixel_locations), 0), dtype=np.float64),
+        )
+    k = min(max_points, len(obs_data.locations))
+    distances, indices = obs_data.tree.query(
+        pixel_locations, k=k, distance_upper_bound=max_dist_m
+    )
+    # Reshape to (N_pix, k) — scipy squeezes the trailing dim when k=1.
+    return (
+        np.asarray(indices).reshape(len(pixel_locations), k),
+        np.asarray(distances).reshape(len(pixel_locations), k),
+    )
+
+
 def select_observations_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
