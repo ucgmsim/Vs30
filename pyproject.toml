@@ -14,7 +14,6 @@ dependencies = [
     "scipy",
     "geopandas",
     "typer",
-    "threadpoolctl",
     "qcore-utils",
     "rasterio",
     "tqdm",
@@ -24,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest", "pyproj"]
 types = ["ty"]
 
 [project.urls]
@@ -69,7 +68,7 @@ omit = [
 
 
 [tool.deptry.per_rule_ignores]
-DEP001 = ["conftest", "setuptools"]
+DEP001 = ["conftest", "setuptools", "test_benchmarks"]
 DEP002 = ["ty"]
 DEP003 = ["setuptools"]
 DEP004 = ["pytest"]
