@@ -145,9 +145,9 @@ def grid(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    max_spatial_boolean_array_memory_gb: typing.Annotated[
+    max_spatial_intermediate_array_memory_gb: typing.Annotated[
         float, typer.Option()
-    ] = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+    ] = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
 ) -> None:
     """
     Run the VS30 grid pipeline using a bundled or user-supplied model config.
@@ -175,8 +175,8 @@ def grid(
         Number of processes for DBSCAN clustering. Use -1 for all cores.
     include_intermediate : bool
         Include intermediate rasters in output.
-    max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
+    max_spatial_intermediate_array_memory_gb : float, optional
+        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
     """
     try:
         config_data = config.resolve_model_config(model)
@@ -209,7 +209,7 @@ def grid(
         do_bayesian_update=config_data["do_bayesian_update"],
         include_intermediate=include_intermediate,
         dbscan_nproc=dbscan_nproc,
-        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+        max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
         apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
         fill_gaps=config_data["fill_gaps"],
     )

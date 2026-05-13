@@ -689,7 +689,7 @@ def compute_spatial_adjustment_for_pixel(
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
-    max_spatial_boolean_array_memory_gb: float,
+    max_spatial_intermediate_array_memory_gb: float,
     model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -702,8 +702,8 @@ def find_affected_pixels(
         Raster data with valid-pixel mask and grid transform.
     obs_data : ObservationData
         Prepared observation data.
-    max_spatial_boolean_array_memory_gb : float
-        Memory limit (GB) for boolean arrays in spatial processing.
+    max_spatial_intermediate_array_memory_gb : float
+        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
     model_type : constants.ModelType
         Either GEOLOGY or TERRAIN; used for progress-bar labelling.
     max_dist_m : float, optional
@@ -724,7 +724,7 @@ def find_affected_pixels(
     chunk_size = max(
         1,
         int(
-            max_spatial_boolean_array_memory_gb
+            max_spatial_intermediate_array_memory_gb
             * constants.BYTES_PER_GB
             / len(obs_data.locations)
         ),
@@ -960,7 +960,7 @@ def compute_spatial_adjustment_on_grid(
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
-    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+    max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -993,8 +993,8 @@ def compute_spatial_adjustment_on_grid(
     noisy : bool, optional
         If True, apply noise-aware weighting to residuals and the covariance
         matrix (via ``obs_data.noise_weights``).
-    max_spatial_boolean_array_memory_gb : float, optional
-        Memory cap for spatial boolean arrays.
+    max_spatial_intermediate_array_memory_gb : float, optional
+        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
     slope_array : np.ndarray, optional
         Pre-computed slope array (for geology observation data preparation).
     coast_dist_array : np.ndarray, optional
@@ -1054,7 +1054,7 @@ def compute_spatial_adjustment_on_grid(
     bbox_mask, grid_locs = find_affected_pixels(
         raster_data,
         obs_data,
-        max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+        max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
         model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
     )

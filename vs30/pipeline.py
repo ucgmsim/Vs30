@@ -274,7 +274,7 @@ def compute_component_grid(
     mvn: bool = True,
     noisy: bool = True,
     dbscan_nproc: int = -1,
-    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+    max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
     output_dir: Path | None = None,
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
@@ -312,8 +312,8 @@ def compute_component_grid(
     dbscan_nproc : int, optional
         Number of processes for DBSCAN clustering. Default -1 (all cores).
         No effect when ``do_bayesian_update`` is False.
-    max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
+    max_spatial_intermediate_array_memory_gb : float, optional
+        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
     output_dir : Path, optional
         Directory to write intermediate and final rasters. If None, no files
         are written.
@@ -486,7 +486,7 @@ def compute_component_grid(
             apply_alluvium_slope_mod=apply_alluvium_slope_mod,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             noisy=noisy,
-            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+            max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
             slope_array=slope_array,
             coast_dist_array=coast_dist_array,
         )
@@ -525,7 +525,7 @@ def grid_pipeline(
     do_bayesian_update: bool = True,
     include_intermediate: bool = False,
     dbscan_nproc: int = -1,
-    max_spatial_boolean_array_memory_gb: float = constants.MAX_SPATIAL_BOOLEAN_ARRAY_MEMORY_GB,
+    max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
     apply_coastal_distance_mod: bool = True,
     fill_gaps: bool = False,
     clustered_observations_df: pd.DataFrame | None = None,
@@ -576,8 +576,8 @@ def grid_pipeline(
     dbscan_nproc : int, optional
         Number of processes for DBSCAN clustering. Default -1 (all cores).
         No effect when ``do_bayesian_update`` is False.
-    max_spatial_boolean_array_memory_gb : float, optional
-        Maximum memory for spatial boolean arrays.
+    max_spatial_intermediate_array_memory_gb : float, optional
+        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
     fill_gaps : bool
@@ -661,7 +661,7 @@ def grid_pipeline(
             mvn=mvn,
             noisy=noisy,
             dbscan_nproc=dbscan_nproc,
-            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+            max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
             corr_fn=geology_corr_fn,
@@ -685,7 +685,7 @@ def grid_pipeline(
             mvn=mvn,
             noisy=noisy,
             dbscan_nproc=dbscan_nproc,
-            max_spatial_boolean_array_memory_gb=max_spatial_boolean_array_memory_gb,
+            max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
             output_dir=output_dir,
             include_intermediate=include_intermediate,
             corr_fn=terrain_corr_fn,

@@ -173,7 +173,7 @@ class TestFindAffectedPixels:
         bbox_mask, grid_locs = spatial.find_affected_pixels(
             raster_data,
             obs_data,
-            max_spatial_boolean_array_memory_gb=1.0,
+            max_spatial_intermediate_array_memory_gb=1.0,
             model_type=constants.ModelType.GEOLOGY,
             max_dist_m=150.0,
         )
@@ -200,7 +200,7 @@ class TestFindAffectedPixels:
         bbox_mask, _ = spatial.find_affected_pixels(
             raster_data,
             obs_data,
-            max_spatial_boolean_array_memory_gb=1.0,
+            max_spatial_intermediate_array_memory_gb=1.0,
             model_type=constants.ModelType.GEOLOGY,
             max_dist_m=1000.0,
         )
