@@ -37,13 +37,18 @@ class TestComputeSpatialAdjustmentForPixel:
 
     def test_updates_toward_observation(self, pixel, nearby_observation):
         """Test that update shifts vs30 toward observation."""
+        indices, distances = spatial.select_observations_for_pixel_batch(
+            np.array([pixel.location]),
+            nearby_observation,
+            max_dist_m=5000.0,
+            max_points=100,
+        )
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
+            indices[0][np.isfinite(distances[0])],
             corr_fn=geology_corr_fn,
             corr_zero=geology_corr_fn(np.array([0.0]))[0],
-            max_dist_m=5000.0,
-            max_points=100,
             noisy=False,
         )
 
@@ -54,13 +59,18 @@ class TestComputeSpatialAdjustmentForPixel:
 
     def test_stdv_decreases_with_observation(self, pixel, nearby_observation):
         """Test that standard deviation decreases when observation is added."""
+        indices, distances = spatial.select_observations_for_pixel_batch(
+            np.array([pixel.location]),
+            nearby_observation,
+            max_dist_m=5000.0,
+            max_points=100,
+        )
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             nearby_observation,
+            indices[0][np.isfinite(distances[0])],
             corr_fn=geology_corr_fn,
             corr_zero=geology_corr_fn(np.array([0.0]))[0],
-            max_dist_m=5000.0,
-            max_points=100,
             noisy=False,
         )
 
@@ -78,13 +88,18 @@ class TestComputeSpatialAdjustmentForPixel:
             residuals=np.zeros(1),
             noise_weights=np.ones(1),
         )
+        indices, distances = spatial.select_observations_for_pixel_batch(
+            np.array([pixel.location]),
+            far_observation,
+            max_dist_m=5000.0,
+        )
 
         result = spatial.compute_spatial_adjustment_for_pixel(
             pixel,
             far_observation,
+            indices[0][np.isfinite(distances[0])],
             corr_fn=geology_corr_fn,
             corr_zero=geology_corr_fn(np.array([0.0]))[0],
-            max_dist_m=5000,
         )
 
         # VS30 should be unchanged when no nearby observations

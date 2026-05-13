@@ -644,15 +644,14 @@ def select_observations_for_pixel(
 def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
+    obs_indices: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
     corr_zero: float,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
 ) -> tuple[float, float] | None:
     """
-    Compute MVN update for a single pixel.
+    Compute MVN update for a single pixel given pre-selected observations.
 
     Parameters
     ----------
@@ -660,17 +659,15 @@ def compute_spatial_adjustment_for_pixel(
         Pixel being updated.
     obs_data : ObservationData
         Prepared observation data.
+    obs_indices : ndarray
+        Integer indices into ``obs_data`` for the observations conditioning
+        this pixel. Pass an empty array when there are no nearby observations;
+        the prior vs30 is returned unchanged and stdv is shrunk by ``corr_zero``.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
     corr_zero : float
-        Pre-computed ``corr_fn(np.array([0.0]))[0]`` (hoisted out of any
-        per-pixel loop).
-    max_dist_m : float, optional
-        Maximum distance in meters to consider observations.
-    max_points : int, optional
-        Target number of observations per pixel; may be exceeded if distances
-        tie at the cutoff.
+        Pre-computed ``corr_fn(np.array([0.0]))[0]``.
     noisy : bool, optional
         If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
@@ -679,8 +676,8 @@ def compute_spatial_adjustment_for_pixel(
     Returns
     -------
     tuple of (float, float) or None
-        (updated_vs30, updated_stdv), or None if the pixel should be skipped
-        (NaN/invalid input).
+        ``(updated_vs30, updated_stdv)``, or None if the pixel should be
+        skipped (NaN/invalid input).
     """
     if (
         np.isnan(pixel.vs30)
@@ -690,19 +687,9 @@ def compute_spatial_adjustment_for_pixel(
     ):
         return None
 
-    # Correlation at zero distance is ≈1 (minus a tiny epsilon from the
-    # enforced minimum distance).
     initial_var = (pixel.stdv**2) * corr_zero
 
-    obs_indices = select_observations_for_pixel(
-        pixel,
-        obs_data,
-        max_dist_m=max_dist_m,
-        max_points=max_points,
-    )
-
     if len(obs_indices) == 0:
-        # No nearby observations: keep prior mean, but apply corr_zero shrinkage to stdv.
         return (pixel.vs30, float(np.sqrt(initial_var)))
 
     cov_matrix = build_covariance_matrix(
@@ -728,7 +715,6 @@ def compute_spatial_adjustment_for_pixel(
             float(np.sqrt(max(0, var))),
         )
     except np.linalg.LinAlgError:
-        # Singular covariance matrix — keep prior values with default variance shrinkage
         logger.debug("Singular covariance matrix, keeping prior values")
         return (pixel.vs30, float(np.sqrt(initial_var)))
 
@@ -824,6 +810,7 @@ def compute_spatial_pixel_adjustments(
     max_points: int = constants.MAX_POINTS,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
+    max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute MVN updates for all affected pixels and return updated arrays.
@@ -838,33 +825,31 @@ def compute_spatial_pixel_adjustments(
         Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
         observation's bounding box, as returned by ``find_affected_pixels``.
     grid_locs : ndarray
-        (N_valid, 2) NZTM pixel-center coordinates for valid pixels — the
-        same array returned by ``find_affected_pixels`` so this function
-        does not need to recompute ``raster_data.get_coordinates()``.
+        (N_valid, 2) NZTM pixel-center coordinates for valid pixels.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
-        Target number of observations per pixel; may be exceeded if distances
-        tie at the cutoff.
+        Maximum number of observations per pixel.
     noisy : bool, optional
         If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
         If > 0, shrink covariance between points with dissimilar Vs30 values.
+    max_spatial_intermediate_array_memory_gb : float, optional
+        Memory cap (GB) for the per-chunk (indices, distances) arrays.
 
     Returns
     -------
     updated_vs30 : ndarray
         Vs30 array with spatial adjustments applied at affected pixels.
     updated_stdv : ndarray
-        Standard deviation array with spatial adjustments applied at affected
-        pixels.
+        Standard deviation array with spatial adjustments applied.
     """
-    # affected_flat_indices indexes the full raster (used for vs30/stdv reads
-    # and writeback); affected_valid_indices indexes grid_locs' rows, which
-    # only cover valid pixels.
+    # bbox_mask is set only at raster_data.valid_flat_indices (see find_affected_pixels),
+    # so affected_flat_indices and affected_locs are always the same length and
+    # can be co-indexed via local_idx.
     affected_flat_indices = np.where(bbox_mask)[0]
     affected_valid_indices = np.where(bbox_mask[raster_data.valid_flat_indices])[0]
 
@@ -878,29 +863,49 @@ def compute_spatial_pixel_adjustments(
     corr_zero = corr_fn(np.array([0.0]))[0]
     n_updated = 0
 
-    for i, flat_idx in enumerate(
-        tqdm(affected_flat_indices, desc="Spatial adjustment", unit="pixel")
-    ):
-        pixel = PixelData(
-            location=affected_locs[i],
-            vs30=float(affected_vs30[i]),
-            stdv=float(affected_stdv[i]),
-        )
-        result = compute_spatial_adjustment_for_pixel(
-            pixel,
-            obs_data,
-            corr_fn,
-            corr_zero=corr_zero,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
-            noisy=noisy,
-            cov_reduc=cov_reduc,
-        )
-        if result is not None:
-            vs30, stdv = result
-            updated_vs30.flat[flat_idx] = vs30
-            updated_stdv.flat[flat_idx] = stdv
-            n_updated += 1
+    # Per-pixel cost: max_points slots × (8 bytes intp + 8 bytes float64) = 16 × max_points.
+    chunk_size = max(
+        1,
+        int(
+            max_spatial_intermediate_array_memory_gb
+            * constants.BYTES_PER_GB
+            / (max_points * 16)
+        ),
+    )
+
+    with tqdm(
+        total=len(affected_flat_indices), desc="Spatial adjustment", unit="pixel"
+    ) as pbar:
+        for chunk_start in range(0, len(affected_flat_indices), chunk_size):
+            chunk_end = min(chunk_start + chunk_size, len(affected_flat_indices))
+            chunk_indices, chunk_distances = select_observations_for_pixel_batch(
+                affected_locs[chunk_start:chunk_end],
+                obs_data,
+                max_dist_m=max_dist_m,
+                max_points=max_points,
+            )
+            for i in range(chunk_end - chunk_start):
+                local_idx = chunk_start + i
+                flat_idx = affected_flat_indices[local_idx]
+                result = compute_spatial_adjustment_for_pixel(
+                    PixelData(
+                        location=affected_locs[local_idx],
+                        vs30=float(affected_vs30[local_idx]),
+                        stdv=float(affected_stdv[local_idx]),
+                    ),
+                    obs_data,
+                    chunk_indices[i][np.isfinite(chunk_distances[i])],
+                    corr_fn,
+                    corr_zero=corr_zero,
+                    noisy=noisy,
+                    cov_reduc=cov_reduc,
+                )
+                if result is not None:
+                    vs30, stdv = result
+                    updated_vs30.flat[flat_idx] = vs30
+                    updated_stdv.flat[flat_idx] = stdv
+                    n_updated += 1
+                pbar.update(1)
 
     logger.info(f"Spatial adjustment complete: {n_updated:,} pixels updated")
 
@@ -922,16 +927,16 @@ def compute_spatial_point_adjustments(
     """
     Compute MVN spatial adjustment at specific query points.
 
-    Point-based equivalent of compute_spatial_pixel_adjustments(), using the
+    Point-based equivalent of ``compute_spatial_pixel_adjustments``, using the
     same MVN conditioning algorithm.
 
     Parameters
     ----------
-    points : np.ndarray
+    points : ndarray
         (N, 2) array of [easting, northing] query locations in NZTM.
-    model_vs30 : np.ndarray
+    model_vs30 : ndarray
         (N,) array of model Vs30 values at query points (before MVN adjustment).
-    model_stdv : np.ndarray
+    model_stdv : ndarray
         (N,) array of model standard deviation at query points.
     obs_data : ObservationData
         Prepared observation data.
@@ -941,22 +946,20 @@ def compute_spatial_point_adjustments(
     max_dist_m : float, optional
         Maximum distance in meters to consider observations.
     max_points : int, optional
-        Target number of observations per point; may be exceeded if distances
-        tie at the cutoff.
+        Maximum number of observations per point.
     noisy : bool, optional
         If True, down-weight uncertain observations by ``obs_data.noise_weights``.
-        Must match the setting used to build ``obs_data``.
+        Must match the value used when ``obs_data`` was constructed.
     cov_reduc : float, optional
         If > 0, shrink covariance between points with dissimilar Vs30 values.
     progress_bar : tqdm, optional
-        External progress bar to update per point. If None, no progress is
-        shown.
+        External progress bar to advance per point. If None, no progress is shown.
 
     Returns
     -------
-    mvn_vs30 : np.ndarray
+    mvn_vs30 : ndarray
         (N,) array of spatially adjusted Vs30 values.
-    mvn_stdv : np.ndarray
+    mvn_stdv : ndarray
         (N,) array of spatially adjusted standard deviation values.
     """
     mvn_vs30 = model_vs30.copy()
@@ -968,28 +971,27 @@ def compute_spatial_point_adjustments(
 
     corr_zero = corr_fn(np.array([0.0]))[0]
 
-    for i in range(len(points)):
-        pixel = PixelData(
-            location=points[i],
-            vs30=float(model_vs30[i]),
-            stdv=float(model_stdv[i]),
-        )
+    indices_matrix, distances_matrix = select_observations_for_pixel_batch(
+        points, obs_data, max_dist_m=max_dist_m, max_points=max_points,
+    )
 
+    for i in range(len(points)):
         result = compute_spatial_adjustment_for_pixel(
-            pixel,
+            PixelData(
+                location=points[i],
+                vs30=float(model_vs30[i]),
+                stdv=float(model_stdv[i]),
+            ),
             obs_data,
+            indices_matrix[i][np.isfinite(distances_matrix[i])],
             corr_fn,
             corr_zero=corr_zero,
-            max_dist_m=max_dist_m,
-            max_points=max_points,
             noisy=noisy,
             cov_reduc=cov_reduc,
         )
-
         if result is not None:
             mvn_vs30[i] = result[0]
             mvn_stdv[i] = result[1]
-
         if progress_bar is not None:
             progress_bar.update(1)
 
