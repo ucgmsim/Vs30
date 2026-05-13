@@ -602,45 +602,6 @@ def select_observations_for_pixel_batch(
     )
 
 
-def select_observations_for_pixel(
-    pixel: PixelData,
-    obs_data: ObservationData,
-    max_dist_m: float = constants.MAX_DIST_M,
-    max_points: int = constants.MAX_POINTS,
-) -> np.ndarray:
-    """
-    Select observations for a pixel using a KDTree nearest-neighbour query.
-
-    Parameters
-    ----------
-    pixel : PixelData
-        Pixel being updated.
-    obs_data : ObservationData
-        Prepared observation data. Must carry a populated ``tree``.
-    max_dist_m : float
-        Maximum distance in meters to consider observations.
-    max_points : int
-        Maximum number of observations to return; the closest are kept.
-
-    Returns
-    -------
-    ndarray
-        Integer indices into obs_data for the selected observations.
-        Empty array if no observations are within range.
-    """
-    # tree is None iff locations is empty (see __post_init__); nothing to query.
-    if obs_data.tree is None:
-        return np.array([], dtype=np.intp)
-    k = min(max_points, len(obs_data.locations))
-    distances, indices = obs_data.tree.query(
-        pixel.location, k=k, distance_upper_bound=max_dist_m
-    )
-    distances = np.atleast_1d(distances)
-    indices = np.atleast_1d(indices)
-    # Slots beyond max_dist_m come back with distance=inf and index=n_obs.
-    return indices[np.isfinite(distances)]
-
-
 def compute_spatial_adjustment_for_pixel(
     pixel: PixelData,
     obs_data: ObservationData,
