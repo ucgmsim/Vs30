@@ -66,7 +66,7 @@ def run_benchmark(
 
 def test_foster_2019_approx_points_benchmark():
     """
-    foster_2019 pipeline matches the paper's published Vs30 at points far from any observation.
+    foster_2019_approx pipeline matches the paper's published Vs30 at points far from any observation.
 
     The 30 sample points all sit further from any observation than
     ``MAX_DIST_M``, so the MVN spatial-adjustment step contributes nothing
