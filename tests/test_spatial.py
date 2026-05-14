@@ -185,7 +185,7 @@ class TestFindAffectedPixels:
             noise_weights=np.ones(1),
         )
 
-        bbox_mask, grid_locs = spatial.find_affected_pixels(
+        affected_flat_indices, affected_locs = spatial.find_affected_pixels(
             raster_data,
             obs_data,
             max_spatial_intermediate_array_memory_gb=1.0,
@@ -193,12 +193,9 @@ class TestFindAffectedPixels:
             max_dist_m=150.0,
         )
 
-        # Mask is sized to the full flat raster.
-        assert bbox_mask.shape == (raster_data.vs30.size,)
         # 3×3 = 9 pixels in the obs bounding box.
-        assert int(bbox_mask.sum()) == 9
-        # grid_locs covers all valid pixels (5×5 = 25 here).
-        assert grid_locs.shape == (25, 2)
+        assert len(affected_flat_indices) == 9
+        assert affected_locs.shape == (9, 2)
 
     def test_find_affected_pixels_far_obs_zero(self):
         """An observation far outside the raster bounds affects zero pixels."""
@@ -212,7 +209,7 @@ class TestFindAffectedPixels:
             noise_weights=np.ones(1),
         )
 
-        bbox_mask, _ = spatial.find_affected_pixels(
+        affected_flat_indices, affected_locs = spatial.find_affected_pixels(
             raster_data,
             obs_data,
             max_spatial_intermediate_array_memory_gb=1.0,
@@ -220,4 +217,5 @@ class TestFindAffectedPixels:
             max_dist_m=1000.0,
         )
 
-        assert int(bbox_mask.sum()) == 0
+        assert len(affected_flat_indices) == 0
+        assert affected_locs.shape == (0, 2)

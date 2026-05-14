@@ -567,8 +567,7 @@ def select_observations_for_pixel_batch(
     Parameters
     ----------
     pixel_locations : ndarray
-        (N_pix, 2) array of [easting, northing] coordinates in NZTM. A (2,)
-        input for a single pixel is also accepted.
+        (N_pix, 2) array of [easting, northing] coordinates in NZTM.
     obs_data : ObservationData
         Prepared observation data. ``obs_data.tree`` carries the spatial index.
     max_dist_m : float
@@ -585,7 +584,6 @@ def select_observations_for_pixel_batch(
     distances : ndarray, shape (N_pix, k), dtype float64
         Euclidean distances. Sentinel slots are ``np.inf``.
     """
-    pixel_locations = np.atleast_2d(pixel_locations)
     if obs_data.tree is None:
         return (
             np.empty((len(pixel_locations), 0), dtype=np.intp),
@@ -595,7 +593,10 @@ def select_observations_for_pixel_batch(
     distances, indices = obs_data.tree.query(
         pixel_locations, k=k, distance_upper_bound=max_dist_m
     )
-    # Reshape to (N_pix, k) — scipy squeezes the trailing dim when k=1.
+    # scipy.spatial.KDTree.query returns shape (N_pix, k) when k > 1 but
+    # squeezes to (N_pix,) when k == 1 (the trailing axis is dropped). Reshape
+    # to (N_pix, k) so callers can always index batch_indices[i] to get this
+    # pixel's row regardless of k.
     return (
         np.asarray(indices).reshape(len(pixel_locations), k),
         np.asarray(distances).reshape(len(pixel_locations), k),
@@ -706,14 +707,12 @@ def find_affected_pixels(
 
     Returns
     -------
-    bbox_mask : ndarray
-        Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
-        observation's bounding box.
-    grid_locs : ndarray
-        (N_valid, 2) array of NZTM pixel-center coordinates for valid pixels.
-        Returned alongside the mask so the downstream
-        ``compute_spatial_pixel_adjustments`` call can reuse it instead of
-        recomputing ``raster_data.get_coordinates()``.
+    affected_flat_indices : ndarray
+        (N_affected,) flat indices into ``raster_data.vs30`` for pixels inside
+        at least one observation's bounding box.
+    affected_locs : ndarray
+        (N_affected, 2) NZTM pixel-center coordinates, aligned with
+        ``affected_flat_indices``.
     """
     grid_locs = raster_data.get_coordinates()
     chunk_size = max(
@@ -752,21 +751,19 @@ def find_affected_pixels(
             grid_locs[start:end], e_min, e_max, n_min, n_max,
         )
 
-    bbox_mask = np.zeros(raster_data.vs30.size, dtype=bool)
-    bbox_mask[raster_data.valid_flat_indices] = valid_in_bbox
     n_affected = int(valid_in_bbox.sum())
     logger.info(
         f"Bounding box search complete: {n_affected:,} pixels affected "
         f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
     )
-    return bbox_mask, grid_locs
+    return raster_data.valid_flat_indices[valid_in_bbox], grid_locs[valid_in_bbox]
 
 
 def compute_spatial_pixel_adjustments(
     raster_data: RasterData,
     obs_data: ObservationData,
-    bbox_mask: np.ndarray,
-    grid_locs: np.ndarray,
+    affected_flat_indices: np.ndarray,
+    affected_locs: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
     max_dist_m: float = constants.MAX_DIST_M,
     max_points: int = constants.MAX_POINTS,
@@ -783,11 +780,12 @@ def compute_spatial_pixel_adjustments(
         Raster data with vs30/stdv arrays and valid-pixel mask.
     obs_data : ObservationData
         Prepared observation data.
-    bbox_mask : ndarray
-        Boolean mask (1D, length ``raster_data.vs30.size``) of pixels in any
-        observation's bounding box, as returned by ``find_affected_pixels``.
-    grid_locs : ndarray
-        (N_valid, 2) NZTM pixel-center coordinates for valid pixels.
+    affected_flat_indices : ndarray
+        (N_affected,) flat indices into ``raster_data.vs30`` for pixels to
+        update, as returned by ``find_affected_pixels``.
+    affected_locs : ndarray
+        (N_affected, 2) NZTM pixel-center coordinates aligned with
+        ``affected_flat_indices``.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
@@ -809,13 +807,6 @@ def compute_spatial_pixel_adjustments(
     updated_stdv : ndarray
         Standard deviation array with spatial adjustments applied.
     """
-    # bbox_mask is set only at raster_data.valid_flat_indices (see find_affected_pixels),
-    # so affected_flat_indices and affected_locs are always the same length and
-    # can be co-indexed via local_idx.
-    affected_flat_indices = np.where(bbox_mask)[0]
-    affected_valid_indices = np.where(bbox_mask[raster_data.valid_flat_indices])[0]
-
-    affected_locs = grid_locs[affected_valid_indices]
     affected_vs30 = raster_data.vs30.flat[affected_flat_indices]
     affected_stdv = raster_data.stdv.flat[affected_flat_indices]
 
@@ -825,13 +816,12 @@ def compute_spatial_pixel_adjustments(
     corr_zero = corr_fn(np.array([0.0]))[0]
     n_updated = 0
 
-    # Per-pixel cost: max_points slots × (8 bytes intp + 8 bytes float64) = 16 × max_points.
     chunk_size = max(
         1,
         int(
             max_spatial_intermediate_array_memory_gb
             * constants.BYTES_PER_GB
-            / (max_points * 16)
+            / (max_points * constants.BYTES_PER_KDTREE_QUERY_SLOT)
         ),
     )
 
@@ -1062,7 +1052,7 @@ def compute_spatial_adjustment_on_grid(
         return vs30_array.copy(), stdv_array.copy()
 
     t_bbox_start = time.perf_counter()
-    bbox_mask, grid_locs = find_affected_pixels(
+    affected_flat_indices, affected_locs = find_affected_pixels(
         raster_data,
         obs_data,
         max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
@@ -1070,7 +1060,7 @@ def compute_spatial_adjustment_on_grid(
         max_dist_m=constants.MAX_DIST_M,
     )
     logger.info(
-        f"Found {int(bbox_mask.sum()):,} affected pixels in "
+        f"Found {len(affected_flat_indices):,} affected pixels in "
         f"{time.perf_counter() - t_bbox_start:.1f}s"
     )
 
@@ -1078,8 +1068,8 @@ def compute_spatial_adjustment_on_grid(
     adjusted_vs30, adjusted_stdv = compute_spatial_pixel_adjustments(
         raster_data,
         obs_data,
-        bbox_mask,
-        grid_locs,
+        affected_flat_indices,
+        affected_locs,
         corr_fn,
         max_dist_m=constants.MAX_DIST_M,
         max_points=constants.MAX_POINTS,

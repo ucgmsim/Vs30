@@ -298,6 +298,11 @@ MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB: float = 1.0
 # Bytes per GB (binary; matches the GB unit used elsewhere in this file).
 BYTES_PER_GB: int = 1024**3
 
+# Per-pixel byte cost of one slot in the (indices, distances) arrays returned
+# by select_observations_for_pixel_batch: 8 bytes intp index + 8 bytes float64
+# distance. Used to size MVN chunks in compute_spatial_pixel_adjustments.
+BYTES_PER_KDTREE_QUERY_SLOT: int = 16
+
 # Default column names for longitude and latitude in location input CSV files.
 LOCATIONS_LON_COLUMN: str = "longitude"
 LOCATIONS_LAT_COLUMN: str = "latitude"
