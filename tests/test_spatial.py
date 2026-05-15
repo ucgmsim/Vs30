@@ -175,7 +175,7 @@ class TestFindAffectedPixels:
         return spatial.RasterData.from_arrays(vs30=vs30, stdv=stdv, transform=transform)
 
     def test_find_affected_pixels_single_obs_in_centre(self):
-        """One obs at the grid centre with 150m half-width covers a 3×3 = 9-pixel bbox (100m lattice)."""
+        """One obs at the grid centre with 150m radius captures a 3×3 = 9-pixel neighbourhood (100m lattice)."""
         raster_data = self.build_raster_data(5, 5)
         obs_data = spatial.ObservationData(
             locations=np.array([[1500250.0, 5099750.0]]),
@@ -188,19 +188,16 @@ class TestFindAffectedPixels:
         affected_flat_indices, affected_locs = spatial.find_affected_pixels(
             raster_data,
             obs_data,
-            max_spatial_intermediate_array_memory_gb=1.0,
-            model_type=constants.ModelType.GEOLOGY,
             max_dist_m=150.0,
         )
 
-        # 3×3 = 9 pixels in the obs bounding box.
+        # 3×3 = 9 pixels within 150 m of the obs.
         assert len(affected_flat_indices) == 9
         assert affected_locs.shape == (9, 2)
 
     def test_find_affected_pixels_far_obs_zero(self):
         """An observation far outside the raster bounds affects zero pixels."""
         raster_data = self.build_raster_data(5, 5)
-        # Obs ~1 km outside the raster bounds.
         obs_data = spatial.ObservationData(
             locations=np.array([[1600000.0, 5200000.0]]),
             model_stdv=np.array([0.5]),
@@ -212,8 +209,6 @@ class TestFindAffectedPixels:
         affected_flat_indices, affected_locs = spatial.find_affected_pixels(
             raster_data,
             obs_data,
-            max_spatial_intermediate_array_memory_gb=1.0,
-            model_type=constants.ModelType.GEOLOGY,
             max_dist_m=1000.0,
         )
 

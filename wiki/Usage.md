@@ -110,7 +110,7 @@ The command writes a directory of GeoTIFF rasters covering the bounding box at t
 ### Practical tips
 
 - **Shorter test runs**: while you're confirming your inputs are right, reduce the bounding box or coarsen the spacing (e.g. `--grid-dx 400 --grid-dy 400`).
-- **Memory**: if the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-intermediate-array-memory-gb` (default: 1.0). It caps the per-chunk intermediate arrays produced during MVN — both the boolean bbox arrays used to find observations near each pixel and the index/distance arrays returned by the KDTree query. Smaller values trade a small amount of speed for a lower peak memory footprint.
+- **Memory**: if the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-intermediate-array-memory-gb` (default: 4.0). It caps the per-chunk (indices, distances) arrays produced by the KDTree query during MVN spatial adjustment. Smaller values trade a small amount of speed for a lower peak memory footprint.
 
 ### All options
 

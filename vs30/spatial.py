@@ -450,47 +450,6 @@ def compute_residuals(
     return residuals, noise_weights
 
 
-def grid_points_in_bbox(
-    grid_locs: np.ndarray,
-    obs_eastings_min: np.ndarray,
-    obs_eastings_max: np.ndarray,
-    obs_northings_min: np.ndarray,
-    obs_northings_max: np.ndarray,
-) -> np.ndarray:
-    """
-    Mark grid points that fall inside any observation's bounding box.
-
-    Parameters
-    ----------
-    grid_locs : array_like, shape (M, 2)
-        Grid point coordinates as (easting, northing) in NZTM.
-    obs_eastings_min : ndarray, shape (N, 1)
-        Per-observation lower easting bound.
-    obs_eastings_max : ndarray, shape (N, 1)
-        Per-observation upper easting bound.
-    obs_northings_min : ndarray, shape (N, 1)
-        Per-observation lower northing bound.
-    obs_northings_max : ndarray, shape (N, 1)
-        Per-observation upper northing bound.
-
-    Returns
-    -------
-    ndarray
-        Shape ``(M,)`` boolean mask; True for grid points inside at least one
-        observation bbox.
-    """
-    grid_eastings = grid_locs[:, 0]
-    grid_northings = grid_locs[:, 1]
-
-    in_bbox = (
-        (grid_eastings >= obs_eastings_min)
-        & (grid_eastings <= obs_eastings_max)
-        & (grid_northings >= obs_northings_min)
-        & (grid_northings <= obs_northings_max)
-    )
-
-    return np.any(in_bbox, axis=0)
-
 
 def build_covariance_matrix(
     pixel: PixelData,
@@ -685,78 +644,46 @@ def compute_spatial_adjustment_for_pixel(
 def find_affected_pixels(
     raster_data: RasterData,
     obs_data: ObservationData,
-    max_spatial_intermediate_array_memory_gb: float,
-    model_type: constants.ModelType,
     max_dist_m: float = constants.MAX_DIST_M,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Find pixels affected by observations using bounding boxes.
+    Find pixels with at least one observation within ``max_dist_m``.
 
     Parameters
     ----------
     raster_data : RasterData
         Raster data with valid-pixel mask and grid transform.
     obs_data : ObservationData
-        Prepared observation data.
-    max_spatial_intermediate_array_memory_gb : float
-        Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
-    model_type : constants.ModelType
-        Either GEOLOGY or TERRAIN; used for progress-bar labelling.
+        Prepared observation data; uses the KDTree built in
+        ``ObservationData.__post_init__``.
     max_dist_m : float, optional
-        Maximum distance in meters for considering observations.
+        Maximum Euclidean distance in meters to consider observations.
 
     Returns
     -------
     affected_flat_indices : ndarray
-        (N_affected,) flat indices into ``raster_data.vs30`` for pixels inside
-        at least one observation's bounding box.
+        (N_affected,) flat indices into ``raster_data.vs30`` for pixels with
+        at least one observation within ``max_dist_m``.
     affected_locs : ndarray
         (N_affected, 2) NZTM pixel-center coordinates, aligned with
         ``affected_flat_indices``.
     """
+    if obs_data.tree is None:
+        return (
+            np.empty(0, dtype=raster_data.valid_flat_indices.dtype),
+            np.empty((0, 2), dtype=np.float32),
+        )
     grid_locs = raster_data.get_coordinates()
-    chunk_size = max(
-        1,
-        int(
-            max_spatial_intermediate_array_memory_gb
-            * constants.BYTES_PER_GB
-            / len(obs_data.locations)
-        ),
+    distances, _ = obs_data.tree.query(
+        grid_locs, k=1, distance_upper_bound=max_dist_m,
     )
-    n_chunks = int(np.ceil(len(grid_locs) / chunk_size))
-
-    obs_eastings = obs_data.locations[:, 0:1]
-    obs_northings = obs_data.locations[:, 1:2]
-    e_min, e_max = obs_eastings - max_dist_m, obs_eastings + max_dist_m
-    n_min, n_max = obs_northings - max_dist_m, obs_northings + max_dist_m
-
-    valid_in_bbox = np.zeros(len(grid_locs), dtype=bool)
-
-    chunk_indices = range(n_chunks)
-    if n_chunks > 1:
-        chunk_indices = tqdm(
-            chunk_indices,
-            desc=f"{str(model_type).capitalize()}: checking pixels for nearby observations ({n_chunks} chunks)",
-            unit="chunk",
-        )
-    else:
-        logger.info(
-            f"{str(model_type).capitalize()}: checking {len(grid_locs):,} pixels for nearby observations"
-        )
-
-    for chunk_idx in chunk_indices:
-        start = chunk_idx * chunk_size
-        end = min(start + chunk_size, len(grid_locs))
-        valid_in_bbox[start:end] = grid_points_in_bbox(
-            grid_locs[start:end], e_min, e_max, n_min, n_max,
-        )
-
-    n_affected = int(valid_in_bbox.sum())
+    affected_mask = np.isfinite(distances)
     logger.info(
-        f"Bounding box search complete: {n_affected:,} pixels affected "
-        f"({n_affected / len(grid_locs) * 100:.1f}% of valid pixels)"
+        f"Found {int(affected_mask.sum()):,} pixels with observations within "
+        f"{max_dist_m:.0f}m "
+        f"({int(affected_mask.sum()) / len(grid_locs) * 100:.1f}% of valid pixels)"
     )
-    return raster_data.valid_flat_indices[valid_in_bbox], grid_locs[valid_in_bbox]
+    return raster_data.valid_flat_indices[affected_mask], grid_locs[affected_mask]
 
 
 def compute_spatial_pixel_adjustments(
@@ -1051,17 +978,15 @@ def compute_spatial_adjustment_on_grid(
         )
         return vs30_array.copy(), stdv_array.copy()
 
-    t_bbox_start = time.perf_counter()
+    t_kdtree_start = time.perf_counter()
     affected_flat_indices, affected_locs = find_affected_pixels(
         raster_data,
         obs_data,
-        max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
-        model_type=model_type,
         max_dist_m=constants.MAX_DIST_M,
     )
     logger.info(
         f"Found {len(affected_flat_indices):,} affected pixels in "
-        f"{time.perf_counter() - t_bbox_start:.1f}s"
+        f"{time.perf_counter() - t_kdtree_start:.1f}s"
     )
 
     t_spatial_start = time.perf_counter()

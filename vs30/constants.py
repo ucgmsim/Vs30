@@ -290,10 +290,10 @@ GAPFILL_HALF_WIDTH_EXPANSION_M: int = 5000
 # beyond plausible donor distances within NZ.
 GAPFILL_MAX_HALF_WIDTH_M: int = 50000
 
-# Default memory limit (GB) for spatial intermediate arrays produced during MVN
-# chunking. Covers both the boolean bbox arrays in find_affected_pixels and the
-# intp+float64 query-result arrays in compute_spatial_pixel_adjustments.
-MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB: float = 1.0
+# Default memory limit (GB) for the per-chunk (indices, distances) arrays
+# returned by the KDTree query inside compute_spatial_pixel_adjustments during
+# MVN spatial adjustment.
+MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB: float = 4.0
 
 # Bytes per GB (binary; matches the GB unit used elsewhere in this file).
 BYTES_PER_GB: int = 1024**3
