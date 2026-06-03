@@ -1,102 +1,30 @@
-# Measured Vs30 Observational Data
+# Vs30 Observation Datasets
 
-This directory contains prepared observational datasets used for Vs30 mapping. These datasets are created by processing scripts in the `dev/observations/` directory, which consolidate and prepare data from multiple raw sources.
+Prepared site-observation datasets used to refine the Vs30 model predictions. Each model version selects its files in `vs30/configs/<version>.yaml` via two keys that differ in how nearby points are grouped:
 
-## Dataset: `foster_2019_approx_measured_vs30_independent_observations.csv`
+- **`independent_observations_csv`** — used one point at a time (no clustering).
+- **`clustered_observations_csv`** — DBSCAN first merges nearby points into single pseudo-observations, so densely sampled areas don't over-weight the result.
 
-This file contains **independent observations** that are processed without spatial clustering in the Vs30 mapping pipeline. Each observation is treated individually when updating the categorical models.
+## CSV format
 
-### Data Sources
+All files share `easting,northing,vs30,uncertainty`; the Foster files add `source,station,q`, the CPT file adds a leading `index` and `source`, and the Jaehwi file has only the four core columns. Coordinates are NZTM2000 (EPSG:2193, meters); `vs30` is in m/s; `uncertainty` is a natural-log-scale standard deviation (e.g. 0.2 ≈ 20%).
 
-The dataset combines measurements from three sources:
+## `foster_2019_approx_measured_vs30_independent_observations.csv`
 
-#### 1. McGann et al. (2015)
-- **Source**: `sites_load.load_mcgann_vs()`
-- **Description**: Surface wave measurements from the Canterbury region
-- **Count**: ~400 sites
-- **Source label**: `mcgann`
+Independent observations for the `foster_2019_approx` model: measured Vs30 from the McGann et al. (2015) and Wotherspoon et al. (2015) Canterbury surface-wave surveys, plus a quality-screened nationwide subset of Kaiser et al. (2017). In the legacy code this package supersedes, these sources were assembled by `sites_load.py` loaders.
 
-#### 2. Wotherspoon et al. (2015)
-- **Source**: `sites_load.load_wotherspoon_vs()`
-- **Description**: Additional surface wave measurements from Canterbury
-- **Count**: ~40 sites
-- **Source label**: `wotherspoon`
+## `modified_foster_2019_measured_vs30_independent_observations.csv`
 
-#### 3. Kaiser et al. (2017) - Filtered
-- **Source**: `sites_load.load_kaiseretal_vs()`
-- **Description**: Comprehensive Vs30 dataset for New Zealand
-- **Filtering criteria**: Sites are excluded if they meet ALL of these conditions:
-  - `q == 3` (quality flag indicating questionable data)
-  - `len(station) != 3` (station code is not exactly 3 characters)
-- **Rationale**: The filter removes low-quality Kaiseretal sites while preserving stations with 3-letter codes that have quality flag 3
-- **Count**: ~400 sites (filtered from ~460 total)
-- **Source label**: `kaiseretal`
+Independent observations for the `modified_foster_2019` model — the fuller measured set that `foster_2019_approx` is derived from. That model starts from precomputed Foster (2019) posteriors (no Bayesian update), so its observations feed only the MVN spatial adjustment.
 
-### Data Structure
+## `viktor_inferred_vs30_from_cpt.csv`
 
-All datasets are standardized to the following CSV format:
+Clustered observations for the `viktor_cpt_clustering` model: ~35,700 Vs30 values *inferred* from cone penetration test (CPT) soundings (`source = cpt` in legacy code).
 
-```csv
-easting,northing,vs30,uncertainty,source,station,q
-1576480.1104056418,5207643.269430228,224.85387,0.20000000298023224,mcgann,,
-1577001.152476283,5207261.8981841365,205.06209,0.20000000298023224,mcgann,,
-1933261.1379653357,5620565.339633845,150.0,0.2,kaiseretal,014A,2.0
-```
+## `jaehwi_v1p0_independent_observations.csv`
 
-#### Column Descriptions
-
-- **`easting`**: Easting coordinate in NZTM2000 projection (meters)
-- **`northing`**: Northing coordinate in NZTM2000 projection (meters)
-- **`vs30`**: Measured Vs30 value (m/s)
-- **`uncertainty`**: Measurement uncertainty/standard deviation (m/s)
-- **`source`**: Data source identifier (`mcgann`, `wotherspoon`, or `kaiseretal`)
-- **`station`**: Station identifier (primarily from Kaiseretal data)
-- **`q`**: Quality flag (primarily from Kaiseretal data, 1-3 scale where 1 is best)
-
-### Processing in Vs30 Pipeline
-
-This dataset is configured in `config.yaml` as:
-```yaml
-independent_observations_file: observations/foster_2019_approx_measured_vs30_independent_observations.csv
-```
-
-**Processing characteristics**:
-- **No spatial clustering**: Each measurement is treated independently
-- **Direct model updating**: Each observation updates the categorical model at its exact location
-- **Bayesian integration**: Uses `update_with_independent_data()` function in the category module
-- **Output layers**: Contributes to `constants.COL_POSTERIOR_MEAN_INDEPENDENT` and related uncertainty layers (`constants.COL_POSTERIOR_STDV_INDEPENDENT`)
-
-### Quality Considerations
-
-- **McGann/Wotherspoon**: High-quality surface wave measurements from specific studies
-- **Kaiseretal filtering**: Removes potentially unreliable measurements while preserving known good stations
-- **Uncertainty**: Most measurements have uncertainty ~0.2 m/s, though some Kaiseretal sites may have different values
-- **Spatial coverage**: Primarily focused on Canterbury region with some nationwide Kaiseretal coverage
-
-### Related Files
-
-- **`viktor_inferred_vs30_from_cpt.csv`**: CPT-derived measurements processed with spatial clustering
-
-## Dataset: `jaehwi_v1p0_independent_observations.csv`
-
-671-station observation set for the `jaehwi_v1p0` model, produced by running
-Jaehwi's `sites_load_NSHM2022.load_vs()` (from the `Vs30_2026` fork) and
-dumping the resulting DataFrame directly to CSV. The loader combines three
-sources:
-
-- **McGann** (276 stations): CPT-derived Vs30, downsampled on a 1 km NZMG grid,
-  NZMG→NZTM transform, uncertainty = 0.2.
-- **Wotherspoon** (36 stations): measured Vs30, WGS84→NZTM transform,
-  uncertainty = `0.5 if q == 3 else q / 10`.
-- **Kaiser/GeoNet** (359 stations): GeoNet metadata, WGS84→NZTM transform,
-  same uncertainty formula; Q3 stations are retained (the Q3 filter is
-  commented out in the fork).
+Independent observations (671 stations) for the `jaehwi_v1p0` model, combining McGann, Wotherspoon, and Kaiser/GeoNet sources. Produced from Jaehwi's `Vs30_2026` fork (legacy code this package supersedes) by running `sites_load_NSHM2022.load_vs()`.
 
 ## Generation
 
-The observation CSV files are generated by scripts in the `dev/observations/` directory. For example, the Jaehwi v1.0 observations are generated by:
-```bash
-python dev/observations/jaehwi_v1p0/create_jaehwi_observations.py
-```
-
-Each script loads data from raw sources, applies filtering, adds source labels, and exports to CSV format.
+These CSVs are static, pre-generated inputs; the scripts that produced them are maintainer-only and not part of the installed package.
