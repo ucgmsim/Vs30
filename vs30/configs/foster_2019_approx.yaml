@@ -1,0 +1,40 @@
+# Approximate reproduction of the Foster (2019) Vs30 model.
+# Aims to reproduce the published model from Foster et al. (2019, Earthquake
+# Spectra) as closely as the refactored Python pipeline allows. Small
+# numerical differences remain, mostly in the MVN-conditioning step near
+# observations.
+
+# --- Categorical model files ---
+# Same posteriors as modified_foster_2019 (computed by the original R code).
+geology_categorical_csv: geology_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+terrain_categorical_csv: terrain_model_posterior_from_foster_2019_mean_and_standard_deviation.csv
+
+# --- Observation files ---
+# Original excludes ALL Kaiser Q3 stations.
+independent_observations_csv: foster_2019_approx_measured_vs30_independent_observations.csv
+clustered_observations_csv:
+
+# --- Pipeline settings ---
+do_bayesian_update: false
+mvn: true
+noisy: true
+combination_method: ratio
+combine_ratio: 1.0
+
+# --- Hybrid geology modifications ---
+# Original: slope only, no coastal distance adjustments.
+apply_alluvium_slope_mod: true
+apply_coastal_distance_mod: false
+fill_gaps: false
+
+# --- Spatial correlation ---
+# Matérn fits as in the original R code.
+geology_correlation:
+  model: matern
+  range: 20000
+  kappa: 0.9
+
+terrain_correlation:
+  model: matern
+  range: 993
+  kappa: 0.5

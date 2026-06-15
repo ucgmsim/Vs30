@@ -4,36 +4,108 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "Vs30"
-version = "2.0"
+version = "2026.05.1"
 description = "NZ Vs30 Calculation"
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 dependencies = [
     "numpy",
     "pandas",
-    "pyproj",
     "scikit-learn",
     "scipy",
-    "matplotlib",
-    "pytest",
     "geopandas",
+    "typer",
+    "qcore-utils",
+    "rasterio",
+    "tqdm",
+    "pyyaml",
+    "shapely",
+    "GDAL",
 ]
+
+[project.optional-dependencies]
+test = ["pytest", "pyproj"]
+types = ["ty"]
 
 [project.urls]
 Repository = "https://github.com/ucgmsim/Vs30"
 
 [project.scripts]
-run-vs30calc = "run_vs30calc:main"
+vs30 = "vs30.cli:app"
 
 [tool.setuptools]
-packages = ["vs30", "VsViewer"]
+packages = ["vs30"]
 
 [tool.setuptools.package-data]
 vs30 = [
-    "data/*.csv",
-    "data/*.ll",
-    "data/*.ssv",
-    "data/*.tif",
-    "data/*.qgz",
-    "data/coast/*",
-    "data/qmap/*",
+    "resources/geospatial/*.tif",
+    "resources/geospatial/*.tar.xz",
+    "resources/geospatial/coast/*",
+    "resources/geospatial/qmap/*",
+    "resources/**/*.csv",
+    "resources/**/*.yaml",
+    "resources/**/*.npy",
+]
+
+[tool.ruff]
+exclude = ["VsViewer", "build", "temp"]
+
+[tool.deptry]
+# .venv must be listed explicitly because custom exclude overrides deptry's defaults.
+exclude = ["VsViewer", ".venv", "dev", "build"]
+
+[tool.deptry.package_module_name_map]
+scikit-learn = ["sklearn"]
+qcore-utils = ["qcore"]
+pyyaml = ["yaml"]
+GDAL = ["osgeo"]
+
+[tool.coverage.run]
+omit = [
+    "vs30/cli.py",
+    "vs30/config.py",
+    "vs30/constants.py",
+]
+
+
+[tool.deptry.per_rule_ignores]
+DEP001 = ["conftest", "setuptools", "test_benchmarks"]
+DEP002 = ["ty"]
+DEP003 = ["setuptools"]
+DEP004 = ["pytest", "pyproj"]
+
+[tool.numpydoc_validation]
+checks = [
+  "GL05",
+  "GL08",
+  "GL10",
+  "PR01",
+  "PR02",
+  "PR03",
+  "PR04",
+  "PR05",
+  "PR06",
+  "PR07",
+  "RT01",
+  "RT02",
+  "RT03",
+  "RT04",
+  "YD01",
+]
+# remember to use single quotes for regex in TOML
+exclude = [ # don't report on objects that match any of these regex
+  '\.undocumented_method$',
+  '\.__repr__$',
+]
+
+[tool.ty.src]
+exclude = ["dev/", "build/", "VsViewer/", "tests/"]
+
+[tool.ty.rules]
+# Typer uses `= ...` (Ellipsis) for required CLI parameters, which is valid
+# at runtime but not understood by type checkers.
+invalid-parameter-default = "ignore"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (skipped by default, use --runslow to run)",
 ]
