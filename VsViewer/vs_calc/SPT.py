@@ -10,7 +10,13 @@ from vs_calc import constants, utils
 
 class SPT:
     """
-    Contains the data from an SPT file
+    Contains SPT measurements and optional contiguous layers from the surface.
+
+    Depths and groundwater level are in metres, borehole diameter is in mm, and
+    energy_ratio is a percentage (e.g. 75, not 0.75). Missing groundwater and
+    diameter use the legacy defaults of 2 m and 150 mm. Empty layers use the
+    original soil-type stress approximation. Nonempty layers must cover every
+    requested stress depth, including the 0.3048 m SPT penetration offset.
     """
 
     def __init__(
@@ -19,34 +25,57 @@ class SPT:
         depth: np.ndarray,
         n: np.ndarray,
         hammer_type: constants.HammerType = constants.HammerType.Auto,
-        borehole_diameter: float = None,
+        borehole_diameter: float = constants.DEFAULT_BOREHOLE_DIAMETER_MM,
         energy_ratio: float = None,
         soil_type: np.ndarray = None,
         layers: Optional[pd.DataFrame] = None,
         groundwater_level: float = None,
     ):
         self.name = name
-        self.depth = depth
-        self.N = n
+        self.depth = np.asarray(depth, dtype=float)
+        self.N = np.asarray(n, dtype=float)
+        if (
+            self.depth.ndim != 1
+            or self.depth.size == 0
+            or self.N.shape != self.depth.shape
+            or not np.isfinite(self.depth).all()
+            or not np.isfinite(self.N).all()
+            or (self.depth < 0).any()
+            or (np.diff(self.depth) < 0).any()
+        ):
+            raise ValueError(
+                "SPT depths and N must be finite matching 1D arrays with non-negative, sorted depths"
+            )
         self.hammer_type = hammer_type
-        self.borehole_diameter = borehole_diameter
-        self.energy_ratio = energy_ratio
+        self.borehole_diameter = (
+            constants.DEFAULT_BOREHOLE_DIAMETER_MM
+            if borehole_diameter is None
+            else float(borehole_diameter)
+        )
+        self.energy_ratio = None if energy_ratio is None else float(energy_ratio)
         self.soil_type = (
-            np.repeat(constants.SoilType.Clay, len(depth))
+            np.repeat(constants.SoilType.Clay, len(self.depth))
             if soil_type is None
-            else soil_type
+            else np.asarray(soil_type)
         )
-        self.groundwater_level = groundwater_level
-        depths_to_split_at = (
-            np.append(depth, groundwater_level)
-            if groundwater_level is not None
-            else depth
+        if self.soil_type.shape != self.depth.shape:
+            raise ValueError("soil_type must have one entry per SPT measurement")
+        self.groundwater_level = (
+            constants.DEFAULT_GROUNDWATER_LEVEL_M
+            if groundwater_level is None
+            else float(groundwater_level)
         )
-        self.layers = utils.split_layers_at_depths(layers, depths_to_split_at)
+        if not np.isfinite(self.groundwater_level) or self.groundwater_level < 0:
+            raise ValueError("Groundwater level must be finite and non-negative")
+        self.layers = (
+            None
+            if layers is None or layers.empty
+            else utils.split_layers_at_depths(layers, self.groundwater_level)
+        )
         self.info = {
-            "z_min": depth[0],
-            "z_max": depth[-1],
-            "z_spread": depth[-1] - depth[0],
+            "z_min": self.depth[0],
+            "z_max": self.depth[-1],
+            "z_spread": self.depth[-1] - self.depth[0],
             "removed_rows": [],
         }
 
@@ -56,9 +85,9 @@ class SPT:
         # Pre-compute effective stresses and layer bottom depths if layers are provided
         self._effective_stresses = None
         self._layer_bottoms = None
-        if self.layers is not None and len(self.layers) > 0:
+        if self.layers is not None:
             self._effective_stresses = utils.effective_stress_from_layers(
-                self.layers, groundwater_level
+                self.layers, self.groundwater_level
             )
             self._layer_bottoms = np.cumsum(
                 self.layers["layer_thickness_m"].to_numpy(dtype=float)
@@ -95,9 +124,9 @@ class SPT:
             "borehole_diameter": self.borehole_diameter,
             "energy_ratio": self.energy_ratio,
             "soil_type": [soil_type.name for soil_type in self.soil_type],
-            "layers": self.layers.to_dict("records")
-            if self.layers is not None
-            else None,
+            "layers": (
+                self.layers.to_dict("records") if self.layers is not None else None
+            ),
             "groundwater_level": self.groundwater_level,
             "info": self.info,
             "N60": self.N60.tolist(),
@@ -113,15 +142,17 @@ class SPT:
             np.asarray(json["depth"]),
             np.asarray(json["N"]),
             constants.HammerType[json["hammer_type"]],
-            float(json["borehole_diameter"]),
+            json.get("borehole_diameter"),
             None if json["energy_ratio"] is None else float(json["energy_ratio"]),
             [constants.SoilType[soil_type] for soil_type in json["soil_type"]],
-            pd.DataFrame(json.get("layers"))
-            if json.get("layers") is not None
-            else None,
+            (
+                pd.DataFrame(json.get("layers"))
+                if json.get("layers") is not None
+                else None
+            ),
             json.get("groundwater_level"),
         )
-        spt._n60 = None if json["N60"] is None else np.asarray(json["N60"])
+        spt._n60 = None if json.get("N60") is None else np.asarray(json["N60"])
         return spt
 
     @staticmethod
@@ -168,14 +199,18 @@ class SPT:
             form.get("sptName", file_name.stem),
             np.asarray(file_data["Depth"]),
             np.asarray(file_data["NValue"]),
-            constants.HammerType.Auto
-            if form["hammerType"] == ""
-            else constants.HammerType[form["hammerType"]],
-            form["boreholeDiameter"],
+            (
+                constants.HammerType.Auto
+                if form["hammerType"] == ""
+                else constants.HammerType[form["hammerType"]]
+            ),
+            form["boreholeDiameter"] or None,
             None if form["energyRatio"] == "" else form["energyRatio"],
-            None
-            if soil_type is None
-            else np.asarray([constants.SoilType[soil] for soil in soil_type]),
+            (
+                None
+                if soil_type is None
+                else np.asarray([constants.SoilType[soil] for soil in soil_type])
+            ),
         )
 
     @staticmethod

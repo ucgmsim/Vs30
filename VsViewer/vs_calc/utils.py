@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-from nzgd.constants import WATER_UNIT_WEIGHT_kN_m3
+
+from vs_calc import constants
 
 
 def convert_to_midpoint(
@@ -77,90 +78,45 @@ def split_layers_at_depths(
         split into sublayers, retaining original unsaturated and saturated unit weights for later selection.
     """
     if layers.empty:
-        return layers
+        return layers.copy()
 
-    # Convert to numpy array and handle single value for backward compatibility
-    if isinstance(depths_to_split_at, (int, float)):
-        depth_values = np.array([float(depths_to_split_at)])
-    else:
-        depth_values = np.asarray(depths_to_split_at, dtype=float).flatten()
-
-    # Remove duplicates and sort (np.unique returns sorted unique values)
-    depth_values = np.unique(depth_values)
-
-    if len(depth_values) == 0:
-        return layers
-
-    # Start with original layers
-    current_layers = layers.copy()
-
-    # Apply each depth split sequentially
-    for depth in depth_values:
-        sublayers = []
-        cumulative_depth = 0.0
-
-        for _, row in current_layers.iterrows():
-            thickness = float(row["layer_thickness_m"])
-            unsat_w = float(row["unsaturated_unit_weight_kN/m3"])
-            sat_w = float(row["saturated_unit_weight_kN/m3"])
-
-            top = cumulative_depth
-            bottom = cumulative_depth + thickness
-
-            if depth <= top or depth >= bottom:
-                # Entirely above or below; keep as-is
-                sublayers.append(
-                    {
-                        "layer_thickness_m": thickness,
-                        "unsaturated_unit_weight_kN/m3": unsat_w,
-                        "saturated_unit_weight_kN/m3": sat_w,
-                    }
-                )
-            else:
-                # Depth intersects this layer; split into two
-                above_thickness = depth - top
-                below_thickness = bottom - depth
-                if above_thickness > 0:
-                    sublayers.append(
-                        {
-                            "layer_thickness_m": above_thickness,
-                            "unsaturated_unit_weight_kN/m3": unsat_w,
-                            "saturated_unit_weight_kN/m3": sat_w,
-                        }
-                    )
-                if below_thickness > 0:
-                    sublayers.append(
-                        {
-                            "layer_thickness_m": below_thickness,
-                            "unsaturated_unit_weight_kN/m3": unsat_w,
-                            "saturated_unit_weight_kN/m3": sat_w,
-                        }
-                    )
-
-            cumulative_depth = bottom
-
-        current_layers = pd.DataFrame(
-            sublayers,
-            columns=[
-                "layer_thickness_m",
-                "unsaturated_unit_weight_kN/m3",
-                "saturated_unit_weight_kN/m3",
-            ],
+    columns = [
+        "layer_thickness_m",
+        "unsaturated_unit_weight_kN/m3",
+        "saturated_unit_weight_kN/m3",
+    ]
+    if not set(columns).issubset(layers.columns):
+        raise ValueError(f"Layers must contain columns {columns}")
+    values = layers[columns].to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (values <= 0).any():
+        raise ValueError(
+            "Layer thicknesses and unit weights must be finite and positive"
         )
 
-    return current_layers
+    depth_values = np.asarray(depths_to_split_at, dtype=float).ravel()
+    if not np.isfinite(depth_values).all():
+        raise ValueError("Split depths must be finite")
+
+    bottoms = np.cumsum(values[:, 0])
+    interior_depths = depth_values[(depth_values > 0) & (depth_values < bottoms[-1])]
+    split_bottoms = np.union1d(bottoms, interior_depths)
+    indices = np.searchsorted(bottoms, split_bottoms, side="left")
+    result = layers.iloc[indices].copy().reset_index(drop=True)
+    result["layer_thickness_m"] = np.diff(np.r_[0.0, split_bottoms])
+    return result
 
 
 def effective_stress_from_layers(
     layers_df: pd.DataFrame, groundwater_level: float
 ) -> np.ndarray:
     """
-    Calculate effective stress using 3-column layer input with groundwater splitting.
+    Calculate effective stress at layer bottoms, splitting at groundwater first.
 
     Parameters
     ----------
-    layers : pandas.DataFrame
+    layers_df : pandas.DataFrame
         DataFrame with columns: ['layer_thickness_m', 'unsaturated_unit_weight_kN/m3', 'saturated_unit_weight_kN/m3'].
+        Layers must be contiguous and ordered from the ground surface downwards.
     groundwater_level : float
         Depth to groundwater level from surface in meters.
 
@@ -174,49 +130,28 @@ def effective_stress_from_layers(
     Raises
     ------
     ValueError
-        If the groundwater level is not at the bottom of a layer in layers_df.
+        If groundwater is negative or non-finite, or layers have invalid thicknesses
+        or unit weights. The input DataFrame is not modified.
     """
     if layers_df is None or len(layers_df) == 0:
         return np.array([])
 
-    # The layer containing the groundwater level in layers_df should have already
-    # been split so that the groundwater level is at the bottom of the layer.
-    # If this split has been correctly done, calling split_layers_at_depths again should
-    # not change the layers_df.
-    gwl_split_layers_df = split_layers_at_depths(layers_df, groundwater_level)
-
-    print()
-
-    if not layers_df.equals(split_layers_at_depths(layers_df, groundwater_level)):
-        raise ValueError(
-            "The groundwater level is not at the bottom of a layer in layers_df."
-            "Please use the split_layers_at_depths function to split the layers at the groundwater level first."
-        )
-
-    # Compute cumulative bottom depths and top depths
-    bottoms = np.cumsum(layers_df["layer_thickness_m"].to_numpy(dtype=float))
-
-    # Mask for layers entirely above groundwater (bottom <= gwl)
-    above_mask = bottoms <= groundwater_level
-
-    # Choose unit weights in two steps for clarity:
-    # 1) select saturated unit weights for all layers
-    # 2) override above groundwater level layers with unsaturated unit weights
-    unit_w = layers_df["saturated_unit_weight_kN/m3"].to_numpy(dtype=float)
-    unsat_arr = layers_df["unsaturated_unit_weight_kN/m3"].to_numpy(dtype=float)
-    unit_w[above_mask] = unsat_arr[above_mask]
-
-    # Layer stresses and cumulative total stress
-    layer_stress = layers_df["layer_thickness_m"].to_numpy(dtype=float) * unit_w
-    total_stress = np.cumsum(layer_stress)
-
-    # Pore water pressure at layer bottoms given by 9.81 * depth_below_gwl.
-    # Set to zero above the groundwater level.
-    depth_below_gwl = bottoms - groundwater_level
-    depth_below_gwl[above_mask] = 0.0
-    pore_water_pressure = WATER_UNIT_WEIGHT_kN_m3 * depth_below_gwl
-
-    # Effective stress at bottoms
-    effective_stresses = total_stress - pore_water_pressure
-
-    return effective_stresses
+    if (
+        groundwater_level is None
+        or not np.isfinite(groundwater_level)
+        or groundwater_level < 0
+    ):
+        raise ValueError("Groundwater level must be finite and non-negative")
+    layers = split_layers_at_depths(layers_df, groundwater_level)
+    thicknesses = layers["layer_thickness_m"].to_numpy(dtype=float)
+    bottoms = np.cumsum(thicknesses)
+    unit_weights = np.where(
+        bottoms <= groundwater_level,
+        layers["unsaturated_unit_weight_kN/m3"].to_numpy(dtype=float),
+        layers["saturated_unit_weight_kN/m3"].to_numpy(dtype=float),
+    )
+    total_stress = np.cumsum(thicknesses * unit_weights)
+    pore_water_pressure = constants.WATER_UNIT_WEIGHT_KN_M3 * np.maximum(
+        bottoms - groundwater_level, 0.0
+    )
+    return total_stress - pore_water_pressure

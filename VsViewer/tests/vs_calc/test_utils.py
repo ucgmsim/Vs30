@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 from vs_calc.utils import effective_stress_from_layers, split_layers_at_depths
 
 
@@ -531,3 +532,55 @@ def test_effective_stress_single_layer_below_gwl():
     # σ' = 20.0 - 9.81 = 10.19 kPa
     expected = np.array([10.19])
     np.testing.assert_array_almost_equal(result, expected, decimal=2)
+
+
+def test_stress_calculation_preserves_input_and_is_repeatable():
+    layers = pd.DataFrame(
+        {
+            "layer_thickness_m": [1.0, 2.0],
+            "unsaturated_unit_weight_kN/m3": [18.0, 19.0],
+            "saturated_unit_weight_kN/m3": [20.0, 21.0],
+        }
+    )
+    original = layers.copy(deep=True)
+    first = effective_stress_from_layers(layers, 1.5)
+    second = effective_stress_from_layers(layers, 1.5)
+    pd.testing.assert_frame_equal(layers, original)
+    np.testing.assert_array_equal(first, second)
+    np.testing.assert_allclose(first, [18.0, 27.5, 44.285])
+
+
+@pytest.mark.parametrize(
+    "column, value",
+    [
+        ("layer_thickness_m", 0.0),
+        ("layer_thickness_m", -1.0),
+        ("layer_thickness_m", np.nan),
+        ("saturated_unit_weight_kN/m3", np.inf),
+        ("unsaturated_unit_weight_kN/m3", -2.0),
+    ],
+)
+def test_invalid_layers_are_rejected(column, value):
+    layers = pd.DataFrame(
+        {
+            "layer_thickness_m": [2.0],
+            "unsaturated_unit_weight_kN/m3": [18.0],
+            "saturated_unit_weight_kN/m3": [20.0],
+        }
+    )
+    layers.loc[0, column] = value
+    with pytest.raises(ValueError, match="finite and positive"):
+        effective_stress_from_layers(layers, 1.0)
+
+
+@pytest.mark.parametrize("groundwater", [-1.0, np.nan, np.inf, None])
+def test_invalid_groundwater_is_rejected(groundwater):
+    layers = pd.DataFrame(
+        {
+            "layer_thickness_m": [2.0],
+            "unsaturated_unit_weight_kN/m3": [18.0],
+            "saturated_unit_weight_kN/m3": [20.0],
+        }
+    )
+    with pytest.raises(ValueError, match="Groundwater"):
+        effective_stress_from_layers(layers, groundwater)
