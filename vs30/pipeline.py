@@ -221,16 +221,16 @@ def compute_categorical_vs30_updates(
             categorical_model_csv, comment="#", skipinitialspace=True
         ).rename(columns=str.strip)
 
-    # Drop rows with placeholder values for excluded categories (e.g., water)
-    categorical_model_df = categorical_model_df[
-        categorical_model_df[constants.COL_MEAN] != constants.NODATA_VALUE
-    ]
-
     utils.validate_csv_columns(
         categorical_model_df,
         [constants.COL_MEAN, constants.COL_STDV],
         "Categorical model CSV",
     )
+
+    # Drop rows with placeholder values for excluded categories (e.g., water)
+    categorical_model_df = categorical_model_df[
+        categorical_model_df[constants.COL_MEAN] != constants.NODATA_VALUE
+    ]
 
     current_prior_df = categorical_model_df.copy()
 
@@ -955,6 +955,7 @@ def points_pipeline(
         observations_df = concat_observation_dfs(
             clustered_observations_df, independent_observations_df
         )
+        spatial.validate_observations(observations_df)
     else:
         observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
 
