@@ -187,12 +187,13 @@ class CPT:
         # atmospheric pressure (MPa)
         pa = 0.1
         # compute vertical stress profile
+        gamma = self.gamma
         totalStress = np.zeros(len(self.depth))
-        totalStress[0] = self.gamma[0] * self.depth[0]
+        totalStress[0] = gamma[0] * self.depth[0]
         u0 = np.zeros(len(self.depth))
         for i in range(1, len(self.depth)):
             totalStress[i] = (
-                self.gamma[i] * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
+                gamma[i] * (self.depth[i] - self.depth[i - 1]) + totalStress[i - 1]
             )
             if self.depth[i] >= self.ground_water_level:
                 u0[i] = 0.00981 * (self.depth[i] - self.ground_water_level)
