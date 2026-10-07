@@ -12,7 +12,11 @@ from vs30 import config, constants, pipeline
 
 logger = logging.getLogger(__name__)
 
-app = typer.Typer(name="vs30", help="VS30 map generation and categorical model updates")
+app = typer.Typer(
+    name="vs30",
+    help="VS30 map generation and categorical model updates",
+    pretty_exceptions_show_locals=False,
+)
 
 _MODEL_ARG_HELP = (
     "Either a bundled model version name ("
