@@ -68,6 +68,8 @@ For the complete list of options:
 vs30 points --help
 ```
 
+By default the command prints a few progress lines; add `--verbose` (`-v`) to also see each step.
+
 ## Vs30 across a region: `vs30 grid`
 
 ### Inputs
@@ -124,6 +126,8 @@ For the complete list of options:
 ```bash
 vs30 grid --help
 ```
+
+By default the command prints a few progress lines; add `--verbose` (`-v`) to also see each step.
 
 ## Custom configurations
 
