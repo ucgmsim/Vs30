@@ -74,33 +74,31 @@ By default the command prints a few progress lines; add `--verbose` (`-v`) to al
 
 ### Inputs
 
-The grid command needs only a bounding box, a spacing, and an output directory — it doesn't take an input CSV (the grid itself defines the locations). The bounding-box and spacing values are in NZTM2000 metres (EPSG:2193).
+The grid command needs only a model and an output directory — it doesn't take an input CSV (the grid itself defines the locations). By default the grid covers all of New Zealand at 100 m spacing; to compute a smaller region or a coarser grid, set the bounding box and spacing, in NZTM2000 metres (EPSG:2193).
 
 ### Running
 
-A full 100 m New Zealand grid:
+A full 100 m New Zealand grid (a long run; the command starts by printing the grid's size, 10600 x 15200 pixels):
 
 ```bash
-vs30 grid \
-    --model modified_foster_2019 \
-    --grid-xmin 1060100 --grid-xmax 2120100 \
-    --grid-ymin 4730100 --grid-ymax 6250100 \
-    --grid-dx 100 --grid-dy 100 \
-    --output-dir ./vs30_out
+vs30 grid modified_foster_2019 ./vs30_out
+```
+
+A smaller region, for example a 20 km box around Wellington:
+
+```bash
+vs30 grid modified_foster_2019 ./wellington_out \
+    --grid-xmin 1740100 --grid-xmax 1760100 \
+    --grid-ymin 5420100 --grid-ymax 5440100
 ```
 
 If you've created a custom model (see [Custom configurations](#custom-configurations)), pass the path to its YAML config file in place of the model name:
 
 ```bash
-vs30 grid \
-    --model ./my_custom_config.yaml \
-    --grid-xmin 1060100 --grid-xmax 2120100 \
-    --grid-ymin 4730100 --grid-ymax 6250100 \
-    --grid-dx 100 --grid-dy 100 \
-    --output-dir ./vs30_out
+vs30 grid ./my_custom_config.yaml ./vs30_out
 ```
 
-The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pixel-edge convention), not pixel centres. So the leftmost pixel's left edge sits at `xmin` and its centre at `xmin + dx/2`.
+The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pixel-edge convention), not pixel centres. So the leftmost pixel's left edge sits at `xmin` and its centre at `xmin + dx/2`. The extent must be a whole number of pixels. For a region to line up pixel-for-pixel with the full-NZ grid, keep its edges at `1060100` plus a multiple of `dx` (east) and `4730100` plus a multiple of `dy` (north); otherwise the command warns.
 
 ### Output
 
@@ -141,12 +139,7 @@ cp vs30/configs/modified_foster_2019.yaml ./my_custom_config.yaml
 
 vs30 points ./my_custom_config.yaml sites.csv results.csv
 
-vs30 grid \
-    --model ./my_custom_config.yaml \
-    --grid-xmin 1060100 --grid-xmax 2120100 \
-    --grid-ymin 4730100 --grid-ymax 6250100 \
-    --grid-dx 100 --grid-dy 100 \
-    --output-dir ./vs30_out
+vs30 grid ./my_custom_config.yaml ./vs30_out
 ```
 
 The path to the YAML file can be absolute or relative to your current working directory. All fields from the bundled config must be present, and no others. The config is checked when it's loaded, before any computation: a missing or unknown field, a value of the wrong kind (e.g. `"false"` in quotes instead of `false`), or a CSV path that doesn't exist stops the run with an error naming the problem.

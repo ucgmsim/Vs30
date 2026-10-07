@@ -193,48 +193,14 @@ def points(
 
 @cli.from_docstring(app)
 def grid(
-    model: typing.Annotated[str, typer.Option(help=_MODEL_ARG_HELP)] = ...,
-    grid_xmin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum X coordinate (outer edge of domain, NZTM meters). "
-            f"Suggested for all of NZ: {config.FULL_NZ_GRID_CONFIG.grid_xmin}."
-        ),
-    ] = ...,
-    grid_xmax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum X coordinate (outer edge of domain, NZTM meters). "
-            f"Suggested for all of NZ: {config.FULL_NZ_GRID_CONFIG.grid_xmax}."
-        ),
-    ] = ...,
-    grid_ymin: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid minimum Y coordinate (outer edge of domain, NZTM meters). "
-            f"Suggested for all of NZ: {config.FULL_NZ_GRID_CONFIG.grid_ymin}."
-        ),
-    ] = ...,
-    grid_ymax: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid maximum Y coordinate (outer edge of domain, NZTM meters). "
-            f"Suggested for all of NZ: {config.FULL_NZ_GRID_CONFIG.grid_ymax}."
-        ),
-    ] = ...,
-    grid_dx: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid X spacing (meters). Suggested: {config.FULL_NZ_GRID_CONFIG.grid_dx}."
-        ),
-    ] = ...,
-    grid_dy: typing.Annotated[
-        int,
-        typer.Option(
-            help=f"Grid Y spacing (meters). Suggested: {config.FULL_NZ_GRID_CONFIG.grid_dy}."
-        ),
-    ] = ...,
-    output_dir: typing.Annotated[Path, typer.Option(file_okay=False)] = ...,
+    model: typing.Annotated[str, typer.Argument(help=_MODEL_ARG_HELP)],
+    output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
+    grid_xmin: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_xmin,
+    grid_xmax: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_xmax,
+    grid_ymin: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_ymin,
+    grid_ymax: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_ymax,
+    grid_dx: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dx,
+    grid_dy: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dy,
     dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
@@ -245,27 +211,30 @@ def grid(
     verbose: typing.Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """
-    Run the VS30 grid pipeline using a bundled or user-supplied model config.
+    Compute a Vs30 grid using a bundled or user-supplied model config.
+
+    By default the grid covers all of New Zealand at 100 m; the bounds and
+    spacing options choose a smaller region or a coarser grid.
 
     Parameters
     ----------
     model : str
         Either a bundled ``FixedModelVersion`` enum value or a path to a
         YAML config file with the same schema.
-    grid_xmin : int
-        Grid minimum X coordinate (NZTM, meters).
-    grid_xmax : int
-        Grid maximum X coordinate (NZTM, meters).
-    grid_ymin : int
-        Grid minimum Y coordinate (NZTM, meters).
-    grid_ymax : int
-        Grid maximum Y coordinate (NZTM, meters).
-    grid_dx : int
-        Grid X spacing (meters).
-    grid_dy : int
-        Grid Y spacing (meters).
     output_dir : Path
         Directory to save all pipeline outputs.
+    grid_xmin : int
+        Western edge of the grid (NZTM2000 metres; a pixel edge, not centre).
+    grid_xmax : int
+        Eastern edge of the grid (NZTM2000 metres).
+    grid_ymin : int
+        Southern edge of the grid (NZTM2000 metres).
+    grid_ymax : int
+        Northern edge of the grid (NZTM2000 metres).
+    grid_dx : int
+        Pixel width (metres).
+    grid_dy : int
+        Pixel height (metres).
     dbscan_nproc : int, optional
         Number of processes for DBSCAN clustering of observations; -1 uses
         all cores. Only used by models that cluster observations
@@ -282,7 +251,37 @@ def grid(
         config_data = config.resolve_model_config(model)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
+    for axis, low, high, spacing in (
+        ("x", grid_xmin, grid_xmax, grid_dx),
+        ("y", grid_ymin, grid_ymax, grid_dy),
+    ):
+        if low >= high:
+            raise typer.BadParameter(
+                f"--grid-{axis}min must be less than --grid-{axis}max "
+                f"(got {low} and {high})."
+            )
+        if spacing <= 0:
+            raise typer.BadParameter(f"--grid-d{axis} must be positive (got {spacing}).")
+        if (high - low) % spacing:
+            raise typer.BadParameter(
+                f"The grid's {axis} extent ({high - low} m) must be a whole number of "
+                f"--grid-d{axis} pixels ({spacing} m)."
+            )
+    if (grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) % grid_dx or (
+        grid_ymin - config.FULL_NZ_GRID_CONFIG.grid_ymin
+    ) % grid_dy:
+        logger.warning(
+            "Grid bounds aren't aligned with the full-NZ grid (edges at "
+            f"{config.FULL_NZ_GRID_CONFIG.grid_xmin} m E, "
+            f"{config.FULL_NZ_GRID_CONFIG.grid_ymin} m N plus multiples of the "
+            "spacing), so its pixels won't line up exactly with a full-NZ map."
+        )
     ensure_writable_directory(output_dir)
+    logger.info(
+        f"Computing a {(grid_xmax - grid_xmin) // grid_dx} x "
+        f"{(grid_ymax - grid_ymin) // grid_dy} pixel grid "
+        f"({grid_dx} x {grid_dy} m pixels)"
+    )
 
     with logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]):
         pipeline.grid_pipeline(

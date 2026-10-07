@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from typer.testing import CliRunner
 
-from vs30 import cli
+from vs30 import cli, config, pipeline
 
 WELLINGTON = "174.7762,-41.2865"
 
@@ -38,6 +38,19 @@ def run_points(
         env={"COLUMNS": "200"},
     )
     return result, output_csv
+
+
+def run_grid(*args: str):
+    """Run ``vs30 grid`` with the given arguments."""
+    return CliRunner().invoke(cli.app, ["grid", *args], env={"COLUMNS": "200"})
+
+
+@pytest.fixture
+def recorded_grid_runs(monkeypatch):
+    """Replace the slow grid pipeline with a stub recording the arguments it gets."""
+    calls = []
+    monkeypatch.setattr(pipeline, "grid_pipeline", lambda **kwargs: calls.append(kwargs))
+    return calls
 
 
 def test_rows_with_bad_coordinates_get_blank_results_and_a_warning(tmp_path, caplog):
@@ -112,20 +125,13 @@ def test_unwritable_output_location_is_reported_before_computing(tmp_path):
         f"name,longitude,latitude\nwellington,{WELLINGTON}\n",
         output_csv=read_only / "out.csv",
     )
-    grid_result = CliRunner().invoke(
-        cli.app,
-        [
-            "grid",
-            "--model", "foster_2019_approx",
-            "--grid-xmin", "1748100",
-            "--grid-xmax", "1749100",
-            "--grid-ymin", "5427100",
-            "--grid-ymax", "5428100",
-            "--grid-dx", "100",
-            "--grid-dy", "100",
-            "--output-dir", str(read_only),
-        ],
-        env={"COLUMNS": "200"},
+    grid_result = run_grid(
+        "foster_2019_approx",
+        str(read_only),
+        "--grid-xmin", "1748100",
+        "--grid-xmax", "1749100",
+        "--grid-ymin", "5427100",
+        "--grid-ymax", "5428100",
     )
 
     for result in (points_result, grid_result):
@@ -165,3 +171,52 @@ def test_gap_fill_local_grids_stay_quiet_by_default(tmp_path):
     assert result.exit_code == 0, result.output
     assert "Gap-filling 1 point(s) from local grids" in result.output
     assert "building the category raster" not in result.output
+
+
+def test_grid_takes_model_and_output_dir_and_defaults_to_all_of_nz(
+    tmp_path, recorded_grid_runs
+):
+    """`vs30 grid MODEL OUTPUT_DIR` computes the full-NZ grid and says how big it is."""
+    result = run_grid("foster_2019_approx", str(tmp_path / "out"))
+
+    assert result.exit_code == 0, result.output
+    assert recorded_grid_runs[0]["grid_config"] == config.FULL_NZ_GRID_CONFIG
+    assert recorded_grid_runs[0]["output_dir"] == tmp_path / "out"
+    assert "10600 x 15200" in result.output
+
+
+@pytest.mark.parametrize(
+    "options, message",
+    [
+        (
+            ["--grid-xmin", "1749100", "--grid-xmax", "1748100"],
+            "--grid-xmin must be less than --grid-xmax",
+        ),
+        (["--grid-dx", "0"], "--grid-dx must be positive"),
+        (["--grid-xmin", "1748100", "--grid-xmax", "1749150"], "whole number of"),
+    ],
+)
+def test_grid_rejects_bad_bounds_before_computing(
+    tmp_path, recorded_grid_runs, options, message
+):
+    """Bounds in the wrong order, a non-positive spacing, or a partial pixel are rejected up front."""
+    result = run_grid("foster_2019_approx", str(tmp_path / "out"), *options)
+
+    assert result.exit_code == 2
+    assert message in result.output
+    assert recorded_grid_runs == []
+
+
+def test_grid_warns_when_bounds_are_off_the_full_nz_grid(tmp_path, recorded_grid_runs):
+    """Bounds that don't line up with the full-NZ grid's pixels get a warning."""
+    result = run_grid(
+        "foster_2019_approx",
+        str(tmp_path / "out"),
+        "--grid-xmin", "1748150",
+        "--grid-xmax", "1750150",
+        "--grid-ymin", "5426100",
+        "--grid-ymax", "5428100",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "aren't aligned with the full-NZ grid" in result.output
