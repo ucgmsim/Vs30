@@ -915,7 +915,8 @@ def points_pipeline(
         If include_intermediate is True, also includes geology_id,
         geology_vs30, geology_stdv, geology_vs30_hybrid, geology_stdv_hybrid,
         geology_mvn_vs30, geology_mvn_stdv, terrain_id, terrain_vs30,
-        terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv.
+        terrain_stdv, terrain_mvn_vs30, terrain_mvn_stdv, plus
+        vs30_before_gapfill and stdv_before_gapfill when fill_gaps is True.
 
     Raises
     ------
@@ -993,6 +994,11 @@ def points_pipeline(
             geol_model_df = pd.read_csv(
                 geology_categorical_csv, comment="#", skipinitialspace=True
             ).rename(columns=str.strip)
+            # Drop placeholder rows (e.g. water), as compute_categorical_vs30_updates
+            # does, so those categories come out as NaN rather than -32767.
+            geol_model_df = geol_model_df[
+                geol_model_df[constants.COL_MEAN] != constants.NODATA_VALUE
+            ]
 
     if run_terrain:
         if terrain_categorical_csv is None:
@@ -1014,6 +1020,9 @@ def points_pipeline(
             terr_model_df = pd.read_csv(
                 terrain_categorical_csv, comment="#", skipinitialspace=True
             ).rename(columns=str.strip)
+            terr_model_df = terr_model_df[
+                terr_model_df[constants.COL_MEAN] != constants.NODATA_VALUE
+            ]
 
     if run_geology:
         assert geol_model_df is not None  # type guard: assigned in the run_geology branch above
@@ -1128,13 +1137,13 @@ def points_pipeline(
         combined_stdv = result_df[constants.COL_COMBINED_STDV].to_numpy()
 
         # COMBINED implies run_geology, so geol_ids was already computed above.
+        if include_intermediate:
+            result_df[constants.COL_VS30_BEFORE_GAPFILL] = combined_vs30.copy()
+            result_df[constants.COL_STDV_BEFORE_GAPFILL] = combined_stdv.copy()
+
         fillable_mask = gapfill.classify_nodata(combined_vs30, geol_ids, locations)
 
         if np.any(fillable_mask):
-            if include_intermediate:
-                result_df[constants.COL_VS30_BEFORE_GAPFILL] = combined_vs30.copy()
-                result_df[constants.COL_STDV_BEFORE_GAPFILL] = combined_stdv.copy()
-
             fillable_indices = np.where(fillable_mask)[0]
             logger.info(
                 f"  Gap-fill: filling {len(fillable_indices)} point(s) "
