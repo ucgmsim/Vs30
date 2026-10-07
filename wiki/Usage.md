@@ -140,7 +140,7 @@ vs30 grid \
     --output-dir ./vs30_out
 ```
 
-The path to the YAML file can be absolute or relative to your current working directory. All fields from the bundled config must be present — they're validated when the YAML is loaded, and a missing field raises an error.
+The path to the YAML file can be absolute or relative to your current working directory. All fields from the bundled config must be present, and no others. The config is checked when it's loaded, before any computation: a missing or unknown field, a value of the wrong kind (e.g. `"false"` in quotes instead of `false`), or a CSV path that doesn't exist stops the run with an error naming the problem.
 
 ### Path fields inside the YAML
 
