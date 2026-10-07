@@ -1,4 +1,4 @@
-id, mean_vs30_km_per_s, standard_deviation_vs30_km_per_s, description, comment
+id, mean_vs30_m_per_s, standard_deviation_ln_vs30, description, comment
 1, 519, 0.5, "Well dissected alpine summits, mountains, etc.",
 2, 393, 0.5, "Large volcano, high block plateaus, etc.",
 3, 547, 0.5, "Well dissected, low mountains, etc.",

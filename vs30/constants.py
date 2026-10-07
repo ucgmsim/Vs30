@@ -323,27 +323,28 @@ LOCATIONS_LAT_COLUMN: str = "latitude"
 
 # Column names used in categorical model DataFrames for Bayesian updates.
 # These are used to identify posterior/prior values at different stages.
+# Means are Vs30 in m/s; standard deviations are of ln(Vs30), so unitless.
 COL_POSTERIOR_MEAN_INDEPENDENT: str = (
-    "posterior_mean_vs30_km_per_s_independent_observations"
+    "posterior_mean_vs30_m_per_s_independent_observations"
 )
 COL_POSTERIOR_STDV_INDEPENDENT: str = (
-    "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+    "posterior_standard_deviation_ln_vs30_independent_observations"
 )
 COL_POSTERIOR_NOBS_INDEPENDENT: str = (
     "posterior_num_observations_independent_observations"
 )
 COL_POSTERIOR_MEAN_CLUSTERED: str = (
-    "posterior_mean_vs30_km_per_s_clustered_observations"
+    "posterior_mean_vs30_m_per_s_clustered_observations"
 )
 COL_POSTERIOR_STDV_CLUSTERED: str = (
-    "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+    "posterior_standard_deviation_ln_vs30_clustered_observations"
 )
-COL_POSTERIOR_MEAN: str = "posterior_mean_vs30_km_per_s"
-COL_POSTERIOR_STDV: str = "posterior_standard_deviation_vs30_km_per_s"
-COL_PRIOR_MEAN: str = "prior_mean_vs30_km_per_s"
-COL_PRIOR_STDV: str = "prior_standard_deviation_vs30_km_per_s"
-COL_MEAN: str = "mean_vs30_km_per_s"
-COL_STDV: str = "standard_deviation_vs30_km_per_s"
+COL_POSTERIOR_MEAN: str = "posterior_mean_vs30_m_per_s"
+COL_POSTERIOR_STDV: str = "posterior_standard_deviation_ln_vs30"
+COL_PRIOR_MEAN: str = "prior_mean_vs30_m_per_s"
+COL_PRIOR_STDV: str = "prior_standard_deviation_ln_vs30"
+COL_MEAN: str = "mean_vs30_m_per_s"
+COL_STDV: str = "standard_deviation_ln_vs30"
 COL_ASSUMED_NUM_PRIOR_OBS: str = "assumed_num_prior_observations"
 COL_ENFORCED_MIN_SIGMA: str = "enforced_min_sigma"
 
