@@ -285,9 +285,16 @@ GAPFILL_INITIAL_HALF_WIDTH_M: int = 5050
 # successive expansions of a valid initial half-width remain valid.
 GAPFILL_HALF_WIDTH_EXPANSION_M: int = 5000
 
-# Large enough to cover the full NZ grid span plus half a pixel, making donor
-# misses essentially impossible when any valid value exists in the grid.
-GAPFILL_MAX_HALF_WIDTH_M: int = 1520050
+# Grid mode: largest donor-search half-width. Large enough to cover the full
+# NZ grid span plus half a pixel, making donor misses essentially impossible
+# when any valid value exists in the grid.
+GAPFILL_GRID_MAX_HALF_WIDTH_M: int = 1520050
+
+# Points mode: largest local-grid half-width tried before leaving a point as
+# nodata. Far below the grid-mode limit because every expansion reruns
+# grid_pipeline on a larger local grid; ~50 km is beyond plausible donor
+# distances within NZ.
+GAPFILL_POINTS_MAX_HALF_WIDTH_M: int = 50050
 
 # Default memory limit (GB) for the per-chunk (indices, distances) arrays
 # returned by the KDTree query inside compute_spatial_pixel_adjustments during

@@ -143,7 +143,7 @@ def fill_nodata_grid(
     dx = abs(transform.a)
     half_width_pixels = round(constants.GAPFILL_INITIAL_HALF_WIDTH_M / dx)
     half_width_expansion_pixels = round(constants.GAPFILL_HALF_WIDTH_EXPANSION_M / dx)
-    max_half_width_pixels = round(constants.GAPFILL_MAX_HALF_WIDTH_M / dx)
+    max_half_width_pixels = round(constants.GAPFILL_GRID_MAX_HALF_WIDTH_M / dx)
 
     filled_vs30 = vs30.copy()
     filled_stdv = stdv.copy()

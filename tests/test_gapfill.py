@@ -195,3 +195,58 @@ def test_points_gap_fill_shows_single_bar_over_points_to_fill(capsys):
     # Geology and terrain bars over both sites, then one bar over the single gap.
     assert len(final_bar_states) == 3, final_bar_states
     assert " 1/1 " in final_bar_states[2]
+
+
+def local_grid_result(vs30: np.ndarray, stdv: np.ndarray) -> dict:
+    """grid_pipeline-style result for the 3x3 grid whose pixel (1, 1) is centred on (1749050, 5427050)."""
+    return {
+        "combined_vs30": vs30,
+        "combined_stdv": stdv,
+        "profile": {
+            "transform": rasterio.transform.Affine(100, 0, 1748900, 0, -100, 5427200)
+        },
+    }
+
+
+def test_fill_one_point_via_local_grid_uses_nearest_valid_pixel(monkeypatch):
+    """A nodata point takes the value of the valid pixel nearest its own pixel's centre."""
+    vs30 = np.full((3, 3), np.nan)
+    stdv = np.full((3, 3), np.nan)
+    vs30[1, 0], stdv[1, 0] = 300.0, 0.7
+    vs30[0, 2], stdv[0, 2] = 400.0, 0.9
+    monkeypatch.setattr(
+        pipeline,
+        "grid_pipeline",
+        lambda grid_config, output_dir, **kwargs: local_grid_result(vs30, stdv),
+    )
+
+    # The point sits 45 m east of its pixel centre: from the point, pixel (0, 2)
+    # is nearer (114 m vs 145 m); from the pixel centre, as grid mode measures,
+    # pixel (1, 0) is (100 m vs 141 m).
+    assert pipeline.fill_one_point_via_local_grid(
+        1749095.0, 5427050.0, config.FULL_NZ_GRID_CONFIG, {}
+    ) == (300.0, 0.7)
+
+
+def test_fill_one_point_via_local_grid_gives_up_at_points_limit(monkeypatch):
+    """With no valid pixel in reach, local grids grow up to the points-mode limit, then the point stays nodata."""
+    requested_half_widths = []
+
+    def fake_grid_pipeline(grid_config, output_dir, **kwargs):
+        requested_half_widths.append((grid_config.grid_xmax - grid_config.grid_xmin) / 2)
+        return local_grid_result(np.full((3, 3), np.nan), np.full((3, 3), np.nan))
+
+    monkeypatch.setattr(pipeline, "grid_pipeline", fake_grid_pipeline)
+
+    fill_vs30, fill_stdv = pipeline.fill_one_point_via_local_grid(
+        1749050.0, 5427050.0, config.FULL_NZ_GRID_CONFIG, {}
+    )
+
+    assert np.isnan(fill_vs30) and np.isnan(fill_stdv)
+    assert requested_half_widths == list(
+        range(
+            constants.GAPFILL_INITIAL_HALF_WIDTH_M,
+            constants.GAPFILL_POINTS_MAX_HALF_WIDTH_M + 1,
+            constants.GAPFILL_HALF_WIDTH_EXPANSION_M,
+        )
+    )

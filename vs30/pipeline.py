@@ -11,6 +11,7 @@ from typing import TypedDict
 import numpy as np
 import pandas as pd
 import rasterio
+import scipy.spatial
 from qcore import coordinates
 from tqdm import tqdm
 
@@ -36,7 +37,6 @@ class GridPipelineResult(TypedDict, total=False):
 
     geology_vs30: np.ndarray
     geology_stdv: np.ndarray
-    geology_ids: np.ndarray
     terrain_vs30: np.ndarray
     terrain_stdv: np.ndarray
     combined_vs30: np.ndarray
@@ -609,9 +609,6 @@ def grid_pipeline(
         Dictionary containing the computed raster data with keys:
 
         - ``"geology_vs30"``, ``"geology_stdv"`` : 2D arrays (when geology is computed)
-        - ``"geology_ids"`` : 2D uint8 array of geology category IDs (always
-          populated when geology is computed; required by the gap-fill
-          classifier in ``points_pipeline``).
         - ``"terrain_vs30"``, ``"terrain_stdv"`` : 2D arrays (when terrain is computed)
         - ``"combined_vs30"``, ``"combined_stdv"`` : 2D arrays (when both models are computed)
         - ``"profile"`` : rasterio profile dict with CRS, transform, dimensions, etc.
@@ -677,7 +674,6 @@ def grid_pipeline(
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
-        result["geology_ids"] = geol_ids
 
     if run_terrain:
         logger.info("\n" + "=" * 80 + "\nRUNNING TERRAIN PIPELINE\n" + "=" * 80)
@@ -775,7 +771,10 @@ def fill_one_point_via_local_grid(
     grid_pipeline_kwargs: dict,
 ) -> tuple[float, float]:
     """
-    Fill a single nodata point by running ``grid_pipeline`` on a local grid.
+    Fill a nodata point with the nearest valid pixel of a local ``grid_pipeline`` run.
+
+    The local grid grows until it contains a valid pixel, up to
+    ``constants.GAPFILL_POINTS_MAX_HALF_WIDTH_M``.
 
     Parameters
     ----------
@@ -795,7 +794,7 @@ def fill_one_point_via_local_grid(
         ``(fill_vs30, fill_stdv)``. Both are NaN if no donor was found.
     """
     half_width = constants.GAPFILL_INITIAL_HALF_WIDTH_M
-    while half_width <= constants.GAPFILL_MAX_HALF_WIDTH_M:
+    while half_width <= constants.GAPFILL_POINTS_MAX_HALF_WIDTH_M:
         local_config = gapfill.create_local_grid_config(
             easting, northing, gapfill_grid_config, half_width
         )
@@ -805,20 +804,22 @@ def fill_one_point_via_local_grid(
             **grid_pipeline_kwargs,
         )
 
-        local_vs30, local_stdv = gapfill.fill_nodata_grid(
-            local_result["combined_vs30"],
-            local_result["combined_stdv"],
-            local_result["geology_ids"],
-            local_result["profile"],
-        )
-        row, col = rasterio.transform.rowcol(
-            local_result["profile"]["transform"], easting, northing
-        )
-        fill_vs30 = local_vs30[row, col]
-        fill_stdv = local_stdv[row, col]
-
-        if not np.isnan(fill_vs30):
-            return float(fill_vs30), float(fill_stdv)
+        transform = local_result["profile"]["transform"]
+        valid_rows, valid_cols = np.where(~np.isnan(local_result["combined_vs30"]))
+        if len(valid_rows) > 0:
+            row, col = rasterio.transform.rowcol(transform, easting, northing)
+            # Measure from the query pixel's centre, as grid-mode gap-fill does,
+            # so both modes pick the same donor for a pixel they both fill.
+            _, nearest = scipy.spatial.KDTree(
+                gapfill.pixel_coords_float32(valid_rows, valid_cols, transform)
+            ).query(
+                gapfill.pixel_coords_float32(np.array([row]), np.array([col]), transform)[0]
+            )
+            donor = (valid_rows[nearest], valid_cols[nearest])
+            return (
+                float(local_result["combined_vs30"][donor]),
+                float(local_result["combined_stdv"][donor]),
+            )
 
         half_width += constants.GAPFILL_HALF_WIDTH_EXPANSION_M
         logger.info(
@@ -1141,10 +1142,9 @@ def points_pipeline(
 
             # Local grid_pipeline calls reuse already-computed observations
             # and posteriors, and disable Bayesian update + internal gap-fill
-            # (grid_pipeline's fill_gaps only searches within the local grid
-            # bounds; fill_one_point_via_local_grid runs gapfill.fill_nodata_grid
-            # itself so it can also grow the local grid on miss). Their per-pixel
-            # progress bars are hidden so only the per-point gap-fill bar shows.
+            # (fill_one_point_via_local_grid picks the donor itself, growing the
+            # local grid on miss). Their per-pixel progress bars are hidden so
+            # only the per-point gap-fill bar shows.
             grid_pipeline_kwargs = {
                 "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
                 "geology_corr_fn": geology_corr_fn,
