@@ -315,7 +315,10 @@ def update_with_clustered_data(
     sites_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """
-    Perform Bayesian update for clustered data.
+    Replace each category's prior with the cluster-weighted mean of its clustered observations.
+
+    Categories without observations keep their prior, as in the legacy
+    ``cluster_update``.
 
     Parameters
     ----------

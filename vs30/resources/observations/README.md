@@ -19,7 +19,7 @@ Independent observations for the `modified_foster_2019` model — the fuller mea
 
 ## `viktor_inferred_vs30_from_cpt.csv`
 
-Clustered observations for the `viktor_cpt_clustering` model: ~35,700 Vs30 values *inferred* from cone penetration test (CPT) soundings (`source = cpt` in legacy code).
+Clustered observations for the `viktor_cpt_clustering` model: ~35,700 Vs30 values *inferred* from cone penetration test (CPT) soundings (`source = cpt` in legacy code). They replace the prior of every category they fall in and are the only observations in that model's MVN. CPTs only penetrate soft ground, so rock categories inherit soft-soil values; see `wiki/Home.md`.
 
 ## `jaehwi_v1p0_independent_observations.csv`
 

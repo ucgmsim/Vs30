@@ -31,7 +31,9 @@ The Foster et al. (2019) model with additional Vs30 measurements from the New Ze
 
 ### `viktor_cpt_clustering`
 
-Extends `modified_foster_2019`, developed by Viktor Polak to incorporate ~35,700 CPT-derived Vs30 estimates, clustered with DBSCAN to avoid over-representing densely surveyed regions.
+Developed by Viktor Polak, this model is built from ~35,700 Vs30 values inferred from cone penetration tests (CPTs) and uses no measured Vs30. It starts from the raw prior Vs30 of each geology and terrain category, then replaces the prior of every category that contains a CPT with the cluster-weighted average of its CPT values (DBSCAN clustering stops densely surveyed areas dominating). The spatial adjustment also uses only the CPT values.
+
+A CPT can only be pushed into soft ground, so CPTs that fall inside rock or volcanic map units sample pockets of soil rather than the rock. As a result, every geology category ends up at about 137–181 m/s: crystalline rock, for example, drops from 750 to about 170 m/s. The model is only sensible within CPT-covered sedimentary basins.
 
 ## Comparing the models
 
