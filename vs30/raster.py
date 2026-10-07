@@ -243,6 +243,13 @@ def create_category_id_array(
         if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
             gdf = gdf.to_crs(constants.NZTM_CRS)
 
+        # Only polygons overlapping the grid can cover its pixel centres, and
+        # rasterizing all of them takes seconds even for a tiny grid.
+        gdf = gdf.cx[
+            grid_config.grid_xmin : grid_config.grid_xmax,
+            grid_config.grid_ymin : grid_config.grid_ymax,
+        ]
+
         id_array = rasterio.features.rasterize(
             shapes=zip(gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]),
             out_shape=(ny, nx),

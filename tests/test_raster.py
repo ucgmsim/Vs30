@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import rasterio
 
-from vs30 import constants, raster
+from vs30 import config, constants, raster
 
 
 def test_point_slope_matches_grid_slope_on_cell_edges():
@@ -21,6 +21,17 @@ def test_point_slope_matches_grid_slope_on_cell_edges():
     point_slope = raster.sample_slope_at_points(np.column_stack([xs, ys]))
 
     np.testing.assert_array_equal(point_slope.reshape(10, 10).astype(np.float32), grid_slope)
+
+
+
+def test_geology_ids_for_a_grid_with_no_polygons_are_nodata():
+    """A grid that no geology polygon reaches (open sea) gets nodata IDs, not an error."""
+    ids, _ = raster.create_category_id_array(
+        constants.ModelType.GEOLOGY,
+        config.GridConfig(1699600, 1700600, 5899600, 5900600, 100, 100),
+    )
+
+    assert (ids == constants.RASTER_ID_NODATA_VALUE).all()
 
 
 class TestApplyHybridGeologyModifications:
