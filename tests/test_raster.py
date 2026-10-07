@@ -2,8 +2,25 @@
 
 import numpy as np
 import pytest
+import rasterio
 
-from vs30 import raster
+from vs30 import constants, raster
+
+
+def test_point_slope_matches_grid_slope_on_cell_edges():
+    """Sampling slope at pixel centres picks the same slope.tif cell as the grid's resampling, including on cell edges."""
+    # slope.tif has 270 m cells from x = 1060040, so the pixel-centre column
+    # x = 1560350 lies exactly on a cell edge: (1560350 - 1060040) / 270 = 1853.
+    transform = rasterio.transform.from_bounds(1560100, 5185100, 1561100, 5186100, 10, 10)
+    grid_slope = raster.compute_slope_array(
+        {"height": 10, "width": 10, "transform": transform, "crs": constants.NZTM_CRS}
+    )
+    rows, cols = np.mgrid[0:10, 0:10]
+    xs, ys = rasterio.transform.xy(transform, rows.ravel(), cols.ravel())
+
+    point_slope = raster.sample_slope_at_points(np.column_stack([xs, ys]))
+
+    np.testing.assert_array_equal(point_slope.reshape(10, 10).astype(np.float32), grid_slope)
 
 
 class TestApplyHybridGeologyModifications:

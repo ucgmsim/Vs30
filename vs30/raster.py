@@ -481,9 +481,12 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
         Slope values at each point (N,).
     """
     data, transform, nodata = load_slope_raster_array()
-    rows, cols = rasterio.transform.rowcol(transform, points[:, 0], points[:, 1])
-    rows = np.asarray(rows)
-    cols = np.asarray(cols)
+    cols_frac, rows_frac = ~transform * (points[:, 0], points[:, 1])
+    # A point exactly on a slope-cell edge can land a hair below the integer
+    # index through float error (e.g. 1852.9999999999995); round it onto the
+    # cell GDAL's nearest-neighbour resampling picks in compute_slope_array.
+    rows = np.floor(rows_frac + 1e-9).astype(int)
+    cols = np.floor(cols_frac + 1e-9).astype(int)
     in_bounds = (
         (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     )
