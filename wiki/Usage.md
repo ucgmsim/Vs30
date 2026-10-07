@@ -110,7 +110,7 @@ By default the command writes three GeoTIFF rasters covering the bounding box at
 
 Each has two bands: Vs30 in m/s, and its uncertainty as the standard deviation of ln(Vs30) (no units; 0.3 means roughly ±30%).
 
-Pass `--include-intermediate` to also write the intermediate products: the geology and terrain category IDs (`gid.tif`, `tid.tif`), each model's Vs30 before MVN adjustment, the slope and coastal-distance rasters behind the geology modifications, for models that update the categories from observations, the updated category tables as CSV; and, for models that gap-fill, the combined Vs30 before gap-filling.
+Pass `--include-intermediate` to also write the intermediate products: the geology and terrain category IDs (`gid.tif`, `tid.tif`), each model's Vs30 before MVN adjustment, the slope and coastal-distance rasters behind the geology modifications (coastal distance is capped at 20 km, beyond which it no longer changes the result), for models that update the categories from observations, the updated category tables as CSV; and, for models that gap-fill, the combined Vs30 before gap-filling.
 
 ### Practical tips
 

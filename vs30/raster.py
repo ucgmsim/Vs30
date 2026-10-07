@@ -341,7 +341,10 @@ def create_vs30_arrays_from_ids(
 
 def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     """
-    Compute distance to the nearest coast (in meters).
+    Compute distance to the nearest coast (in meters), capped at the coastal modification's range.
+
+    Distances beyond the larger of ``HYBRID_GID4_DIST_MAX`` and
+    ``HYBRID_GID10_DIST_MAX`` (20 km) change nothing, so they are capped there.
 
     Parameters
     ----------
@@ -366,27 +369,13 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     s_xmax = s_xmin + template_profile["width"] * dx
     s_ymin = s_ymax - template_profile["height"] * dy
 
-    # Grid extension rationale:
-    # - Full-NZ coverage: accurate distances for observations beyond the
-    #   template bounds.
-    # - Pixel alignment: round up to whole pixels (else GDAL trims to integer
-    #   pixel counts and shifts samples by a sub-pixel offset).
-    g_xmin = (
-        s_xmin
-        - math.ceil(max(0, s_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) / dx) * dx
-    )
-    g_xmax = (
-        s_xmax
-        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_xmax - s_xmax) / dx) * dx
-    )
-    g_ymin = (
-        s_ymin
-        - math.ceil(max(0, s_ymin - config.FULL_NZ_GRID_CONFIG.grid_ymin) / dy) * dy
-    )
-    g_ymax = (
-        s_ymax
-        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_ymax - s_ymax) / dy) * dy
-    )
+    # Pad the grid by the distance cap so the nearest coast within the cap is
+    # always inside the rasterized area, rounding up to whole pixels (else
+    # GDAL trims to integer pixel counts and shifts samples by a sub-pixel
+    # offset).
+    max_distance = max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
+    pad_cols = math.ceil(max_distance / dx)
+    pad_rows = math.ceil(max_distance / dy)
 
     # GDAL requires a file path, so use a temporary file.
     fd, tmp_path = tempfile.mkstemp(suffix=".tif")
@@ -397,7 +386,12 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
             tmp_path,
             str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
             creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-            outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
+            outputBounds=[
+                s_xmin - pad_cols * dx,
+                s_ymin - pad_rows * dy,
+                s_xmax + pad_cols * dx,
+                s_ymax + pad_rows * dy,
+            ],
             xRes=dx,
             yRes=dy,
             noData=0,
@@ -408,24 +402,25 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
         band = ds.GetRasterBand(1)
         band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
         # band is passed as both source and destination - ComputeProximity
-        # overwrites it with distance values.
-        ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
+        # overwrites it with distance values. Pixels with no coast within
+        # MAXDIST get -1; without MAXDIST, an area with no sea at all would
+        # come out as distance 0 everywhere.
+        ds = gdal.ComputeProximity(
+            band,
+            band,
+            ["VALUES=0", "DISTUNITS=GEO", f"MAXDIST={max_distance}", "NODATA=-1"],
+        )
 
         with rasterio.open(tmp_path) as src:
             data = src.read(1)
-
-        if g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax:
-            col_offset = round((s_xmin - g_xmin) / dx)
-            row_offset = round((g_ymax - s_ymax) / dy)
-            distance_meters = data[
-                row_offset : row_offset + template_profile["height"],
-                col_offset : col_offset + template_profile["width"],
-            ].astype(np.float32)
-        else:
-            distance_meters = data.astype(np.float32)
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
+    distance_meters = data[
+        pad_rows : pad_rows + template_profile["height"],
+        pad_cols : pad_cols + template_profile["width"],
+    ].astype(np.float32)
+    distance_meters[distance_meters < 0] = max_distance
     return distance_meters
 
 

@@ -34,6 +34,21 @@ def test_geology_ids_for_a_grid_with_no_polygons_are_nodata():
     assert (ids == constants.RASTER_ID_NODATA_VALUE).all()
 
 
+
+def test_coast_distance_is_capped_where_the_coast_is_out_of_range():
+    """Far inland, coast distance is capped at the coastal modification's range instead of coming out as 0."""
+    # A central North Island box more than 20 km from any coast.
+    transform = rasterio.transform.from_bounds(1830100, 5700100, 1832100, 5702100, 20, 20)
+
+    distances = raster.compute_coast_distance_raster(
+        {"height": 20, "width": 20, "transform": transform}
+    )
+
+    assert (
+        distances == max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
+    ).all()
+
+
 class TestApplyHybridGeologyModifications:
     """Tests for the apply_hybrid_geology_modifications function."""
 
