@@ -419,9 +419,6 @@ def compute_component_grid(
             (constants.BAND_DESCRIPTION_VS30, constants.BAND_DESCRIPTION_STDV),
         )
 
-    slope_array = None
-    coast_dist_array = None
-
     if model_type == constants.ModelType.GEOLOGY:
         logger.log(
             progress_level, "Geology: applying slope and coastal-distance modifications"
@@ -499,8 +496,6 @@ def compute_component_grid(
             apply_coastal_distance_mod=apply_coastal_distance_mod,
             noisy=noisy,
             max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
-            slope_array=slope_array,
-            coast_dist_array=coast_dist_array,
             show_progress=show_progress,
         )
     else:

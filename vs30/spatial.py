@@ -253,13 +253,10 @@ def validate_observations(observations: pd.DataFrame) -> None:
 
 def prepare_observation_data(
     observations: pd.DataFrame,
-    raster_data: RasterData,
     updated_model_table: np.ndarray,
     model_type: constants.ModelType,
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
-    slope_array: np.ndarray | None = None,
-    coast_dist_array: np.ndarray | None = None,
     noisy: bool = False,
 ) -> ObservationData:
     """
@@ -267,14 +264,14 @@ def prepare_observation_data(
 
     For geology models, hybrid modifications (slope and coastal distance)
     are applied to model values at observation locations before computing
-    residuals. Terrain models do not use slope_array or coast_dist_array.
+    residuals. Slope and coastal distance are sampled at each observation's
+    exact location, as in points mode, so the residuals don't depend on the
+    grid's extent or spacing.
 
     Parameters
     ----------
     observations : DataFrame
         Observations with vs30, uncertainty, easting, northing columns.
-    raster_data : RasterData
-        Provides the transform used to locate observations within the grid.
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_type : constants.ModelType
@@ -283,11 +280,6 @@ def prepare_observation_data(
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
-    slope_array : ndarray, optional
-        2D slope array. Required for geology models; ignored for terrain.
-    coast_dist_array : ndarray, optional
-        2D coastal distance array. Required for geology models; ignored
-        for terrain.
     noisy : bool, optional
         Whether to apply noise weighting.
 
@@ -295,18 +287,7 @@ def prepare_observation_data(
     -------
     ObservationData
         Prepared observation data.
-
-    Raises
-    ------
-    ValueError
-        If model_type is GEOLOGY and slope_array or coast_dist_array is None.
     """
-    if model_type == constants.ModelType.GEOLOGY and (
-        slope_array is None or coast_dist_array is None
-    ):
-        raise ValueError(
-            "slope_array and coast_dist_array are required for geology models."
-        )
     obs_locs = observations[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
     ].to_numpy()
@@ -336,43 +317,17 @@ def prepare_observation_data(
     ]
 
     if model_type == constants.ModelType.GEOLOGY:
-        assert slope_array is not None and coast_dist_array is not None  # type guard: entry check raises if either is None when GEOLOGY
-        rows, cols = rasterio.transform.rowcol(
-            raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
-        )
-        rows = np.asarray(rows)
-        cols = np.asarray(cols)
-
-        within_grid = (
-            (rows >= 0)
-            & (rows < slope_array.shape[0])
-            & (cols >= 0)
-            & (cols < slope_array.shape[1])
-        )
-
-        # Within-grid observations: sample from grid arrays for consistency
-        # with pixel updates. Outside-grid observations: sample from source
-        # rasters since there are no corresponding grid pixels to be
-        # consistent with.
-        slope_obs = np.empty(len(rows), dtype=np.float64)
-        coast_obs = np.full(len(rows), np.nan, dtype=np.float64)
-
-        slope_obs[within_grid] = slope_array[rows[within_grid], cols[within_grid]]
-        coast_obs[within_grid] = coast_dist_array[rows[within_grid], cols[within_grid]]
-
-        if not np.all(within_grid):
-            outside_grid_points = obs_locs[~within_grid]
-            slope_obs[~within_grid] = raster.sample_slope_at_points(outside_grid_points)
-            if apply_coastal_distance_mod:
-                coast_obs[~within_grid] = raster.compute_coast_distance_at_points(
-                    outside_grid_points
-                )
-
+        slope_obs = raster.sample_slope_at_points(obs_locs)
         # NODATA slope at obs locations gets replaced with OBS_SLOPE_NODATA_SENTINEL
         # so np.interp returns MAX Vs30 (distinct from grid pixels' NODATA path,
         # which yields MIN Vs30).
         slope_obs = np.where(
             slope_obs < 0, constants.OBS_SLOPE_NODATA_SENTINEL, slope_obs
+        )
+        coast_obs = (
+            raster.compute_coast_distance_at_points(obs_locs)
+            if apply_coastal_distance_mod
+            else np.zeros(len(obs_locs))
         )
 
         model_vs30, model_stdv = raster.apply_hybrid_geology_modifications(
@@ -905,8 +860,6 @@ def compute_spatial_adjustment_on_grid(
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
     max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
-    slope_array: np.ndarray | None = None,
-    coast_dist_array: np.ndarray | None = None,
     show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -940,10 +893,6 @@ def compute_spatial_adjustment_on_grid(
         matrix (via ``obs_data.noise_weights``).
     max_spatial_intermediate_array_memory_gb : float, optional
         Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
-    slope_array : np.ndarray, optional
-        Pre-computed slope array (for geology observation data preparation).
-    coast_dist_array : np.ndarray, optional
-        Pre-computed coast distance array.
     show_progress : bool, optional
         Whether to display a per-pixel progress bar.
 
@@ -983,14 +932,11 @@ def compute_spatial_adjustment_on_grid(
     logger.debug("Preparing observation data for spatial adjustment...")
     obs_data = prepare_observation_data(
         observations_df,
-        raster_data,
         updated_model_table,
         model_type,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
         noisy=noisy,
-        slope_array=slope_array,
-        coast_dist_array=coast_dist_array,
     )
     logger.debug(f"Prepared {len(obs_data.locations)} valid observations")
 
