@@ -279,6 +279,7 @@ def compute_component_grid(
     include_intermediate: bool = False,
     corr_fn: Callable | None = None,
     apply_coastal_distance_mod: bool = True,
+    show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     """
     Compute the Vs30 grid for one component (geology or terrain).
@@ -324,6 +325,8 @@ def compute_component_grid(
         Correlation function for spatial adjustment.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
+    show_progress : bool, optional
+        Whether to display a per-pixel progress bar during MVN spatial adjustment.
 
     Returns
     -------
@@ -489,6 +492,7 @@ def compute_component_grid(
             max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
             slope_array=slope_array,
             coast_dist_array=coast_dist_array,
+            show_progress=show_progress,
         )
     else:
         logger.info("\n=== STEP 4: SKIPPED - MVN spatial adjustment disabled ===")
@@ -532,6 +536,7 @@ def grid_pipeline(
     independent_observations_df: pd.DataFrame | None = None,
     geology_posterior_df: pd.DataFrame | None = None,
     terrain_posterior_df: pd.DataFrame | None = None,
+    show_progress: bool = True,
 ) -> GridPipelineResult:
     """
     Compute the Vs30 grid.
@@ -595,6 +600,8 @@ def grid_pipeline(
     terrain_posterior_df : pd.DataFrame, optional
         Pre-computed posterior categorical model for terrain. When provided,
         the terrain Bayesian update step is skipped.
+    show_progress : bool, optional
+        Whether to display per-pixel progress bars during MVN spatial adjustment.
 
     Returns
     -------
@@ -666,6 +673,7 @@ def grid_pipeline(
             include_intermediate=include_intermediate,
             corr_fn=geology_corr_fn,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
+            show_progress=show_progress,
         )
         result["geology_vs30"] = geol_vs30
         result["geology_stdv"] = geol_stdv
@@ -690,6 +698,7 @@ def grid_pipeline(
             include_intermediate=include_intermediate,
             corr_fn=terrain_corr_fn,
             apply_coastal_distance_mod=apply_coastal_distance_mod,
+            show_progress=show_progress,
         )
         result["terrain_vs30"] = terr_vs30
         result["terrain_stdv"] = terr_stdv
@@ -1134,7 +1143,8 @@ def points_pipeline(
             # and posteriors, and disable Bayesian update + internal gap-fill
             # (grid_pipeline's fill_gaps only searches within the local grid
             # bounds; fill_one_point_via_local_grid runs gapfill.fill_nodata_grid
-            # itself so it can also grow the local grid on miss).
+            # itself so it can also grow the local grid on miss). Their per-pixel
+            # progress bars are hidden so only the per-point gap-fill bar shows.
             grid_pipeline_kwargs = {
                 "apply_alluvium_slope_mod": apply_alluvium_slope_mod,
                 "geology_corr_fn": geology_corr_fn,
@@ -1153,9 +1163,10 @@ def points_pipeline(
                 "do_bayesian_update": False,
                 "include_intermediate": False,
                 "fill_gaps": False,
+                "show_progress": False,
             }
 
-            for idx in fillable_indices:
+            for idx in tqdm(fillable_indices, desc="Gap-fill", unit="point"):
                 easting, northing = locations[idx]
                 fill_vs30, fill_stdv = fill_one_point_via_local_grid(
                     easting, northing, gapfill_grid_config, grid_pipeline_kwargs

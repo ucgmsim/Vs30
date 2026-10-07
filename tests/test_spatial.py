@@ -214,3 +214,41 @@ class TestFindAffectedPixels:
 
         assert len(affected_flat_indices) == 0
         assert affected_locs.shape == (0, 2)
+
+
+class TestComputeSpatialPixelAdjustments:
+    """Tests for compute_spatial_pixel_adjustments."""
+
+    def test_show_progress_false_silences_progress_bar(self, capsys):
+        """show_progress=False hides the per-pixel progress bar that is shown by default."""
+        raster_data = spatial.RasterData.from_arrays(
+            vs30=np.full((3, 3), 300.0),
+            stdv=np.full((3, 3), 0.5),
+            transform=rasterio.transform.Affine(100, 0, 1500000, 0, -100, 5100000),
+        )
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1500150.0, 5099850.0]]),
+            model_stdv=np.array([0.5]),
+            log_model_vs30=np.log(np.array([300.0])),
+            residuals=np.zeros(1),
+            noise_weights=np.ones(1),
+        )
+        affected_flat_indices, affected_locs = spatial.find_affected_pixels(
+            raster_data, obs_data
+        )
+
+        spatial.compute_spatial_pixel_adjustments(
+            raster_data, obs_data, affected_flat_indices, affected_locs, geology_corr_fn
+        )
+        # The observation is at the centre pixel, so all 3x3 = 9 pixels are adjusted.
+        assert "9/9" in capsys.readouterr().err
+
+        spatial.compute_spatial_pixel_adjustments(
+            raster_data,
+            obs_data,
+            affected_flat_indices,
+            affected_locs,
+            geology_corr_fn,
+            show_progress=False,
+        )
+        assert capsys.readouterr().err == ""

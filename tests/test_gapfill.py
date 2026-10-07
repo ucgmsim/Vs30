@@ -1,9 +1,11 @@
 """Tests for the gap-fill module."""
 
 import numpy as np
+import pandas as pd
 import rasterio
 
-from vs30 import config, constants, gapfill
+from conftest import FIXTURES_DIR, load_fixed_model_config
+from vs30 import config, constants, gapfill, pipeline
 
 
 def test_classify_nodata_excludes_water_and_offshore():
@@ -155,3 +157,41 @@ def test_create_local_grid_config_expansion():
     assert (
         expanded_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin
     ) % dx == 0
+
+
+def test_points_gap_fill_shows_single_bar_over_points_to_fill(capsys):
+    """Points-mode gap-fill shows one bar over the points being filled, not per-pixel bars from each local grid."""
+    cfg = load_fixed_model_config(constants.FixedModelVersion.JAEHWI_V1P0)
+    # geology_gid9_outwash is an on-land nodata gap (no terrain category) with no
+    # observations near its local grid; auckland needs no filling.
+    sites = (
+        pd.read_csv(FIXTURES_DIR / "consistency_test_points.csv")
+        .set_index("name")
+        .loc[["auckland", "geology_gid9_outwash"]]
+    )
+
+    pipeline.points_pipeline(
+        longitudes=sites["longitude"].to_numpy(),
+        latitudes=sites["latitude"].to_numpy(),
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg["geology_corr_fn"],
+        terrain_corr_fn=cfg["terrain_corr_fn"],
+        geology_categorical_csv=cfg["geology_categorical_csv"],
+        terrain_categorical_csv=cfg["terrain_categorical_csv"],
+        independent_observations_csv=cfg["independent_observations_csv"],
+        combination_method=constants.CombinationMethod(cfg["combination_method"]),
+        combine_ratio=cfg["combine_ratio"],
+        do_bayesian_update=cfg["do_bayesian_update"],
+        apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
+        fill_gaps=True,
+    )
+
+    # tqdm redraws each bar in place with "\r" and ends it with "\n", so the last
+    # "\r" segment of each "\n" line is what stays on screen (splitlines() would
+    # also split on "\r").
+    final_bar_states = [
+        line.split("\r")[-1] for line in capsys.readouterr().err.split("\n") if line
+    ]
+    # Geology and terrain bars over both sites, then one bar over the single gap.
+    assert len(final_bar_states) == 3, final_bar_states
+    assert " 1/1 " in final_bar_states[2]

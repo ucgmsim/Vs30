@@ -697,6 +697,7 @@ def compute_spatial_pixel_adjustments(
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
     max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
+    show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute MVN updates for all affected pixels and return updated arrays.
@@ -726,6 +727,8 @@ def compute_spatial_pixel_adjustments(
         If > 0, shrink covariance between points with dissimilar Vs30 values.
     max_spatial_intermediate_array_memory_gb : float, optional
         Memory cap (GB) for the per-chunk (indices, distances) arrays.
+    show_progress : bool, optional
+        Whether to display a per-pixel progress bar.
 
     Returns
     -------
@@ -753,7 +756,10 @@ def compute_spatial_pixel_adjustments(
     )
 
     with tqdm(
-        total=len(affected_flat_indices), desc="Spatial adjustment", unit="pixel"
+        total=len(affected_flat_indices),
+        desc="Spatial adjustment",
+        unit="pixel",
+        disable=not show_progress,
     ) as pbar:
         for chunk_start in range(0, len(affected_flat_indices), chunk_size):
             chunk_end = min(chunk_start + chunk_size, len(affected_flat_indices))
@@ -891,6 +897,7 @@ def compute_spatial_adjustment_on_grid(
     max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
     slope_array: np.ndarray | None = None,
     coast_dist_array: np.ndarray | None = None,
+    show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute MVN spatial adjustment on a grid.
@@ -927,6 +934,8 @@ def compute_spatial_adjustment_on_grid(
         Pre-computed slope array (for geology observation data preparation).
     coast_dist_array : np.ndarray, optional
         Pre-computed coast distance array.
+    show_progress : bool, optional
+        Whether to display a per-pixel progress bar.
 
     Returns
     -------
@@ -1001,6 +1010,7 @@ def compute_spatial_adjustment_on_grid(
         noisy=noisy,
         cov_reduc=constants.COV_REDUC,
         max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
+        show_progress=show_progress,
     )
     logger.info(
         f"Spatial adjustments completed in "
