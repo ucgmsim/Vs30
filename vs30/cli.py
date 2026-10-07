@@ -83,8 +83,9 @@ def points(
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering. Use -1 for all cores.
-        Has no effect unless --do-bayesian-update is set.
+        Number of processes for DBSCAN clustering of observations; -1 uses
+        all cores. Only used by models that cluster observations
+        (bundled: viktor_cpt_clustering).
     """
     try:
         config_data = config.resolve_model_config(model)
@@ -244,7 +245,9 @@ def grid(
     output_dir : Path
         Directory to save all pipeline outputs.
     dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering. Use -1 for all cores.
+        Number of processes for DBSCAN clustering of observations; -1 uses
+        all cores. Only used by models that cluster observations
+        (bundled: viktor_cpt_clustering).
     include_intermediate : bool
         Include intermediate rasters in output.
     max_spatial_intermediate_array_memory_gb : float, optional

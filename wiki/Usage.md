@@ -53,8 +53,8 @@ vs30 points ./my_custom_config.yaml sites.csv results.csv
 The output CSV contains every column from the input plus four new columns:
 
 - `easting`, `northing` — the input coordinates converted to NZTM2000 (EPSG:2193).
-- `vs30` — the final Vs30 estimate (the combined geology + terrain value).
-- `stdv` — the estimated standard deviation of `vs30`.
+- `vs30` — the final Vs30 estimate in m/s (the combined geology + terrain value).
+- `stdv` — the uncertainty of `vs30`, given as the standard deviation of ln(Vs30). It has no units; 0.3 means roughly ±30%.
 
 To also write the intermediate per-model values (geology and terrain category IDs, the separate per-model Vs30 estimates, etc.), pass the `--include-intermediate` flag.
 
@@ -102,12 +102,15 @@ The `--grid-xmin/xmax/ymin/ymax` values are the **outer edges** of the grid (pix
 
 ### Output
 
-The command writes a directory of GeoTIFF rasters covering the bounding box at the chosen spacing:
+By default the command writes three GeoTIFF rasters covering the bounding box at the chosen spacing:
 
-- the geology and terrain category IDs
-- the geology and terrain Vs30 before MVN spatial adjustment
-- the geology and terrain Vs30 after MVN adjustment
-- the combined geology + terrain Vs30 (the final result)
+- `combined_vs30.tif` — the combined geology + terrain Vs30 (the final result)
+- `geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif` — the geology model after MVN spatial adjustment
+- `terrain_vs30_spatially_adjusted_with_uncertainty.tif` — the terrain model after MVN spatial adjustment
+
+Each has two bands: Vs30 in m/s, and its uncertainty as the standard deviation of ln(Vs30) (no units; 0.3 means roughly ±30%).
+
+Pass `--include-intermediate` to also write the intermediate products: the geology and terrain category IDs (`gid.tif`, `tid.tif`), each model's Vs30 before MVN adjustment, the slope and coastal-distance rasters behind the geology modifications, for models that update the categories from observations, the updated category tables as CSV; and, for models that gap-fill, the combined Vs30 before gap-filling.
 
 ### Practical tips
 
