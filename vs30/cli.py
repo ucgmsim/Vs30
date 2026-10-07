@@ -1,6 +1,7 @@
 """Command-line interface for the vs30 package."""
 
 import logging
+import os
 import typing
 from pathlib import Path
 
@@ -23,6 +24,32 @@ _MODEL_ARG_HELP = (
     f"{', '.join(v.value for v in constants.FixedModelVersion)}"
     ") or a path to a custom YAML config file."
 )
+
+
+def ensure_writable_directory(directory: Path) -> None:
+    """
+    Create ``directory`` if needed and fail fast if it can't be written to.
+
+    Parameters
+    ----------
+    directory : Path
+        Output directory.
+
+    Raises
+    ------
+    typer.BadParameter
+        If the directory can't be created or written to.
+    """
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise typer.BadParameter(
+            f"Can't write to output directory {directory}: {e.strerror}."
+        ) from e
+    if not os.access(directory, os.W_OK):
+        raise typer.BadParameter(
+            f"Can't write to output directory {directory}: permission denied."
+        )
 
 
 @cli.from_docstring(app)
@@ -63,6 +90,7 @@ def points(
         config_data = config.resolve_model_config(model)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
+    ensure_writable_directory(output_csv.parent)
 
     df = pd.read_csv(locations_csv, skipinitialspace=True).rename(columns=str.strip)
     for column, option in ((lon_column, "--lon-column"), (lat_column, "--lat-column")):
@@ -137,7 +165,6 @@ def points(
         )
     output_df = pd.concat([df.rename(columns=renamed_columns), result_df], axis=1)
 
-    output_csv.parent.mkdir(parents=True, exist_ok=True)
     output_df.to_csv(output_csv, index=False)
     logger.info(f"Results written to {output_csv}")
 
@@ -227,6 +254,7 @@ def grid(
         config_data = config.resolve_model_config(model)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
+    ensure_writable_directory(output_dir)
 
     pipeline.grid_pipeline(
         grid_config=config.GridConfig(

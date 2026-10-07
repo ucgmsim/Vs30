@@ -1,5 +1,7 @@
 """Tests for the vs30 command-line interface."""
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from typer.testing import CliRunner
@@ -9,11 +11,11 @@ from vs30 import cli
 WELLINGTON = "174.7762,-41.2865"
 
 
-def run_points(tmp_path, csv_text: str):
+def run_points(tmp_path, csv_text: str, output_csv: Path | None = None):
     """Run ``vs30 points foster_2019_approx`` on a locations CSV; return the result and output path."""
     locations_csv = tmp_path / "sites.csv"
     locations_csv.write_text(csv_text)
-    output_csv = tmp_path / "out.csv"
+    output_csv = output_csv or tmp_path / "out.csv"
     result = CliRunner().invoke(
         cli.app,
         ["points", "foster_2019_approx", str(locations_csv), str(output_csv)],
@@ -81,3 +83,33 @@ def test_sites_without_vs30_are_counted_in_a_warning(tmp_path, caplog):
 
     assert result.exit_code == 0, result.output
     assert "1 site(s) have no Vs30" in caplog.text
+
+
+def test_unwritable_output_location_is_reported_before_computing(tmp_path):
+    """points and grid refuse an output location they can't write to, before any computation."""
+    read_only = tmp_path / "read_only"
+    read_only.mkdir()
+    read_only.chmod(0o500)
+
+    points_result, _ = run_points(
+        tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n", read_only / "out.csv"
+    )
+    grid_result = CliRunner().invoke(
+        cli.app,
+        [
+            "grid",
+            "--model", "foster_2019_approx",
+            "--grid-xmin", "1748100",
+            "--grid-xmax", "1749100",
+            "--grid-ymin", "5427100",
+            "--grid-ymax", "5428100",
+            "--grid-dx", "100",
+            "--grid-dy", "100",
+            "--output-dir", str(read_only),
+        ],
+        env={"COLUMNS": "200"},
+    )
+
+    for result in (points_result, grid_result):
+        assert result.exit_code == 2, result.output
+        assert "Can't write to output directory" in result.output
