@@ -58,6 +58,8 @@ The output CSV contains every column from the input plus four new columns:
 
 To also write the intermediate per-model values (geology and terrain category IDs, the separate per-model Vs30 estimates, etc.), pass the `--include-intermediate` flag.
 
+Rows whose coordinates are missing or invalid are kept, with blank results, and a warning lists their line numbers. Sites outside the model's data coverage (offshore, on water, or outside New Zealand) also get blank results, and a warning says how many. If one of your input columns has the same name as an output column (for example your own `vs30`), it's kept as `vs30_input`.
+
 ### All options
 
 For the complete list of options:
