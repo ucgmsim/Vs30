@@ -955,6 +955,10 @@ def compute_spatial_adjustment_on_grid(
     validate_raster_data(raster_data)
     validate_observations(observations_df)
 
+    if len(raster_data.valid_flat_indices) == 0:
+        logger.info("No valid pixels in grid; skipping spatial adjustment.")
+        return vs30_array.copy(), stdv_array.copy()
+
     # Convert 1-indexed model IDs to 0-indexed array rows (0..max_id-1).
     mean_col, std_col = utils.select_vs30_columns_by_priority(
         list(model_values_df.columns)

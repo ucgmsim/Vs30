@@ -3,10 +3,12 @@
 import functools
 
 import numpy as np
+import pandas as pd
 import pytest
 import rasterio
 
-from vs30 import correlations, spatial
+from conftest import load_fixed_model_config
+from vs30 import constants, correlations, spatial
 
 # Create a standard geology correlation callable for tests
 geology_corr_fn = functools.partial(correlations.exponential, phi=1407)
@@ -214,6 +216,48 @@ class TestFindAffectedPixels:
 
         assert len(affected_flat_indices) == 0
         assert affected_locs.shape == (0, 2)
+
+
+class TestComputeSpatialAdjustmentOnGrid:
+    """Tests for compute_spatial_adjustment_on_grid."""
+
+    def test_grid_with_no_valid_pixels_is_returned_unchanged(self):
+        """A grid with no valid pixels (e.g. all sea) is returned as is instead of crashing."""
+        vs30 = np.full((3, 3), float(constants.NODATA_VALUE))
+        stdv = np.full((3, 3), float(constants.NODATA_VALUE))
+        terrain_model_df = pd.read_csv(
+            load_fixed_model_config(constants.FixedModelVersion.MODIFIED_FOSTER_2019)[
+                "terrain_categorical_csv"
+            ],
+            comment="#",
+            skipinitialspace=True,
+        ).rename(columns=str.strip)
+        # A real on-land observation in Wellington, so observation preparation succeeds.
+        observations_df = pd.DataFrame(
+            {
+                constants.ObservationColumn.EASTING: [1749050.0],
+                constants.ObservationColumn.NORTHING: [5427050.0],
+                constants.ObservationColumn.VS30: [300.0],
+                constants.ObservationColumn.UNCERTAINTY: [0.2],
+            }
+        )
+
+        adjusted_vs30, adjusted_stdv = spatial.compute_spatial_adjustment_on_grid(
+            vs30_array=vs30,
+            stdv_array=stdv,
+            profile={
+                "transform": rasterio.transform.Affine(100, 0, 1748900, 0, -100, 5427200)
+            },
+            observations_df=observations_df,
+            model_values_df=terrain_model_df,
+            model_type=constants.ModelType.TERRAIN,
+            corr_fn=geology_corr_fn,
+            apply_alluvium_slope_mod=False,
+            apply_coastal_distance_mod=False,
+        )
+
+        np.testing.assert_array_equal(adjusted_vs30, vs30)
+        np.testing.assert_array_equal(adjusted_stdv, stdv)
 
 
 class TestComputeSpatialPixelAdjustments:
