@@ -1,9 +1,11 @@
 """Tests for the vs30 command-line interface."""
 
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from typer.testing import CliRunner
 
 from vs30 import cli
@@ -11,14 +13,28 @@ from vs30 import cli
 WELLINGTON = "174.7762,-41.2865"
 
 
-def run_points(tmp_path, csv_text: str, output_csv: Path | None = None):
-    """Run ``vs30 points foster_2019_approx`` on a locations CSV; return the result and output path."""
+@pytest.fixture(autouse=True)
+def reset_package_logger():
+    """Undo the CLI's logging setup so later tests don't log to a finished CliRunner's stream."""
+    yield
+    logging.getLogger("vs30").handlers = []
+    logging.getLogger("vs30").setLevel(logging.NOTSET)
+
+
+def run_points(
+    tmp_path,
+    csv_text: str,
+    *extra_args: str,
+    model: str = "foster_2019_approx",
+    output_csv: Path | None = None,
+):
+    """Run ``vs30 points`` on a locations CSV; return the result and output path."""
     locations_csv = tmp_path / "sites.csv"
     locations_csv.write_text(csv_text)
     output_csv = output_csv or tmp_path / "out.csv"
     result = CliRunner().invoke(
         cli.app,
-        ["points", "foster_2019_approx", str(locations_csv), str(output_csv)],
+        ["points", model, str(locations_csv), str(output_csv), *extra_args],
         env={"COLUMNS": "200"},
     )
     return result, output_csv
@@ -92,7 +108,9 @@ def test_unwritable_output_location_is_reported_before_computing(tmp_path):
     read_only.chmod(0o500)
 
     points_result, _ = run_points(
-        tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n", read_only / "out.csv"
+        tmp_path,
+        f"name,longitude,latitude\nwellington,{WELLINGTON}\n",
+        output_csv=read_only / "out.csv",
     )
     grid_result = CliRunner().invoke(
         cli.app,
@@ -113,3 +131,37 @@ def test_unwritable_output_location_is_reported_before_computing(tmp_path):
     for result in (points_result, grid_result):
         assert result.exit_code == 2, result.output
         assert "Can't write to output directory" in result.output
+
+
+def test_points_prints_progress_lines_but_not_detail_by_default(tmp_path):
+    """By default, points prints a few progress lines but not the step-by-step detail."""
+    result, output_csv = run_points(tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n")
+
+    assert result.exit_code == 0, result.output
+    assert "Processing 1 location(s)" in result.output
+    assert f"Results written to {output_csv}" in result.output
+    assert "Loading observations from" not in result.output
+
+
+def test_verbose_shows_the_detail(tmp_path):
+    """--verbose adds the step-by-step detail."""
+    result, _ = run_points(
+        tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n", "--verbose"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Loading observations from" in result.output
+
+
+def test_gap_fill_local_grids_stay_quiet_by_default(tmp_path):
+    """Gap-filling reports how many points it fills, without each local grid's stage messages."""
+    # geology_gid9_outwash from tests/fixtures/consistency_test_points.csv: an on-land gap.
+    result, _ = run_points(
+        tmp_path,
+        "name,longitude,latitude\noutwash,167.4593781323869,-46.14815700398977\n",
+        model="jaehwi_v1p0",
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Gap-filling 1 point(s) from local grids" in result.output
+    assert "building the category raster" not in result.output

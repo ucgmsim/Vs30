@@ -688,7 +688,7 @@ def find_affected_pixels(
         grid_locs, k=1, distance_upper_bound=max_dist_m,
     )
     affected_mask = np.isfinite(distances)
-    logger.info(
+    logger.debug(
         f"Found {int(affected_mask.sum()):,} pixels with observations within "
         f"{max_dist_m:.0f}m "
         f"({int(affected_mask.sum()) / len(grid_locs) * 100:.1f}% of valid pixels)"
@@ -802,7 +802,7 @@ def compute_spatial_pixel_adjustments(
                     n_updated += 1
                 pbar.update(1)
 
-    logger.info(f"Spatial adjustment complete: {n_updated:,} pixels updated")
+    logger.debug(f"Spatial adjustment complete: {n_updated:,} pixels updated")
 
     return updated_vs30, updated_stdv
 
@@ -954,7 +954,7 @@ def compute_spatial_adjustment_on_grid(
     adjusted_stdv : np.ndarray
         Spatially-adjusted standard deviation array.
     """
-    logger.info(f"Starting spatial adjustment for {model_type} model")
+    logger.debug(f"Starting spatial adjustment for {model_type} model")
 
     raster_data = RasterData.from_arrays(
         vs30=vs30_array,
@@ -966,7 +966,7 @@ def compute_spatial_adjustment_on_grid(
     validate_observations(observations_df)
 
     if len(raster_data.valid_flat_indices) == 0:
-        logger.info("No valid pixels in grid; skipping spatial adjustment.")
+        logger.debug("No valid pixels in grid; skipping spatial adjustment.")
         return vs30_array.copy(), stdv_array.copy()
 
     # Convert 1-indexed model IDs to 0-indexed array rows (0..max_id-1).
@@ -980,7 +980,7 @@ def compute_spatial_adjustment_on_grid(
     updated_model_table[ids[valid], 0] = model_values_df[mean_col].to_numpy()[valid]
     updated_model_table[ids[valid], 1] = model_values_df[std_col].to_numpy()[valid]
 
-    logger.info("Preparing observation data for spatial adjustment...")
+    logger.debug("Preparing observation data for spatial adjustment...")
     obs_data = prepare_observation_data(
         observations_df,
         raster_data,
@@ -992,7 +992,7 @@ def compute_spatial_adjustment_on_grid(
         slope_array=slope_array,
         coast_dist_array=coast_dist_array,
     )
-    logger.info(f"Prepared {len(obs_data.locations)} valid observations")
+    logger.debug(f"Prepared {len(obs_data.locations)} valid observations")
 
     if len(obs_data.locations) == 0:
         logger.warning(
@@ -1007,7 +1007,7 @@ def compute_spatial_adjustment_on_grid(
         obs_data,
         max_dist_m=constants.MAX_DIST_M,
     )
-    logger.info(
+    logger.debug(
         f"Found {len(affected_flat_indices):,} affected pixels in "
         f"{time.perf_counter() - t_kdtree_start:.1f}s"
     )
@@ -1026,7 +1026,7 @@ def compute_spatial_adjustment_on_grid(
         max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
         show_progress=show_progress,
     )
-    logger.info(
+    logger.debug(
         f"Spatial adjustments completed in "
         f"{time.perf_counter() - t_spatial_start:.1f}s"
     )

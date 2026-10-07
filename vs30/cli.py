@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import typer
 from qcore import cli
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from vs30 import config, constants, pipeline
 
@@ -24,6 +25,21 @@ _MODEL_ARG_HELP = (
     f"{', '.join(v.value for v in constants.FixedModelVersion)}"
     ") or a path to a custom YAML config file."
 )
+
+
+def configure_logging(verbose: bool) -> None:
+    """
+    Print the package's log messages to stderr: progress lines, or everything if verbose.
+
+    Parameters
+    ----------
+    verbose : bool
+        Whether to include the step-by-step (DEBUG) messages.
+    """
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logging.getLogger("vs30").handlers = [handler]
+    logging.getLogger("vs30").setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
 def ensure_writable_directory(directory: Path) -> None:
@@ -63,6 +79,7 @@ def points(
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
     dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
+    verbose: typing.Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """
     Compute Vs30 at locations using a bundled or user-supplied model config.
@@ -86,7 +103,10 @@ def points(
         Number of processes for DBSCAN clustering of observations; -1 uses
         all cores. Only used by models that cluster observations
         (bundled: viktor_cpt_clustering).
+    verbose : bool, optional
+        Also print step-by-step progress messages.
     """
+    configure_logging(verbose)
     try:
         config_data = config.resolve_model_config(model)
     except ValueError as e:
@@ -119,32 +139,33 @@ def points(
             "blank. Coordinates must be WGS84 degrees."
         )
 
-    result_df = (
-        pipeline.points_pipeline(
-            longitudes=longitudes[valid_coords].to_numpy(),
-            latitudes=latitudes[valid_coords].to_numpy(),
-            apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
-            geology_corr_fn=config_data["geology_corr_fn"],
-            terrain_corr_fn=config_data["terrain_corr_fn"],
-            geology_categorical_csv=config_data["geology_categorical_csv"],
-            terrain_categorical_csv=config_data["terrain_categorical_csv"],
-            clustered_observations_csv=config_data["clustered_observations_csv"],
-            independent_observations_csv=config_data["independent_observations_csv"],
-            combination_method=constants.CombinationMethod(
-                config_data["combination_method"]
-            ),
-            combine_ratio=config_data["combine_ratio"],
-            noisy=config_data["noisy"],
-            mvn=config_data["mvn"],
-            do_bayesian_update=config_data["do_bayesian_update"],
-            include_intermediate=include_intermediate,
-            dbscan_nproc=dbscan_nproc,
-            apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-            fill_gaps=config_data["fill_gaps"],
+    with logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]):
+        result_df = (
+            pipeline.points_pipeline(
+                longitudes=longitudes[valid_coords].to_numpy(),
+                latitudes=latitudes[valid_coords].to_numpy(),
+                apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+                geology_corr_fn=config_data["geology_corr_fn"],
+                terrain_corr_fn=config_data["terrain_corr_fn"],
+                geology_categorical_csv=config_data["geology_categorical_csv"],
+                terrain_categorical_csv=config_data["terrain_categorical_csv"],
+                clustered_observations_csv=config_data["clustered_observations_csv"],
+                independent_observations_csv=config_data["independent_observations_csv"],
+                combination_method=constants.CombinationMethod(
+                    config_data["combination_method"]
+                ),
+                combine_ratio=config_data["combine_ratio"],
+                noisy=config_data["noisy"],
+                mvn=config_data["mvn"],
+                do_bayesian_update=config_data["do_bayesian_update"],
+                include_intermediate=include_intermediate,
+                dbscan_nproc=dbscan_nproc,
+                apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+                fill_gaps=config_data["fill_gaps"],
+            )
+            .set_axis(df.index[valid_coords])
+            .reindex(df.index)
         )
-        .set_axis(df.index[valid_coords])
-        .reindex(df.index)
-    )
 
     n_without_vs30 = (
         result_df.loc[valid_coords, constants.ObservationColumn.VS30].isna().sum()
@@ -221,6 +242,7 @@ def grid(
     max_spatial_intermediate_array_memory_gb: typing.Annotated[
         float, typer.Option()
     ] = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
+    verbose: typing.Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """
     Run the VS30 grid pipeline using a bundled or user-supplied model config.
@@ -252,43 +274,47 @@ def grid(
         Include intermediate rasters in output.
     max_spatial_intermediate_array_memory_gb : float, optional
         Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
+    verbose : bool, optional
+        Also print step-by-step progress messages.
     """
+    configure_logging(verbose)
     try:
         config_data = config.resolve_model_config(model)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from e
     ensure_writable_directory(output_dir)
 
-    pipeline.grid_pipeline(
-        grid_config=config.GridConfig(
-            grid_xmin=grid_xmin,
-            grid_xmax=grid_xmax,
-            grid_ymin=grid_ymin,
-            grid_ymax=grid_ymax,
-            grid_dx=grid_dx,
-            grid_dy=grid_dy,
-        ),
-        apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
-        geology_corr_fn=config_data["geology_corr_fn"],
-        terrain_corr_fn=config_data["terrain_corr_fn"],
-        output_dir=output_dir,
-        geology_categorical_csv=config_data["geology_categorical_csv"],
-        terrain_categorical_csv=config_data["terrain_categorical_csv"],
-        clustered_observations_csv=config_data["clustered_observations_csv"],
-        independent_observations_csv=config_data["independent_observations_csv"],
-        combination_method=constants.CombinationMethod(
-            config_data["combination_method"]
-        ),
-        combine_ratio=config_data["combine_ratio"],
-        noisy=config_data["noisy"],
-        mvn=config_data["mvn"],
-        do_bayesian_update=config_data["do_bayesian_update"],
-        include_intermediate=include_intermediate,
-        dbscan_nproc=dbscan_nproc,
-        max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
-        apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
-        fill_gaps=config_data["fill_gaps"],
-    )
+    with logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]):
+        pipeline.grid_pipeline(
+            grid_config=config.GridConfig(
+                grid_xmin=grid_xmin,
+                grid_xmax=grid_xmax,
+                grid_ymin=grid_ymin,
+                grid_ymax=grid_ymax,
+                grid_dx=grid_dx,
+                grid_dy=grid_dy,
+            ),
+            apply_alluvium_slope_mod=config_data["apply_alluvium_slope_mod"],
+            geology_corr_fn=config_data["geology_corr_fn"],
+            terrain_corr_fn=config_data["terrain_corr_fn"],
+            output_dir=output_dir,
+            geology_categorical_csv=config_data["geology_categorical_csv"],
+            terrain_categorical_csv=config_data["terrain_categorical_csv"],
+            clustered_observations_csv=config_data["clustered_observations_csv"],
+            independent_observations_csv=config_data["independent_observations_csv"],
+            combination_method=constants.CombinationMethod(
+                config_data["combination_method"]
+            ),
+            combine_ratio=config_data["combine_ratio"],
+            noisy=config_data["noisy"],
+            mvn=config_data["mvn"],
+            do_bayesian_update=config_data["do_bayesian_update"],
+            include_intermediate=include_intermediate,
+            dbscan_nproc=dbscan_nproc,
+            max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
+            apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
+            fill_gaps=config_data["fill_gaps"],
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

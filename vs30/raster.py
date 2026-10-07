@@ -595,7 +595,7 @@ def apply_hybrid_geology_modifications(
     tuple[np.ndarray, np.ndarray]
         Modified (vs30_array, stdv_array).
     """
-    logger.info("Applying slope and coastal distance based geology modifications...")
+    logger.debug("Applying slope and coastal distance based geology modifications...")
 
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
@@ -694,4 +694,4 @@ def write_raster(
             dst.write(data, i)
         dst.descriptions = band_descriptions
 
-    logger.info(f"Wrote raster: {output_path}")
+    logger.debug(f"Wrote raster: {output_path}")

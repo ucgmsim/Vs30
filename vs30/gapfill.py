@@ -96,8 +96,8 @@ def classify_nodata(
 
     n_fillable = int(fillable_mask.sum())
     if n_fillable > 0:
-        logger.info(
-            f"  Gap-fill: {n_fillable} on-land nodata pixel(s) identified for filling"
+        logger.debug(
+            f"Gap-fill: {n_fillable} on-land nodata pixel(s) identified for filling"
         )
 
     return fillable_mask
@@ -158,8 +158,8 @@ def fill_nodata_grid(
         )
         valid_in_neighborhood = valid_2d & neighborhood_2d
         if not np.any(valid_in_neighborhood):
-            logger.info(
-                f"  Gap-fill: no valid donors within {half_width_pixels}-pixel "
+            logger.debug(
+                f"Gap-fill: no valid donors within {half_width_pixels}-pixel "
                 f"({half_width_pixels * dx:.0f}m) half-width, expanding"
             )
             half_width_pixels += half_width_expansion_pixels
@@ -176,12 +176,12 @@ def fill_nodata_grid(
             valid_rows[nn_indices], valid_cols[nn_indices]
         ]
         logger.info(
-            f"  Gap-fill: filled {len(fillable_rows)} pixel(s) with nearest-neighbor values"
+            f"Gap-fill: filled {len(fillable_rows)} pixel(s) with nearest-neighbor values"
         )
         return filled_vs30, filled_stdv
 
     logger.warning(
-        f"  Gap-fill: no valid donors found within maximum half-width of "
+        f"Gap-fill: no valid donors found within maximum half-width of "
         f"{max_half_width_pixels} pixels ({max_half_width_pixels * dx:.0f}m). "
         f"{len(fillable_rows)} pixel(s) remain unfilled."
     )
