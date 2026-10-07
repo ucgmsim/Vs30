@@ -71,10 +71,18 @@ REQUIRED_CONFIG_FIELDS: tuple[str, ...] = (
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 COV_REDUC: float = 1.5
 
-# Lower bound (meters) on distances passed to correlation functions.
-# Without it, co-located observations would produce singular covariance
-# (exponential gives corr=1 exactly) or NaN (Matérn Bessel singularity).
+# Lower bound (meters) on distances passed to correlation functions, so the
+# Matérn Bessel function is never evaluated at zero distance (NaN). It does not
+# stop co-located observations making the covariance singular: their rows stay
+# identical, which MVN_RELATIVE_NUGGET handles.
 MIN_DIST_ENFORCED: float = 0.1
+
+# Relative nugget added to the diagonal of the observation covariance block
+# before inversion. Co-located observations have identical covariance rows, so
+# with noisy=False (no noise weighting of the off-diagonals) the block is
+# singular. The nugget makes them act as one observation with their mean
+# residual, and changes the update for distinct observations by ~1e-8.
+MVN_RELATIVE_NUGGET: float = 1e-8
 
 # Maximum distance (meters) for considering observations in multivariate normal
 # (MVN) spatial adjustment. Observations further than this distance from a pixel

@@ -109,6 +109,66 @@ class TestComputeSpatialAdjustmentForPixel:
         updated_vs30, _ = result
         assert updated_vs30 == pixel.vs30
 
+    def test_colocated_observations_act_as_one_with_mean_residual(self, pixel):
+        """With noisy=False, two observations at one location update like one observation with their mean residual."""
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1100.0, 1000.0], [1100.0, 1000.0]]),  # same spot, 100 m away
+            model_stdv=np.array([0.4, 0.4]),
+            log_model_vs30=np.log(np.array([260.0, 260.0])),
+            residuals=np.log(np.array([300.0, 280.0]) / 260.0),
+            noise_weights=np.ones(2),
+        )
+        corr_zero = geology_corr_fn(np.array([0.0]))[0]
+
+        result = spatial.compute_spatial_adjustment_for_pixel(
+            pixel,
+            obs_data,
+            np.array([0, 1]),
+            corr_fn=geology_corr_fn,
+            corr_zero=corr_zero,
+            noisy=False,
+            cov_reduc=0.0,
+        )
+
+        # Both observations share the pixel covariance rho * 0.4**2, and their
+        # block is 0.4**2 * corr_zero * [[1, 1], [1, 1]], so each gets weight
+        # rho / corr_zero / 2.
+        rho = geology_corr_fn(np.array([100.0]))[0]
+        assert result is not None
+        updated_vs30, updated_stdv = result
+        assert updated_vs30 == pytest.approx(
+            250.0 * np.exp(rho / corr_zero * np.mean(obs_data.residuals)), rel=1e-6
+        )
+        assert updated_stdv == pytest.approx(
+            0.4 * np.sqrt(corr_zero - rho**2 / corr_zero), rel=1e-6
+        )
+
+    def test_non_finite_update_keeps_prior_and_warns(self, pixel, caplog):
+        """An update that comes out non-finite keeps the prior values and logs a warning."""
+        obs_data = spatial.ObservationData(
+            locations=np.array([[1100.0, 1000.0]]),
+            model_stdv=np.array([0.4]),
+            log_model_vs30=np.log(np.array([260.0])),
+            residuals=np.array([np.nan]),
+            noise_weights=np.ones(1),
+        )
+        corr_zero = geology_corr_fn(np.array([0.0]))[0]
+
+        with caplog.at_level("WARNING", logger="vs30.spatial"):
+            result = spatial.compute_spatial_adjustment_for_pixel(
+                pixel,
+                obs_data,
+                np.array([0]),
+                corr_fn=geology_corr_fn,
+                corr_zero=corr_zero,
+            )
+
+        assert result is not None
+        updated_vs30, updated_stdv = result
+        assert updated_vs30 == pixel.vs30
+        assert updated_stdv == pytest.approx(pixel.stdv * np.sqrt(corr_zero))
+        assert [record.levelname for record in caplog.records] == ["WARNING"]
+
 
 class TestComputeMvnAtPoints:
     """Tests for compute_spatial_point_adjustments function."""

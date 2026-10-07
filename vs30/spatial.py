@@ -624,7 +624,10 @@ def compute_spatial_adjustment_for_pixel(
     )
 
     try:
-        inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
+        inv_cov = np.linalg.inv(
+            cov_matrix[1:, 1:]
+            + np.diag(constants.MVN_RELATIVE_NUGGET * np.diag(cov_matrix[1:, 1:]))
+        )
         pred_update = np.dot(
             np.dot(cov_matrix[0, 1:], inv_cov),
             obs_data.residuals[obs_indices],
@@ -632,13 +635,20 @@ def compute_spatial_adjustment_for_pixel(
         var = cov_matrix[0, 0] - np.dot(
             np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
         )
-        return (
-            float(pixel.vs30 * np.exp(pred_update)),
-            float(np.sqrt(max(0, var))),
-        )
     except np.linalg.LinAlgError:
-        logger.debug("Singular covariance matrix, keeping prior values")
+        pred_update = var = np.nan
+
+    if not (np.isfinite(pred_update) and np.isfinite(var)):
+        logger.warning(
+            f"MVN update failed at ({pixel.location[0]:.0f}, "
+            f"{pixel.location[1]:.0f}); keeping prior values"
+        )
         return (pixel.vs30, float(np.sqrt(initial_var)))
+
+    return (
+        float(pixel.vs30 * np.exp(pred_update)),
+        float(np.sqrt(max(0, var))),
+    )
 
 
 def find_affected_pixels(
