@@ -308,6 +308,31 @@ class TestFindAffectedPixels:
         assert affected_locs.shape == (0, 2)
 
 
+def test_observations_with_zero_model_stdv_are_dropped():
+    """Observations whose category has a non-positive model stdv are dropped, as in points mode."""
+    observations_df = pd.DataFrame(
+        {
+            constants.ObservationColumn.EASTING: [1749050.0],
+            constants.ObservationColumn.NORTHING: [5427050.0],
+            constants.ObservationColumn.VS30: [300.0],
+            constants.ObservationColumn.UNCERTAINTY: [0.2],
+        }
+    )
+    # All 16 terrain categories with a zero stdv (as a clustered update gives a
+    # category with a single cluster).
+    updated_model_table = np.column_stack([np.full(16, 300.0), np.zeros(16)])
+
+    obs_data = spatial.prepare_observation_data(
+        observations_df,
+        updated_model_table,
+        constants.ModelType.TERRAIN,
+        apply_alluvium_slope_mod=False,
+        apply_coastal_distance_mod=False,
+    )
+
+    assert len(obs_data.locations) == 0
+
+
 class TestComputeSpatialAdjustmentOnGrid:
     """Tests for compute_spatial_adjustment_on_grid."""
 

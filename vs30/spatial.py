@@ -307,7 +307,13 @@ def prepare_observation_data(
     model_vs30[valid_mask] = updated_model_table[valid_model_ids, 0]
     model_stdv[valid_mask] = updated_model_table[valid_model_ids, 1]
 
-    valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
+    # Same rule as points.build_obs_data: the MVN needs positive model values.
+    valid_obs_mask = (
+        ~np.isnan(model_vs30)
+        & ~np.isnan(model_stdv)
+        & (model_vs30 > 0)
+        & (model_stdv > 0)
+    )
     obs_locs = obs_locs[valid_obs_mask]
     vs30_obs = observations[constants.ObservationColumn.VS30].to_numpy()[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
