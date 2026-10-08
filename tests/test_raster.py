@@ -27,6 +27,18 @@ def test_point_slope_matches_grid_slope_on_cell_edges():
 
 
 
+
+def test_slope_nodata_pixels_hold_the_nodata_value():
+    """Slope pixels with no data (offshore) hold NODATA_VALUE, the value written rasters declare as nodata."""
+    # South Wellington coast: part land, part sea.
+    transform = rasterio.transform.from_bounds(1750100, 5418100, 1756100, 5424100, 60, 60)
+
+    slope = raster.compute_slope_array(
+        {"height": 60, "width": 60, "transform": transform, "crs": constants.NZTM_CRS}
+    )
+
+    assert set(np.unique(slope[slope < 0])) == {constants.NODATA_VALUE}
+
 def test_geology_ids_for_a_grid_with_no_polygons_are_nodata():
     """A grid that no geology polygon reaches (open sea) gets nodata IDs, not an error."""
     ids, _ = raster.create_category_id_array(

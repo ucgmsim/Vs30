@@ -465,6 +465,7 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
             dst_transform=template_profile["transform"],
             dst_crs=template_profile["crs"],
             resampling=rasterio.enums.Resampling.nearest,
+            dst_nodata=constants.NODATA_VALUE,
         )
 
     return slope_array
@@ -616,11 +617,10 @@ def apply_hybrid_geology_modifications(
             continue
 
         group_slopes = slope_array[id_array == group_params.gid]
-        # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
+        # Non-positive slopes (0, or nodata at grid pixels) become
+        # MIN_SLOPE_FOR_LOG so log10 is defined.
         safe_slope = np.where(
-            (group_slopes <= 0) | (group_slopes == constants.NODATA_VALUE),
-            constants.MIN_SLOPE_FOR_LOG,
-            group_slopes,
+            group_slopes <= 0, constants.MIN_SLOPE_FOR_LOG, group_slopes
         )
         vs30_array[id_array == group_params.gid] = 10 ** np.interp(
             np.log10(safe_slope),
