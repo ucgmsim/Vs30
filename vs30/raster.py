@@ -591,8 +591,10 @@ def apply_hybrid_geology_modifications(
     coast_dist_array : np.ndarray
         Distance to coast array (float).
     apply_alluvium_slope_mod : bool
-        Whether to apply slope-based interpolation for GID 4 (alluvium).
-        When False, GID 4 keeps its categorical Vs30 value.
+        Whether to apply slope-based interpolation for GID 4 (alluvium). Has
+        no effect when ``apply_coastal_distance_mod`` is on, because the
+        coastal-distance modification then sets GID 4's Vs30; with both off,
+        GID 4 keeps its categorical value.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modifications for GID 4 (alluvium)
         and GID 10 (floodplain).
@@ -611,9 +613,11 @@ def apply_hybrid_geology_modifications(
         # sigma_reduction always applies, regardless of the slope/coastal mod gating.
         stdv_array[id_array == group_params.gid] *= group_params.sigma_reduction
 
-        # GID 4 (alluvium) gets coastal-distance handling below when the
-        # slope mod is off, so skip slope interpolation here.
-        if group_params.gid == 4 and not apply_alluvium_slope_mod:
+        # GID 4 (alluvium) takes its Vs30 from slope only when the slope mod is
+        # on and the coastal-distance mod, which would overwrite it, is off.
+        if group_params.gid == 4 and (
+            not apply_alluvium_slope_mod or apply_coastal_distance_mod
+        ):
             continue
 
         group_slopes = slope_array[id_array == group_params.gid]

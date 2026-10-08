@@ -23,6 +23,8 @@ noisy: true
 combination_method: ratio
 combine_ratio: 1.0
 
+# apply_alluvium_slope_mod has no effect while apply_coastal_distance_mod is
+# true: the coastal-distance modification sets alluvium (GID 4) Vs30.
 apply_alluvium_slope_mod: true
 apply_coastal_distance_mod: true
 fill_gaps: false
