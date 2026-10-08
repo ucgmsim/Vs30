@@ -71,7 +71,7 @@ def matern(
     # scipy.special: gamma = Gamma function; kv = modified Bessel function (2nd kind).
     rho = (
         (2 ** (1 - kappa) / scipy.special.gamma(kappa))
-        * (scaled ** kappa)
+        * (scaled**kappa)
         * scipy.special.kv(kappa, scaled)
     )
     # Clamp NaN from numerical edge cases (kv can overflow for very small d)
@@ -94,18 +94,25 @@ def resolve_correlation_function(
     -------
     callable
         Function with signature (distances: ndarray) -> ndarray.
+
+    Raises
+    ------
+    ValueError
+        If the model is unknown or one of its parameters is missing.
     """
-    model = config_section["model"]
-    if model == "exponential":
-        return functools.partial(
-            exponential,
-            phi=config_section["phi"],
-        )
-    elif model == "matern":
-        return functools.partial(
-            matern,
-            range_m=config_section["range"],
-            kappa=config_section["kappa"],
-        )
-    else:
-        raise ValueError(f"Unknown correlation model: {model}")
+    model = config_section.get("model")
+    try:
+        if model == "exponential":
+            return functools.partial(
+                exponential,
+                phi=config_section["phi"],
+            )
+        elif model == "matern":
+            return functools.partial(
+                matern,
+                range_m=config_section["range"],
+                kappa=config_section["kappa"],
+            )
+    except KeyError as e:
+        raise ValueError(f"The {model} correlation model needs '{e.args[0]}'") from e
+    raise ValueError(f"Unknown correlation model: {model}")

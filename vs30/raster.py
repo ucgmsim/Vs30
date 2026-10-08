@@ -23,6 +23,10 @@ from vs30 import config, constants, utils
 
 logger = logging.getLogger(__name__)
 
+# Make GDAL errors raise (the GDAL 4 default) rather than return None; setting
+# it explicitly also stops GDAL's FutureWarning about the choice.
+gdal.UseExceptions()
+
 
 @functools.lru_cache(maxsize=1)
 def load_qmap_shapefile() -> gpd.GeoDataFrame:
@@ -243,6 +247,13 @@ def create_category_id_array(
         if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
             gdf = gdf.to_crs(constants.NZTM_CRS)
 
+        # Only polygons overlapping the grid can cover its pixel centres, and
+        # rasterizing all of them takes seconds even for a tiny grid.
+        gdf = gdf.cx[
+            grid_config.grid_xmin : grid_config.grid_xmax,
+            grid_config.grid_ymin : grid_config.grid_ymax,
+        ]
+
         id_array = rasterio.features.rasterize(
             shapes=zip(gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]),
             out_shape=(ny, nx),
@@ -334,7 +345,14 @@ def create_vs30_arrays_from_ids(
 
 def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     """
-    Compute distance to the nearest coast (in meters).
+    Compute distance to the nearest coast (in meters), capped at the coastal modification's range.
+
+    Distances beyond the larger of ``HYBRID_GID4_DIST_MAX`` and
+    ``HYBRID_GID10_DIST_MAX`` (20 km) change nothing, so they are capped there.
+    They are measured between pixel centres, from each pixel to the nearest
+    pixel outside the coastline, so they can exceed the exact distance from
+    ``compute_coast_distance_at_points`` by up to about a pixel (45 m on
+    average at 100 m spacing).
 
     Parameters
     ----------
@@ -359,27 +377,13 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     s_xmax = s_xmin + template_profile["width"] * dx
     s_ymin = s_ymax - template_profile["height"] * dy
 
-    # Grid extension rationale:
-    # - Full-NZ coverage: accurate distances for observations beyond the
-    #   template bounds.
-    # - Pixel alignment: round up to whole pixels (else GDAL trims to integer
-    #   pixel counts and shifts samples by a sub-pixel offset).
-    g_xmin = (
-        s_xmin
-        - math.ceil(max(0, s_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) / dx) * dx
-    )
-    g_xmax = (
-        s_xmax
-        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_xmax - s_xmax) / dx) * dx
-    )
-    g_ymin = (
-        s_ymin
-        - math.ceil(max(0, s_ymin - config.FULL_NZ_GRID_CONFIG.grid_ymin) / dy) * dy
-    )
-    g_ymax = (
-        s_ymax
-        + math.ceil(max(0, config.FULL_NZ_GRID_CONFIG.grid_ymax - s_ymax) / dy) * dy
-    )
+    # Pad the grid by the distance cap so the nearest coast within the cap is
+    # always inside the rasterized area, rounding up to whole pixels (else
+    # GDAL trims to integer pixel counts and shifts samples by a sub-pixel
+    # offset).
+    max_distance = max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
+    pad_cols = math.ceil(max_distance / dx)
+    pad_rows = math.ceil(max_distance / dy)
 
     # GDAL requires a file path, so use a temporary file.
     fd, tmp_path = tempfile.mkstemp(suffix=".tif")
@@ -390,7 +394,12 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
             tmp_path,
             str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
             creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-            outputBounds=[g_xmin, g_ymin, g_xmax, g_ymax],
+            outputBounds=[
+                s_xmin - pad_cols * dx,
+                s_ymin - pad_rows * dy,
+                s_xmax + pad_cols * dx,
+                s_ymax + pad_rows * dy,
+            ],
             xRes=dx,
             yRes=dy,
             noData=0,
@@ -401,24 +410,25 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
         band = ds.GetRasterBand(1)
         band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
         # band is passed as both source and destination - ComputeProximity
-        # overwrites it with distance values.
-        ds = gdal.ComputeProximity(band, band, ["VALUES=0", "DISTUNITS=GEO"])
+        # overwrites it with distance values. Pixels with no coast within
+        # MAXDIST get -1; without MAXDIST, an area with no sea at all would
+        # come out as distance 0 everywhere.
+        ds = gdal.ComputeProximity(
+            band,
+            band,
+            ["VALUES=0", "DISTUNITS=GEO", f"MAXDIST={max_distance}", "NODATA=-1"],
+        )
 
         with rasterio.open(tmp_path) as src:
             data = src.read(1)
-
-        if g_xmin < s_xmin or g_xmax > s_xmax or g_ymin < s_ymin or g_ymax > s_ymax:
-            col_offset = round((s_xmin - g_xmin) / dx)
-            row_offset = round((g_ymax - s_ymax) / dy)
-            distance_meters = data[
-                row_offset : row_offset + template_profile["height"],
-                col_offset : col_offset + template_profile["width"],
-            ].astype(np.float32)
-        else:
-            distance_meters = data.astype(np.float32)
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
+    distance_meters = data[
+        pad_rows : pad_rows + template_profile["height"],
+        pad_cols : pad_cols + template_profile["width"],
+    ].astype(np.float32)
+    distance_meters[distance_meters < 0] = max_distance
     return distance_meters
 
 
@@ -459,6 +469,7 @@ def compute_slope_array(template_profile: dict) -> np.ndarray:
             dst_transform=template_profile["transform"],
             dst_crs=template_profile["crs"],
             resampling=rasterio.enums.Resampling.nearest,
+            dst_nodata=constants.NODATA_VALUE,
         )
 
     return slope_array
@@ -481,9 +492,12 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
         Slope values at each point (N,).
     """
     data, transform, nodata = load_slope_raster_array()
-    rows, cols = rasterio.transform.rowcol(transform, points[:, 0], points[:, 1])
-    rows = np.asarray(rows)
-    cols = np.asarray(cols)
+    cols_frac, rows_frac = ~transform * (points[:, 0], points[:, 1])
+    # A point exactly on a slope-cell edge can land a hair below the integer
+    # index through float error (e.g. 1852.9999999999995); round it onto the
+    # cell GDAL's nearest-neighbour resampling picks in compute_slope_array.
+    rows = np.floor(rows_frac + 1e-9).astype(int)
+    cols = np.floor(cols_frac + 1e-9).astype(int)
     in_bounds = (
         (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
     )
@@ -494,10 +508,11 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
 
 def compute_coast_distance_at_points(points: np.ndarray) -> np.ndarray:
     """
-    Compute distance from each point to the nearest coastline.
+    Compute the exact distance from each point to the nearest coastline.
 
     For small numbers of points this is much faster than computing
-    a full proximity raster via ``compute_coast_distance_raster``.
+    a full proximity raster via ``compute_coast_distance_raster``, whose
+    pixel-centre distances can be up to about a pixel larger.
 
     Parameters
     ----------
@@ -581,8 +596,10 @@ def apply_hybrid_geology_modifications(
     coast_dist_array : np.ndarray
         Distance to coast array (float).
     apply_alluvium_slope_mod : bool
-        Whether to apply slope-based interpolation for GID 4 (alluvium).
-        When False, GID 4 keeps its categorical Vs30 value.
+        Whether to apply slope-based interpolation for GID 4 (alluvium). Has
+        no effect when ``apply_coastal_distance_mod`` is on, because the
+        coastal-distance modification then sets GID 4's Vs30; with both off,
+        GID 4 keeps its categorical value.
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modifications for GID 4 (alluvium)
         and GID 10 (floodplain).
@@ -592,7 +609,7 @@ def apply_hybrid_geology_modifications(
     tuple[np.ndarray, np.ndarray]
         Modified (vs30_array, stdv_array).
     """
-    logger.info("Applying slope and coastal distance based geology modifications...")
+    logger.debug("Applying slope and coastal distance based geology modifications...")
 
     vs30_array = vs30_array.copy()
     stdv_array = stdv_array.copy()
@@ -601,17 +618,18 @@ def apply_hybrid_geology_modifications(
         # sigma_reduction always applies, regardless of the slope/coastal mod gating.
         stdv_array[id_array == group_params.gid] *= group_params.sigma_reduction
 
-        # GID 4 (alluvium) gets coastal-distance handling below when the
-        # slope mod is off, so skip slope interpolation here.
-        if group_params.gid == 4 and not apply_alluvium_slope_mod:
+        # GID 4 (alluvium) takes its Vs30 from slope only when the slope mod is
+        # on and the coastal-distance mod, which would overwrite it, is off.
+        if group_params.gid == 4 and (
+            not apply_alluvium_slope_mod or apply_coastal_distance_mod
+        ):
             continue
 
         group_slopes = slope_array[id_array == group_params.gid]
-        # Cap slope at MIN_SLOPE_FOR_LOG to avoid log10(0) or log10(-NODATA).
+        # Non-positive slopes (0, or nodata at grid pixels) become
+        # MIN_SLOPE_FOR_LOG so log10 is defined.
         safe_slope = np.where(
-            (group_slopes <= 0) | (group_slopes == constants.NODATA_VALUE),
-            constants.MIN_SLOPE_FOR_LOG,
-            group_slopes,
+            group_slopes <= 0, constants.MIN_SLOPE_FOR_LOG, group_slopes
         )
         vs30_array[id_array == group_params.gid] = 10 ** np.interp(
             np.log10(safe_slope),
@@ -691,4 +709,4 @@ def write_raster(
             dst.write(data, i)
         dst.descriptions = band_descriptions
 
-    logger.info(f"Wrote raster: {output_path}")
+    logger.debug(f"Wrote raster: {output_path}")

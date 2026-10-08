@@ -253,13 +253,10 @@ def validate_observations(observations: pd.DataFrame) -> None:
 
 def prepare_observation_data(
     observations: pd.DataFrame,
-    raster_data: RasterData,
     updated_model_table: np.ndarray,
     model_type: constants.ModelType,
     apply_alluvium_slope_mod: bool,
     apply_coastal_distance_mod: bool,
-    slope_array: np.ndarray | None = None,
-    coast_dist_array: np.ndarray | None = None,
     noisy: bool = False,
 ) -> ObservationData:
     """
@@ -267,14 +264,14 @@ def prepare_observation_data(
 
     For geology models, hybrid modifications (slope and coastal distance)
     are applied to model values at observation locations before computing
-    residuals. Terrain models do not use slope_array or coast_dist_array.
+    residuals. Slope and coastal distance are sampled at each observation's
+    exact location, as in points mode, so the residuals don't depend on the
+    grid's extent or spacing.
 
     Parameters
     ----------
     observations : DataFrame
         Observations with vs30, uncertainty, easting, northing columns.
-    raster_data : RasterData
-        Provides the transform used to locate observations within the grid.
     updated_model_table : ndarray
         Updated model table (n_categories, 2) array of [vs30, stdv].
     model_type : constants.ModelType
@@ -283,11 +280,6 @@ def prepare_observation_data(
         Whether to apply slope-based interpolation for GID 4 (alluvium).
     apply_coastal_distance_mod : bool
         Whether to apply coastal distance modification for GID 4 and GID 10.
-    slope_array : ndarray, optional
-        2D slope array. Required for geology models; ignored for terrain.
-    coast_dist_array : ndarray, optional
-        2D coastal distance array. Required for geology models; ignored
-        for terrain.
     noisy : bool, optional
         Whether to apply noise weighting.
 
@@ -295,18 +287,7 @@ def prepare_observation_data(
     -------
     ObservationData
         Prepared observation data.
-
-    Raises
-    ------
-    ValueError
-        If model_type is GEOLOGY and slope_array or coast_dist_array is None.
     """
-    if model_type == constants.ModelType.GEOLOGY and (
-        slope_array is None or coast_dist_array is None
-    ):
-        raise ValueError(
-            "slope_array and coast_dist_array are required for geology models."
-        )
     obs_locs = observations[
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
     ].to_numpy()
@@ -326,7 +307,13 @@ def prepare_observation_data(
     model_vs30[valid_mask] = updated_model_table[valid_model_ids, 0]
     model_stdv[valid_mask] = updated_model_table[valid_model_ids, 1]
 
-    valid_obs_mask = ~np.isnan(model_vs30) & ~np.isnan(model_stdv)
+    # Same rule as points.build_obs_data: the MVN needs positive model values.
+    valid_obs_mask = (
+        ~np.isnan(model_vs30)
+        & ~np.isnan(model_stdv)
+        & (model_vs30 > 0)
+        & (model_stdv > 0)
+    )
     obs_locs = obs_locs[valid_obs_mask]
     vs30_obs = observations[constants.ObservationColumn.VS30].to_numpy()[valid_obs_mask]
     model_vs30 = model_vs30[valid_obs_mask]
@@ -336,43 +323,17 @@ def prepare_observation_data(
     ]
 
     if model_type == constants.ModelType.GEOLOGY:
-        assert slope_array is not None and coast_dist_array is not None  # type guard: entry check raises if either is None when GEOLOGY
-        rows, cols = rasterio.transform.rowcol(
-            raster_data.transform, obs_locs[:, 0], obs_locs[:, 1]
-        )
-        rows = np.asarray(rows)
-        cols = np.asarray(cols)
-
-        within_grid = (
-            (rows >= 0)
-            & (rows < slope_array.shape[0])
-            & (cols >= 0)
-            & (cols < slope_array.shape[1])
-        )
-
-        # Within-grid observations: sample from grid arrays for consistency
-        # with pixel updates. Outside-grid observations: sample from source
-        # rasters since there are no corresponding grid pixels to be
-        # consistent with.
-        slope_obs = np.empty(len(rows), dtype=np.float64)
-        coast_obs = np.full(len(rows), np.nan, dtype=np.float64)
-
-        slope_obs[within_grid] = slope_array[rows[within_grid], cols[within_grid]]
-        coast_obs[within_grid] = coast_dist_array[rows[within_grid], cols[within_grid]]
-
-        if not np.all(within_grid):
-            outside_grid_points = obs_locs[~within_grid]
-            slope_obs[~within_grid] = raster.sample_slope_at_points(outside_grid_points)
-            if apply_coastal_distance_mod:
-                coast_obs[~within_grid] = raster.compute_coast_distance_at_points(
-                    outside_grid_points
-                )
-
+        slope_obs = raster.sample_slope_at_points(obs_locs)
         # NODATA slope at obs locations gets replaced with OBS_SLOPE_NODATA_SENTINEL
         # so np.interp returns MAX Vs30 (distinct from grid pixels' NODATA path,
         # which yields MIN Vs30).
         slope_obs = np.where(
             slope_obs < 0, constants.OBS_SLOPE_NODATA_SENTINEL, slope_obs
+        )
+        coast_obs = (
+            raster.compute_coast_distance_at_points(obs_locs)
+            if apply_coastal_distance_mod
+            else np.zeros(len(obs_locs))
         )
 
         model_vs30, model_stdv = raster.apply_hybrid_geology_modifications(
@@ -450,9 +411,7 @@ def compute_residuals(
     return residuals, noise_weights
 
 
-
-def build_covariance_matrix(
-    pixel: PixelData,
+def observation_covariance(
     obs_data: ObservationData,
     obs_indices: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
@@ -460,15 +419,15 @@ def build_covariance_matrix(
     cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
     """
-    Build the covariance matrix for one pixel and its nearby observations.
+    Build the covariance matrix between the selected observations.
+
+    It doesn't depend on the pixel being updated, so it can be built once for
+    all observations and sliced per pixel.
 
     Parameters
     ----------
-    pixel : PixelData
-        Pixel being updated.
     obs_data : ObservationData
-        Prepared observation data; the rows used here are selected by
-        ``obs_indices``.
+        Prepared observation data.
     obs_indices : ndarray
         Integer indices into ``obs_data`` for the selected observations.
     corr_fn : callable
@@ -482,36 +441,119 @@ def build_covariance_matrix(
     Returns
     -------
     ndarray
-        Covariance matrix of shape ``(n_selected_obs + 1, n_selected_obs + 1)``.
-        Row/column 0 is the pixel; rows/columns 1..n are the selected
-        observations.
+        Covariance matrix of shape ``(n_selected_obs, n_selected_obs)``.
     """
-    all_points = np.vstack([pixel.location, obs_data.locations[obs_indices]]).astype(
-        np.float64
-    )
-    distance_matrix = scipy.spatial.distance.cdist(
-        all_points, all_points, metric="euclidean"
-    )
-
-    corr = corr_fn(distance_matrix)
-
-    stdvs = np.insert(obs_data.model_stdv[obs_indices], 0, pixel.stdv)
-    cov = corr * np.outer(stdvs, stdvs)
+    cov = corr_fn(
+        scipy.spatial.distance.cdist(
+            obs_data.locations[obs_indices],
+            obs_data.locations[obs_indices],
+            metric="euclidean",
+        )
+    ) * np.outer(obs_data.model_stdv[obs_indices], obs_data.model_stdv[obs_indices])
 
     if noisy:
-        noise_weights = np.insert(obs_data.noise_weights[obs_indices], 0, 1.0)
-        noise_weight_matrix = np.outer(noise_weights, noise_weights)
+        noise_weight_matrix = np.outer(
+            obs_data.noise_weights[obs_indices], obs_data.noise_weights[obs_indices]
+        )
         np.fill_diagonal(noise_weight_matrix, 1.0)
         cov *= noise_weight_matrix
 
     if cov_reduc > 0:
-        log_vs30s = np.insert(
-            obs_data.log_model_vs30[obs_indices], 0, np.log(pixel.vs30)
-        )
-        log_dist_matrix = np.abs(log_vs30s[:, np.newaxis] - log_vs30s)
-        cov *= np.exp(-cov_reduc * log_dist_matrix)
+        log_vs30s = obs_data.log_model_vs30[obs_indices]
+        cov *= np.exp(-cov_reduc * np.abs(log_vs30s[:, np.newaxis] - log_vs30s))
 
     return cov
+
+
+def pixel_observation_covariance(
+    pixel: PixelData,
+    obs_data: ObservationData,
+    obs_indices: np.ndarray,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
+) -> np.ndarray:
+    """
+    Build the covariance between a pixel and each selected observation.
+
+    Parameters
+    ----------
+    pixel : PixelData
+        Pixel being updated.
+    obs_data : ObservationData
+        Prepared observation data.
+    obs_indices : ndarray
+        Integer indices into ``obs_data`` for the selected observations.
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
+    noisy : bool, optional
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
+    cov_reduc : float, optional
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
+
+    Returns
+    -------
+    ndarray
+        Covariances of shape ``(n_selected_obs,)``.
+    """
+    # Parenthesised to multiply in the same order as an outer product of stdvs.
+    cov = corr_fn(
+        scipy.spatial.distance.cdist(
+            pixel.location[np.newaxis].astype(np.float64),
+            obs_data.locations[obs_indices],
+            metric="euclidean",
+        )[0]
+    ) * (pixel.stdv * obs_data.model_stdv[obs_indices])
+
+    if noisy:
+        cov *= obs_data.noise_weights[obs_indices]
+
+    if cov_reduc > 0:
+        cov *= np.exp(
+            -cov_reduc
+            * np.abs(np.log(pixel.vs30) - obs_data.log_model_vs30[obs_indices])
+        )
+
+    return cov
+
+
+def precompute_observation_covariance(
+    obs_data: ObservationData,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
+    noisy: bool,
+    cov_reduc: float,
+) -> np.ndarray | None:
+    """
+    Build the covariance between all observations, unless there are too many to hold.
+
+    Parameters
+    ----------
+    obs_data : ObservationData
+        Prepared observation data.
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
+    noisy : bool
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
+    cov_reduc : float
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
+
+    Returns
+    -------
+    ndarray or None
+        ``(n_obs, n_obs)`` covariance, or None above
+        ``constants.MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE`` observations.
+    """
+    if len(obs_data.locations) > constants.MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE:
+        return None
+    return observation_covariance(
+        obs_data,
+        np.arange(len(obs_data.locations)),
+        corr_fn,
+        noisy=noisy,
+        cov_reduc=cov_reduc,
+    )
 
 
 def select_observations_for_pixel_batch(
@@ -570,6 +612,7 @@ def compute_spatial_adjustment_for_pixel(
     corr_zero: float,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
+    obs_covariance: np.ndarray | None = None,
 ) -> tuple[float, float] | None:
     """
     Compute MVN update for a single pixel given pre-selected observations.
@@ -583,7 +626,7 @@ def compute_spatial_adjustment_for_pixel(
     obs_indices : ndarray
         Integer indices into ``obs_data`` for the observations conditioning
         this pixel. Pass an empty array when there are no nearby observations;
-        the prior vs30 is returned unchanged and stdv is shrunk by ``corr_zero``.
+        the prior vs30 and stdv are then returned unchanged.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
@@ -593,6 +636,10 @@ def compute_spatial_adjustment_for_pixel(
         If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
         If > 0, shrink covariance between points with dissimilar Vs30 values.
+    obs_covariance : ndarray, optional
+        Covariance between all observations, from
+        ``precompute_observation_covariance``. When given, the selected
+        observations' block is sliced from it instead of built for this pixel.
 
     Returns
     -------
@@ -608,37 +655,47 @@ def compute_spatial_adjustment_for_pixel(
     ):
         return None
 
-    # corr_zero ≈ 1 (slightly less than 1 because correlations.exponential enforces MIN_DIST_ENFORCED before the exp).
-    initial_var = (pixel.stdv**2) * corr_zero
-
     if len(obs_indices) == 0:
-        return (pixel.vs30, float(np.sqrt(initial_var)))
+        return (pixel.vs30, pixel.stdv)
 
-    cov_matrix = build_covariance_matrix(
-        pixel,
-        obs_data,
-        obs_indices,
-        corr_fn,
-        noisy=noisy,
-        cov_reduc=cov_reduc,
+    pixel_cov = pixel_observation_covariance(
+        pixel, obs_data, obs_indices, corr_fn, noisy=noisy, cov_reduc=cov_reduc
+    )
+    obs_cov = (
+        obs_covariance[np.ix_(obs_indices, obs_indices)]
+        if obs_covariance is not None
+        else observation_covariance(
+            obs_data, obs_indices, corr_fn, noisy=noisy, cov_reduc=cov_reduc
+        )
     )
 
     try:
-        inv_cov = np.linalg.inv(cov_matrix[1:, 1:])
+        inv_cov = np.linalg.inv(
+            obs_cov + np.diag(constants.MVN_RELATIVE_NUGGET * np.diag(obs_cov))
+        )
         pred_update = np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov),
+            np.dot(pixel_cov, inv_cov),
             obs_data.residuals[obs_indices],
         )
-        var = cov_matrix[0, 0] - np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
-        )
-        return (
-            float(pixel.vs30 * np.exp(pred_update)),
-            float(np.sqrt(max(0, var))),
+        # corr_zero ≈ 1 (slightly less than 1 because correlations.exponential
+        # enforces MIN_DIST_ENFORCED before the exp).
+        var = (pixel.stdv**2) * corr_zero - np.dot(
+            np.dot(pixel_cov, inv_cov), pixel_cov
         )
     except np.linalg.LinAlgError:
-        logger.debug("Singular covariance matrix, keeping prior values")
-        return (pixel.vs30, float(np.sqrt(initial_var)))
+        pred_update = var = np.nan
+
+    if not (np.isfinite(pred_update) and np.isfinite(var)):
+        logger.warning(
+            f"MVN update failed at ({pixel.location[0]:.0f}, "
+            f"{pixel.location[1]:.0f}); keeping prior values"
+        )
+        return (pixel.vs30, pixel.stdv)
+
+    return (
+        float(pixel.vs30 * np.exp(pred_update)),
+        float(np.sqrt(max(0, var))),
+    )
 
 
 def find_affected_pixels(
@@ -674,11 +731,9 @@ def find_affected_pixels(
             np.empty((0, 2), dtype=np.float32),
         )
     grid_locs = raster_data.get_coordinates()
-    distances, _ = obs_data.tree.query(
-        grid_locs, k=1, distance_upper_bound=max_dist_m,
-    )
+    distances, _ = obs_data.tree.query(grid_locs, k=1, distance_upper_bound=max_dist_m)
     affected_mask = np.isfinite(distances)
-    logger.info(
+    logger.debug(
         f"Found {int(affected_mask.sum()):,} pixels with observations within "
         f"{max_dist_m:.0f}m "
         f"({int(affected_mask.sum()) / len(grid_locs) * 100:.1f}% of valid pixels)"
@@ -697,6 +752,7 @@ def compute_spatial_pixel_adjustments(
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
     max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
+    show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute MVN updates for all affected pixels and return updated arrays.
@@ -726,6 +782,8 @@ def compute_spatial_pixel_adjustments(
         If > 0, shrink covariance between points with dissimilar Vs30 values.
     max_spatial_intermediate_array_memory_gb : float, optional
         Memory cap (GB) for the per-chunk (indices, distances) arrays.
+    show_progress : bool, optional
+        Whether to display a per-pixel progress bar.
 
     Returns
     -------
@@ -741,6 +799,9 @@ def compute_spatial_pixel_adjustments(
     updated_stdv = raster_data.stdv.copy()
 
     corr_zero = corr_fn(np.array([0.0]))[0]
+    obs_covariance = precompute_observation_covariance(
+        obs_data, corr_fn, noisy, cov_reduc
+    )
     n_updated = 0
 
     chunk_size = max(
@@ -753,7 +814,10 @@ def compute_spatial_pixel_adjustments(
     )
 
     with tqdm(
-        total=len(affected_flat_indices), desc="Spatial adjustment", unit="pixel"
+        total=len(affected_flat_indices),
+        desc="Spatial adjustment",
+        unit="pixel",
+        disable=not show_progress,
     ) as pbar:
         for chunk_start in range(0, len(affected_flat_indices), chunk_size):
             chunk_end = min(chunk_start + chunk_size, len(affected_flat_indices))
@@ -778,6 +842,7 @@ def compute_spatial_pixel_adjustments(
                     corr_zero=corr_zero,
                     noisy=noisy,
                     cov_reduc=cov_reduc,
+                    obs_covariance=obs_covariance,
                 )
                 if result is not None:
                     vs30, stdv = result
@@ -786,7 +851,7 @@ def compute_spatial_pixel_adjustments(
                     n_updated += 1
                 pbar.update(1)
 
-    logger.info(f"Spatial adjustment complete: {n_updated:,} pixels updated")
+    logger.debug(f"Spatial adjustment complete: {n_updated:,} pixels updated")
 
     return updated_vs30, updated_stdv
 
@@ -849,9 +914,12 @@ def compute_spatial_point_adjustments(
         return mvn_vs30, mvn_stdv
 
     corr_zero = corr_fn(np.array([0.0]))[0]
+    obs_covariance = precompute_observation_covariance(
+        obs_data, corr_fn, noisy, cov_reduc
+    )
 
     batch_indices, batch_distances = select_observations_for_pixel_batch(
-        points, obs_data, max_dist_m=max_dist_m, max_points=max_points,
+        points, obs_data, max_dist_m=max_dist_m, max_points=max_points
     )
 
     for i in range(len(points)):
@@ -867,6 +935,7 @@ def compute_spatial_point_adjustments(
             corr_zero=corr_zero,
             noisy=noisy,
             cov_reduc=cov_reduc,
+            obs_covariance=obs_covariance,
         )
         if result is not None:
             mvn_vs30[i] = result[0]
@@ -889,8 +958,7 @@ def compute_spatial_adjustment_on_grid(
     apply_coastal_distance_mod: bool,
     noisy: bool = True,
     max_spatial_intermediate_array_memory_gb: float = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
-    slope_array: np.ndarray | None = None,
-    coast_dist_array: np.ndarray | None = None,
+    show_progress: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute MVN spatial adjustment on a grid.
@@ -923,10 +991,8 @@ def compute_spatial_adjustment_on_grid(
         matrix (via ``obs_data.noise_weights``).
     max_spatial_intermediate_array_memory_gb : float, optional
         Memory cap (GB) for spatial intermediate arrays produced during MVN chunking.
-    slope_array : np.ndarray, optional
-        Pre-computed slope array (for geology observation data preparation).
-    coast_dist_array : np.ndarray, optional
-        Pre-computed coast distance array.
+    show_progress : bool, optional
+        Whether to display a per-pixel progress bar.
 
     Returns
     -------
@@ -935,7 +1001,7 @@ def compute_spatial_adjustment_on_grid(
     adjusted_stdv : np.ndarray
         Spatially-adjusted standard deviation array.
     """
-    logger.info(f"Starting spatial adjustment for {model_type} model")
+    logger.debug(f"Starting spatial adjustment for {model_type} model")
 
     raster_data = RasterData.from_arrays(
         vs30=vs30_array,
@@ -945,6 +1011,10 @@ def compute_spatial_adjustment_on_grid(
     )
     validate_raster_data(raster_data)
     validate_observations(observations_df)
+
+    if len(raster_data.valid_flat_indices) == 0:
+        logger.debug("No valid pixels in grid; skipping spatial adjustment.")
+        return vs30_array.copy(), stdv_array.copy()
 
     # Convert 1-indexed model IDs to 0-indexed array rows (0..max_id-1).
     mean_col, std_col = utils.select_vs30_columns_by_priority(
@@ -957,19 +1027,16 @@ def compute_spatial_adjustment_on_grid(
     updated_model_table[ids[valid], 0] = model_values_df[mean_col].to_numpy()[valid]
     updated_model_table[ids[valid], 1] = model_values_df[std_col].to_numpy()[valid]
 
-    logger.info("Preparing observation data for spatial adjustment...")
+    logger.debug("Preparing observation data for spatial adjustment...")
     obs_data = prepare_observation_data(
         observations_df,
-        raster_data,
         updated_model_table,
         model_type,
         apply_alluvium_slope_mod=apply_alluvium_slope_mod,
         apply_coastal_distance_mod=apply_coastal_distance_mod,
         noisy=noisy,
-        slope_array=slope_array,
-        coast_dist_array=coast_dist_array,
     )
-    logger.info(f"Prepared {len(obs_data.locations)} valid observations")
+    logger.debug(f"Prepared {len(obs_data.locations)} valid observations")
 
     if len(obs_data.locations) == 0:
         logger.warning(
@@ -984,7 +1051,7 @@ def compute_spatial_adjustment_on_grid(
         obs_data,
         max_dist_m=constants.MAX_DIST_M,
     )
-    logger.info(
+    logger.debug(
         f"Found {len(affected_flat_indices):,} affected pixels in "
         f"{time.perf_counter() - t_kdtree_start:.1f}s"
     )
@@ -1001,10 +1068,10 @@ def compute_spatial_adjustment_on_grid(
         noisy=noisy,
         cov_reduc=constants.COV_REDUC,
         max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
+        show_progress=show_progress,
     )
-    logger.info(
-        f"Spatial adjustments completed in "
-        f"{time.perf_counter() - t_spatial_start:.1f}s"
+    logger.debug(
+        f"Spatial adjustments completed in {time.perf_counter() - t_spatial_start:.1f}s"
     )
 
     return adjusted_vs30, adjusted_stdv

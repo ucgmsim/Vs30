@@ -1,10 +1,13 @@
 # Viktor CPT Clustering Configuration
 # Reproduces the legacy codebase behavior with --source cpt --gupdate posterior
-# --tupdate posterior: starts from raw priors and performs a live Bayesian
-# update using DBSCAN-clustered CPT observations.
+# --tupdate posterior: starts from raw priors, then replaces the prior of every
+# category containing a CPT with the cluster-weighted mean of its CPT-inferred
+# Vs30 (DBSCAN clustering). The MVN also uses only the CPT values. CPTs only
+# penetrate soft ground, so every geology category ends up at ~137-181 m/s
+# (crystalline 750 -> ~170); only sensible within CPT-covered basins.
 
 # --- Categorical model files (relative to resources directory) ---
-# Raw priors — the Bayesian update below will compute posteriors from these.
+# Raw priors, kept only for categories that contain no CPT.
 geology_categorical_csv: geology_model_prior_mean_and_standard_deviation.csv
 terrain_categorical_csv: terrain_model_prior_mean_and_standard_deviation.csv
 
@@ -20,6 +23,8 @@ noisy: true
 combination_method: ratio
 combine_ratio: 1.0
 
+# apply_alluvium_slope_mod has no effect while apply_coastal_distance_mod is
+# true: the coastal-distance modification sets alluvium (GID 4) Vs30.
 apply_alluvium_slope_mod: true
 apply_coastal_distance_mod: true
 fill_gaps: false

@@ -71,7 +71,14 @@ class TestUpdateWithClusteredData:
         sites_df = pd.DataFrame(
             {
                 constants.STANDARD_ID_COLUMN: [1] * 6,
-                constants.ObservationColumn.VS30: [200.0, 220.0, 240.0, 300.0, 320.0, 400.0],
+                constants.ObservationColumn.VS30: [
+                    200.0,
+                    220.0,
+                    240.0,
+                    300.0,
+                    320.0,
+                    400.0,
+                ],
                 constants.ObservationColumn.CLUSTER: [0, 0, 0, 1, 1, -1],
             }
         )

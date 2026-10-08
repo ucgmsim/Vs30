@@ -68,14 +68,17 @@ def run_points_pipeline_for_version(cfg: dict, points_df: pd.DataFrame) -> pd.Da
 
 
 def run_grid_pipeline_at_point(
-    cfg: dict, easting: float, northing: float
+    cfg: dict,
+    easting: float,
+    northing: float,
+    half_width: int = LOCAL_GRID_HALF_WIDTH,
 ) -> tuple[float, float]:
-    """Run grid_pipeline on a 3x3 grid centered on (easting, northing).
+    """Run grid_pipeline on a square grid centred on (easting, northing).
 
-    Returns the center pixel (row=1, col=1) Vs30 and stdv.
+    Returns the centre pixel's Vs30 and stdv.
     """
     local_config = gapfill.create_local_grid_config(
-        easting, northing, config.FULL_NZ_GRID_CONFIG, LOCAL_GRID_HALF_WIDTH
+        easting, northing, config.FULL_NZ_GRID_CONFIG, half_width
     )
 
     result = pipeline.grid_pipeline(
@@ -100,8 +103,8 @@ def run_grid_pipeline_at_point(
     grid_vs30 = result["combined_vs30"]
     grid_stdv = result["combined_stdv"]
 
-    # Center pixel of the 3x3 grid
-    return float(grid_vs30[1, 1]), float(grid_stdv[1, 1])
+    centre = (grid_vs30.shape[0] // 2, grid_vs30.shape[1] // 2)
+    return float(grid_vs30[centre]), float(grid_stdv[centre])
 
 
 def check_consistency_for_version(
@@ -185,3 +188,29 @@ def test_grid_points_consistency_fast(version):
 def test_grid_points_consistency_slow(version):
     """Full grid/points consistency: many test points across all model versions."""
     check_consistency_for_version(version)
+
+
+def test_points_match_a_grid_with_observations_inside_it():
+    """Points match a grid that contains observations, so grid results don't depend on the grid's extent."""
+    cfg = load_fixed_model_config(constants.FixedModelVersion.JAEHWI_V1P0)
+    # A Wellington CBD pixel centre with observations within the 6.1 km grid
+    # around it; jaehwi_v1p0 has the coastal-distance modification off, so
+    # both modes evaluate the same model at this location.
+    easting, northing = 1748650.0, 5427850.0
+    grid_vs30, grid_stdv = run_grid_pipeline_at_point(
+        cfg, easting, northing, half_width=3050
+    )
+    latitude, longitude = coordinates.nztm_to_wgs_depth(
+        np.array([[northing, easting]])
+    )[0][:2]
+
+    points_result = run_points_pipeline_for_version(
+        cfg, pd.DataFrame({"longitude": [longitude], "latitude": [latitude]})
+    )
+
+    assert points_result[constants.ObservationColumn.VS30].iloc[0] == pytest.approx(
+        grid_vs30, rel=1e-5
+    )
+    assert points_result[constants.COL_COMBINED_STDV].iloc[0] == pytest.approx(
+        grid_stdv, rel=1e-5
+    )

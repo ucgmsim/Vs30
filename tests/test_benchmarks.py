@@ -1,4 +1,10 @@
-"""Benchmark tests that compare pipeline output against reference benchmarks."""
+"""Benchmark tests that compare pipeline output against reference benchmarks.
+
+The three grid benchmarks (``benchmarks/<model>.tif``) are the refactored
+pipeline's own output, regenerated when observations started being sampled at
+their exact location. Up to commit 3ffae3f they were legacy output, which the
+refactored pipeline matched within ``TEST_RTOL``.
+"""
 
 from pathlib import Path
 
@@ -34,7 +40,6 @@ NZTM_TO_WGS = pyproj.Transformer.from_crs(2193, 4326, always_xy=True)
 def run_benchmark(
     version: constants.FixedModelVersion,
     grid: config.GridConfig,
-    rtol: float | None = None,
 ) -> None:
     """Run the grid pipeline for a fixed model version and compare against the benchmark raster."""
     cfg = load_fixed_model_config(version)
@@ -60,7 +65,7 @@ def run_benchmark(
 
     benchmark = BENCHMARKS_DIR / f"{version}.tif"
     assert_arrays_match_raster_benchmark(
-        result["combined_vs30"], result["combined_stdv"], benchmark, rtol=rtol
+        result["combined_vs30"], result["combined_stdv"], benchmark
     )
 
 
@@ -145,11 +150,7 @@ def test_modified_foster_2019():
 
 def test_jaehwi_v1p0():
     """jaehwi_v1p0 full-domain pipeline matches benchmark."""
-    run_benchmark(
-        constants.FixedModelVersion.JAEHWI_V1P0,
-        BENCHMARK_NZ_GRID,
-        rtol=2e-4,
-    )
+    run_benchmark(constants.FixedModelVersion.JAEHWI_V1P0, BENCHMARK_NZ_GRID)
 
 
 def test_viktor_cpt_clustering():

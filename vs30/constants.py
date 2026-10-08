@@ -71,10 +71,24 @@ REQUIRED_CONFIG_FIELDS: tuple[str, ...] = (
 # model Vs30 values differ. Higher values = more reduction for dissimilar values.
 COV_REDUC: float = 1.5
 
-# Lower bound (meters) on distances passed to correlation functions.
-# Without it, co-located observations would produce singular covariance
-# (exponential gives corr=1 exactly) or NaN (Matérn Bessel singularity).
+# Lower bound (meters) on distances passed to correlation functions, so the
+# Matérn Bessel function is never evaluated at zero distance (NaN). It does not
+# stop co-located observations making the covariance singular: their rows stay
+# identical, which MVN_RELATIVE_NUGGET handles.
 MIN_DIST_ENFORCED: float = 0.1
+
+# Relative nugget added to the diagonal of the observation covariance block
+# before inversion. Co-located observations have identical covariance rows, so
+# with noisy=False (no noise weighting of the off-diagonals) the block is
+# singular. The nugget makes them act as one observation with their mean
+# residual, and changes the update for distinct observations by ~1e-8.
+MVN_RELATIVE_NUGGET: float = 1e-8
+
+# Up to this many observations, the MVN observation-observation covariance is
+# built once per run and sliced per pixel; above it, each pixel's block is built
+# on the fly. Memory is n^2 float64: 200 MB at 5,000 observations, whereas the
+# 35,706 CPTs of viktor_cpt_clustering would need ~10 GB.
+MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE: int = 5000
 
 # Maximum distance (meters) for considering observations in multivariate normal
 # (MVN) spatial adjustment. Observations further than this distance from a pixel
@@ -167,9 +181,7 @@ TERRAIN_VS30_MEAN_STDDEV_FILENAME: str = (
 )
 
 # Final geology Vs30 after slope, coastal distance, and spatial adjustment
-GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = (
-    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
-)
+GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
 
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"
@@ -285,9 +297,16 @@ GAPFILL_INITIAL_HALF_WIDTH_M: int = 5050
 # successive expansions of a valid initial half-width remain valid.
 GAPFILL_HALF_WIDTH_EXPANSION_M: int = 5000
 
-# Large enough to cover the full NZ grid span plus half a pixel, making donor
-# misses essentially impossible when any valid value exists in the grid.
-GAPFILL_MAX_HALF_WIDTH_M: int = 1520050
+# Grid mode: largest donor-search half-width. Large enough to cover the full
+# NZ grid span plus half a pixel, making donor misses essentially impossible
+# when any valid value exists in the grid.
+GAPFILL_GRID_MAX_HALF_WIDTH_M: int = 1520050
+
+# Points mode: largest local-grid half-width tried before leaving a point as
+# nodata. Far below the grid-mode limit because every expansion reruns
+# grid_pipeline on a larger local grid; ~50 km is beyond plausible donor
+# distances within NZ.
+GAPFILL_POINTS_MAX_HALF_WIDTH_M: int = 50050
 
 # Default memory limit (GB) for the per-chunk (indices, distances) arrays
 # returned by the KDTree query inside compute_spatial_pixel_adjustments during
@@ -308,27 +327,26 @@ LOCATIONS_LAT_COLUMN: str = "latitude"
 
 # Column names used in categorical model DataFrames for Bayesian updates.
 # These are used to identify posterior/prior values at different stages.
+# Means are Vs30 in m/s; standard deviations are of ln(Vs30), so unitless.
 COL_POSTERIOR_MEAN_INDEPENDENT: str = (
-    "posterior_mean_vs30_km_per_s_independent_observations"
+    "posterior_mean_vs30_m_per_s_independent_observations"
 )
 COL_POSTERIOR_STDV_INDEPENDENT: str = (
-    "posterior_standard_deviation_vs30_km_per_s_independent_observations"
+    "posterior_standard_deviation_ln_vs30_independent_observations"
 )
 COL_POSTERIOR_NOBS_INDEPENDENT: str = (
     "posterior_num_observations_independent_observations"
 )
-COL_POSTERIOR_MEAN_CLUSTERED: str = (
-    "posterior_mean_vs30_km_per_s_clustered_observations"
-)
+COL_POSTERIOR_MEAN_CLUSTERED: str = "posterior_mean_vs30_m_per_s_clustered_observations"
 COL_POSTERIOR_STDV_CLUSTERED: str = (
-    "posterior_standard_deviation_vs30_km_per_s_clustered_observations"
+    "posterior_standard_deviation_ln_vs30_clustered_observations"
 )
-COL_POSTERIOR_MEAN: str = "posterior_mean_vs30_km_per_s"
-COL_POSTERIOR_STDV: str = "posterior_standard_deviation_vs30_km_per_s"
-COL_PRIOR_MEAN: str = "prior_mean_vs30_km_per_s"
-COL_PRIOR_STDV: str = "prior_standard_deviation_vs30_km_per_s"
-COL_MEAN: str = "mean_vs30_km_per_s"
-COL_STDV: str = "standard_deviation_vs30_km_per_s"
+COL_POSTERIOR_MEAN: str = "posterior_mean_vs30_m_per_s"
+COL_POSTERIOR_STDV: str = "posterior_standard_deviation_ln_vs30"
+COL_PRIOR_MEAN: str = "prior_mean_vs30_m_per_s"
+COL_PRIOR_STDV: str = "prior_standard_deviation_ln_vs30"
+COL_MEAN: str = "mean_vs30_m_per_s"
+COL_STDV: str = "standard_deviation_ln_vs30"
 COL_ASSUMED_NUM_PRIOR_OBS: str = "assumed_num_prior_observations"
 COL_ENFORCED_MIN_SIGMA: str = "enforced_min_sigma"
 
