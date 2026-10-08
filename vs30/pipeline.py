@@ -132,7 +132,7 @@ def concat_observation_dfs(
     ]
     if dfs:
         return pd.concat(dfs, ignore_index=True)
-    return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
+    return pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
 
 
 def compute_categorical_vs30_updates(
@@ -970,7 +970,7 @@ def points_pipeline(
         )
         spatial.validate_observations(observations_df)
     else:
-        observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)  # ty: ignore[invalid-argument-type]
+        observations_df = pd.DataFrame(columns=constants.ObservationColumn.REQUIRED)
 
     logger.debug(f"Loaded {len(observations_df)} observations for spatial adjustment")
 

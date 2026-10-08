@@ -492,7 +492,11 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
         Slope values at each point (N,).
     """
     data, transform, nodata = load_slope_raster_array()
-    cols_frac, rows_frac = ~transform * (points[:, 0], points[:, 1])
+    # Written out because affine 3 deprecates `~transform * (xs, ys)` and
+    # affine 2 doesn't support `@` there; same arithmetic as affine's own.
+    inverse = ~transform
+    cols_frac = inverse.a * points[:, 0] + inverse.b * points[:, 1] + inverse.c
+    rows_frac = inverse.d * points[:, 0] + inverse.e * points[:, 1] + inverse.f
     # A point exactly on a slope-cell edge can land a hair below the integer
     # index through float error (e.g. 1852.9999999999995); round it onto the
     # cell GDAL's nearest-neighbour resampling picks in compute_slope_array.
