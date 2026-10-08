@@ -2,6 +2,7 @@
 
 import subprocess
 import sys
+import warnings
 
 import numpy as np
 import pytest
@@ -69,6 +70,13 @@ def test_coast_distance_is_capped_where_the_coast_is_out_of_range():
         distances
         == max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
     ).all()
+
+
+def test_point_slope_sampling_avoids_deprecated_affine_operators():
+    """Sampling slope at points doesn't use affine's `*` on points, which affine 3 deprecates."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", PendingDeprecationWarning)
+        raster.sample_slope_at_points(np.array([[1560350.0, 5185600.0]]))
 
 
 def test_gdal_does_not_warn_about_its_exception_mode():
