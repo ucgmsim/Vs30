@@ -52,7 +52,9 @@ def test_fill_nodata_grid_nearest_neighbor():
     # For col 1: origin_x + 1.5 * 100 = 1749050 -> origin_x = 1748900
     # For row 1: origin_y + 1.5 * (-100) = 5427050 -> origin_y = 5427200
     pixel_size = 100
-    transform = rasterio.transform.Affine(pixel_size, 0, 1748900, 0, -pixel_size, 5427200)
+    transform = rasterio.transform.Affine(
+        pixel_size, 0, 1748900, 0, -pixel_size, 5427200
+    )
     profile = {"transform": transform}
 
     vs30 = np.array(
@@ -96,16 +98,8 @@ def test_create_local_grid_config_expansion():
     # origin). Pixel centres are at grid_xmin + dx/2 + n*dx under the
     # pixel-edge bounds convention.
     n_pixels = 100
-    easting = (
-        config.FULL_NZ_GRID_CONFIG.grid_xmin
-        + dx / 2
-        + n_pixels * dx
-    )
-    northing = (
-        config.FULL_NZ_GRID_CONFIG.grid_ymin
-        + dy / 2
-        + n_pixels * dy
-    )
+    easting = config.FULL_NZ_GRID_CONFIG.grid_xmin + dx / 2 + n_pixels * dx
+    northing = config.FULL_NZ_GRID_CONFIG.grid_ymin + dy / 2 + n_pixels * dy
 
     # Production constants must satisfy create_local_grid_config's pixel-edge
     # constraint (half_width = k*dx + dx/2).
@@ -151,12 +145,8 @@ def test_create_local_grid_config_expansion():
     # (xmin offsets are an integer number of dx away from the full grid's xmin).
     assert initial_grid.grid_dx == dx
     assert expanded_grid.grid_dx == dx
-    assert (
-        initial_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin
-    ) % dx == 0
-    assert (
-        expanded_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin
-    ) % dx == 0
+    assert (initial_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) % dx == 0
+    assert (expanded_grid.grid_xmin - config.FULL_NZ_GRID_CONFIG.grid_xmin) % dx == 0
 
 
 def test_points_gap_fill_shows_single_bar_over_points_to_fill(capsys):

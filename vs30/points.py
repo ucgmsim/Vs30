@@ -105,7 +105,9 @@ def prepare_geology_obs_data(
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
     ].to_numpy()
     obs_geol_ids = category.assign_to_category_geology(obs_locs)
-    obs_geol_vs30, obs_geol_stdv = category.get_vs30_for_ids(obs_geol_ids, geol_model_df)
+    obs_geol_vs30, obs_geol_stdv = category.get_vs30_for_ids(
+        obs_geol_ids, geol_model_df
+    )
 
     # Apply hybrid modifications to observation model values so residuals
     # match the grid pipeline; see spatial.prepare_observation_data.
@@ -113,9 +115,7 @@ def prepare_geology_obs_data(
     # NODATA slope at obs locations gets replaced with OBS_SLOPE_NODATA_SENTINEL
     # so np.interp returns MAX Vs30 (distinct from grid pixels' NODATA path,
     # which yields MIN Vs30).
-    obs_slope = np.where(
-        obs_slope < 0, constants.OBS_SLOPE_NODATA_SENTINEL, obs_slope
-    )
+    obs_slope = np.where(obs_slope < 0, constants.OBS_SLOPE_NODATA_SENTINEL, obs_slope)
     obs_coast_dist = (
         raster.compute_coast_distance_at_points(obs_locs)
         if apply_coastal_distance_mod
@@ -134,7 +134,9 @@ def prepare_geology_obs_data(
     return build_obs_data(
         obs_locs=obs_locs,
         obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
-        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
+        obs_uncertainty=observations_df[
+            constants.ObservationColumn.UNCERTAINTY
+        ].to_numpy(),
         obs_model_vs30=obs_model_vs30,
         obs_model_stdv=obs_model_stdv,
         noisy=noisy,
@@ -170,12 +172,16 @@ def prepare_terrain_obs_data(
         [constants.ObservationColumn.EASTING, constants.ObservationColumn.NORTHING]
     ].to_numpy()
     obs_terr_ids = category.assign_to_category_terrain(obs_locs)
-    obs_terr_vs30, obs_terr_stdv = category.get_vs30_for_ids(obs_terr_ids, terr_model_df)
+    obs_terr_vs30, obs_terr_stdv = category.get_vs30_for_ids(
+        obs_terr_ids, terr_model_df
+    )
 
     return build_obs_data(
         obs_locs=obs_locs,
         obs_vs30=observations_df[constants.ObservationColumn.VS30].to_numpy(),
-        obs_uncertainty=observations_df[constants.ObservationColumn.UNCERTAINTY].to_numpy(),
+        obs_uncertainty=observations_df[
+            constants.ObservationColumn.UNCERTAINTY
+        ].to_numpy(),
         obs_model_vs30=obs_terr_vs30,
         obs_model_stdv=obs_terr_stdv,
         noisy=noisy,

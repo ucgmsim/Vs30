@@ -181,9 +181,7 @@ TERRAIN_VS30_MEAN_STDDEV_FILENAME: str = (
 )
 
 # Final geology Vs30 after slope, coastal distance, and spatial adjustment
-GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = (
-    "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
-)
+GEOLOGY_VS30_MEAN_STDDEV_FILENAME: str = "geology_vs30_slope_and_coastal_distance_and_spatially_adjusted_with_uncertainty.tif"
 
 # Combined weighted average of geology and terrain Vs30
 COMBINED_VS30_FILENAME: str = "combined_vs30.tif"

@@ -7,7 +7,6 @@ from vs30 import constants, utils
 
 
 class TestCombineVs30Models:
-
     def test_equal_ratio_gives_geometric_mean(self):
         """Test that ratio=1.0 gives geometric mean, not arithmetic mean."""
         geol_vs30 = np.array([200.0])
@@ -115,5 +114,3 @@ class TestCombineVs30Models:
             + 0.5 * ((log_t - log_comb) ** 2 + 0.4**2)
         )
         assert combined_stdv[0] == pytest.approx(expected_stdv)
-
-

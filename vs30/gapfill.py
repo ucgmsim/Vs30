@@ -36,10 +36,7 @@ def pixel_coords_float32(
     """
     eastings = transform.c + transform.a * (cols + constants.PIXEL_CENTER_OFFSET)
     northings = transform.f + transform.e * (rows + constants.PIXEL_CENTER_OFFSET)
-    return np.column_stack([
-        eastings.astype(np.float32),
-        northings.astype(np.float32),
-    ])
+    return np.column_stack([eastings.astype(np.float32), northings.astype(np.float32)])
 
 
 def points_inside_coastline(locations: np.ndarray) -> np.ndarray:

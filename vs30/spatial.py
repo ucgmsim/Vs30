@@ -411,7 +411,6 @@ def compute_residuals(
     return residuals, noise_weights
 
 
-
 def observation_covariance(
     obs_data: ObservationData,
     obs_indices: np.ndarray,
@@ -732,9 +731,7 @@ def find_affected_pixels(
             np.empty((0, 2), dtype=np.float32),
         )
     grid_locs = raster_data.get_coordinates()
-    distances, _ = obs_data.tree.query(
-        grid_locs, k=1, distance_upper_bound=max_dist_m,
-    )
+    distances, _ = obs_data.tree.query(grid_locs, k=1, distance_upper_bound=max_dist_m)
     affected_mask = np.isfinite(distances)
     logger.debug(
         f"Found {int(affected_mask.sum()):,} pixels with observations within "
@@ -922,7 +919,7 @@ def compute_spatial_point_adjustments(
     )
 
     batch_indices, batch_distances = select_observations_for_pixel_batch(
-        points, obs_data, max_dist_m=max_dist_m, max_points=max_points,
+        points, obs_data, max_dist_m=max_dist_m, max_points=max_points
     )
 
     for i in range(len(points)):
@@ -1074,8 +1071,7 @@ def compute_spatial_adjustment_on_grid(
         show_progress=show_progress,
     )
     logger.debug(
-        f"Spatial adjustments completed in "
-        f"{time.perf_counter() - t_spatial_start:.1f}s"
+        f"Spatial adjustments completed in {time.perf_counter() - t_spatial_start:.1f}s"
     )
 
     return adjusted_vs30, adjusted_stdv

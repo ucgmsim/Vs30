@@ -261,7 +261,6 @@ def compute_categorical_vs30_updates(
     return current_prior_df
 
 
-
 def compute_component_grid(
     model_type: constants.ModelType,
     grid_config: config.GridConfig,
@@ -358,7 +357,8 @@ def compute_component_grid(
     if posterior_df is not None:
         logger.debug("Using the pre-computed category values")
     else:
-        assert categorical_model_csv is not None  # type guard: entry check raises if both posterior_df and this are None
+        # Type guard: the entry check raises if both posterior_df and this are None.
+        assert categorical_model_csv is not None
         if do_bayesian_update:
             logger.log(
                 progress_level,
@@ -374,7 +374,8 @@ def compute_component_grid(
 
             if output_dir is not None and include_intermediate:
                 posterior_csv_path = (
-                    output_dir / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
+                    output_dir
+                    / f"{constants.POSTERIOR_PREFIX}{categorical_model_csv.name}"
                 )
                 posterior_df.to_csv(posterior_csv_path, index=False)
         else:
@@ -388,9 +389,7 @@ def compute_component_grid(
     )
     logger.debug(f"Using grid parameters: {grid_config}")
     id_array, profile = raster.create_category_id_array(model_type, grid_config)
-    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(
-        id_array, posterior_df
-    )
+    vs30_array, stdv_array = raster.create_vs30_arrays_from_ids(id_array, posterior_df)
 
     if output_dir is not None and include_intermediate:
         id_filename = (
@@ -653,7 +652,9 @@ def grid_pipeline(
     if clustered_observations_df is None and clustered_observations_csv is not None:
         clustered_observations_df = load_observations_csv(clustered_observations_csv)
     if independent_observations_df is None and independent_observations_csv is not None:
-        independent_observations_df = load_observations_csv(independent_observations_csv)
+        independent_observations_df = load_observations_csv(
+            independent_observations_csv
+        )
 
     result: GridPipelineResult = {}
     profile: dict | None = None
@@ -720,7 +721,8 @@ def grid_pipeline(
             combine_ratio=combine_ratio,
         )
 
-        assert profile is not None  # type guard: both run_geology and run_terrain branches set this above
+        # Type guard: both the run_geology and run_terrain branches set this above.
+        assert profile is not None
 
         if fill_gaps:
             # Gap-fill on-land nodata pixels in combined output
@@ -730,7 +732,10 @@ def grid_pipeline(
                 raster.write_raster(
                     output_dir / constants.COMBINED_VS30_BEFORE_GAPFILL_FILENAME,
                     profile,
-                    [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
+                    [
+                        utils.nan_to_nodata(combined_vs30),
+                        utils.nan_to_nodata(combined_stdv),
+                    ],
                     (
                         constants.BAND_DESCRIPTION_VS30_COMBINED,
                         constants.BAND_DESCRIPTION_STDV_COMBINED,
@@ -747,14 +752,18 @@ def grid_pipeline(
             raster.write_raster(
                 output_dir / constants.COMBINED_VS30_FILENAME,
                 profile,
-                [utils.nan_to_nodata(combined_vs30), utils.nan_to_nodata(combined_stdv)],
+                [
+                    utils.nan_to_nodata(combined_vs30),
+                    utils.nan_to_nodata(combined_stdv),
+                ],
                 (
                     constants.BAND_DESCRIPTION_VS30_COMBINED,
                     constants.BAND_DESCRIPTION_STDV_COMBINED,
                 ),
             )
 
-    assert profile is not None  # type guard: at least one of run_geology/run_terrain runs and sets this
+    # Type guard: at least one of run_geology/run_terrain runs and sets this.
+    assert profile is not None
     result["profile"] = profile
 
     elapsed_time = time.time() - start_time
@@ -1024,7 +1033,8 @@ def points_pipeline(
             ]
 
     if run_geology:
-        assert geol_model_df is not None  # type guard: assigned in the run_geology branch above
+        # Type guard: assigned in the run_geology branch above.
+        assert geol_model_df is not None
         geology_obs_data = points.prepare_geology_obs_data(
             observations_df,
             geol_model_df,
@@ -1036,7 +1046,8 @@ def points_pipeline(
         geology_obs_data = None
 
     if run_terrain:
-        assert terr_model_df is not None  # type guard: assigned in the run_terrain branch above
+        # Type guard: assigned in the run_terrain branch above.
+        assert terr_model_df is not None
         terrain_obs_data = points.prepare_terrain_obs_data(
             observations_df, terr_model_df, noisy=noisy
         )
@@ -1048,8 +1059,9 @@ def points_pipeline(
     result[constants.ObservationColumn.NORTHING] = locations[:, 1]
 
     if run_geology:
-        assert geol_model_df is not None  # type guard: assigned in the run_geology branch above
-        assert geology_obs_data is not None  # type guard: assigned in the run_geology branch above
+        # Type guards: both are assigned in the run_geology branch above.
+        assert geol_model_df is not None
+        assert geology_obs_data is not None
         with tqdm(
             total=len(locations), desc="Geology: spatial adjustment", unit="point"
         ) as pbar:
@@ -1082,8 +1094,9 @@ def points_pipeline(
             result[constants.COL_GEOLOGY_MVN_STDV] = geol_mvn_stdv
 
     if run_terrain:
-        assert terr_model_df is not None  # type guard: assigned in the run_terrain branch above
-        assert terrain_obs_data is not None  # type guard: assigned in the run_terrain branch above
+        # Type guards: both are assigned in the run_terrain branch above.
+        assert terr_model_df is not None
+        assert terrain_obs_data is not None
         with tqdm(
             total=len(locations), desc="Terrain: spatial adjustment", unit="point"
         ) as pbar:
