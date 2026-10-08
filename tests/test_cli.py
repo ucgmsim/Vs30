@@ -15,6 +15,12 @@ WELLINGTON = "174.7762,-41.2865"
 
 
 @pytest.fixture(autouse=True)
+def plain_terminal(monkeypatch):
+    """Turn off Rich styling, which Typer forces on under GitHub Actions, so tests can match message text."""
+    monkeypatch.setenv("TERM", "dumb")
+
+
+@pytest.fixture(autouse=True)
 def reset_package_logger():
     """Undo the CLI's logging setup so later tests don't log to a finished CliRunner's stream."""
     yield
