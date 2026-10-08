@@ -213,7 +213,7 @@ def grid(
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
     max_spatial_intermediate_array_memory_gb: typing.Annotated[
-        float, typer.Option()
+        float, typer.Option("--mvn-chunk-memory-gb")
     ] = constants.MAX_SPATIAL_INTERMEDIATE_ARRAY_MEMORY_GB,
     verbose: typing.Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:

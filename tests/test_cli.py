@@ -248,3 +248,22 @@ def test_nproc_must_be_all_cores_or_positive(tmp_path, recorded_grid_runs):
     assert result.exit_code == 2
     assert "--nproc must be -1 (all cores) or a positive number" in result.output
     assert recorded_grid_runs == []
+
+
+@pytest.mark.parametrize("command", ["points", "grid"])
+def test_help_shows_option_names_in_full_at_80_columns(command):
+    """No option name is cut short ('…') in a standard 80-column terminal."""
+    result = CliRunner().invoke(cli.app, [command, "--help"], env={"COLUMNS": "80"})
+
+    assert result.exit_code == 0
+    assert "…" not in result.output
+
+
+def test_mvn_chunk_memory_option_reaches_the_pipeline(tmp_path, recorded_grid_runs):
+    """--mvn-chunk-memory-gb sets the MVN chunk memory cap."""
+    result = run_grid(
+        "foster_2019_approx", str(tmp_path / "out"), "--mvn-chunk-memory-gb", "2"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert recorded_grid_runs[0]["max_spatial_intermediate_array_memory_gb"] == 2
