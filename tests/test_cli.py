@@ -138,10 +138,8 @@ def test_unwritable_output_location_is_reported_before_computing(tmp_path):
     grid_result = run_grid(
         "foster_2019_approx",
         str(read_only),
-        "--grid-xmin", "1748100",
-        "--grid-xmax", "1749100",
-        "--grid-ymin", "5427100",
-        "--grid-ymax", "5428100",
+        *"--grid-xmin 1748100 --grid-xmax 1749100".split(),
+        *"--grid-ymin 5427100 --grid-ymax 5428100".split(),
     )
 
     for result in (points_result, grid_result):
@@ -151,7 +149,9 @@ def test_unwritable_output_location_is_reported_before_computing(tmp_path):
 
 def test_points_prints_progress_lines_but_not_detail_by_default(tmp_path):
     """By default, points prints a few progress lines but not the step-by-step detail."""
-    result, output_csv = run_points(tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n")
+    result, output_csv = run_points(
+        tmp_path, f"name,longitude,latitude\nwellington,{WELLINGTON}\n"
+    )
 
     assert result.exit_code == 0, result.output
     assert "Processing 1 location(s)" in result.output
@@ -222,10 +222,8 @@ def test_grid_warns_when_bounds_are_off_the_full_nz_grid(tmp_path, recorded_grid
     result = run_grid(
         "foster_2019_approx",
         str(tmp_path / "out"),
-        "--grid-xmin", "1748150",
-        "--grid-xmax", "1750150",
-        "--grid-ymin", "5426100",
-        "--grid-ymax", "5428100",
+        *"--grid-xmin 1748150 --grid-xmax 1750150".split(),
+        *"--grid-ymin 5426100 --grid-ymax 5428100".split(),
     )
 
     assert result.exit_code == 0, result.output

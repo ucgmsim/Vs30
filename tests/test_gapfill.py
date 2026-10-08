@@ -233,7 +233,9 @@ def test_fill_one_point_via_local_grid_gives_up_at_points_limit(monkeypatch):
     requested_half_widths = []
 
     def fake_grid_pipeline(grid_config, output_dir, **kwargs):
-        requested_half_widths.append((grid_config.grid_xmax - grid_config.grid_xmin) / 2)
+        requested_half_widths.append(
+            (grid_config.grid_xmax - grid_config.grid_xmin) / 2
+        )
         return local_grid_result(np.full((3, 3), np.nan), np.full((3, 3), np.nan))
 
     monkeypatch.setattr(pipeline, "grid_pipeline", fake_grid_pipeline)

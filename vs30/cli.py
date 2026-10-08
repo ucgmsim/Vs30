@@ -157,7 +157,9 @@ def points(
                 geology_categorical_csv=config_data["geology_categorical_csv"],
                 terrain_categorical_csv=config_data["terrain_categorical_csv"],
                 clustered_observations_csv=config_data["clustered_observations_csv"],
-                independent_observations_csv=config_data["independent_observations_csv"],
+                independent_observations_csv=config_data[
+                    "independent_observations_csv"
+                ],
                 combination_method=constants.CombinationMethod(
                     config_data["combination_method"]
                 ),
@@ -185,7 +187,9 @@ def points(
         )
 
     renamed_columns = {
-        column: f"{column}_input" for column in df.columns if column in result_df.columns
+        column: f"{column}_input"
+        for column in df.columns
+        if column in result_df.columns
     }
     if renamed_columns:
         logger.warning(
@@ -202,10 +206,18 @@ def points(
 def grid(
     model: typing.Annotated[str, typer.Argument(help=_MODEL_ARG_HELP)],
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
-    grid_xmin: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_xmin,
-    grid_xmax: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_xmax,
-    grid_ymin: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_ymin,
-    grid_ymax: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_ymax,
+    grid_xmin: typing.Annotated[
+        int, typer.Option()
+    ] = config.FULL_NZ_GRID_CONFIG.grid_xmin,
+    grid_xmax: typing.Annotated[
+        int, typer.Option()
+    ] = config.FULL_NZ_GRID_CONFIG.grid_xmax,
+    grid_ymin: typing.Annotated[
+        int, typer.Option()
+    ] = config.FULL_NZ_GRID_CONFIG.grid_ymin,
+    grid_ymax: typing.Annotated[
+        int, typer.Option()
+    ] = config.FULL_NZ_GRID_CONFIG.grid_ymax,
     grid_dx: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dx,
     grid_dy: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dy,
     nproc: typing.Annotated[int, typer.Option()] = -1,
@@ -269,7 +281,9 @@ def grid(
                 f"(got {low} and {high})."
             )
         if spacing <= 0:
-            raise typer.BadParameter(f"--grid-d{axis} must be positive (got {spacing}).")
+            raise typer.BadParameter(
+                f"--grid-d{axis} must be positive (got {spacing})."
+            )
         if (high - low) % spacing:
             raise typer.BadParameter(
                 f"The grid's {axis} extent ({high - low} m) must be a whole number of "

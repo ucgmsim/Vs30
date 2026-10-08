@@ -83,9 +83,10 @@ def test_before_gap_fill_columns_are_present_when_no_site_needed_filling():
         constants.FixedModelVersion.JAEHWI_V1P0, 174.7762, -41.2865
     )
 
-    assert result.loc[0, constants.COL_VS30_BEFORE_GAPFILL] == result.loc[
-        0, constants.ObservationColumn.VS30
-    ]
+    assert (
+        result.loc[0, constants.COL_VS30_BEFORE_GAPFILL]
+        == result.loc[0, constants.ObservationColumn.VS30]
+    )
 
 
 def test_no_coast_distance_raster_is_written_when_the_coastal_modification_is_off(

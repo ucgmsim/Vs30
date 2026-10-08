@@ -814,7 +814,9 @@ def fill_one_point_via_local_grid(
             _, nearest = scipy.spatial.KDTree(
                 gapfill.pixel_coords_float32(valid_rows, valid_cols, transform)
             ).query(
-                gapfill.pixel_coords_float32(np.array([row]), np.array([col]), transform)[0]
+                gapfill.pixel_coords_float32(
+                    np.array([row]), np.array([col]), transform
+                )[0]
             )
             donor = (valid_rows[nearest], valid_cols[nearest])
             return (
@@ -1141,7 +1143,9 @@ def points_pipeline(
 
         if np.any(fillable_mask):
             fillable_indices = np.where(fillable_mask)[0]
-            logger.info(f"Gap-filling {len(fillable_indices)} point(s) from local grids")
+            logger.info(
+                f"Gap-filling {len(fillable_indices)} point(s) from local grids"
+            )
 
             # Local grid_pipeline calls reuse already-computed observations
             # and posteriors, and disable Bayesian update + internal gap-fill

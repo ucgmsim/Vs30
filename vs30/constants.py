@@ -339,9 +339,7 @@ COL_POSTERIOR_STDV_INDEPENDENT: str = (
 COL_POSTERIOR_NOBS_INDEPENDENT: str = (
     "posterior_num_observations_independent_observations"
 )
-COL_POSTERIOR_MEAN_CLUSTERED: str = (
-    "posterior_mean_vs30_m_per_s_clustered_observations"
-)
+COL_POSTERIOR_MEAN_CLUSTERED: str = "posterior_mean_vs30_m_per_s_clustered_observations"
 COL_POSTERIOR_STDV_CLUSTERED: str = (
     "posterior_standard_deviation_ln_vs30_clustered_observations"
 )

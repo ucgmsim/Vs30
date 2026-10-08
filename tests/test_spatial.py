@@ -109,7 +109,8 @@ class TestComputeSpatialAdjustmentForPixel:
     def test_colocated_observations_act_as_one_with_mean_residual(self, pixel):
         """With noisy=False, two observations at one location update like one observation with their mean residual."""
         obs_data = spatial.ObservationData(
-            locations=np.array([[1100.0, 1000.0], [1100.0, 1000.0]]),  # same spot, 100 m away
+            # Both at the same spot, 100 m from the pixel.
+            locations=np.array([[1100.0, 1000.0], [1100.0, 1000.0]]),
             model_stdv=np.array([0.4, 0.4]),
             log_model_vs30=np.log(np.array([260.0, 260.0])),
             residuals=np.log(np.array([300.0, 280.0]) / 260.0),
@@ -361,7 +362,9 @@ class TestComputeSpatialAdjustmentOnGrid:
             vs30_array=vs30,
             stdv_array=stdv,
             profile={
-                "transform": rasterio.transform.Affine(100, 0, 1748900, 0, -100, 5427200)
+                "transform": rasterio.transform.Affine(
+                    100, 0, 1748900, 0, -100, 5427200
+                )
             },
             observations_df=observations_df,
             model_values_df=terrain_model_df,

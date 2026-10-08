@@ -14,7 +14,9 @@ def test_point_slope_matches_grid_slope_on_cell_edges():
     """Sampling slope at pixel centres picks the same slope.tif cell as the grid's resampling, including on cell edges."""
     # slope.tif has 270 m cells from x = 1060040, so the pixel-centre column
     # x = 1560350 lies exactly on a cell edge: (1560350 - 1060040) / 270 = 1853.
-    transform = rasterio.transform.from_bounds(1560100, 5185100, 1561100, 5186100, 10, 10)
+    transform = rasterio.transform.from_bounds(
+        1560100, 5185100, 1561100, 5186100, 10, 10
+    )
     grid_slope = raster.compute_slope_array(
         {"height": 10, "width": 10, "transform": transform, "crs": constants.NZTM_CRS}
     )
@@ -23,21 +25,24 @@ def test_point_slope_matches_grid_slope_on_cell_edges():
 
     point_slope = raster.sample_slope_at_points(np.column_stack([xs, ys]))
 
-    np.testing.assert_array_equal(point_slope.reshape(10, 10).astype(np.float32), grid_slope)
-
-
+    np.testing.assert_array_equal(
+        point_slope.reshape(10, 10).astype(np.float32), grid_slope
+    )
 
 
 def test_slope_nodata_pixels_hold_the_nodata_value():
     """Slope pixels with no data (offshore) hold NODATA_VALUE, the value written rasters declare as nodata."""
     # South Wellington coast: part land, part sea.
-    transform = rasterio.transform.from_bounds(1750100, 5418100, 1756100, 5424100, 60, 60)
+    transform = rasterio.transform.from_bounds(
+        1750100, 5418100, 1756100, 5424100, 60, 60
+    )
 
     slope = raster.compute_slope_array(
         {"height": 60, "width": 60, "transform": transform, "crs": constants.NZTM_CRS}
     )
 
     assert set(np.unique(slope[slope < 0])) == {constants.NODATA_VALUE}
+
 
 def test_geology_ids_for_a_grid_with_no_polygons_are_nodata():
     """A grid that no geology polygon reaches (open sea) gets nodata IDs, not an error."""
@@ -49,20 +54,21 @@ def test_geology_ids_for_a_grid_with_no_polygons_are_nodata():
     assert (ids == constants.RASTER_ID_NODATA_VALUE).all()
 
 
-
 def test_coast_distance_is_capped_where_the_coast_is_out_of_range():
     """Far inland, coast distance is capped at the coastal modification's range instead of coming out as 0."""
     # A central North Island box more than 20 km from any coast.
-    transform = rasterio.transform.from_bounds(1830100, 5700100, 1832100, 5702100, 20, 20)
+    transform = rasterio.transform.from_bounds(
+        1830100, 5700100, 1832100, 5702100, 20, 20
+    )
 
     distances = raster.compute_coast_distance_raster(
         {"height": 20, "width": 20, "transform": transform}
     )
 
     assert (
-        distances == max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
+        distances
+        == max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
     ).all()
-
 
 
 def test_gdal_does_not_warn_about_its_exception_mode():
@@ -75,7 +81,13 @@ def test_gdal_does_not_warn_about_its_exception_mode():
     )
 
     result = subprocess.run(
-        [sys.executable, "-W", "error:Neither gdal.UseExceptions:FutureWarning", "-c", script],
+        [
+            sys.executable,
+            "-W",
+            "error:Neither gdal.UseExceptions:FutureWarning",
+            "-c",
+            script,
+        ],
         capture_output=True,
         text=True,
     )
