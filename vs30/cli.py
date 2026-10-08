@@ -6,6 +6,7 @@ import typing
 from pathlib import Path
 
 import pandas as pd
+import threadpoolctl
 import typer
 from qcore import cli
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -78,7 +79,7 @@ def points(
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
-    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
     verbose: typing.Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """
@@ -99,14 +100,15 @@ def points(
         Name of latitude column in input CSV.
     include_intermediate : bool
         Include intermediate values (geology/terrain separately) in output.
-    dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of observations; -1 uses
-        all cores. Only used by models that cluster observations
-        (bundled: viktor_cpt_clustering).
+    nproc : int, optional
+        Number of CPU cores to use, for DBSCAN clustering of observations and
+        the linear algebra in the MVN spatial adjustment; -1 uses all cores.
     verbose : bool, optional
         Also print step-by-step progress messages.
     """
     configure_logging(verbose)
+    if nproc == 0 or nproc < -1:
+        raise typer.BadParameter("--nproc must be -1 (all cores) or a positive number.")
     try:
         config_data = config.resolve_model_config(model)
     except ValueError as e:
@@ -139,7 +141,12 @@ def points(
             "blank. Coordinates must be WGS84 degrees."
         )
 
-    with logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]):
+    with (
+        logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]),
+        threadpoolctl.threadpool_limits(
+            limits=None if nproc == -1 else nproc, user_api="blas"
+        ),
+    ):
         result_df = (
             pipeline.points_pipeline(
                 longitudes=longitudes[valid_coords].to_numpy(),
@@ -159,7 +166,7 @@ def points(
                 mvn=config_data["mvn"],
                 do_bayesian_update=config_data["do_bayesian_update"],
                 include_intermediate=include_intermediate,
-                dbscan_nproc=dbscan_nproc,
+                dbscan_nproc=nproc,
                 apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
                 fill_gaps=config_data["fill_gaps"],
             )
@@ -201,7 +208,7 @@ def grid(
     grid_ymax: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_ymax,
     grid_dx: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dx,
     grid_dy: typing.Annotated[int, typer.Option()] = config.FULL_NZ_GRID_CONFIG.grid_dy,
-    dbscan_nproc: typing.Annotated[int, typer.Option()] = -1,
+    nproc: typing.Annotated[int, typer.Option()] = -1,
     include_intermediate: typing.Annotated[
         bool, typer.Option("--include-intermediate/--final-only")
     ] = False,
@@ -235,10 +242,9 @@ def grid(
         Pixel width (metres).
     grid_dy : int
         Pixel height (metres).
-    dbscan_nproc : int, optional
-        Number of processes for DBSCAN clustering of observations; -1 uses
-        all cores. Only used by models that cluster observations
-        (bundled: viktor_cpt_clustering).
+    nproc : int, optional
+        Number of CPU cores to use, for DBSCAN clustering of observations and
+        the linear algebra in the MVN spatial adjustment; -1 uses all cores.
     include_intermediate : bool
         Include intermediate rasters in output.
     max_spatial_intermediate_array_memory_gb : float, optional
@@ -247,6 +253,8 @@ def grid(
         Also print step-by-step progress messages.
     """
     configure_logging(verbose)
+    if nproc == 0 or nproc < -1:
+        raise typer.BadParameter("--nproc must be -1 (all cores) or a positive number.")
     try:
         config_data = config.resolve_model_config(model)
     except ValueError as e:
@@ -283,7 +291,12 @@ def grid(
         f"({grid_dx} x {grid_dy} m pixels)"
     )
 
-    with logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]):
+    with (
+        logging_redirect_tqdm(loggers=[logging.getLogger("vs30")]),
+        threadpoolctl.threadpool_limits(
+            limits=None if nproc == -1 else nproc, user_api="blas"
+        ),
+    ):
         pipeline.grid_pipeline(
             grid_config=config.GridConfig(
                 grid_xmin=grid_xmin,
@@ -309,7 +322,7 @@ def grid(
             mvn=config_data["mvn"],
             do_bayesian_update=config_data["do_bayesian_update"],
             include_intermediate=include_intermediate,
-            dbscan_nproc=dbscan_nproc,
+            dbscan_nproc=nproc,
             max_spatial_intermediate_array_memory_gb=max_spatial_intermediate_array_memory_gb,
             apply_coastal_distance_mod=config_data["apply_coastal_distance_mod"],
             fill_gaps=config_data["fill_gaps"],

@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import threadpoolctl
 from typer.testing import CliRunner
 
 from vs30 import cli, config, pipeline
@@ -47,9 +48,18 @@ def run_grid(*args: str):
 
 @pytest.fixture
 def recorded_grid_runs(monkeypatch):
-    """Replace the slow grid pipeline with a stub recording the arguments it gets."""
+    """Replace the slow grid pipeline with a stub recording its arguments and BLAS thread count."""
     calls = []
-    monkeypatch.setattr(pipeline, "grid_pipeline", lambda **kwargs: calls.append(kwargs))
+
+    def fake_grid_pipeline(**kwargs):
+        kwargs["blas_threads"] = [
+            info["num_threads"]
+            for info in threadpoolctl.threadpool_info()
+            if info["user_api"] == "blas"
+        ]
+        calls.append(kwargs)
+
+    monkeypatch.setattr(pipeline, "grid_pipeline", fake_grid_pipeline)
     return calls
 
 
@@ -220,3 +230,21 @@ def test_grid_warns_when_bounds_are_off_the_full_nz_grid(tmp_path, recorded_grid
 
     assert result.exit_code == 0, result.output
     assert "aren't aligned with the full-NZ grid" in result.output
+
+
+def test_nproc_limits_dbscan_and_blas_threads(tmp_path, recorded_grid_runs):
+    """--nproc caps both DBSCAN's processes and the BLAS threads used by the MVN."""
+    result = run_grid("foster_2019_approx", str(tmp_path / "out"), "--nproc", "2")
+
+    assert result.exit_code == 0, result.output
+    assert recorded_grid_runs[0]["dbscan_nproc"] == 2
+    assert set(recorded_grid_runs[0]["blas_threads"]) == {2}
+
+
+def test_nproc_must_be_all_cores_or_positive(tmp_path, recorded_grid_runs):
+    """--nproc 0 is rejected before computing."""
+    result = run_grid("foster_2019_approx", str(tmp_path / "out"), "--nproc", "0")
+
+    assert result.exit_code == 2
+    assert "--nproc must be -1 (all cores) or a positive number" in result.output
+    assert recorded_grid_runs == []

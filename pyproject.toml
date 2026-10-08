@@ -16,6 +16,7 @@ dependencies = [
     "typer",
     "qcore-utils",
     "rasterio",
+    "threadpoolctl",
     "tqdm",
     "pyyaml",
     "shapely",

@@ -115,6 +115,7 @@ Pass `--include-intermediate` to also write the intermediate products: the geolo
 ### Practical tips
 
 - **Shorter test runs**: while you're confirming your inputs are right, reduce the bounding box or coarsen the spacing (e.g. `--grid-dx 400 --grid-dy 400`).
+- **CPU use**: by default the command uses every CPU core. `--nproc 4` (for example) caps both the clustering of observations and the linear algebra in the spatial adjustment, keeping the machine responsive, usually with little loss of speed.
 - **Memory**: if the spatial-adjustment step runs out of memory on a large grid, lower `--max-spatial-intermediate-array-memory-gb` (default: 4.0). It caps the per-chunk (indices, distances) arrays produced by the KDTree query during MVN spatial adjustment. Smaller values trade a small amount of speed for a lower peak memory footprint.
 
 ### All options
