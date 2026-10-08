@@ -81,8 +81,8 @@ class TestComputeSpatialAdjustmentForPixel:
         _, updated_stdv = result
         assert updated_stdv < pixel.stdv
 
-    def test_no_observations_returns_unchanged_vs30(self, pixel):
-        """Test that no nearby observations returns unchanged vs30."""
+    def test_no_observations_returns_unchanged_prior(self, pixel):
+        """With no nearby observations, vs30 and stdv are unchanged, as for grid pixels out of every observation's range."""
         far_observation = spatial.ObservationData(
             locations=np.array([[100000.0, 100000.0]]),  # Very far
             model_stdv=np.array([0.4]),
@@ -104,10 +104,7 @@ class TestComputeSpatialAdjustmentForPixel:
             corr_zero=geology_corr_fn(np.array([0.0]))[0],
         )
 
-        # VS30 should be unchanged when no nearby observations
-        assert result is not None
-        updated_vs30, _ = result
-        assert updated_vs30 == pixel.vs30
+        assert result == (pixel.vs30, pixel.stdv)
 
     def test_colocated_observations_act_as_one_with_mean_residual(self, pixel):
         """With noisy=False, two observations at one location update like one observation with their mean residual."""
@@ -199,7 +196,7 @@ class TestComputeSpatialAdjustmentForPixel:
         assert result is not None
         updated_vs30, updated_stdv = result
         assert updated_vs30 == pixel.vs30
-        assert updated_stdv == pytest.approx(pixel.stdv * np.sqrt(corr_zero))
+        assert updated_stdv == pixel.stdv
         assert [record.levelname for record in caplog.records] == ["WARNING"]
 
 

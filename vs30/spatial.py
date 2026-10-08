@@ -621,7 +621,7 @@ def compute_spatial_adjustment_for_pixel(
     obs_indices : ndarray
         Integer indices into ``obs_data`` for the observations conditioning
         this pixel. Pass an empty array when there are no nearby observations;
-        the prior vs30 is returned unchanged and stdv is shrunk by ``corr_zero``.
+        the prior vs30 and stdv are then returned unchanged.
     corr_fn : callable
         Correlation function mapping distances (ndarray) to correlations
         (ndarray).
@@ -650,11 +650,8 @@ def compute_spatial_adjustment_for_pixel(
     ):
         return None
 
-    # corr_zero ≈ 1 (slightly less than 1 because correlations.exponential enforces MIN_DIST_ENFORCED before the exp).
-    initial_var = (pixel.stdv**2) * corr_zero
-
     if len(obs_indices) == 0:
-        return (pixel.vs30, float(np.sqrt(initial_var)))
+        return (pixel.vs30, pixel.stdv)
 
     pixel_cov = pixel_observation_covariance(
         pixel, obs_data, obs_indices, corr_fn, noisy=noisy, cov_reduc=cov_reduc
@@ -675,7 +672,11 @@ def compute_spatial_adjustment_for_pixel(
             np.dot(pixel_cov, inv_cov),
             obs_data.residuals[obs_indices],
         )
-        var = initial_var - np.dot(np.dot(pixel_cov, inv_cov), pixel_cov)
+        # corr_zero ≈ 1 (slightly less than 1 because correlations.exponential
+        # enforces MIN_DIST_ENFORCED before the exp).
+        var = (pixel.stdv**2) * corr_zero - np.dot(
+            np.dot(pixel_cov, inv_cov), pixel_cov
+        )
     except np.linalg.LinAlgError:
         pred_update = var = np.nan
 
@@ -684,7 +685,7 @@ def compute_spatial_adjustment_for_pixel(
             f"MVN update failed at ({pixel.location[0]:.0f}, "
             f"{pixel.location[1]:.0f}); keeping prior values"
         )
-        return (pixel.vs30, float(np.sqrt(initial_var)))
+        return (pixel.vs30, pixel.stdv)
 
     return (
         float(pixel.vs30 * np.exp(pred_update)),
