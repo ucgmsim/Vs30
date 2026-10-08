@@ -1,0 +1,24 @@
+name: Deptry Dependency Check
+
+on: [pull_request]
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Setup the minimum required python distribution
+      - uses: actions/setup-python@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+      - name: Install GDAL system libraries
+        run: sudo apt-get update && sudo apt-get install -y libgdal-dev
+      # GDAL's Python bindings must match the system libgdal version exactly.
+      # Pin the version in pyproject.toml to match the system libgdal.
+      - run: |
+          sed -i "s/\"GDAL\"/\"GDAL==$(gdal-config --version)\"/" pyproject.toml
+          uv sync
+      # Install deptry
+      - run: uv pip install deptry
+      # Run deptry to check that all dependencies are present.
+      - run: uv run deptry . -ddg test,types
