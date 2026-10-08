@@ -143,6 +143,39 @@ class TestComputeSpatialAdjustmentForPixel:
             0.4 * np.sqrt(corr_zero - rho**2 / corr_zero), rel=1e-6
         )
 
+    def test_precomputed_observation_covariance_gives_identical_updates(self, pixel):
+        """Slicing an observation covariance built once for all observations gives exactly the per-pixel result."""
+        rng = np.random.default_rng(0)
+        obs_data = spatial.ObservationData(
+            locations=rng.uniform(0, 3000, (6, 2)),
+            model_stdv=rng.uniform(0.3, 0.6, 6),
+            log_model_vs30=np.log(rng.uniform(200, 600, 6)),
+            residuals=rng.normal(0, 0.3, 6),
+            noise_weights=rng.uniform(0.5, 1.0, 6),
+        )
+        obs_indices = np.array([4, 0, 2])  # a subset, not in storage order
+        settings = {
+            "corr_fn": geology_corr_fn,
+            "corr_zero": geology_corr_fn(np.array([0.0]))[0],
+            "noisy": True,
+            "cov_reduc": 1.5,
+        }
+
+        built_per_pixel = spatial.compute_spatial_adjustment_for_pixel(
+            pixel, obs_data, obs_indices, **settings
+        )
+        precomputed = spatial.compute_spatial_adjustment_for_pixel(
+            pixel,
+            obs_data,
+            obs_indices,
+            obs_covariance=spatial.observation_covariance(
+                obs_data, np.arange(6), geology_corr_fn, noisy=True, cov_reduc=1.5
+            ),
+            **settings,
+        )
+
+        assert precomputed == built_per_pixel
+
     def test_non_finite_update_keeps_prior_and_warns(self, pixel, caplog):
         """An update that comes out non-finite keeps the prior values and logs a warning."""
         obs_data = spatial.ObservationData(

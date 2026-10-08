@@ -84,6 +84,12 @@ MIN_DIST_ENFORCED: float = 0.1
 # residual, and changes the update for distinct observations by ~1e-8.
 MVN_RELATIVE_NUGGET: float = 1e-8
 
+# Up to this many observations, the MVN observation-observation covariance is
+# built once per run and sliced per pixel; above it, each pixel's block is built
+# on the fly. Memory is n^2 float64: 200 MB at 5,000 observations, whereas the
+# 35,706 CPTs of viktor_cpt_clustering would need ~10 GB.
+MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE: int = 5000
+
 # Maximum distance (meters) for considering observations in multivariate normal
 # (MVN) spatial adjustment. Observations further than this distance from a pixel
 # will not influence its update.

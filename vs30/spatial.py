@@ -406,8 +406,7 @@ def compute_residuals(
 
 
 
-def build_covariance_matrix(
-    pixel: PixelData,
+def observation_covariance(
     obs_data: ObservationData,
     obs_indices: np.ndarray,
     corr_fn: Callable[[np.ndarray], np.ndarray],
@@ -415,15 +414,15 @@ def build_covariance_matrix(
     cov_reduc: float = constants.COV_REDUC,
 ) -> np.ndarray:
     """
-    Build the covariance matrix for one pixel and its nearby observations.
+    Build the covariance matrix between the selected observations.
+
+    It doesn't depend on the pixel being updated, so it can be built once for
+    all observations and sliced per pixel.
 
     Parameters
     ----------
-    pixel : PixelData
-        Pixel being updated.
     obs_data : ObservationData
-        Prepared observation data; the rows used here are selected by
-        ``obs_indices``.
+        Prepared observation data.
     obs_indices : ndarray
         Integer indices into ``obs_data`` for the selected observations.
     corr_fn : callable
@@ -437,36 +436,119 @@ def build_covariance_matrix(
     Returns
     -------
     ndarray
-        Covariance matrix of shape ``(n_selected_obs + 1, n_selected_obs + 1)``.
-        Row/column 0 is the pixel; rows/columns 1..n are the selected
-        observations.
+        Covariance matrix of shape ``(n_selected_obs, n_selected_obs)``.
     """
-    all_points = np.vstack([pixel.location, obs_data.locations[obs_indices]]).astype(
-        np.float64
-    )
-    distance_matrix = scipy.spatial.distance.cdist(
-        all_points, all_points, metric="euclidean"
-    )
-
-    corr = corr_fn(distance_matrix)
-
-    stdvs = np.insert(obs_data.model_stdv[obs_indices], 0, pixel.stdv)
-    cov = corr * np.outer(stdvs, stdvs)
+    cov = corr_fn(
+        scipy.spatial.distance.cdist(
+            obs_data.locations[obs_indices],
+            obs_data.locations[obs_indices],
+            metric="euclidean",
+        )
+    ) * np.outer(obs_data.model_stdv[obs_indices], obs_data.model_stdv[obs_indices])
 
     if noisy:
-        noise_weights = np.insert(obs_data.noise_weights[obs_indices], 0, 1.0)
-        noise_weight_matrix = np.outer(noise_weights, noise_weights)
+        noise_weight_matrix = np.outer(
+            obs_data.noise_weights[obs_indices], obs_data.noise_weights[obs_indices]
+        )
         np.fill_diagonal(noise_weight_matrix, 1.0)
         cov *= noise_weight_matrix
 
     if cov_reduc > 0:
-        log_vs30s = np.insert(
-            obs_data.log_model_vs30[obs_indices], 0, np.log(pixel.vs30)
-        )
-        log_dist_matrix = np.abs(log_vs30s[:, np.newaxis] - log_vs30s)
-        cov *= np.exp(-cov_reduc * log_dist_matrix)
+        log_vs30s = obs_data.log_model_vs30[obs_indices]
+        cov *= np.exp(-cov_reduc * np.abs(log_vs30s[:, np.newaxis] - log_vs30s))
 
     return cov
+
+
+def pixel_observation_covariance(
+    pixel: PixelData,
+    obs_data: ObservationData,
+    obs_indices: np.ndarray,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
+    noisy: bool = False,
+    cov_reduc: float = constants.COV_REDUC,
+) -> np.ndarray:
+    """
+    Build the covariance between a pixel and each selected observation.
+
+    Parameters
+    ----------
+    pixel : PixelData
+        Pixel being updated.
+    obs_data : ObservationData
+        Prepared observation data.
+    obs_indices : ndarray
+        Integer indices into ``obs_data`` for the selected observations.
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
+    noisy : bool, optional
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
+    cov_reduc : float, optional
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
+
+    Returns
+    -------
+    ndarray
+        Covariances of shape ``(n_selected_obs,)``.
+    """
+    # Parenthesised to multiply in the same order as an outer product of stdvs.
+    cov = corr_fn(
+        scipy.spatial.distance.cdist(
+            pixel.location[np.newaxis].astype(np.float64),
+            obs_data.locations[obs_indices],
+            metric="euclidean",
+        )[0]
+    ) * (pixel.stdv * obs_data.model_stdv[obs_indices])
+
+    if noisy:
+        cov *= obs_data.noise_weights[obs_indices]
+
+    if cov_reduc > 0:
+        cov *= np.exp(
+            -cov_reduc
+            * np.abs(np.log(pixel.vs30) - obs_data.log_model_vs30[obs_indices])
+        )
+
+    return cov
+
+
+def precompute_observation_covariance(
+    obs_data: ObservationData,
+    corr_fn: Callable[[np.ndarray], np.ndarray],
+    noisy: bool,
+    cov_reduc: float,
+) -> np.ndarray | None:
+    """
+    Build the covariance between all observations, unless there are too many to hold.
+
+    Parameters
+    ----------
+    obs_data : ObservationData
+        Prepared observation data.
+    corr_fn : callable
+        Correlation function mapping distances (ndarray) to correlations
+        (ndarray).
+    noisy : bool
+        If True, down-weight uncertain observations by ``obs_data.noise_weights``.
+    cov_reduc : float
+        If > 0, shrink covariance between points with dissimilar Vs30 values.
+
+    Returns
+    -------
+    ndarray or None
+        ``(n_obs, n_obs)`` covariance, or None above
+        ``constants.MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE`` observations.
+    """
+    if len(obs_data.locations) > constants.MAX_OBSERVATIONS_FOR_PRECOMPUTED_COVARIANCE:
+        return None
+    return observation_covariance(
+        obs_data,
+        np.arange(len(obs_data.locations)),
+        corr_fn,
+        noisy=noisy,
+        cov_reduc=cov_reduc,
+    )
 
 
 def select_observations_for_pixel_batch(
@@ -525,6 +607,7 @@ def compute_spatial_adjustment_for_pixel(
     corr_zero: float,
     noisy: bool = False,
     cov_reduc: float = constants.COV_REDUC,
+    obs_covariance: np.ndarray | None = None,
 ) -> tuple[float, float] | None:
     """
     Compute MVN update for a single pixel given pre-selected observations.
@@ -548,6 +631,10 @@ def compute_spatial_adjustment_for_pixel(
         If True, down-weight uncertain observations by ``obs_data.noise_weights``.
     cov_reduc : float, optional
         If > 0, shrink covariance between points with dissimilar Vs30 values.
+    obs_covariance : ndarray, optional
+        Covariance between all observations, from
+        ``precompute_observation_covariance``. When given, the selected
+        observations' block is sliced from it instead of built for this pixel.
 
     Returns
     -------
@@ -569,27 +656,26 @@ def compute_spatial_adjustment_for_pixel(
     if len(obs_indices) == 0:
         return (pixel.vs30, float(np.sqrt(initial_var)))
 
-    cov_matrix = build_covariance_matrix(
-        pixel,
-        obs_data,
-        obs_indices,
-        corr_fn,
-        noisy=noisy,
-        cov_reduc=cov_reduc,
+    pixel_cov = pixel_observation_covariance(
+        pixel, obs_data, obs_indices, corr_fn, noisy=noisy, cov_reduc=cov_reduc
+    )
+    obs_cov = (
+        obs_covariance[np.ix_(obs_indices, obs_indices)]
+        if obs_covariance is not None
+        else observation_covariance(
+            obs_data, obs_indices, corr_fn, noisy=noisy, cov_reduc=cov_reduc
+        )
     )
 
     try:
         inv_cov = np.linalg.inv(
-            cov_matrix[1:, 1:]
-            + np.diag(constants.MVN_RELATIVE_NUGGET * np.diag(cov_matrix[1:, 1:]))
+            obs_cov + np.diag(constants.MVN_RELATIVE_NUGGET * np.diag(obs_cov))
         )
         pred_update = np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov),
+            np.dot(pixel_cov, inv_cov),
             obs_data.residuals[obs_indices],
         )
-        var = cov_matrix[0, 0] - np.dot(
-            np.dot(cov_matrix[0, 1:], inv_cov), cov_matrix[1:, 0]
-        )
+        var = initial_var - np.dot(np.dot(pixel_cov, inv_cov), pixel_cov)
     except np.linalg.LinAlgError:
         pred_update = var = np.nan
 
@@ -709,6 +795,9 @@ def compute_spatial_pixel_adjustments(
     updated_stdv = raster_data.stdv.copy()
 
     corr_zero = corr_fn(np.array([0.0]))[0]
+    obs_covariance = precompute_observation_covariance(
+        obs_data, corr_fn, noisy, cov_reduc
+    )
     n_updated = 0
 
     chunk_size = max(
@@ -749,6 +838,7 @@ def compute_spatial_pixel_adjustments(
                     corr_zero=corr_zero,
                     noisy=noisy,
                     cov_reduc=cov_reduc,
+                    obs_covariance=obs_covariance,
                 )
                 if result is not None:
                     vs30, stdv = result
@@ -820,6 +910,9 @@ def compute_spatial_point_adjustments(
         return mvn_vs30, mvn_stdv
 
     corr_zero = corr_fn(np.array([0.0]))[0]
+    obs_covariance = precompute_observation_covariance(
+        obs_data, corr_fn, noisy, cov_reduc
+    )
 
     batch_indices, batch_distances = select_observations_for_pixel_batch(
         points, obs_data, max_dist_m=max_dist_m, max_points=max_points,
@@ -838,6 +931,7 @@ def compute_spatial_point_adjustments(
             corr_zero=corr_zero,
             noisy=noisy,
             cov_reduc=cov_reduc,
+            obs_covariance=obs_covariance,
         )
         if result is not None:
             mvn_vs30[i] = result[0]
