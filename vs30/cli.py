@@ -21,7 +21,7 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
 )
 
-_MODEL_ARG_HELP = (
+MODEL_ARG_HELP = (
     "Either a bundled model version name ("
     f"{', '.join(v.value for v in constants.FixedModelVersion)}"
     ") or a path to a custom YAML config file."
@@ -71,7 +71,7 @@ def ensure_writable_directory(directory: Path) -> None:
 
 @cli.from_docstring(app)
 def points(
-    model: typing.Annotated[str, typer.Argument(help=_MODEL_ARG_HELP)],
+    model: typing.Annotated[str, typer.Argument(help=MODEL_ARG_HELP)],
     locations_csv: typing.Annotated[Path, typer.Argument(exists=True, dir_okay=False)],
     output_csv: typing.Annotated[Path, typer.Argument(dir_okay=False)],
     lon_column: typing.Annotated[str, typer.Option()] = constants.LOCATIONS_LON_COLUMN,
@@ -204,7 +204,7 @@ def points(
 
 @cli.from_docstring(app)
 def grid(
-    model: typing.Annotated[str, typer.Argument(help=_MODEL_ARG_HELP)],
+    model: typing.Annotated[str, typer.Argument(help=MODEL_ARG_HELP)],
     output_dir: typing.Annotated[Path, typer.Argument(file_okay=False)],
     grid_xmin: typing.Annotated[
         int, typer.Option()
