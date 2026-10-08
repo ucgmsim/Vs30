@@ -23,6 +23,10 @@ from vs30 import config, constants, utils
 
 logger = logging.getLogger(__name__)
 
+# Make GDAL errors raise (the GDAL 4 default) rather than return None; setting
+# it explicitly also stops GDAL's FutureWarning about the choice.
+gdal.UseExceptions()
+
 
 @functools.lru_cache(maxsize=1)
 def load_qmap_shapefile() -> gpd.GeoDataFrame:

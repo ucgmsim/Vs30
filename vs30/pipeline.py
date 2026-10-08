@@ -449,13 +449,14 @@ def compute_component_grid(
                 [slope_array],
                 (constants.BAND_DESCRIPTION_SLOPE,),
             )
-            raster.write_raster(
-                output_dir / constants.COAST_DISTANCE_RASTER_FILENAME,
-                profile,
-                [coast_dist_array],
-                (constants.BAND_DESCRIPTION_COAST_DISTANCE,),
-                nodata=None,
-            )
+            if apply_coastal_distance_mod:
+                raster.write_raster(
+                    output_dir / constants.COAST_DISTANCE_RASTER_FILENAME,
+                    profile,
+                    [coast_dist_array],
+                    (constants.BAND_DESCRIPTION_COAST_DISTANCE,),
+                    nodata=None,
+                )
             raster.write_raster(
                 output_dir
                 / constants.GEOLOGY_VS30_SLOPE_AND_COASTAL_DISTANCE_ADJUSTED_FILENAME,

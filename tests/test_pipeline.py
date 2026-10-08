@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 
 from conftest import load_fixed_model_config
-from vs30 import constants, pipeline
+from vs30 import config, constants, pipeline
 
 
 def test_points_rejects_non_positive_observation_vs30(tmp_path):
@@ -86,3 +86,30 @@ def test_before_gap_fill_columns_are_present_when_no_site_needed_filling():
     assert result.loc[0, constants.COL_VS30_BEFORE_GAPFILL] == result.loc[
         0, constants.ObservationColumn.VS30
     ]
+
+
+def test_no_coast_distance_raster_is_written_when_the_coastal_modification_is_off(
+    tmp_path,
+):
+    """Intermediate output skips coast_distance.tif for models that don't use it, rather than writing zeros."""
+    cfg = load_fixed_model_config(constants.FixedModelVersion.FOSTER_2019_APPROX)
+
+    pipeline.grid_pipeline(
+        grid_config=config.GridConfig(1748100, 1748400, 5427100, 5427400, 100, 100),
+        apply_alluvium_slope_mod=cfg["apply_alluvium_slope_mod"],
+        geology_corr_fn=cfg["geology_corr_fn"],
+        terrain_corr_fn=cfg["terrain_corr_fn"],
+        output_dir=tmp_path,
+        geology_categorical_csv=cfg["geology_categorical_csv"],
+        terrain_categorical_csv=cfg["terrain_categorical_csv"],
+        independent_observations_csv=cfg["independent_observations_csv"],
+        combination_method=constants.CombinationMethod(cfg["combination_method"]),
+        combine_ratio=cfg["combine_ratio"],
+        do_bayesian_update=cfg["do_bayesian_update"],
+        include_intermediate=True,
+        apply_coastal_distance_mod=cfg["apply_coastal_distance_mod"],
+        show_progress=False,
+    )
+
+    assert (tmp_path / constants.SLOPE_RASTER_FILENAME).exists()
+    assert not (tmp_path / constants.COAST_DISTANCE_RASTER_FILENAME).exists()

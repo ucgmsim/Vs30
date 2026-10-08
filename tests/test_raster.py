@@ -1,5 +1,8 @@
 """Tests for the VS30 raster module."""
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 import rasterio
@@ -47,6 +50,25 @@ def test_coast_distance_is_capped_where_the_coast_is_out_of_range():
     assert (
         distances == max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
     ).all()
+
+
+
+def test_gdal_does_not_warn_about_its_exception_mode():
+    """GDAL's exception mode is set explicitly, so coast-distance runs don't print its FutureWarning."""
+    # A fresh process: GDAL only warns once per process.
+    script = (
+        "import rasterio.transform; from vs30 import raster; "
+        "raster.compute_coast_distance_raster({'height': 3, 'width': 3, 'transform': "
+        "rasterio.transform.from_bounds(1748100, 5427100, 1748400, 5427400, 3, 3)})"
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-W", "error:Neither gdal.UseExceptions:FutureWarning", "-c", script],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 class TestApplyHybridGeologyModifications:
