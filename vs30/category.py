@@ -335,7 +335,7 @@ def update_with_clustered_data(
     Raises
     ------
     ValueError
-        If `prior_df` has neither posterior-clustered columns nor
+        If `prior_df` has neither COL_PRIOR_MEAN/COL_PRIOR_STDV nor
         COL_MEAN/COL_STDV columns.
     """
     posterior_df = prior_df.copy()

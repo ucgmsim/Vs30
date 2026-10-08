@@ -349,6 +349,10 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
 
     Distances beyond the larger of ``HYBRID_GID4_DIST_MAX`` and
     ``HYBRID_GID10_DIST_MAX`` (20 km) change nothing, so they are capped there.
+    They are measured between pixel centres, from each pixel to the nearest
+    pixel outside the coastline, so they can exceed the exact distance from
+    ``compute_coast_distance_at_points`` by up to about a pixel (45 m on
+    average at 100 m spacing).
 
     Parameters
     ----------
@@ -504,10 +508,11 @@ def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
 
 def compute_coast_distance_at_points(points: np.ndarray) -> np.ndarray:
     """
-    Compute distance from each point to the nearest coastline.
+    Compute the exact distance from each point to the nearest coastline.
 
     For small numbers of points this is much faster than computing
-    a full proximity raster via ``compute_coast_distance_raster``.
+    a full proximity raster via ``compute_coast_distance_raster``, whose
+    pixel-centre distances can be up to about a pixel larger.
 
     Parameters
     ----------

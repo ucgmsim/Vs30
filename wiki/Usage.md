@@ -128,6 +128,13 @@ vs30 grid --help
 
 By default the command prints a few progress lines; add `--verbose` (`-v`) to also see each step.
 
+## Gap-filling
+
+Models with `fill_gaps: true` in their config (bundled: `jaehwi_v1p0`) give on-land sites and pixels that would otherwise have no Vs30 — mostly along the coast, where the terrain map has no data — the value of the nearest pixel that has one. Known limitations:
+
+- What counts as land comes from a 1:1.5M coastline, so some reclaimed or very narrow coastal land is treated as sea and left blank, and some harbour areas without a geology map unit are treated as land and filled.
+- `vs30 grid` only looks for that nearest value inside the requested grid, so gap-filled pixels near the edge of a regional grid can differ from the full-NZ map. `vs30 points` searches around each site, so it isn't affected.
+
 ## Custom configurations
 
 Each bundled model version is just a YAML config file living in `vs30/configs/`. To customize the pipeline — for example to toggle the coastal-distance modifier or swap the correlation kernel — copy a bundled config, edit it, and pass the path to `vs30 points` or `vs30 grid` in place of a bundled model name.
