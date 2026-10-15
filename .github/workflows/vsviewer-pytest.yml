@@ -3,7 +3,7 @@ name: VsViewer tests
 on:
   pull_request:
   push:
-    branches: [add-jaehwi-effstress, vs30_refactor, andrew-latest, master]
+    branches: [master]
 
 jobs:
   test:
