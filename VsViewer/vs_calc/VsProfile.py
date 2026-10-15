@@ -7,6 +7,7 @@ import pandas as pd
 from vs_calc import (
     CPT,
     SPT,
+    constants,
     cpt_vs_correlations,
     spt_vs_correlations,
     utils,
@@ -251,9 +252,7 @@ class VsProfile:
     @property
     def vs30_sd(self):
         """
-        Gets the Vs30 Standard Deviation value and computes the value if not set
-        Will grab value from VsZ if max depth is 30m already
-        then no conversion is needed
+        Gets the provisional standard deviation of ln(Vs30), computing it if not set
         """
         if self._vs30_sd is None:
             self._vs30, self._vs30_sd = self.calc_vs30()
@@ -274,18 +273,18 @@ class VsProfile:
 
     def calc_vs30(self):
         """
-        Calculates Vs30 and Vs30_sd for the given VsProfile based on VsZ and max depth
+        Calculates Vs30 and the provisional standard deviation of ln(Vs30)
         Uses vs30 correlations if the max depth is less than 30m
         """
         if self.max_depth == 30:
             # Set Vs30 to VsZ as Z is 30
-            vs30, vs30_sd = self.vsz, 0
+            vs30, extrapolation_sd = self.vsz, 0
         else:
             if self.vs30_correlation not in vs30_correlations.VS30_CORRELATIONS.keys():
                 raise KeyError(
                     f"{self.vs30_correlation} not found in set of correlations {vs30_correlations.VS30_CORRELATIONS.keys()}"
                 )
-            vs30, vs30_sd = vs30_correlations.VS30_CORRELATIONS[self.vs30_correlation](
-                self
-            )
-        return vs30, vs30_sd
+            vs30, extrapolation_sd = vs30_correlations.VS30_CORRELATIONS[
+                self.vs30_correlation
+            ](self)
+        return vs30, np.sqrt(constants.PROFILE_SIGMA_LN_VS30**2 + extrapolation_sd**2)

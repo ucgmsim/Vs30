@@ -59,39 +59,35 @@ VS30_BOORE_2004_COEFFS = [
 def boore_2011(vs_profile):
     """
     VsZ-Vs30 correlation developed by Boore et al. (2011).
+
+    Returns Vs30 (m/s) and the standard deviation of ln(Vs30) from the
+    extrapolation alone, converted from the published log10 residual.
     """
-    # Get Coeffs from max depth
     max_depth = int(vs_profile.max_depth)
     index = max_depth - 5
     if index < 0:
         raise IndexError("VsProfile is not deep enough")
-    C0, C1, C2, SD = VS30_BOORE_2011_COEFFS[index]
-
-    # Compute Vs30 and Vs30_sd
+    C0, C1, C2, sigma_log10 = VS30_BOORE_2011_COEFFS[index]
     vs30 = 10 ** (
         C0 + C1 * np.log10(vs_profile.vsz) + C2 * (np.log10(vs_profile.vsz)) ** 2
     )
-    log_vsz = np.log(vs_profile.vsz)
-    d_vs30 = (
-        C1 * 10 ** (C1 * np.log10(log_vsz))
-        + 2 * C2 * np.log10(log_vsz) * 10 ** (C2 * np.log10(log_vsz) ** 2)
-    ) / log_vsz
-    vs30_sd = np.sqrt(SD**2 + (d_vs30**2))
-    return vs30, vs30_sd
+    return vs30, np.log(10) * sigma_log10
 
 
 def boore_2004(vs_profile):
     """
     VsZ-Vs30 correlation developed by Boore et al. (2004).
+
+    Returns Vs30 (m/s) and the standard deviation of ln(Vs30) from the
+    extrapolation alone, converted from the published log10 residual.
     """
-    # Get Coeffs from max depth
     max_depth = int(vs_profile.max_depth)
     index = max_depth - 10
     if index < 0:
         raise IndexError("VsProfile is not deep enough")
-    a, b, sigma = VS30_BOORE_2004_COEFFS[index]
+    a, b, sigma_log10 = VS30_BOORE_2004_COEFFS[index]
     vs30 = 10 ** (a + b * np.log10(vs_profile.vsz))
-    return vs30, sigma
+    return vs30, np.log(10) * sigma_log10
 
 
 VS30_CORRELATIONS = {"boore_2011": boore_2011, "boore_2004": boore_2004}

@@ -35,8 +35,9 @@ def calculate_weighted_vs30(
     vs30_correlation_weights: dict,
 ):
     """
-    Calculates the weighted Vs30 by combining each of the Vs30Profiles
-    with set weights for the VsProfile's and the Correlations
+    Calculates the weighted Vs30 (arithmetic mean, m/s) and the standard deviation
+    of ln(Vs30) by combining each of the Vs30Profiles with set weights for the
+    VsProfile's and the Correlations
     """
     (
         vs_weights,
@@ -57,17 +58,23 @@ def calculate_weighted_vs30(
         * vs_profile.vs30
         for vs_profile in vs_profiles
     )
-    # Calculate variance / sigma
-    # Based on the equation variance = sum(W_i*Sigma_i^2) + sum(W_i*(x - mu)^2)
-    average_vs30_variance = 0
-    for vs_profile in vs_profiles:
-        weight = get_weight(
+    # Law of total variance in log space: each profile's own variance plus the
+    # spread of ln(Vs30) about its weighted mean.
+    mean_ln_vs30 = sum(
+        get_weight(
             vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
         )
-        average_vs30_variance += weight * np.square(vs_profile.vs30_sd)
-        average_vs30_variance += weight * np.square(vs_profile.vs30 - average_vs30)
-    average_vs30_sd = (
-        0 if average_vs30_variance == 0 else np.log(np.sqrt(average_vs30_variance))
+        * np.log(vs_profile.vs30)
+        for vs_profile in vs_profiles
+    )
+    average_vs30_sd = np.sqrt(
+        sum(
+            get_weight(
+                vs_profile, vs_weights, vs_correlation_weights, vs30_correlation_weights
+            )
+            * (vs_profile.vs30_sd**2 + (np.log(vs_profile.vs30) - mean_ln_vs30) ** 2)
+            for vs_profile in vs_profiles
+        )
     )
     return average_vs30, average_vs30_sd
 
