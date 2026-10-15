@@ -1,9 +1,10 @@
 name: Pytest Check
 
-on: [pull_request]
+on:
+  pull_request:
 
 jobs:
-  test:
+  test-fast:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,13 +23,114 @@ jobs:
       - name: Install dependencies with mamba
         shell: bash -el {0}
         run: |
-          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib pytest geopandas
+          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib pytest pytest-cov geopandas
 
       - name: Install project in dev mode
         shell: bash -el {0}
         run: pip install -e .
 
-      - name: Run tests
+      - name: Run fast tests
         shell: bash -el {0}
-        run: pytest
+        run: pytest --cov=vs30 tests
 
+      - name: Rename coverage data for combine
+        shell: bash -el {0}
+        run: mv .coverage .coverage.fast
+
+      - name: Upload fast coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data-fast
+          path: .coverage.fast
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  test-slow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Miniforge
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-variant: Miniforge3
+          miniforge-version: latest
+          activate-environment: test-env
+          python-version: "3.12"
+          use-mamba: true
+
+      - name: Install dependencies with mamba
+        shell: bash -el {0}
+        run: |
+          mamba install -c conda-forge gdal numpy pandas pyproj scikit-learn scipy matplotlib pytest pytest-cov geopandas
+
+      - name: Install project in dev mode
+        shell: bash -el {0}
+        run: pip install -e .
+
+      - name: Run slow tests
+        shell: bash -el {0}
+        run: pytest --cov=vs30 --runslow -m slow tests
+
+      - name: Rename coverage data for combine
+        shell: bash -el {0}
+        run: mv .coverage .coverage.slow
+
+      - name: Upload slow coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data-slow
+          path: .coverage.slow
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  coverage:
+    needs: [test-fast, test-slow]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade coverage[toml]
+
+      - name: Download fast coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-data-fast
+
+      - name: Download slow coverage data
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-data-slow
+
+      - name: Combine coverage data
+        run: python -m coverage combine
+
+      - name: Report and fail if under 85%
+        run: |
+          python -m coverage html --skip-covered --skip-empty
+
+          # Report and write to summary.
+          python -m coverage report | sed 's/^/    /' >> $GITHUB_STEP_SUMMARY
+
+          # Report again and fail if under 85%.
+          python -Im coverage report --fail-under=85
+
+      - name: Upload HTML report if check failed
+        uses: actions/upload-artifact@v4
+
+        with:
+          name: html-report
+          path: htmlcov
+
+        if: ${{ failure() }}

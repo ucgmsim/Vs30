@@ -1,0 +1,19 @@
+name: VsViewer tests
+
+on:
+  pull_request:
+  push:
+    branches: [add-jaehwi-effstress, vs30_refactor, andrew-latest, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ./VsViewer pytest
+      # The tests import vs_calc from the source tree, so check the installed package separately
+      - run: python -c "import vs_calc.scripts.validate_spt_database"
+      - run: python -m pytest VsViewer/tests

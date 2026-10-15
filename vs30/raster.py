@@ -1,0 +1,716 @@
+"""Categorical VS30 raster creation and hybrid geology modifications."""
+
+import functools
+import logging
+import math
+import os
+import tarfile
+import tempfile
+from pathlib import Path
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import rasterio
+import rasterio.enums
+import rasterio.features
+import rasterio.transform
+import rasterio.warp
+import shapely
+from osgeo import gdal
+
+from vs30 import config, constants, utils
+
+logger = logging.getLogger(__name__)
+
+# Make GDAL errors raise (the GDAL 4 default) rather than return None; setting
+# it explicitly also stops GDAL's FutureWarning about the choice.
+gdal.UseExceptions()
+
+
+@functools.lru_cache(maxsize=1)
+def load_qmap_shapefile() -> gpd.GeoDataFrame:
+    """
+    Load the bundled QMAP geology shapefile.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        QMAP polygons with geology ``gid`` attribute.
+    """
+    qmap_path = constants.GEOSPATIAL_DIR / constants.GEOLOGY_SHAPEFILE_PATH
+    ensure_shapefile_extracted(qmap_path, "qmap")
+    return gpd.read_file(qmap_path)
+
+
+@functools.lru_cache(maxsize=1)
+def load_coast_shapefile() -> gpd.GeoDataFrame:
+    """
+    Load the bundled NZ coastline shapefile.
+
+    Returns
+    -------
+    gpd.GeoDataFrame
+        Coastline land polygons.
+    """
+    coast_path = constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH
+    ensure_shapefile_extracted(coast_path, "coast")
+    return gpd.read_file(coast_path)
+
+
+@functools.lru_cache(maxsize=1)
+def load_coast_union():
+    """
+    Return the unioned NZ coastline geometry.
+
+    Returns
+    -------
+    shapely.geometry.base.BaseGeometry
+        Unioned NZ coastline polygon.
+    """
+    return load_coast_shapefile().geometry.union_all()
+
+
+@functools.lru_cache(maxsize=1)
+def load_coast_boundary_union():
+    """
+    Return the unioned NZ coastline boundary (polygon edges, distinct from
+    ``load_coast_union`` which returns the polygon union).
+
+    Returns
+    -------
+    shapely.geometry.base.BaseGeometry
+        Unioned NZ coastline boundary geometry.
+    """
+    return load_coast_shapefile().geometry.boundary.union_all()
+
+
+@functools.lru_cache(maxsize=1)
+def load_terrain_raster_array() -> tuple[
+    np.ndarray, rasterio.transform.Affine, float | None
+]:
+    """
+    Load the bundled terrain (IwahashiPike) raster fully into memory.
+
+    Returns
+    -------
+    tuple[ndarray, rasterio.transform.Affine, float or None]
+        ``(data, transform, nodata)`` where ``data`` is the full 2D uint8
+        category-id raster.
+    """
+    path = constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"Terrain raster not found: {path}")
+    with rasterio.open(path) as src:
+        return src.read(1), src.transform, src.nodata
+
+
+@functools.lru_cache(maxsize=1)
+def load_slope_raster_array() -> tuple[
+    np.ndarray, rasterio.transform.Affine, float | None
+]:
+    """
+    Load the bundled slope raster fully into memory.
+
+    Returns
+    -------
+    tuple[ndarray, rasterio.transform.Affine, float or None]
+        ``(data, transform, nodata)`` where ``data`` is the full 2D float
+        slope raster.
+    """
+    path = constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    if not path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {path}")
+    with rasterio.open(path) as src:
+        return src.read(1), src.transform, src.nodata
+
+
+def ensure_shapefile_extracted(shapefile_path: Path, directory_prefix: str) -> None:
+    """
+    Ensure a shapefile is extracted from shapefiles.tar.xz.
+
+    Parameters
+    ----------
+    shapefile_path : Path
+        Shapefile to ensure exists.
+    directory_prefix : str
+        Directory prefix within the archive (e.g., "qmap" or "coast").
+
+    Raises
+    ------
+    FileNotFoundError
+        If shapefiles.tar.xz is not found or extraction fails.
+    ValueError
+        If the directory is not found in the archive.
+    """
+    if shapefile_path.exists():
+        return
+
+    archive_path = constants.GEOSPATIAL_DIR / constants.SHAPEFILES_ARCHIVE_FILENAME
+    if not archive_path.exists():
+        raise FileNotFoundError(
+            f"Shapefile archive not found: {archive_path}. "
+            f"Cannot extract {shapefile_path.name}. Please ensure shapefiles.tar.xz exists."
+        )
+
+    with tarfile.open(archive_path, "r:xz") as tar:
+        members = [
+            member
+            for member in tar.getmembers()
+            if member.name.startswith(f"{directory_prefix}/")
+        ]
+        if not members:
+            raise ValueError(
+                f"No '{directory_prefix}' directory found in archive {archive_path}"
+            )
+        tar.extractall(path=constants.GEOSPATIAL_DIR, members=members)
+
+    if not shapefile_path.exists():
+        raise FileNotFoundError(
+            f"Failed to extract {shapefile_path.name} from {archive_path}. "
+            f"Expected file at {shapefile_path} but it was not created."
+        )
+
+
+def create_category_id_array(
+    model_type: constants.ModelType,
+    grid_config: config.GridConfig,
+) -> tuple[np.ndarray, dict]:
+    """
+    Create category ID array for terrain or geology.
+
+    Parameters
+    ----------
+    model_type : constants.ModelType
+        Either ModelType.TERRAIN or ModelType.GEOLOGY.
+    grid_config : config.GridConfig
+        Grid bounds and spacing.
+
+    Returns
+    -------
+    id_array : ndarray
+        Category ID array (uint8).
+    profile : dict
+        Rasterio profile describing the array's spatial properties.
+
+    Raises
+    ------
+    ValueError
+        If model_type is invalid or the geology shapefile is missing required
+        columns.
+    FileNotFoundError
+        If the input raster or shapefile is not found.
+    """
+    if model_type not in (constants.ModelType.GEOLOGY, constants.ModelType.TERRAIN):
+        raise ValueError(
+            f"model_type must be ModelType.GEOLOGY or ModelType.TERRAIN, got '{model_type}'"
+        )
+
+    nx = round((grid_config.grid_xmax - grid_config.grid_xmin) / grid_config.grid_dx)
+    ny = round((grid_config.grid_ymax - grid_config.grid_ymin) / grid_config.grid_dy)
+    dst_transform = rasterio.transform.from_bounds(
+        grid_config.grid_xmin,
+        grid_config.grid_ymin,
+        grid_config.grid_xmax,
+        grid_config.grid_ymax,
+        nx,
+        ny,
+    )
+
+    if model_type == constants.ModelType.TERRAIN:
+        terrain_raster_path = (
+            constants.GEOSPATIAL_DIR / constants.TERRAIN_RASTER_FILENAME
+        )
+        if not terrain_raster_path.exists():
+            raise FileNotFoundError(f"Terrain raster not found: {terrain_raster_path}")
+
+        id_array = np.full((ny, nx), constants.RASTER_ID_NODATA_VALUE, dtype=np.uint8)
+        with rasterio.open(terrain_raster_path) as src:
+            rasterio.warp.reproject(
+                source=rasterio.band(src, 1),
+                destination=id_array,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=dst_transform,
+                dst_crs=constants.NZTM_CRS,
+                resampling=rasterio.enums.Resampling.nearest,
+            )
+
+    elif model_type == constants.ModelType.GEOLOGY:
+        gdf = load_qmap_shapefile()
+        if constants.SHAPEFILE_GEOLOGY_ID_COLUMN not in gdf.columns:
+            raise ValueError(
+                f"Shapefile {constants.GEOLOGY_SHAPEFILE_PATH} missing "
+                f"'{constants.SHAPEFILE_GEOLOGY_ID_COLUMN}' column"
+            )
+
+        if gdf.crs is None or str(gdf.crs) != constants.NZTM_CRS:
+            gdf = gdf.to_crs(constants.NZTM_CRS)
+
+        # Only polygons overlapping the grid can cover its pixel centres, and
+        # rasterizing all of them takes seconds even for a tiny grid.
+        gdf = gdf.cx[
+            grid_config.grid_xmin : grid_config.grid_xmax,
+            grid_config.grid_ymin : grid_config.grid_ymax,
+        ]
+
+        id_array = rasterio.features.rasterize(
+            shapes=zip(gdf.geometry, gdf[constants.SHAPEFILE_GEOLOGY_ID_COLUMN]),
+            out_shape=(ny, nx),
+            transform=dst_transform,
+            fill=constants.RASTER_ID_NODATA_VALUE,
+            dtype=np.uint8,
+            all_touched=False,
+        )
+
+    return id_array, {
+        "driver": constants.GEOTIFF_DRIVER,
+        "width": nx,
+        "height": ny,
+        "count": 1,
+        "dtype": "uint8",
+        "crs": constants.NZTM_CRS,
+        "transform": dst_transform,
+        "nodata": constants.RASTER_ID_NODATA_VALUE,
+        "compress": constants.GEOTIFF_COMPRESSION,
+    }
+
+
+def create_vs30_arrays_from_ids(
+    id_array: np.ndarray,
+    model_values_df: pd.DataFrame,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Map category IDs to Vs30 mean and standard deviation arrays.
+
+    Parameters
+    ----------
+    id_array : np.ndarray
+        Category ID array (uint8) from terrain or geology rasterization.
+    model_values_df : pd.DataFrame
+        Category ID → Vs30 mapping. Must have a STANDARD_ID_COLUMN column
+        and one of the mean/stdv pairs recognized by
+        utils.select_vs30_columns_by_priority.
+
+    Returns
+    -------
+    vs30_array : ndarray
+        Vs30 mean values for each pixel (float32).
+    stdv_array : ndarray
+        Vs30 standard deviation values for each pixel (float32).
+
+    Raises
+    ------
+    ValueError
+        If model_values_df lacks required columns, or if id_array contains
+        an ID not present in model_values_df.
+    """
+    mean_col, std_col = utils.select_vs30_columns_by_priority(
+        list(model_values_df.columns)
+    )
+
+    if constants.STANDARD_ID_COLUMN not in model_values_df.columns:
+        raise ValueError(
+            f"DataFrame is missing required column: {constants.STANDARD_ID_COLUMN}"
+        )
+
+    # Build LUTs indexed directly by category ID. RASTER_ID_NODATA_VALUE (255)
+    # is the largest id we ever see, so the LUT length is fixed at 256.
+    mean_lut = np.full(
+        constants.RASTER_ID_NODATA_VALUE + 1, constants.NODATA_VALUE, dtype=np.float32
+    )
+    stdv_lut = np.full(
+        constants.RASTER_ID_NODATA_VALUE + 1, constants.NODATA_VALUE, dtype=np.float32
+    )
+
+    df_ids = model_values_df[constants.STANDARD_ID_COLUMN].astype(int).to_numpy()
+    mean_lut[df_ids] = model_values_df[mean_col].astype(np.float32).to_numpy()
+    stdv_lut[df_ids] = model_values_df[std_col].astype(np.float32).to_numpy()
+
+    unique_ids = np.unique(id_array)
+    missing_ids = np.setdiff1d(
+        unique_ids[
+            (unique_ids != constants.RASTER_ID_NODATA_VALUE) & (unique_ids != 0)
+        ],
+        df_ids,
+    )
+    if missing_ids.size:
+        raise ValueError(
+            f"ID {int(missing_ids[0])} found in array but not in DataFrame. "
+            f"Available IDs: {sorted(df_ids.tolist())}"
+        )
+
+    return mean_lut[id_array], stdv_lut[id_array]
+
+
+def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
+    """
+    Compute distance to the nearest coast (in meters), capped at the coastal modification's range.
+
+    Distances beyond the larger of ``HYBRID_GID4_DIST_MAX`` and
+    ``HYBRID_GID10_DIST_MAX`` (20 km) change nothing, so they are capped there.
+    They are measured between pixel centres, from each pixel to the nearest
+    pixel outside the coastline, so they can exceed the exact distance from
+    ``compute_coast_distance_at_points`` by up to about a pixel (45 m on
+    average at 100 m spacing).
+
+    Parameters
+    ----------
+    template_profile : dict
+        Rasterio profile of the reference raster (to match resolution and bounds).
+
+    Returns
+    -------
+    np.ndarray
+        Distance array (float32) matching the template grid dimensions.
+    """
+    ensure_shapefile_extracted(
+        constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
+    )
+
+    # Template bounds for output
+    transform = template_profile["transform"]
+    dx = transform.a
+    dy = abs(transform.e)
+    s_xmin = transform.c
+    s_ymax = transform.f
+    s_xmax = s_xmin + template_profile["width"] * dx
+    s_ymin = s_ymax - template_profile["height"] * dy
+
+    # Pad the grid by the distance cap so the nearest coast within the cap is
+    # always inside the rasterized area, rounding up to whole pixels (else
+    # GDAL trims to integer pixel counts and shifts samples by a sub-pixel
+    # offset).
+    max_distance = max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
+    pad_cols = math.ceil(max_distance / dx)
+    pad_rows = math.ceil(max_distance / dy)
+
+    # GDAL requires a file path, so use a temporary file.
+    fd, tmp_path = tempfile.mkstemp(suffix=".tif")
+    os.close(fd)
+
+    try:
+        ds = gdal.Rasterize(
+            tmp_path,
+            str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
+            creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
+            outputBounds=[
+                s_xmin - pad_cols * dx,
+                s_ymin - pad_rows * dy,
+                s_xmax + pad_cols * dx,
+                s_ymax + pad_rows * dy,
+            ],
+            xRes=dx,
+            yRes=dy,
+            noData=0,
+            burnValues=1,
+            outputType=gdal.GetDataTypeByName("Float32"),
+        )
+
+        band = ds.GetRasterBand(1)
+        band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
+        # band is passed as both source and destination - ComputeProximity
+        # overwrites it with distance values. Pixels with no coast within
+        # MAXDIST get -1; without MAXDIST, an area with no sea at all would
+        # come out as distance 0 everywhere.
+        ds = gdal.ComputeProximity(
+            band,
+            band,
+            ["VALUES=0", "DISTUNITS=GEO", f"MAXDIST={max_distance}", "NODATA=-1"],
+        )
+
+        with rasterio.open(tmp_path) as src:
+            data = src.read(1)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    distance_meters = data[
+        pad_rows : pad_rows + template_profile["height"],
+        pad_cols : pad_cols + template_profile["width"],
+    ].astype(np.float32)
+    distance_meters[distance_meters < 0] = max_distance
+    return distance_meters
+
+
+def compute_slope_array(template_profile: dict) -> np.ndarray:
+    """
+    Compute a slope array matching the target grid.
+
+    Parameters
+    ----------
+    template_profile : dict
+        Rasterio profile of the reference raster (to match resolution and bounds).
+
+    Returns
+    -------
+    np.ndarray
+        Slope array matching the template grid dimensions.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the source slope raster is not found.
+    """
+    slope_raster_path = (
+        constants.GEOSPATIAL_DIR / constants.SLOPE_SOURCE_RASTER_FILENAME
+    )
+    if not slope_raster_path.exists():
+        raise FileNotFoundError(f"Slope raster not found: {slope_raster_path}")
+
+    slope_array = np.zeros(
+        (template_profile["height"], template_profile["width"]), dtype=np.float32
+    )
+    with rasterio.open(slope_raster_path) as src:
+        rasterio.warp.reproject(
+            source=rasterio.band(src, 1),
+            destination=slope_array,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=template_profile["transform"],
+            dst_crs=template_profile["crs"],
+            resampling=rasterio.enums.Resampling.nearest,
+            dst_nodata=constants.NODATA_VALUE,
+        )
+
+    return slope_array
+
+
+def sample_slope_at_points(points: np.ndarray) -> np.ndarray:
+    """
+    Sample slope values at specific NZTM points from the bundled slope raster.
+
+    Out-of-bounds points get the slope raster's nodata value.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] coordinates in NZTM.
+
+    Returns
+    -------
+    np.ndarray
+        Slope values at each point (N,).
+    """
+    data, transform, nodata = load_slope_raster_array()
+    # Written out because affine 3 deprecates `~transform * (xs, ys)` and
+    # affine 2 doesn't support `@` there; same arithmetic as affine's own.
+    inverse = ~transform
+    cols_frac = inverse.a * points[:, 0] + inverse.b * points[:, 1] + inverse.c
+    rows_frac = inverse.d * points[:, 0] + inverse.e * points[:, 1] + inverse.f
+    # A point exactly on a slope-cell edge can land a hair below the integer
+    # index through float error (e.g. 1852.9999999999995); round it onto the
+    # cell GDAL's nearest-neighbour resampling picks in compute_slope_array.
+    rows = np.floor(rows_frac + 1e-9).astype(int)
+    cols = np.floor(cols_frac + 1e-9).astype(int)
+    in_bounds = (
+        (rows >= 0) & (rows < data.shape[0]) & (cols >= 0) & (cols < data.shape[1])
+    )
+    slope_values = np.full(len(points), nodata, dtype=np.float64)
+    slope_values[in_bounds] = data[rows[in_bounds], cols[in_bounds]].astype(np.float64)
+    return slope_values
+
+
+def compute_coast_distance_at_points(points: np.ndarray) -> np.ndarray:
+    """
+    Compute the exact distance from each point to the nearest coastline.
+
+    For small numbers of points this is much faster than computing
+    a full proximity raster via ``compute_coast_distance_raster``, whose
+    pixel-centre distances can be up to about a pixel larger.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        (N, 2) array of [easting, northing] coordinates in NZTM.
+
+    Returns
+    -------
+    np.ndarray
+        Distance to coast in meters for each point (N,).
+    """
+    # Distance is to the polygon boundary, not interior — load_coast_boundary_union
+    # returns boundary.union_all(), distinct from load_coast_union's polygon union.
+    return np.asarray(
+        shapely.distance(shapely.points(points), load_coast_boundary_union()),
+        dtype=np.float64,
+    )
+
+
+def apply_coastal_distance_modification(
+    vs30_array: np.ndarray,
+    id_array: np.ndarray,
+    coast_dist_array: np.ndarray,
+    gid: int,
+    dist_min: float,
+    dist_max: float,
+    vs30_min: float,
+    vs30_max: float,
+) -> None:
+    """
+    Apply linear coastal-distance interpolation to a specific geology group.
+
+    Parameters
+    ----------
+    vs30_array : ndarray
+        VS30 array to modify in-place.
+    id_array : ndarray
+        Category ID array.
+    coast_dist_array : ndarray
+        Coast distance array (meters).
+    gid : int
+        Geology group ID to modify.
+    dist_min, dist_max : float
+        Distance range (meters) for linear interpolation.
+    vs30_min, vs30_max : float
+        Vs30 range (m/s) for linear interpolation.
+    """
+    vs30_array[id_array == gid] = np.clip(
+        vs30_min
+        + (vs30_max - vs30_min)
+        * (coast_dist_array[id_array == gid] - dist_min)
+        / (dist_max - dist_min),
+        vs30_min,
+        vs30_max,
+    )
+
+
+def apply_hybrid_geology_modifications(
+    vs30_array: np.ndarray,
+    stdv_array: np.ndarray,
+    id_array: np.ndarray,
+    slope_array: np.ndarray,
+    coast_dist_array: np.ndarray,
+    apply_alluvium_slope_mod: bool,
+    apply_coastal_distance_mod: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Apply hybrid-model per-geology-group modifications: sigma reduction,
+    slope-based Vs30 interpolation, and coastal-distance Vs30 adjustment.
+
+    Parameters
+    ----------
+    vs30_array : np.ndarray
+        Base VS30 array (float).
+    stdv_array : np.ndarray
+        Base Standard Deviation array (float).
+    id_array : np.ndarray
+        Category ID array (int).
+    slope_array : np.ndarray
+        Slope array (float).
+    coast_dist_array : np.ndarray
+        Distance to coast array (float).
+    apply_alluvium_slope_mod : bool
+        Whether to apply slope-based interpolation for GID 4 (alluvium). Has
+        no effect when ``apply_coastal_distance_mod`` is on, because the
+        coastal-distance modification then sets GID 4's Vs30; with both off,
+        GID 4 keeps its categorical value.
+    apply_coastal_distance_mod : bool
+        Whether to apply coastal distance modifications for GID 4 (alluvium)
+        and GID 10 (floodplain).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Modified (vs30_array, stdv_array).
+    """
+    logger.debug("Applying slope and coastal distance based geology modifications...")
+
+    vs30_array = vs30_array.copy()
+    stdv_array = stdv_array.copy()
+
+    for group_params in constants.HYBRID_GEOLOGY_PARAMS:
+        # sigma_reduction always applies, regardless of the slope/coastal mod gating.
+        stdv_array[id_array == group_params.gid] *= group_params.sigma_reduction
+
+        # GID 4 (alluvium) takes its Vs30 from slope only when the slope mod is
+        # on and the coastal-distance mod, which would overwrite it, is off.
+        if group_params.gid == 4 and (
+            not apply_alluvium_slope_mod or apply_coastal_distance_mod
+        ):
+            continue
+
+        group_slopes = slope_array[id_array == group_params.gid]
+        # Non-positive slopes (0, or nodata at grid pixels) become
+        # MIN_SLOPE_FOR_LOG so log10 is defined.
+        safe_slope = np.where(
+            group_slopes <= 0, constants.MIN_SLOPE_FOR_LOG, group_slopes
+        )
+        vs30_array[id_array == group_params.gid] = 10 ** np.interp(
+            np.log10(safe_slope),
+            group_params.slope_limits,
+            group_params.vs30_values_log10,
+        )
+
+    if apply_coastal_distance_mod:
+        apply_coastal_distance_modification(
+            vs30_array,
+            id_array,
+            coast_dist_array,
+            gid=4,
+            dist_min=constants.HYBRID_GID4_DIST_MIN,
+            dist_max=constants.HYBRID_GID4_DIST_MAX,
+            vs30_min=constants.HYBRID_GID4_VS30_MIN,
+            vs30_max=constants.HYBRID_GID4_VS30_MAX,
+        )
+
+        apply_coastal_distance_modification(
+            vs30_array,
+            id_array,
+            coast_dist_array,
+            gid=10,
+            dist_min=constants.HYBRID_GID10_DIST_MIN,
+            dist_max=constants.HYBRID_GID10_DIST_MAX,
+            vs30_min=constants.HYBRID_GID10_VS30_MIN,
+            vs30_max=constants.HYBRID_GID10_VS30_MAX,
+        )
+
+    return vs30_array, stdv_array
+
+
+def write_raster(
+    output_path: Path,
+    profile: dict,
+    bands: list[np.ndarray],
+    band_descriptions: tuple[str, ...],
+    dtype: str = "float32",
+    nodata: float | None = constants.NODATA_VALUE,
+) -> None:
+    """
+    Write a multi-band raster to a GeoTIFF file.
+
+    Parameters
+    ----------
+    output_path : Path
+        Output file path.
+    profile : dict
+        Rasterio profile with CRS, transform, dimensions. Caller-supplied
+        values for dtype/count/nodata/compress are overridden.
+    bands : list[np.ndarray]
+        2D arrays to write, one per band.
+    band_descriptions : tuple[str, ...]
+        Per-band description strings; must match ``len(bands)``.
+    dtype : str, optional
+        Output dtype (e.g. ``"float32"`` or ``"uint8"``). Default ``"float32"``.
+    nodata : float or None, optional
+        No-data value. Pass ``None`` to omit nodata metadata.
+        Default ``constants.NODATA_VALUE``.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    write_profile = profile.copy()
+    write_profile.update(
+        {
+            "dtype": dtype,
+            "count": len(bands),
+            "nodata": nodata,
+            "compress": constants.GEOTIFF_COMPRESSION,
+        }
+    )
+
+    with rasterio.open(output_path, "w", **write_profile) as dst:
+        for i, band in enumerate(bands, start=1):
+            data = band if band.dtype.name == dtype else band.astype(dtype)
+            dst.write(data, i)
+        dst.descriptions = band_descriptions
+
+    logger.debug(f"Wrote raster: {output_path}")

@@ -1,4 +1,7 @@
 import numpy as np
+import pandas as pd
+
+from vs_calc import constants
 
 
 def convert_to_midpoint(
@@ -52,3 +55,103 @@ def normalise_weights(weights: dict):
             return weights
     else:
         return weights
+
+
+def split_layers_at_depths(
+    layers: pd.DataFrame, depths_to_split_at: np.ndarray
+) -> pd.DataFrame:
+    """
+    Split layers at the specified depth values. Each depth value will split the layer containing it
+    into two parts: one above and one below the depth.
+
+    Parameters
+    ----------
+    layers : pandas.DataFrame
+        DataFrame with columns: ['layer_thickness_m', 'unsaturated_unit_weight_kN/m3', 'saturated_unit_weight_kN/m3']
+    depths_to_split_at : np.ndarray
+        1D numpy array of depths from surface in meters at which to split layers. Values will be sorted internally.
+
+    Returns
+    -------
+    pandas.DataFrame
+        DataFrame with the same columns, where any layer intersected by any of the depth values is
+        split into sublayers, retaining original unsaturated and saturated unit weights for later selection.
+    """
+    if layers.empty:
+        return layers.copy()
+
+    columns = [
+        "layer_thickness_m",
+        "unsaturated_unit_weight_kN/m3",
+        "saturated_unit_weight_kN/m3",
+    ]
+    if not set(columns).issubset(layers.columns):
+        raise ValueError(f"Layers must contain columns {columns}")
+    values = layers[columns].to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (values <= 0).any():
+        raise ValueError(
+            "Layer thicknesses and unit weights must be finite and positive"
+        )
+
+    depth_values = np.asarray(depths_to_split_at, dtype=float).ravel()
+    if not np.isfinite(depth_values).all():
+        raise ValueError("Split depths must be finite")
+
+    bottoms = np.cumsum(values[:, 0])
+    interior_depths = depth_values[(depth_values > 0) & (depth_values < bottoms[-1])]
+    split_bottoms = np.union1d(bottoms, interior_depths)
+    indices = np.searchsorted(bottoms, split_bottoms, side="left")
+    result = layers.iloc[indices].copy().reset_index(drop=True)
+    result["layer_thickness_m"] = np.diff(np.r_[0.0, split_bottoms])
+    return result
+
+
+def effective_stress_from_layers(
+    layers_df: pd.DataFrame, groundwater_level: float
+) -> np.ndarray:
+    """
+    Calculate effective stress at layer bottoms, splitting at groundwater first.
+
+    Parameters
+    ----------
+    layers_df : pandas.DataFrame
+        DataFrame with columns: ['layer_thickness_m', 'unsaturated_unit_weight_kN/m3', 'saturated_unit_weight_kN/m3'].
+        Layers must be contiguous and ordered from the ground surface downwards.
+    groundwater_level : float
+        Depth to groundwater level from surface in meters.
+
+    Returns
+    -------
+    np.ndarray
+        Effective stress at the bottom of each resulting sublayer (kPa), after splitting
+        the groundwater-intersected layer. Unit weights are chosen here based on position
+        relative to groundwater level (unsaturated above, saturated below).
+
+    Raises
+    ------
+    ValueError
+        If groundwater is negative or non-finite, or layers have invalid thicknesses
+        or unit weights. The input DataFrame is not modified.
+    """
+    if layers_df is None or len(layers_df) == 0:
+        return np.array([])
+
+    if (
+        groundwater_level is None
+        or not np.isfinite(groundwater_level)
+        or groundwater_level < 0
+    ):
+        raise ValueError("Groundwater level must be finite and non-negative")
+    layers = split_layers_at_depths(layers_df, groundwater_level)
+    thicknesses = layers["layer_thickness_m"].to_numpy(dtype=float)
+    bottoms = np.cumsum(thicknesses)
+    unit_weights = np.where(
+        bottoms <= groundwater_level,
+        layers["unsaturated_unit_weight_kN/m3"].to_numpy(dtype=float),
+        layers["saturated_unit_weight_kN/m3"].to_numpy(dtype=float),
+    )
+    total_stress = np.cumsum(thicknesses * unit_weights)
+    pore_water_pressure = constants.WATER_UNIT_WEIGHT_KN_M3 * np.maximum(
+        bottoms - groundwater_level, 0.0
+    )
+    return total_stress - pore_water_pressure

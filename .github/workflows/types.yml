@@ -1,0 +1,34 @@
+name: Type Check
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install GDAL system libraries
+        run: sudo apt-get update && sudo apt-get install -y libgdal-dev
+
+      - name: Install project with types
+        # GDAL's Python bindings must match the system libgdal version exactly.
+        # Pin the version in pyproject.toml to match the system libgdal.
+        run: |
+          sed -i "s/\"GDAL\"/\"GDAL==$(gdal-config --version)\"/" pyproject.toml
+          uv sync --all-extras --dev
+
+      - name: Run type checking with ty
+        run: uv run ty check --exclude setup.py --exclude VsViewer/
