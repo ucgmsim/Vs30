@@ -399,8 +399,7 @@ def compute_residuals(
     Worden, C. B., Thompson, E. M., Baker, J. W., Bradley, B. A., Luco, N.,
     and Wald, D. J. (2018). Spatial and Spectral Interpolation of Ground-Motion
     Intensity Measure Observations. Bulletin of the Seismological Society of
-    America, 108(2), 866–875. doi:10.1785/0120170201. Local copy at
-    ``reference_papers/worden_2018_mvn_interpolation.pdf``.
+    America, 108(2), 866–875. doi:10.1785/0120170201.
     """
     residuals = np.log(vs30 / model_vs30)
     if noisy:

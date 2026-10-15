@@ -2,7 +2,8 @@
 
 Run with ``PYTHONPATH=VsViewer python -m vs_calc.scripts.validate_spt_database
 DATABASE --unit-weights CSV --output-dir DIRECTORY``. See
-``VsViewer/docs/effective_stress_validation.md`` for data assumptions.
+https://github.com/ucgmsim/Vs30/blob/dev_scripts_archive/dev/docs/vs_calc/effective_stress_validation.md
+for data assumptions.
 """
 
 import argparse
