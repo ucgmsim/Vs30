@@ -23,8 +23,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pyproj"]
-types = ["ty"]
+test = ["pytest", "pytest-cov", "pyproj"]
+
+[dependency-groups]
+dev = ["deptry", "npdlint", "ruff", "ty"]
 
 [project.urls]
 Repository = "https://github.com/ucgmsim/Vs30"
@@ -37,6 +39,7 @@ packages = ["vs30"]
 
 [tool.setuptools.package-data]
 vs30 = [
+    "configs/*.yaml",
     "resources/geospatial/*.tif",
     "resources/geospatial/*.tar.xz",
     "resources/geospatial/coast/*",
@@ -55,7 +58,8 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.deptry]
 # .venv must be listed explicitly because custom exclude overrides deptry's defaults.
-exclude = ["VsViewer", ".venv", "dev", "build"]
+exclude = ["VsViewer", ".venv", ".worktrees", "dev", "build"]
+optional_dependencies_dev_groups = ["test"]
 
 [tool.deptry.package_module_name_map]
 scikit-learn = ["sklearn"]
@@ -72,12 +76,13 @@ omit = [
 
 [tool.deptry.per_rule_ignores]
 DEP001 = ["conftest", "setuptools", "test_benchmarks"]
-DEP002 = ["ty"]
 DEP003 = ["setuptools"]
 DEP004 = ["pytest", "pyproj"]
 
-[tool.numpydoc_validation]
-checks = [
+[tool.npdlint]
+include = ["vs30"]
+numpydoc-compat = false
+select = [
   "GL05",
   "GL08",
   "GL10",
@@ -94,14 +99,9 @@ checks = [
   "RT04",
   "YD01",
 ]
-# remember to use single quotes for regex in TOML
-exclude = [ # don't report on objects that match any of these regex
-  '\.undocumented_method$',
-  '\.__repr__$',
-]
 
 [tool.ty.src]
-exclude = ["dev/", "build/", "VsViewer/", "tests/"]
+exclude = ["dev/", "build/", "VsViewer/", "tests/", "setup.py"]
 
 [tool.ty.rules]
 # Typer uses `= ...` (Ellipsis) for required CLI parameters, which is valid
@@ -109,6 +109,7 @@ exclude = ["dev/", "build/", "VsViewer/", "tests/"]
 invalid-parameter-default = "ignore"
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 markers = [
     "slow: marks tests as slow (skipped by default, use --runslow to run)",
 ]
