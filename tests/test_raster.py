@@ -79,28 +79,52 @@ def test_point_slope_sampling_avoids_deprecated_affine_operators():
         raster.sample_slope_at_points(np.array([[1560350.0, 5185600.0]]))
 
 
-def test_gdal_does_not_warn_about_its_exception_mode():
-    """GDAL's exception mode is set explicitly, so coast-distance runs don't print its FutureWarning."""
-    # A fresh process: GDAL only warns once per process.
+def test_raster_module_needs_no_gdal_python_bindings():
+    """Coast distance works without the separately installed GDAL Python package (osgeo)."""
     script = (
+        "import sys; sys.modules['osgeo'] = None; "
         "import rasterio.transform; from vs30 import raster; "
         "raster.compute_coast_distance_raster({'height': 3, 'width': 3, 'transform': "
         "rasterio.transform.from_bounds(1748100, 5427100, 1748400, 5427400, 3, 3)})"
     )
 
     result = subprocess.run(
-        [
-            sys.executable,
-            "-W",
-            "error:Neither gdal.UseExceptions:FutureWarning",
-            "-c",
-            script,
-        ],
-        capture_output=True,
-        text=True,
+        [sys.executable, "-c", script], capture_output=True, text=True
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_coast_distance_is_within_a_pixel_diagonal_above_the_exact_distance():
+    """Pixel-centre distances on a grid spanning Wellington's coast never undercut the exact distance, nor exceed it by more than a pixel diagonal."""
+    transform = rasterio.transform.from_bounds(
+        1745100, 5425100, 1750100, 5430100, 50, 50
+    )
+
+    distances = raster.compute_coast_distance_raster(
+        {"height": 50, "width": 50, "transform": transform}
+    )
+
+    rows, cols = np.nonzero(distances > 0)
+    xs, ys = rasterio.transform.xy(transform, rows, cols)
+    excess = distances[rows, cols] - raster.compute_coast_distance_at_points(
+        np.column_stack([xs, ys])
+    )
+    assert (distances == 0).any() and len(rows) > 0
+    assert (excess > -0.01).all()
+    assert (excess <= np.hypot(100, 100)).all()
+
+
+def test_coast_distance_is_zero_over_open_sea():
+    transform = rasterio.transform.from_bounds(
+        1699600, 5899600, 1700600, 5900600, 10, 10
+    )
+
+    distances = raster.compute_coast_distance_raster(
+        {"height": 10, "width": 10, "transform": transform}
+    )
+
+    assert (distances == 0).all()
 
 
 class TestApplyHybridGeologyModifications:

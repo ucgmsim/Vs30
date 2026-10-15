@@ -3,9 +3,7 @@
 import functools
 import logging
 import math
-import os
 import tarfile
-import tempfile
 from pathlib import Path
 
 import geopandas as gpd
@@ -16,16 +14,12 @@ import rasterio.enums
 import rasterio.features
 import rasterio.transform
 import rasterio.warp
+import scipy.ndimage
 import shapely
-from osgeo import gdal
 
 from vs30 import config, constants, utils
 
 logger = logging.getLogger(__name__)
-
-# Make GDAL errors raise (the GDAL 4 default) rather than return None; setting
-# it explicitly also stops GDAL's FutureWarning about the choice.
-gdal.UseExceptions()
 
 
 @functools.lru_cache(maxsize=1)
@@ -364,72 +358,39 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     np.ndarray
         Distance array (float32) matching the template grid dimensions.
     """
-    ensure_shapefile_extracted(
-        constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH, "coast"
-    )
-
-    # Template bounds for output
     transform = template_profile["transform"]
     dx = transform.a
     dy = abs(transform.e)
-    s_xmin = transform.c
-    s_ymax = transform.f
-    s_xmax = s_xmin + template_profile["width"] * dx
-    s_ymin = s_ymax - template_profile["height"] * dy
-
     # Pad the grid by the distance cap so the nearest coast within the cap is
-    # always inside the rasterized area, rounding up to whole pixels (else
-    # GDAL trims to integer pixel counts and shifts samples by a sub-pixel
-    # offset).
+    # always inside the rasterized area, rounding up to whole pixels so the
+    # padded grid keeps the template's pixel alignment.
     max_distance = max(constants.HYBRID_GID4_DIST_MAX, constants.HYBRID_GID10_DIST_MAX)
     pad_cols = math.ceil(max_distance / dx)
     pad_rows = math.ceil(max_distance / dy)
-
-    # GDAL requires a file path, so use a temporary file.
-    fd, tmp_path = tempfile.mkstemp(suffix=".tif")
-    os.close(fd)
-
-    try:
-        ds = gdal.Rasterize(
-            tmp_path,
-            str(constants.GEOSPATIAL_DIR / constants.COASTLINE_SHAPEFILE_PATH),
-            creationOptions=["COMPRESS=DEFLATE", "BIGTIFF=YES"],
-            outputBounds=[
-                s_xmin - pad_cols * dx,
-                s_ymin - pad_rows * dy,
-                s_xmax + pad_cols * dx,
-                s_ymax + pad_rows * dy,
-            ],
-            xRes=dx,
-            yRes=dy,
-            noData=0,
-            burnValues=1,
-            outputType=gdal.GetDataTypeByName("Float32"),
+    land = rasterio.features.rasterize(
+        ((geometry, 1) for geometry in load_coast_shapefile().geometry),
+        out_shape=(
+            template_profile["height"] + 2 * pad_rows,
+            template_profile["width"] + 2 * pad_cols,
+        ),
+        transform=rasterio.transform.from_origin(
+            transform.c - pad_cols * dx, transform.f + pad_rows * dy, dx, dy
+        ),
+        dtype=np.uint8,
+    )
+    # distance_transform_edt measures to the nearest zero (sea) pixel, so with
+    # no sea in the padded window every pixel is beyond the cap.
+    if land.all():
+        return np.full(
+            (template_profile["height"], template_profile["width"]),
+            max_distance,
+            dtype=np.float32,
         )
-
-        band = ds.GetRasterBand(1)
-        band.SetDescription(constants.BAND_DESCRIPTION_COAST_DISTANCE)
-        # band is passed as both source and destination - ComputeProximity
-        # overwrites it with distance values. Pixels with no coast within
-        # MAXDIST get -1; without MAXDIST, an area with no sea at all would
-        # come out as distance 0 everywhere.
-        ds = gdal.ComputeProximity(
-            band,
-            band,
-            ["VALUES=0", "DISTUNITS=GEO", f"MAXDIST={max_distance}", "NODATA=-1"],
-        )
-
-        with rasterio.open(tmp_path) as src:
-            data = src.read(1)
-    finally:
-        Path(tmp_path).unlink(missing_ok=True)
-
-    distance_meters = data[
+    distance_meters = scipy.ndimage.distance_transform_edt(land, sampling=(dy, dx))
+    return np.minimum(distance_meters, max_distance)[
         pad_rows : pad_rows + template_profile["height"],
         pad_cols : pad_cols + template_profile["width"],
     ].astype(np.float32)
-    distance_meters[distance_meters < 0] = max_distance
-    return distance_meters
 
 
 def compute_slope_array(template_profile: dict) -> np.ndarray:
