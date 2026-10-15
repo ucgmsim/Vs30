@@ -25,3 +25,14 @@ The package provides a `vs30` command-line interface with `points` and `grid` su
 ## Coordinate System
 
 All coordinates use NZTM2000 (EPSG:2193) in meters. The `points` command accepts WGS84 lat/lon input and converts internally.
+
+## Development
+
+```bash
+uv sync --all-extras --dev   # the environment CI uses
+uvx lefthook install         # run CI's checks on git push
+```
+
+`uv run pytest` runs the default tests; add `--runslow` for the slow grid/points consistency tier.
+
+Maintainer scripts and developer notes are on the [`dev_scripts_archive`](https://github.com/ucgmsim/Vs30/tree/dev_scripts_archive/dev) branch.

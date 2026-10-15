@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  ci:
+    uses: ucgmsim/meta-ci-action/.github/workflows/ci.yml@v2
+    with:
+      # Docstring scope comes from [tool.npdlint] in pyproject.toml.
+      exclude-init: false
+      # Test paths come from [tool.pytest.ini_options]; extra-checks.yml runs the slow tier.
+      pytest-paths: ""
+      enable-coverage: true
+      cov-package: vs30
+      cov-fail-under: 91

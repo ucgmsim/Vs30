@@ -1,0 +1,19 @@
+# Only the workflows and hook config are linted; the model configs under
+# vs30/configs/ and VsViewer's API config are package data.
+extends: default
+
+ignore: |
+  vs30/configs/
+  VsViewer/
+
+rules:
+  # Workflows are not multi-document streams and GitHub does not want a
+  # leading `---`.
+  document-start: disable
+  # `on:` is the Actions trigger key, not the YAML 1.1 boolean `on`.
+  truthy:
+    check-keys: false
+  # Job names, action refs and ${{ }} expressions do not wrap.
+  line-length:
+    max: 140
+    allow-non-breakable-words: true

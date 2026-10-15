@@ -1,0 +1,32 @@
+name: Extra checks
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  slow-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --dev
+      - run: uv run --no-sync pytest --runslow -m slow
+
+  # A regular install must carry the bundled configs and data, which an
+  # editable install hides.
+  wheel-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build --wheel --out-dir dist
+      - run: uv venv /tmp/smoke && uv pip install --python /tmp/smoke dist/*.whl
+      - name: vs30 points on one site
+        run: |
+          printf 'name,longitude,latitude\nwellington,174.7762,-41.2865\n' > sites.csv
+          /tmp/smoke/bin/vs30 points foster_2019_approx sites.csv results.csv
+          /tmp/smoke/bin/python -c "import math, pandas; v = pandas.read_csv('results.csv').vs30[0]; assert math.isfinite(v) and v > 0, v"
