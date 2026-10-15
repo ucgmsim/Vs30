@@ -1545,7 +1545,7 @@ wheels = [
 
 [[package]]
 name = "vs30"
-version = "2026.5.1"
+version = "2026.10.1"
 source = { editable = "." }
 dependencies = [
     { name = "geopandas" },
