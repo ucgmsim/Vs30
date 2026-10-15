@@ -1,5 +1,7 @@
 # VS30 - Shear-Wave Velocity Mapping for New Zealand
 
+> **Developer archive.** This branch keeps the vs30 maintainer scripts and developer notes under `dev/`. Its code is a snapshot of `vs30_refactor` from 13 May 2026; the current package is on `master`. Notes added since then describe `master`.
+
 A Python package estimating Vs30 (time-averaged shear-wave velocity in the upper 30 meters) values across New Zealand.
 
 ## Installation
