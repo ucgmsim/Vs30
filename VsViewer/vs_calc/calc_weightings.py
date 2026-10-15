@@ -35,9 +35,9 @@ def calculate_weighted_vs30(
     vs30_correlation_weights: dict,
 ):
     """
-    Calculates the weighted Vs30 (arithmetic mean, m/s) and the standard deviation
-    of ln(Vs30) by combining each of the Vs30Profiles with set weights for the
-    VsProfile's and the Correlations
+    Calculates the weighted Vs30 (arithmetic mean, m/s) and the provisional
+    standard deviation of ln(Vs30) by combining each of the Vs30Profiles with set
+    weights for the VsProfile's and the Correlations
     """
     (
         vs_weights,

@@ -9,7 +9,10 @@ SPT_DEPTH_OFFSET_M = 0.3048
 # extrapolation to 30 m: the measurement uncertainty Foster et al. (2019) gave
 # CPT-derived and other Vs30 data. A stopgap until uncertainty is propagated
 # through each correlation; see dev/docs/vs_calc/vs30_uncertainty_followup.md
-# on the Vs30 repository's dev_scripts_archive branch.
+# on the Vs30 repository's dev_scripts_archive branch. It leaves out the
+# uncertainty from choosing a correlation and from input assumptions
+# (groundwater, unit weights, soil class), and models no correlation of errors
+# with depth.
 PROFILE_SIGMA_LN_VS30 = 0.2
 
 
