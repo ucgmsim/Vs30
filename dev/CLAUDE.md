@@ -18,7 +18,7 @@ This codebase was refactored from legacy code to improve readability and underst
 
 **Priority**: Readability is the most important priority and should not be sacrificed for small performance improvements.
 
-**Status**: The refactoring project is nearing completion, but additional features and testing still need to be implemented.
+**Status**: The refactor is complete: it was merged to master in the October 2026 wrap-up (release v2026.10.1).
 
 **Validation**: When making large changes, compare `vs30 grid` output to that produced by the legacy wrapper scripts. Expect intended differences within 10 km of observations: since f539ab8, observations take slope and coast distance from their exact location (legacy used pixel values), and the grid benchmarks in `tests/benchmarks/` are refactored-pipeline output.
 
