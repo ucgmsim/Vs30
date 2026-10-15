@@ -96,7 +96,7 @@ def test_raster_module_needs_no_gdal_python_bindings():
 
 
 def test_coast_distance_is_within_a_pixel_diagonal_above_the_exact_distance():
-    """Pixel-centre distances on a grid spanning Wellington's coast never undercut the exact distance, nor exceed it by more than a pixel diagonal."""
+    """Pixel-centre distances on a 100 m grid spanning Wellington's coast never undercut the exact distance, nor exceed it by more than a pixel diagonal."""
     transform = rasterio.transform.from_bounds(
         1745100, 5425100, 1750100, 5430100, 50, 50
     )

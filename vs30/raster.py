@@ -344,9 +344,11 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
     Distances beyond the larger of ``HYBRID_GID4_DIST_MAX`` and
     ``HYBRID_GID10_DIST_MAX`` (20 km) change nothing, so they are capped there.
     They are measured between pixel centres, from each pixel to the nearest
-    pixel outside the coastline, so they can exceed the exact distance from
-    ``compute_coast_distance_at_points`` by up to about a pixel (45 m on
-    average at 100 m spacing).
+    pixel outside the coastline, so they are never shorter than the exact
+    distance from ``compute_coast_distance_at_points`` and usually longer by up
+    to about a pixel (45 m on average at 100 m spacing). Where sea narrower
+    than a pixel leaves no sea pixel centre near the coast, as in fiords at
+    coarse spacings, they can be longer still.
 
     Parameters
     ----------
@@ -378,8 +380,9 @@ def compute_coast_distance_raster(template_profile: dict) -> np.ndarray:
         ),
         dtype=np.uint8,
     )
-    # distance_transform_edt measures to the nearest zero (sea) pixel, so with
-    # no sea in the padded window every pixel is beyond the cap.
+    # With no sea pixel to measure to, distance_transform_edt returns small,
+    # meaningless distances instead of failing, so an all-land window needs
+    # this guard: every pixel in it is beyond the cap.
     if land.all():
         return np.full(
             (template_profile["height"], template_profile["width"]),
@@ -477,7 +480,8 @@ def compute_coast_distance_at_points(points: np.ndarray) -> np.ndarray:
 
     For small numbers of points this is much faster than computing
     a full proximity raster via ``compute_coast_distance_raster``, whose
-    pixel-centre distances can be up to about a pixel larger.
+    pixel-centre distances are never shorter and usually up to about a pixel
+    longer.
 
     Parameters
     ----------

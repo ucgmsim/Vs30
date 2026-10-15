@@ -412,7 +412,7 @@ const Results = () => {
           <div className="vs30-value outline">
             {vs30 === null ? "" : Utils.roundValue(vs30)}
           </div>
-          <div className="vs30-title">Vs30 Sigma</div>
+          <div className="vs30-title">Vs30 σ (ln units, provisional)</div>
           <div className="vs30-value outline">
             {vs30SD === null ? "" : Utils.roundValue(vs30SD)}
           </div>
