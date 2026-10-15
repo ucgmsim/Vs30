@@ -1,5 +1,7 @@
 # Vs30 uncertainty findings and deferred work
 
+> **Status (October 2026):** vs_calc now returns a provisional uncertainty, `sqrt(0.2**2 + (ln(10) * Boore residual)**2)` as the standard deviation of ln(Vs30), and the NZGD database's `vs30_stddev` is filled with it. The full model below remains deferred.
+
 Status: deferred at the user's request, 2026-09-19. The immediate objective is
 to populate central Vs30 estimates using `andrew-latest`. Do not mistake this
 document for an implemented uncertainty model.
